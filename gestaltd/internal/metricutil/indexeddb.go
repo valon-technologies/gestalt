@@ -72,88 +72,90 @@ type instrumentedObjectStore struct {
 func (s *instrumentedObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
 	startedAt := time.Now()
 	rec, err := s.inner.Get(ctx, id)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Get", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Get", err)
 	return rec, err
 }
 
 func (s *instrumentedObjectStore) GetKey(ctx context.Context, id string) (string, error) {
 	startedAt := time.Now()
 	key, err := s.inner.GetKey(ctx, id)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "GetKey", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetKey", err)
 	return key, err
 }
 
 func (s *instrumentedObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
 	startedAt := time.Now()
 	err := s.inner.Add(ctx, record)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Add", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Add", err)
 	return err
 }
 
 func (s *instrumentedObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
 	startedAt := time.Now()
 	err := s.inner.Put(ctx, record)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Put", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Put", err)
 	return err
 }
 
 func (s *instrumentedObjectStore) Delete(ctx context.Context, id string) error {
 	startedAt := time.Now()
 	err := s.inner.Delete(ctx, id)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Delete", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Delete", err)
 	return err
 }
 
 func (s *instrumentedObjectStore) Clear(ctx context.Context) error {
 	startedAt := time.Now()
 	err := s.inner.Clear(ctx)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Clear", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Clear", err)
 	return err
 }
 
 func (s *instrumentedObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
 	startedAt := time.Now()
 	recs, err := s.inner.GetAll(ctx, r)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "GetAll", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAll", err)
 	return recs, err
 }
 
 func (s *instrumentedObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
 	startedAt := time.Now()
 	keys, err := s.inner.GetAllKeys(ctx, r)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "GetAllKeys", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAllKeys", err)
 	return keys, err
 }
 
 func (s *instrumentedObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
 	startedAt := time.Now()
 	n, err := s.inner.Count(ctx, r)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "Count", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Count", err)
 	return n, err
 }
 
 func (s *instrumentedObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
 	startedAt := time.Now()
 	n, err := s.inner.DeleteRange(ctx, r)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "DeleteRange", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "DeleteRange", err)
 	return n, err
 }
 
 func (s *instrumentedObjectStore) Index(name string) indexeddb.Index {
-	return &instrumentedIndex{inner: s.inner.Index(name), labels: s.labels}
+	labels := s.labels
+	labels.IndexName = name
+	return &instrumentedIndex{inner: s.inner.Index(name), labels: labels}
 }
 
 func (s *instrumentedObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
 	startedAt := time.Now()
 	c, err := s.inner.OpenCursor(ctx, r, dir)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "OpenCursor", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "OpenCursor", err)
 	return c, err
 }
 
 func (s *instrumentedObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
 	startedAt := time.Now()
 	c, err := s.inner.OpenKeyCursor(ctx, r, dir)
-	RecordIndexedDBMetrics(ctx, startedAt, s.labels, "OpenKeyCursor", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "OpenKeyCursor", err)
 	return c, err
 }
 
@@ -165,55 +167,55 @@ type instrumentedIndex struct {
 func (i *instrumentedIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
 	startedAt := time.Now()
 	rec, err := i.inner.Get(ctx, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.Get", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Get", err)
 	return rec, err
 }
 
 func (i *instrumentedIndex) GetKey(ctx context.Context, values ...any) (string, error) {
 	startedAt := time.Now()
 	key, err := i.inner.GetKey(ctx, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.GetKey", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetKey", err)
 	return key, err
 }
 
 func (i *instrumentedIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
 	startedAt := time.Now()
 	recs, err := i.inner.GetAll(ctx, r, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.GetAll", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAll", err)
 	return recs, err
 }
 
 func (i *instrumentedIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
 	startedAt := time.Now()
 	keys, err := i.inner.GetAllKeys(ctx, r, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.GetAllKeys", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAllKeys", err)
 	return keys, err
 }
 
 func (i *instrumentedIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
 	startedAt := time.Now()
 	n, err := i.inner.Count(ctx, r, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.Count", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Count", err)
 	return n, err
 }
 
 func (i *instrumentedIndex) Delete(ctx context.Context, values ...any) (int64, error) {
 	startedAt := time.Now()
 	n, err := i.inner.Delete(ctx, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.Delete", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Delete", err)
 	return n, err
 }
 
 func (i *instrumentedIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
 	startedAt := time.Now()
 	c, err := i.inner.OpenCursor(ctx, r, dir, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.OpenCursor", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.OpenCursor", err)
 	return c, err
 }
 
 func (i *instrumentedIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
 	startedAt := time.Now()
 	c, err := i.inner.OpenKeyCursor(ctx, r, dir, values...)
-	RecordIndexedDBMetrics(ctx, startedAt, i.labels, "Index.OpenKeyCursor", err != nil)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.OpenKeyCursor", err)
 	return c, err
 }

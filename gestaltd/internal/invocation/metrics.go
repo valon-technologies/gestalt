@@ -63,13 +63,28 @@ func recordOperationMetrics(
 		metricutil.AttrResultStatus.String(resultStatusValue),
 		metricutil.AttrResultStatusClass.String(resultStatusClass),
 	}
-	if surface := InvocationSurfaceFromContext(ctx); surface != "" {
+	surface := InvocationSurfaceFromContext(ctx)
+	binding := HTTPBindingFromContext(ctx)
+	if surface != "" {
 		attrs = append(attrs, metricutil.AttrInvocationSurface.String(metricutil.AttrValue(string(surface))))
 	}
-	if binding := HTTPBindingFromContext(ctx); binding != "" {
+	if binding != "" {
 		attrs = append(attrs, metricutil.AttrHTTPBinding.String(metricutil.AttrValue(binding)))
 	}
-	metricutil.AddHTTPAttributes(ctx, attrs...)
+	httpDims := metricutil.HTTPMetricDims{
+		ProviderName:   provider,
+		OperationName:  operation,
+		Transport:      transport,
+		ConnectionMode: connectionMode,
+	}
+	if surface != "" {
+		httpDims.Surface = string(surface)
+	}
+	if binding != "" {
+		httpDims.HTTPBindingName = binding
+		httpDims.Surface = metricutil.InvocationSurfaceHTTPBinding
+	}
+	metricutil.AddHTTPServerMetricDims(ctx, httpDims)
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
 	duration := time.Since(startedAt)

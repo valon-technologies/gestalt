@@ -138,6 +138,18 @@ func RequireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name s
 	t.Fatalf("metric %q with attrs %v not found", name, attrs)
 }
 
+func RequireNoMetric(t *testing.T, rm metricdata.ResourceMetrics, name string) {
+	t.Helper()
+
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name == name {
+				t.Fatalf("metric %q unexpectedly found", name)
+			}
+		}
+	}
+}
+
 func RequireFloat64HistogramOmitsAttr(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string, forbiddenKey string) {
 	t.Helper()
 

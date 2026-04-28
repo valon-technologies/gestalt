@@ -13,7 +13,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -294,13 +293,10 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 }
 
 func hostedPluginGRPCOptions(cfg dialConfig) []otelgrpc.Option {
-	attrs := []attribute.KeyValue{
-		metricutil.AttrRPCRole.String("hosted_plugin_client"),
-	}
-	if cfg.providerName != "" {
-		attrs = append(attrs, metricutil.AttrProvider.String(metricutil.AttrValue(cfg.providerName)))
-	}
-	return metricutil.GRPCOptions(cfg.telemetryProviders(), attrs...)
+	return metricutil.GRPCMetricOptions(cfg.telemetryProviders(), metricutil.RPCMetricDims{
+		Role:         metricutil.RPCRoleHostedPluginClient,
+		ProviderName: cfg.providerName,
+	})
 }
 
 func (cfg dialConfig) telemetryProviders() metricutil.TelemetryProviders {

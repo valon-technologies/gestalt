@@ -63,9 +63,9 @@ func (s *indexedDBServer) objectStore(name string) (indexeddb.ObjectStore, error
 	return metricutil.InstrumentObjectStore(
 		metricutil.UnwrapIndexedDB(s.ds).ObjectStore(s.storeName(name)),
 		metricutil.IndexedDBMetricLabels{
-			DB:          s.db,
-			Plugin:      s.plugin,
-			ObjectStore: name,
+			DB:           s.db,
+			ProviderName: s.plugin,
+			ObjectStore:  name,
 		},
 	), nil
 }

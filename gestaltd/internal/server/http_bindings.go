@@ -262,12 +262,12 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 	for i := range s.mountedHTTPBindings {
 		binding := &s.mountedHTTPBindings[i]
 		r.MethodFunc(binding.Method, binding.Path, func(w http.ResponseWriter, r *http.Request) {
-			metricutil.AddHTTPAttributes(r.Context(),
-				metricutil.AttrProvider.String(metricutil.AttrValue(binding.PluginName)),
-				metricutil.AttrOperation.String(metricutil.AttrValue(binding.Target)),
-				metricutil.AttrHTTPBinding.String(metricutil.AttrValue(binding.Name)),
-				metricutil.AttrInvocationSurface.String("http"),
-			)
+			metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+				ProviderName:    binding.PluginName,
+				OperationName:   binding.Target,
+				HTTPBindingName: binding.Name,
+				Surface:         metricutil.InvocationSurfaceHTTPBinding,
+			})
 			s.handleHTTPBinding(*binding, w, r)
 		})
 	}

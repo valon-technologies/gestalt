@@ -2,8 +2,11 @@ package metricutil
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -13,11 +16,7 @@ const meterName = "gestaltd"
 var (
 	attrProvider       = AttrProvider
 	attrAction         = attribute.Key("gestalt.action")
-	attrDB             = attribute.Key("gestalt.db")
 	attrType           = attribute.Key("gestalt.type")
-	attrMethod         = attribute.Key("gestalt.method")
-	attrObjectStore    = attribute.Key("gestalt.object_store")
-	attrPlugin         = attribute.Key("gestalt.plugin")
 	attrConnectionMode = AttrConnectionMode
 )
 
@@ -52,8 +51,10 @@ var (
 	authMetricsCache           MeterCache[counterMetrics]
 	connectionAuthMetricsCache MeterCache[counterMetrics]
 	discoveryMetricsCache      MeterCache[counterMetrics]
-	indexedDBMetricsCache      MeterCache[counterMetrics]
+	dbClientMetricsCache       MeterCache[metric.Float64Histogram]
 )
+
+var dbClientOperationDurationBuckets = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10}
 
 func RecordAuthMetrics(ctx context.Context, startedAt time.Time, provider string, action string, failed bool) {
 	metrics := authMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
@@ -89,24 +90,109 @@ func RecordDiscoveryMetrics(ctx context.Context, startedAt time.Time, provider s
 }
 
 type IndexedDBMetricLabels struct {
-	DB          string
-	Plugin      string
-	ObjectStore string
+	SystemName   string
+	DB           string
+	ProviderName string
+	ObjectStore  string
+	IndexName    string
 }
 
-func RecordIndexedDBMetrics(ctx context.Context, startedAt time.Time, labels IndexedDBMetricLabels, method string, failed bool) {
-	metrics := indexedDBMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
-		return newCounterMetrics(meter, "gestaltd.indexeddb", "gestaltd indexeddb operations")
+func RecordDBClientOperation(ctx context.Context, startedAt time.Time, dims DBMetricDims) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	duration := dbClientMetricsCache.Load(ctx, meterName, func(meter metric.Meter) metric.Float64Histogram {
+		return NewFloat64Histogram(
+			meter,
+			"db.client.operation.duration",
+			"Measures database client operation duration.",
+			"s",
+			metric.WithExplicitBucketBoundaries(dbClientOperationDurationBuckets...),
+		)
 	})
-	attrs := []attribute.KeyValue{
-		attrDB.String(AttrValue(labels.DB)),
-		attrObjectStore.String(AttrValue(labels.ObjectStore)),
-		attrMethod.String(AttrValue(method)),
+	duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(DBClientAttrs(dims)...))
+}
+
+func RecordIndexedDBOperation(ctx context.Context, startedAt time.Time, labels IndexedDBMetricLabels, method string, err error) {
+	systemName := strings.TrimSpace(labels.SystemName)
+	if systemName == "" {
+		systemName = DBSystemNameGestaltdIndexedDB
 	}
-	if labels.Plugin != "" {
-		attrs = append(attrs, attrPlugin.String(AttrValue(labels.Plugin)))
+	RecordDBClientOperation(ctx, startedAt, DBMetricDims{
+		SystemName:     systemName,
+		Namespace:      labels.DB,
+		CollectionName: labels.ObjectStore,
+		OperationName:  normalizeIndexedDBOperationName(method),
+		ProviderName:   labels.ProviderName,
+		IndexName:      labels.IndexName,
+		ErrorType:      indexedDBErrorType(err),
+	})
+}
+
+func normalizeIndexedDBOperationName(operation string) string {
+	switch strings.TrimSpace(operation) {
+	case "Get":
+		return "get"
+	case "GetKey":
+		return "get_key"
+	case "Add":
+		return "add"
+	case "Put":
+		return "put"
+	case "Delete":
+		return "delete"
+	case "Clear":
+		return "clear"
+	case "GetAll":
+		return "get_all"
+	case "GetAllKeys":
+		return "get_all_keys"
+	case "Count":
+		return "count"
+	case "DeleteRange":
+		return "delete_range"
+	case "OpenCursor":
+		return "open_cursor"
+	case "OpenKeyCursor":
+		return "open_key_cursor"
+	case "Index.Get":
+		return "index_get"
+	case "Index.GetKey":
+		return "index_get_key"
+	case "Index.GetAll":
+		return "index_get_all"
+	case "Index.GetAllKeys":
+		return "index_get_all_keys"
+	case "Index.Count":
+		return "index_count"
+	case "Index.Delete":
+		return "index_delete"
+	case "Index.OpenCursor":
+		return "index_open_cursor"
+	case "Index.OpenKeyCursor":
+		return "index_open_key_cursor"
+	default:
+		return strings.TrimSpace(operation)
 	}
-	recordCounterMetrics(ctx, metrics, startedAt, failed, attrs...)
+}
+
+func indexedDBErrorType(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	case errors.Is(err, indexeddb.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, indexeddb.ErrAlreadyExists):
+		return "already_exists"
+	case errors.Is(err, indexeddb.ErrKeysOnly):
+		return "keys_only"
+	default:
+		return "internal"
+	}
 }
 
 func recordCounterMetrics(ctx context.Context, metrics counterMetrics, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

@@ -70,11 +70,15 @@ func NewInt64Gauge(meter metric.Meter, name, desc string) metric.Int64Gauge {
 	return gauge
 }
 
-func NewFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Float64Histogram {
-	histogram, err := meter.Float64Histogram(
-		name,
+func NewFloat64Histogram(meter metric.Meter, name, desc, unit string, opts ...metric.Float64HistogramOption) metric.Float64Histogram {
+	histogramOpts := []metric.Float64HistogramOption{
 		metric.WithDescription(desc),
 		metric.WithUnit(unit),
+	}
+	histogramOpts = append(histogramOpts, opts...)
+	histogram, err := meter.Float64Histogram(
+		name,
+		histogramOpts...,
 	)
 	if err != nil {
 		otel.Handle(err)

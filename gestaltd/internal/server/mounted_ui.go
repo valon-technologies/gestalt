@@ -21,7 +21,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 const browserLoginPath = "/api/v1/auth/login"
@@ -434,14 +433,11 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 
 func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attrs := []attribute.KeyValue{
-			metricutil.AttrUI.String(metricutil.AttrValue(mounted.Name)),
-			metricutil.AttrInvocationSurface.String("ui"),
-		}
-		if mounted.PluginName != "" {
-			attrs = append(attrs, metricutil.AttrProvider.String(metricutil.AttrValue(mounted.PluginName)))
-		}
-		metricutil.AddHTTPAttributes(r.Context(), attrs...)
+		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+			ProviderName: mounted.PluginName,
+			Surface:      metricutil.InvocationSurfaceUI,
+			UIName:       mounted.Name,
+		})
 		next.ServeHTTP(w, r)
 	})
 }

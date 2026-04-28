@@ -76,25 +76,31 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	putAttrs := map[string]string{
-		"gestalt.db":           "system",
-		"gestalt.plugin":       "roadmap",
-		"gestalt.object_store": "snapshots",
-		"gestalt.method":       "Put",
+	dbPutAttrs := map[string]string{
+		"db.system.name":         "gestaltd.indexeddb",
+		"db.namespace":           "system",
+		"db.collection.name":     "snapshots",
+		"db.operation.name":      "put",
+		"gestaltd.provider.name": "roadmap",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, putAttrs)
-	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", putAttrs, "gestalt.store")
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", putAttrs)
+	metrictest.RequireFloat64Histogram(t, rm, "db.client.operation.duration", dbPutAttrs)
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbPutAttrs, "gestalt.db")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbPutAttrs, "gestalt.plugin")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbPutAttrs, "gestalt.object_store")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbPutAttrs, "gestalt.method")
 
-	indexAttrs := map[string]string{
-		"gestalt.db":           "system",
-		"gestalt.plugin":       "roadmap",
-		"gestalt.object_store": "snapshots",
-		"gestalt.method":       "Index.Get",
+	dbIndexAttrs := map[string]string{
+		"db.system.name":                "gestaltd.indexeddb",
+		"db.namespace":                  "system",
+		"db.collection.name":            "snapshots",
+		"db.operation.name":             "index_get",
+		"gestaltd.provider.name":        "roadmap",
+		"gestaltd.indexeddb.index.name": "by_type",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, indexAttrs)
-	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", indexAttrs, "gestalt.store")
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", indexAttrs)
+	metrictest.RequireFloat64Histogram(t, rm, "db.client.operation.duration", dbIndexAttrs)
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.error_count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.duration")
 }
 
 func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
