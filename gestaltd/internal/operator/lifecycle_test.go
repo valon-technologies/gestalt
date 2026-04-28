@@ -509,7 +509,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -573,7 +573,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     notion:
       source:
         path: ./manifest.yaml
@@ -678,7 +678,7 @@ spec:
 			}
 
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+			cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -765,7 +765,7 @@ func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 
 			caseDir := t.TempDir()
 			cfgPath := filepath.Join(caseDir, "config.yaml")
-			cfg := requiredComponentConfigYAML(t, caseDir, filepath.Join(caseDir, "gestalt.db")) + tc.body + `server:
+			cfg := requiredComponentConfigV3YAML(t, caseDir, filepath.Join(caseDir, "gestalt.db")) + tc.body + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -788,7 +788,7 @@ func TestInitAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -821,7 +821,7 @@ func TestInitAtPath_RejectsHybridExecutableStaticOperationByOriginalNameAfterAli
 	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -856,7 +856,7 @@ func TestInitAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *testin
 	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     target:
       source:
         path: %q
@@ -966,7 +966,7 @@ func TestInitAtPath_RejectsSessionCatalogOnlyInvokesTarget(t *testing.T) {
 	targetManifestPath := writeLocalMCPSpecPlugin(t, dir, "target")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -997,7 +997,7 @@ func TestInitAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing.T)
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -1031,7 +1031,7 @@ func TestInitAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
 	targetManifestPath := writeLocalOpenAPIAndMCPSpecPlugin(t, dir, "target")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -1065,7 +1065,7 @@ func TestLoadForExecutionAtPath_RejectsInvalidPluginInvokesDependency(t *testing
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -1143,7 +1143,7 @@ paths:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
@@ -1430,7 +1430,7 @@ plugins:
 			}
 
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + tc.uiConfigYAML + tc.extraYAML + `server:
+			cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + tc.uiConfigYAML + tc.extraYAML + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1524,7 +1524,7 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
     roadmap:
       source:
         path: ./ui/manifest.yaml
@@ -1972,7 +1972,8 @@ func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t 
 	})
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`providers:
+	cfg := fmt.Sprintf(`apiVersion: %s
+providers:
   indexeddb:
     main:
       source:
@@ -1992,7 +1993,7 @@ server:
   providers:
     indexeddb: main
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), uiManifestPath, pluginManifestPath)
+`, config.APIVersionV3, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), uiManifestPath, pluginManifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -2175,7 +2176,7 @@ func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedUIWithoutLockfile(t *
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
     roadmap:
       disabled: true
       source:
@@ -2231,7 +2232,8 @@ func TestInitAtPath_RejectsDisabledManagedHostProvidersWithStructuredSecretRefs(
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	manifestPath := writeStubIndexedDBManifest(t, dir)
-	cfg := `providers:
+	cfg := `apiVersion: ` + config.APIVersionV3 + `
+providers:
   indexeddb:
     sqlite:
       source:
@@ -2592,7 +2594,8 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	dbPath := filepath.Join(dir, "gestalt.db")
 	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`providers:
+	cfg := fmt.Sprintf(`apiVersion: %s
+providers:
   authentication:
     auth:
       source:
@@ -2610,7 +2613,7 @@ server:
     authentication: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, idbManifestPath, "sqlite://"+dbPath)
+`, config.APIVersionV3, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -2681,7 +2684,8 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	dbPath := filepath.Join(dir, "gestalt.db")
 	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`providers:
+	cfg := fmt.Sprintf(`apiVersion: %s
+providers:
   authentication:
     auth:
       source:
@@ -2697,7 +2701,7 @@ server:
     authentication: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, idbManifestPath, "sqlite://"+dbPath)
+`, config.APIVersionV3, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -2758,7 +2762,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -2943,7 +2947,7 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	}
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -3285,7 +3289,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -3316,7 +3320,7 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  public:\n    port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("apiVersion: "+config.APIVersionV3+"\nserver:\n  public:\n    port: 8080\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

@@ -54,8 +54,7 @@ const APIVersionV4 = "gestaltd.config/v4"
 type providerSourceSyntaxMode int
 
 const (
-	providerSourceSyntaxLegacy providerSourceSyntaxMode = iota
-	providerSourceSyntaxV3
+	providerSourceSyntaxV3 providerSourceSyntaxMode = iota
 	providerSourceSyntaxV4
 )
 
@@ -146,7 +145,7 @@ type ServerProvidersConfig struct {
 
 // ProviderSource supports handwritten config in three forms via custom
 // UnmarshalYAML:
-//   - Builtin:  source: "name"                               -> ProviderSource{Builtin: "name"}
+//   - Builtin:  recognized host builtins such as source: "env" or "stdout"
 //   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
 //   - GitHub:   source: {githubRelease: {repo, tag, asset}}  -> ProviderSource{GitHubRelease: ...}
 //   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."} in v3
@@ -2025,7 +2024,8 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	}
 
 	roots := make([]yaml.Node, len(paths))
-	sourceSyntax := providerSourceSyntaxLegacy
+	var sourceSyntax providerSourceSyntaxMode
+	sourceSyntaxSet := false
 	for i, path := range paths {
 		root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
 		if err != nil {
@@ -2035,18 +2035,17 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 		if err != nil {
 			return yaml.Node{}, err
 		}
-		if rootSyntax != providerSourceSyntaxLegacy {
-			if sourceSyntax != providerSourceSyntaxLegacy && sourceSyntax != rootSyntax {
-				return yaml.Node{}, fmt.Errorf("config validation: mixed apiVersion values are not supported across merged config files")
-			}
-			sourceSyntax = rootSyntax
+		if sourceSyntaxSet && sourceSyntax != rootSyntax {
+			return yaml.Node{}, fmt.Errorf("config validation: mixed apiVersion values are not supported across merged config files")
 		}
+		sourceSyntax = rootSyntax
+		sourceSyntaxSet = true
 		roots[i] = root
 	}
 
 	var merged any
 	for i, path := range paths {
-		value, err := loadConfigValue(path, roots[i], sourceSyntax)
+		value, err := loadConfigValue(path, roots[i])
 		if err != nil {
 			return yaml.Node{}, err
 		}
@@ -2075,25 +2074,28 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 
 func configRootSourceSyntax(root yaml.Node) (providerSourceSyntaxMode, error) {
 	doc := documentValueNode(&root)
-	if doc == nil || doc.Kind != yaml.MappingNode {
-		return providerSourceSyntaxLegacy, nil
+	if doc == nil || doc.Kind == 0 {
+		return providerSourceSyntaxV3, requiredAPIVersionError()
+	}
+	if doc.Kind != yaml.MappingNode {
+		return providerSourceSyntaxV3, fmt.Errorf("parsing config YAML: expected mapping document")
 	}
 	node := mappingValueNode(doc, "apiVersion")
 	if node == nil {
-		return providerSourceSyntaxLegacy, nil
+		return providerSourceSyntaxV3, requiredAPIVersionError()
 	}
 	value := strings.TrimSpace(node.Value)
 	if value == "" {
-		return providerSourceSyntaxLegacy, nil
+		return providerSourceSyntaxV3, requiredAPIVersionError()
 	}
 	mode, err := providerSourceSyntaxForAPIVersion(value)
 	if err != nil {
-		return providerSourceSyntaxLegacy, err
+		return providerSourceSyntaxV3, err
 	}
 	return mode, nil
 }
 
-func loadConfigValue(path string, root yaml.Node, sourceSyntax providerSourceSyntaxMode) (any, error) {
+func loadConfigValue(path string, root yaml.Node) (any, error) {
 	doc := documentValueNode(&root)
 	if doc == nil || doc.Kind == 0 {
 		return nil, nil
@@ -2113,7 +2115,7 @@ func loadConfigValue(path string, root yaml.Node, sourceSyntax providerSourceSyn
 		if !ok {
 			return nil, fmt.Errorf("expected mapping document")
 		}
-		resolveRelativePathsInValue(path, root, sourceSyntax)
+		resolveRelativePathsInValue(path, root)
 	}
 	return normalized, nil
 }
@@ -2646,8 +2648,6 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 		return
 	}
 	switch {
-	case sourceSyntax == providerSourceSyntaxLegacy:
-		source.Builtin = source.scalar
 	case isBuiltinScalarSource(kind, source.scalar):
 		source.Builtin = source.scalar
 	case looksLikeMetadataURL(source.scalar):
@@ -2724,21 +2724,21 @@ func looksLikeUnsupportedScalarSource(value string) bool {
 
 func providerSourceSyntaxForAPIVersion(apiVersion string) (providerSourceSyntaxMode, error) {
 	switch strings.TrimSpace(apiVersion) {
-	case "":
-		return providerSourceSyntaxLegacy, nil
 	case APIVersionV3:
 		return providerSourceSyntaxV3, nil
 	case APIVersionV4:
 		return providerSourceSyntaxV4, nil
+	case "":
+		return providerSourceSyntaxV3, requiredAPIVersionError()
 	default:
-		return providerSourceSyntaxLegacy, fmt.Errorf("config validation: unsupported apiVersion %q", strings.TrimSpace(apiVersion))
+		return providerSourceSyntaxV3, fmt.Errorf("config validation: unsupported apiVersion %q", strings.TrimSpace(apiVersion))
 	}
 }
 
 func sourceSyntaxForConfig(apiVersion string) providerSourceSyntaxMode {
 	mode, err := providerSourceSyntaxForAPIVersion(apiVersion)
 	if err != nil {
-		return providerSourceSyntaxLegacy
+		return providerSourceSyntaxV3
 	}
 	return mode
 }
@@ -2907,7 +2907,7 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 }
 
-func resolveRelativePathsInValue(configPath string, root map[string]any, sourceSyntax providerSourceSyntaxMode) {
+func resolveRelativePathsInValue(configPath string, root map[string]any) {
 	baseDir := filepath.Dir(configPath)
 	if absPath, err := filepath.Abs(configPath); err == nil {
 		baseDir = filepath.Dir(absPath)
@@ -2935,31 +2935,28 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, sourceS
 			{key: "agent", kind: string(HostProviderKindAgent)},
 		} {
 			for _, entry := range mapValues(nestedMap(providers, section.key)) {
-				resolveRelativePathsInEntry(section.kind, entry, baseDir, sourceSyntax)
+				resolveRelativePathsInEntry(section.kind, entry, baseDir)
 			}
 		}
 	}
 	if runtimeConfig := nestedMap(root, "runtime"); runtimeConfig != nil {
 		for _, entry := range mapValues(nestedMap(runtimeConfig, "providers")) {
-			resolveRelativePathsInEntry(providermanifestv1.KindRuntime, entry, baseDir, sourceSyntax)
+			resolveRelativePathsInEntry(providermanifestv1.KindRuntime, entry, baseDir)
 		}
 	}
 
 	for _, entry := range mapValues(nestedMap(root, "plugins")) {
-		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir, sourceSyntax)
+		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir)
 	}
 }
 
-func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string, sourceSyntax providerSourceSyntaxMode) {
+func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string) {
 	if entry == nil {
 		return
 	}
 	resolveRelativeStringField(entry, "iconFile", baseDir)
 	if source, ok := entry["source"].(map[string]any); ok {
 		resolveRelativeStringField(source, "path", baseDir)
-		return
-	}
-	if sourceSyntax == providerSourceSyntaxLegacy {
 		return
 	}
 	sourceValue, ok := entry["source"].(string)

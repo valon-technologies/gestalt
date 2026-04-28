@@ -23,12 +23,25 @@ func mustDecodeNode(t *testing.T, node yaml.Node) map[string]any {
 
 func mustWriteConfigFile(t *testing.T, content string) string {
 	t.Helper()
+	return mustWriteRawConfigFile(t, withDefaultConfigAPIVersion(content))
+}
+
+func mustWriteRawConfigFile(t *testing.T, content string) string {
+	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "gestalt.yaml")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp config: %v", err)
 	}
 	return path
+}
+
+func withDefaultConfigAPIVersion(content string) string {
+	trimmed := strings.TrimLeft(content, " \t\r\n")
+	if strings.HasPrefix(trimmed, "apiVersion:") {
+		return content
+	}
+	return "\napiVersion: " + APIVersionV3 + "\n" + strings.TrimLeft(content, "\r\n")
 }
 
 func mustSelectedProvider(t *testing.T, cfg *Config, kind HostProviderKind) (string, *ProviderEntry) {
@@ -830,6 +843,7 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 			t.Parallel()
 
 			cfg := &Config{
+				APIVersion: APIVersionV3,
 				Authorization: AuthorizationConfig{
 					Policies: map[string]SubjectPolicyDef{
 						"roadmap": {
@@ -2175,7 +2189,7 @@ server:
 		}
 	})
 
-	t.Run("builtin ui source is rejected", func(t *testing.T) {
+	t.Run("ui scalar source is treated as local path", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2194,12 +2208,12 @@ server:
   encryptionKey: server-key
 `)
 
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
 		}
-		if !strings.Contains(err.Error(), `ui "roadmap" does not support builtin providers`) {
-			t.Fatalf("unexpected error: %v", err)
+		if got := cfg.Providers.UI["roadmap"].SourcePath(); got != filepath.Join(filepath.Dir(path), "stdout") {
+			t.Fatalf("ui source path = %q, want local path", got)
 		}
 	})
 
@@ -3999,6 +4013,7 @@ func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v3
 server:
   encryptionKey: server-key
 plugins:
@@ -4021,6 +4036,7 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v3
 plugins:
   service:
     execution:
@@ -4287,6 +4303,82 @@ plugins:
 				t.Fatalf("Load error = %v, want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestLoadConfigRequiresAPIVersion(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "missing apiVersion is rejected",
+			yaml: `
+providers:
+plugins:
+  external:
+    source: ./plugins/dummy/manifest.yaml
+`,
+		},
+		{
+			name: "empty apiVersion is rejected",
+			yaml: `
+apiVersion: ""
+providers:
+plugins:
+  external:
+    source: ./plugins/dummy/manifest.yaml
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteRawConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "apiVersion is required") {
+				t.Fatalf("Load error = %v, want apiVersion required error", err)
+			}
+		})
+	}
+}
+
+func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base.yaml")
+	overridePath := filepath.Join(dir, "override.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+  external:
+    source: ./plugins/dummy/manifest.yaml
+`), 0o644); err != nil {
+		t.Fatalf("writing base config: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(`
+plugins:
+  external:
+    displayName: External
+`), 0o644); err != nil {
+		t.Fatalf("writing override config: %v", err)
+	}
+
+	_, err := LoadPaths([]string{basePath, overridePath})
+	if err == nil {
+		t.Fatal("LoadPaths: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "apiVersion is required") {
+		t.Fatalf("LoadPaths error = %v, want apiVersion required error", err)
 	}
 }
 
@@ -4937,6 +5029,9 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			if tc.cfg != nil && strings.TrimSpace(tc.cfg.APIVersion) == "" {
+				tc.cfg.APIVersion = APIVersionV3
+			}
 			err := ValidateStructure(tc.cfg)
 			if tc.wantErr == "" {
 				if err != nil {
@@ -4972,6 +5067,7 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
+apiVersion: gestaltd.config/v3
 providers:
   authentication:
     authentication:
@@ -5036,6 +5132,7 @@ plugins:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v3
 providers:
 plugins:
     sample:
@@ -5164,7 +5261,8 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `providers:
+	cfg := `apiVersion: gestaltd.config/v3
+providers:
 plugins:
     sample:
       source:
