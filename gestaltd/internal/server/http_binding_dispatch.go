@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -68,6 +69,7 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.PluginName))
 	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
+	ctx = invocation.WithHTTPBinding(ctx, binding.Name)
 	if binding.CredentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, binding.CredentialMode)
 	}
@@ -76,7 +78,8 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 
 func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest, requestMeta invocation.RequestMeta) {
 	go func() {
-		ctx := invocation.WithRequestMeta(context.Background(), requestMeta)
+		ctx := metricutil.WithMeterProvider(context.Background(), s.meterProvider)
+		ctx = invocation.WithRequestMeta(ctx, requestMeta)
 		if _, err := s.httpBindingOperationInvocation(ctx, binding, p, verified, parsed); err != nil {
 			slog.Error("http binding async operation failed", "plugin", binding.PluginName, "binding", binding.Name, "operation", binding.Target, "error", err)
 		}

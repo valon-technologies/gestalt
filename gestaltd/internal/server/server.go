@@ -111,6 +111,7 @@ type Server struct {
 	apiTokenTTL            time.Duration
 	now                    func() time.Time
 	readiness              ReadinessChecker
+	meterProvider          metric.MeterProvider
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
@@ -330,6 +331,7 @@ func New(cfg Config) (*Server, error) {
 		apiTokenTTL:            cfg.APITokenTTL,
 		now:                    now,
 		readiness:              cfg.Readiness,
+		meterProvider:          cfg.MeterProvider,
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,

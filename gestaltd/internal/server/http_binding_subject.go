@@ -23,6 +23,7 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 	resolveCtx = invocation.WithAccessContext(resolveCtx, s.providerAccessContextWithContext(resolveCtx, bindingPrincipal, binding.PluginName))
 	resolveCtx = invocation.WithWorkflowContext(resolveCtx, httpBindingContextValue(binding, verified, parsed))
 	resolveCtx = invocation.WithInvocationSurface(resolveCtx, invocation.InvocationSurfaceHTTP)
+	resolveCtx = invocation.WithHTTPBinding(resolveCtx, binding.Name)
 
 	resolved, supported, err := core.ResolveHTTPSubject(resolveCtx, prov, &core.HTTPSubjectResolveRequest{
 		Binding:         binding.Name,
