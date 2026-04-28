@@ -497,6 +497,54 @@ spec:
 	}
 }
 
+func TestManifestWorkflow_AcceptsPlatformProviderConnection(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/platform-connection
+version: 1.0.0
+spec:
+  defaultConnection: default
+  connections:
+    default:
+      mode: user
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+    bot:
+      displayName: Bot
+      mode: platform
+      auth:
+        type: bearer
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected plugin metadata")
+	}
+	if got := manifest.Spec.Connections["bot"].Mode; got != providermanifestv1.ConnectionModePlatform {
+		t.Fatalf("bot connection mode = %q, want %q", got, providermanifestv1.ConnectionModePlatform)
+	}
+	if got := manifest.Spec.Connections["bot"].Auth.Type; got != providermanifestv1.AuthTypeBearer {
+		t.Fatalf("bot auth type = %q, want %q", got, providermanifestv1.AuthTypeBearer)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	rendered := string(encoded)
+	if !strings.Contains(rendered, "mode: platform") || !strings.Contains(rendered, "type: bearer") {
+		t.Fatalf("expected canonical platform bearer connection in output:\n%s", rendered)
+	}
+}
+
 func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing.T) {
 	t.Parallel()
 
