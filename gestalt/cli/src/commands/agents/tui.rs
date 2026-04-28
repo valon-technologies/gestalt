@@ -19,7 +19,7 @@ use crate::cli::{AgentArgs, AgentTurnCreateArgs};
 mod state;
 mod worker;
 
-use state::{AgentUiState, TranscriptKind, turn_status_label};
+use state::{AgentUiState, TranscriptItem, turn_status_label};
 use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 
 use super::{
@@ -200,30 +200,11 @@ impl TuiApp {
     fn transcript_lines(&self, area: Rect) -> Vec<Line<'static>> {
         let content_width = area.width.saturating_sub(2).max(1) as usize;
         let mut lines = Vec::new();
-        for item in self.state.transcript() {
-            let style = match item.kind {
-                TranscriptKind::User => Style::default().fg(Color::Cyan),
-                TranscriptKind::Assistant => Style::default().fg(Color::White),
-                TranscriptKind::Tool => Style::default().fg(Color::Yellow),
-                TranscriptKind::Interaction => Style::default().fg(Color::Magenta),
-                TranscriptKind::System => Style::default().fg(Color::Green),
-                TranscriptKind::Error => Style::default().fg(Color::Red),
-            };
-            let label_text = format!("{} ", item.kind.label());
-            let label_width = UnicodeWidthStr::width(label_text.as_str());
-            let text_width = content_width.saturating_sub(label_width).max(1);
-            let mut first_row = true;
-            for text_line in item.text.split('\n') {
-                for chunk in text_chunks(text_line, text_width) {
-                    let label = if first_row {
-                        first_row = false;
-                        Span::styled(label_text.clone(), style.add_modifier(Modifier::BOLD))
-                    } else {
-                        Span::raw(" ".repeat(label_width))
-                    };
-                    lines.push(Line::from(vec![label, Span::raw(chunk)]));
-                }
+        for (index, item) in self.state.transcript().iter().enumerate() {
+            if index > 0 {
+                lines.push(Line::from(""));
             }
+            push_transcript_item_lines(&mut lines, item, content_width);
         }
         lines
     }
@@ -671,6 +652,31 @@ fn visible_lines(
     let end = lines.len().saturating_sub(scroll_offset);
     let start = end.saturating_sub(visible_height.max(1));
     lines.into_iter().skip(start).take(end - start).collect()
+}
+
+fn push_transcript_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let header_style = item.kind.header_style().add_modifier(Modifier::BOLD);
+    lines.push(Line::from(Span::styled(
+        item.kind.header().to_string(),
+        header_style,
+    )));
+
+    let body_style = item.kind.body_style();
+    let indent = "  ";
+    let indent_width = UnicodeWidthStr::width(indent);
+    let text_width = content_width.saturating_sub(indent_width).max(1);
+    for text_line in item.text.split('\n') {
+        for chunk in text_chunks(text_line, text_width) {
+            lines.push(Line::from(Span::styled(
+                format!("{indent}{chunk}"),
+                body_style,
+            )));
+        }
+    }
 }
 
 fn text_chunks(text: &str, width: usize) -> Vec<String> {

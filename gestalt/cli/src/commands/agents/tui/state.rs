@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use ratatui::style::{Color, Style};
 use serde_json::Value;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -537,15 +538,37 @@ pub(super) enum TranscriptKind {
 }
 
 impl TranscriptKind {
-    pub(super) fn label(self) -> &'static str {
+    pub(super) fn header(self) -> &'static str {
         match self {
-            Self::User => "you>",
-            Self::Assistant => "assistant>",
-            Self::Tool => "tool>",
-            Self::Interaction => "interaction>",
-            Self::System => "system>",
-            Self::Error => "error>",
+            Self::User => "You",
+            Self::Assistant => "Assistant",
+            Self::Tool => "Tool",
+            Self::Interaction => "Interaction",
+            Self::System => "System",
+            Self::Error => "Error",
         }
+    }
+
+    pub(super) fn header_style(self) -> Style {
+        Style::default().fg(match self {
+            Self::User => Color::Cyan,
+            Self::Assistant => Color::Green,
+            Self::Tool => Color::Yellow,
+            Self::Interaction => Color::Magenta,
+            Self::System => Color::Blue,
+            Self::Error => Color::Red,
+        })
+    }
+
+    pub(super) fn body_style(self) -> Style {
+        Style::default().fg(match self {
+            Self::User => Color::White,
+            Self::Assistant => Color::White,
+            Self::Tool => Color::Gray,
+            Self::Interaction => Color::Gray,
+            Self::System => Color::Gray,
+            Self::Error => Color::LightRed,
+        })
     }
 }
 
