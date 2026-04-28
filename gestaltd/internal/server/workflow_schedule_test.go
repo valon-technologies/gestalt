@@ -691,6 +691,9 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if ref.SubjectID != principal.UserSubjectID(user.ID) {
 		t.Fatalf("execution ref = %#v", ref)
 	}
+	if ref.SubjectKind != "user" || ref.DisplayName != "Ada" || ref.AuthSource != "session" {
+		t.Fatalf("execution ref subject metadata = (%q, %q, %q), want user/Ada/session", ref.SubjectKind, ref.DisplayName, ref.AuthSource)
+	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2644,6 +2647,12 @@ func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 		for _, publishReq := range provider.publishEventReqs {
 			if publishReq.Event.ID != body.Event.ID || publishReq.Event.SpecVersion != "1.0" || publishReq.Event.Time == nil || !publishReq.Event.Time.Equal(*body.Event.Time) {
 				t.Fatalf("%s publish event = %#v, response = %#v", name, publishReq.Event, body.Event)
+			}
+			if publishReq.PublishedBy.SubjectID != principal.UserSubjectID(user.ID) ||
+				publishReq.PublishedBy.SubjectKind != "user" ||
+				publishReq.PublishedBy.DisplayName != "Ada" ||
+				publishReq.PublishedBy.AuthSource != "session" {
+				t.Fatalf("%s published_by = %#v, want publishing user actor", name, publishReq.PublishedBy)
 			}
 		}
 	}

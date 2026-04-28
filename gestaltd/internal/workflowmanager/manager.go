@@ -273,6 +273,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, even
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
+	publishedBy := workflowActorFromPrincipal(p)
 
 	providerNames := m.workflow.ProviderNames()
 	for _, providerName := range providerNames {
@@ -281,7 +282,8 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, even
 			return coreworkflow.Event{}, err
 		}
 		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-			Event: event,
+			Event:       event,
+			PublishedBy: publishedBy,
 		}); err != nil {
 			return coreworkflow.Event{}, err
 		}
@@ -989,12 +991,16 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	if err != nil {
 		return nil, fmt.Errorf("workflow target fingerprint: %w", err)
 	}
+	actor := workflowActorFromPrincipal(p)
 	return store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
 		TargetFingerprint:   targetFingerprint,
 		SubjectID:           subjectID,
+		SubjectKind:         actor.SubjectKind,
+		DisplayName:         actor.DisplayName,
+		AuthSource:          actor.AuthSource,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
 	})

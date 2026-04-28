@@ -673,6 +673,9 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 		ProviderName:        "temporal",
 		Target:              testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil),
 		SubjectID:           principal.UserSubjectID(user.ID),
+		SubjectKind:         string(principal.KindUser),
+		DisplayName:         "Ada Lovelace",
+		AuthSource:          "github_app_webhook",
 		CredentialSubjectID: "service_account:workflow-credential",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
@@ -729,6 +732,9 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 	if gotPrincipal.CredentialSubjectID != "service_account:workflow-credential" {
 		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, "service_account:workflow-credential")
+	}
+	if gotPrincipal.DisplayName != "Ada Lovelace" || gotPrincipal.AuthSource() != "github_app_webhook" {
+		t.Fatalf("principal display/auth = (%q, %q), want stored execution ref metadata", gotPrincipal.DisplayName, gotPrincipal.AuthSource())
 	}
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")

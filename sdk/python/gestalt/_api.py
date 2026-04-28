@@ -1,4 +1,5 @@
 """Core request, response, and model helpers for authored operations."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -15,16 +16,19 @@ else:
         try:
             from typing_extensions import dataclass_transform
         except ImportError:
+
             def dataclass_transform(*args: Any, **kwargs: Any):
                 def decorator(cls: type[Any]) -> type[Any]:
                     return cls
 
                 return decorator
 
+
 if TYPE_CHECKING:
     from ._agent import AgentManager
     from ._authorization import AuthorizationClient
     from ._invoker import PluginInvoker
+    from ._workflow import WorkflowManager
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -89,6 +93,11 @@ class Request:
         from ._agent import AgentManager
 
         return AgentManager(self.invocation_token)
+
+    def workflow_manager(self) -> "WorkflowManager":
+        from ._workflow import WorkflowManager
+
+        return WorkflowManager(self.invocation_token)
 
     def authorization(self) -> "AuthorizationClient":
         from ._authorization import Authorization

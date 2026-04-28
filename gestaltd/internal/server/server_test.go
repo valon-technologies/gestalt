@@ -14424,7 +14424,11 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T) {
 	t.Parallel()
 
-	subjects := make(chan string, 1)
+	type resolvedInvocationSubject struct {
+		ID         string
+		AuthSource string
+	}
+	subjects := make(chan resolvedInvocationSubject, 1)
 	resolved := atomic.Bool{}
 	baseProvider := &stubIntegrationWithResolvedSubject{
 		stubIntegrationWithOps: stubIntegrationWithOps{
@@ -14438,7 +14442,11 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 					if got, want := params["event"], "opened"; got != want {
 						t.Fatalf("params[event] = %#v, want %q", got, want)
 					}
-					subjects <- principal.FromContext(ctx).SubjectID
+					p := principal.FromContext(ctx)
+					subjects <- resolvedInvocationSubject{
+						ID:         p.SubjectID,
+						AuthSource: p.AuthSource(),
+					}
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"accepted":true}`}, nil
 				},
 			},
@@ -14518,9 +14526,12 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 	}
 
 	select {
-	case subjectID := <-subjects:
-		if subjectID != "user:slack-linked" {
-			t.Fatalf("operation subject = %q, want %q", subjectID, "user:slack-linked")
+	case subject := <-subjects:
+		if subject.ID != "user:slack-linked" {
+			t.Fatalf("operation subject = %q, want %q", subject.ID, "user:slack-linked")
+		}
+		if subject.AuthSource != "authorization" {
+			t.Fatalf("operation auth_source = %q, want %q", subject.AuthSource, "authorization")
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for http binding invocation")

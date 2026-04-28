@@ -119,8 +119,8 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	p := &principal.Principal{
 		SubjectID:   subject.GetId(),
 		DisplayName: subject.GetDisplayName(),
-		Source:      sourceFromString(subject.GetAuthSource()),
 	}
+	principal.SetAuthSource(p, subject.GetAuthSource())
 	if kind := strings.TrimSpace(subject.GetKind()); kind != "" {
 		p.Kind = principal.Kind(kind)
 	}
@@ -131,7 +131,7 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 			DisplayName: subject.GetDisplayName(),
 		}
 	}
-	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
+	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown && p.AuthSourceOverride == "" {
 		return &principal.Principal{}
 	}
 	return p
@@ -168,17 +168,4 @@ func postConnectCredentialFromProto(token *proto.PostConnectCredential) *core.Ex
 		out.UpdatedAt = ts.AsTime()
 	}
 	return out
-}
-
-func sourceFromString(raw string) principal.Source {
-	switch raw {
-	case principal.SourceSession.String():
-		return principal.SourceSession
-	case principal.SourceAPIToken.String():
-		return principal.SourceAPIToken
-	case principal.SourceEnv.String():
-		return principal.SourceEnv
-	default:
-		return principal.SourceUnknown
-	}
 }
