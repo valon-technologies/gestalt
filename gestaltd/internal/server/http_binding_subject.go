@@ -58,15 +58,15 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "invalid resolved http subject", errors.New("resolved subject uses reserved system namespace"))
 	}
 
-	p := principal.Canonicalize(&principal.Principal{
+	p := &principal.Principal{
 		SubjectID:   strings.TrimSpace(resolved.ID),
 		DisplayName: strings.TrimSpace(resolved.DisplayName),
-		Source:      principal.ParseSource(strings.TrimSpace(resolved.AuthSource)),
-	})
+	}
+	principal.SetAuthSource(p, resolved.AuthSource)
 	if kind := strings.TrimSpace(resolved.Kind); kind != "" {
 		p.Kind = principal.Kind(kind)
 	}
-	return p, nil
+	return principal.Canonicalize(p), nil
 }
 
 func requestMethod(r *http.Request, binding MountedHTTPBinding) string {

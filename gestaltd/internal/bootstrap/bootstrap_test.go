@@ -4692,6 +4692,70 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	}
 }
 
+func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenMetadataChanges(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	_ = result.Close(context.Background())
+	provider.executionRefs[initialExecutionRef].DisplayName = "Stale config name"
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap replay: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.upsertedSchedules) != 2 {
+		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
+	}
+	refreshedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
+	if refreshedExecutionRef == initialExecutionRef {
+		t.Fatalf("execution ref = %q, want refreshed ref after display name drift", refreshedExecutionRef)
+	}
+	ref, err := provider.GetExecutionReference(context.Background(), refreshedExecutionRef)
+	if err != nil {
+		t.Fatalf("Get refreshed execution ref: %v", err)
+	}
+	if ref.DisplayName != "Gestalt config" {
+		t.Fatalf("displayName = %q, want refreshed config display name", ref.DisplayName)
+	}
+	oldRef, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get old execution ref: %v", err)
+	}
+	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
+		t.Fatalf("old revokedAt = %#v, want set", oldRef.RevokedAt)
+	}
+}
+
 func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) {
 	t.Parallel()
 

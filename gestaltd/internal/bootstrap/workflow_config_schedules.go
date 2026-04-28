@@ -405,6 +405,9 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		ProviderName:        providerName,
 		Target:              target,
 		SubjectID:           workflowConfigOwnerSubjectID(),
+		SubjectKind:         "system",
+		DisplayName:         "Gestalt config",
+		AuthSource:          "config",
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
 		Permissions:         workflowExecutionRefPermissionsForTarget(target),
 	}
@@ -472,6 +475,15 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 		return false
 	}
 	if strings.TrimSpace(existing.SubjectID) != strings.TrimSpace(desired.SubjectID) {
+		return false
+	}
+	if strings.TrimSpace(existing.SubjectKind) != strings.TrimSpace(desired.SubjectKind) {
+		return false
+	}
+	if strings.TrimSpace(existing.DisplayName) != strings.TrimSpace(desired.DisplayName) {
+		return false
+	}
+	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
 		return false
 	}
 	if !workflowTargetsEqual(existing.Target, desired.Target) {

@@ -31,6 +31,7 @@ type Principal struct {
 	DisplayName         string
 	Kind                Kind
 	Source              Source
+	AuthSourceOverride  string
 	Scopes              []string
 	TokenPermissions    PermissionSet
 }
@@ -67,10 +68,26 @@ func (p *Principal) AuthSource() string {
 	if p == nil {
 		return ""
 	}
+	if authSource := strings.TrimSpace(p.AuthSourceOverride); authSource != "" {
+		return authSource
+	}
 	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
 		return ""
 	}
 	return p.Source.String()
+}
+
+func SetAuthSource(p *Principal, value string) {
+	if p == nil {
+		return
+	}
+	value = strings.TrimSpace(value)
+	p.Source = ParseSource(value)
+	if value != "" && p.Source.String() != value {
+		p.AuthSourceOverride = value
+	} else {
+		p.AuthSourceOverride = ""
+	}
 }
 
 func UserSubjectID(userID string) string {

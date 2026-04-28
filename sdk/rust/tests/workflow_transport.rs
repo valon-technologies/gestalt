@@ -359,6 +359,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 r#type: "demo.refresh.requested".to_string(),
                 ..Default::default()
             }),
+            published_by: None,
         })
         .await
         .expect("publish event");

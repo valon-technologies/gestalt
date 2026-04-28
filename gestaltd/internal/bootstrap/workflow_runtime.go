@@ -219,7 +219,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		if err != nil {
 			return nil, err
 		}
-		principalValue = executionReferencePrincipal(resolvedRef.SubjectID, resolvedRef.CredentialSubjectID, resolvedRef.Permissions)
+		principalValue = workflowExecutionReferencePrincipal(resolvedRef)
 		target = resolvedRef.Target
 		if target.Plugin != nil {
 			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
@@ -327,7 +327,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		if err != nil {
 			return nil, err
 		}
-		principalValue = executionReferencePrincipal(resolvedRef.SubjectID, resolvedRef.CredentialSubjectID, resolvedRef.Permissions)
+		principalValue = workflowExecutionReferencePrincipal(resolvedRef)
 		target = resolvedRef.Target
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)

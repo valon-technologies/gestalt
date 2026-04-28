@@ -64,6 +64,9 @@ type ExecutionReference struct {
 	Target              Target
 	TargetFingerprint   string
 	SubjectID           string
+	SubjectKind         string
+	DisplayName         string
+	AuthSource          string
 	CredentialSubjectID string
 	Permissions         []core.AccessPermission
 	CreatedAt           *time.Time
@@ -222,8 +225,9 @@ type ResumeEventTriggerRequest struct {
 }
 
 type PublishEventRequest struct {
-	PluginName string
-	Event      Event
+	PluginName  string
+	Event       Event
+	PublishedBy Actor
 }
 
 type InvokeOperationRequest struct {

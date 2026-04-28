@@ -9340,6 +9340,12 @@ pub struct WorkflowExecutionReference {
     pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "9")]
     pub target_fingerprint: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub subject_kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -9483,6 +9489,8 @@ pub struct PublishWorkflowProviderEventRequest {
     pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
+    #[prost(message, optional, tag = "3")]
+    pub published_by: ::core::option::Option<WorkflowActor>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InvokeWorkflowOperationRequest {

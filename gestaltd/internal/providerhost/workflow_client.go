@@ -295,8 +295,9 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 		return err
 	}
 	_, err = r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-		PluginName: req.PluginName,
-		Event:      pbEvent,
+		PluginName:  req.PluginName,
+		Event:       pbEvent,
+		PublishedBy: workflowActorToProto(req.PublishedBy),
 	})
 	return err
 }

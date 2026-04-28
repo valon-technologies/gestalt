@@ -393,6 +393,26 @@ func TestPrincipalFromProto_NonUserDisplayNameDoesNotCreateIdentity(t *testing.T
 	}
 }
 
+func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
+	t.Parallel()
+
+	p := principalFromProto(&proto.SubjectContext{
+		Id:          "workload:github_app_installation:127579767:repo:valon-technologies/gestalt",
+		Kind:        "workload",
+		DisplayName: "GitHub App installation 127579767",
+		AuthSource:  "github_app_webhook",
+	})
+	if p == nil {
+		t.Fatal("expected principal")
+	}
+	if p.AuthSource() != "github_app_webhook" {
+		t.Fatalf("auth source = %q, want github_app_webhook", p.AuthSource())
+	}
+	if p.Kind != principal.Kind("workload") {
+		t.Fatalf("kind = %q, want workload", p.Kind)
+	}
+}
+
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 

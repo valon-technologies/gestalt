@@ -403,16 +403,15 @@ func principalFromInvocationClaims(claims *invocationTokenClaims) *principal.Pri
 	if claims == nil {
 		return nil
 	}
-	source := principal.ParseSource(claims.AuthSource)
 	tokenPerms := decodePermissionSet(claims.TokenPermissions)
 	p := &principal.Principal{
 		SubjectID:           strings.TrimSpace(claims.Subject),
 		CredentialSubjectID: strings.TrimSpace(claims.CredentialSubjectID),
 		DisplayName:         strings.TrimSpace(claims.DisplayName),
 		Kind:                principal.Kind(strings.TrimSpace(claims.SubjectKind)),
-		Source:              source,
 		TokenPermissions:    tokenPerms,
 	}
+	principal.SetAuthSource(p, claims.AuthSource)
 	if strings.TrimSpace(claims.Email) != "" || strings.TrimSpace(claims.DisplayName) != "" {
 		p.Identity = &core.UserIdentity{
 			Email:       strings.TrimSpace(claims.Email),
@@ -423,7 +422,7 @@ func principalFromInvocationClaims(claims *invocationTokenClaims) *principal.Pri
 		p.Scopes = principal.PermissionPlugins(p.TokenPermissions)
 	}
 	principal.Canonicalize(p)
-	if p.SubjectID == "" && p.UserID == "" && p.Kind == "" && p.DisplayName == "" && p.CredentialSubjectID == "" && p.TokenPermissions == nil && source == principal.SourceUnknown {
+	if p.SubjectID == "" && p.UserID == "" && p.Kind == "" && p.DisplayName == "" && p.CredentialSubjectID == "" && p.TokenPermissions == nil && p.Source == principal.SourceUnknown && p.AuthSourceOverride == "" {
 		return nil
 	}
 	return p
