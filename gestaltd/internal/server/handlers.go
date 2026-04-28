@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -256,15 +257,13 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-	for _, param := range []string{"instance", "connection"} {
-		if _, ok := query[param]; ok {
-			auditErr = errors.New("unsupported connection parameter")
-			writeError(w, http.StatusBadRequest, "use _connection and _instance query parameters")
-			return
-		}
-	}
 
-	requestedInstance := query.Get(httpInstanceParam)
+	requestedInstance, err := selectorQueryValue(query, httpInstanceParam, "instance")
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if requestedInstance != "" {
 		var ok bool
 		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
@@ -273,7 +272,12 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	requestedConnection := query.Get(httpConnectionParam)
+	requestedConnection, err := selectorQueryValue(query, httpConnectionParam, "connection")
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if requestedConnection != "" {
 		var ok bool
 		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
@@ -362,6 +366,18 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+func selectorQueryValue(query url.Values, canonical, legacy string) (string, error) {
+	canonicalValue := query.Get(canonical)
+	legacyValue := query.Get(legacy)
+	if canonicalValue != "" && legacyValue != "" && canonicalValue != legacyValue {
+		return "", fmt.Errorf("conflicting %s and %s query parameters", canonical, legacy)
+	}
+	if canonicalValue != "" {
+		return canonicalValue, nil
+	}
+	return legacyValue, nil
 }
 
 func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider, bool) {
@@ -760,6 +776,16 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	case errors.Is(err, apiexec.ErrMissingPathParam):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.As(err, &upstreamErr):
+		if upstreamErr.Status == http.StatusUnauthorized {
+			writeTypedError(
+				w,
+				http.StatusPreconditionFailed,
+				"reconnect_required",
+				providerName,
+				fmt.Sprintf("stored credential for integration %q was rejected by upstream; reconnect it", providerName),
+			)
+			return
+		}
 		writeOperationResult(w, &core.OperationResult{
 			Status:  upstreamErr.Status,
 			Headers: upstreamErr.Headers,

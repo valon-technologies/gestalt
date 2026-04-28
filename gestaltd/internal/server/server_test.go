@@ -8590,7 +8590,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("plain parameters are rejected for disconnect", func(t *testing.T) {
+	t.Run("legacy plain parameters are accepted for disconnect", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
@@ -8617,6 +8617,45 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "notion")
+		if err != nil {
+			t.Fatalf("ListCredentialsForProvider: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("expected one token to remain after legacy disconnect, got %d", len(tokens))
+		}
+		if tokens[0].Connection != "default" || tokens[0].Instance != "default" {
+			t.Fatalf("unexpected remaining token %+v", tokens[0])
+		}
+	})
+
+	t.Run("conflicting canonical and legacy parameters are rejected for disconnect", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		seedToken(t, svc, &core.ExternalCredential{
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
+			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion?_connection=default&connection=mcp", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
 		if resp.StatusCode != http.StatusBadRequest {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
@@ -8625,15 +8664,8 @@ func TestDisconnectIntegration(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			t.Fatalf("decoding: %v", err)
 		}
-		if !strings.Contains(result["error"], "_connection") || !strings.Contains(result["error"], "_instance") {
-			t.Fatalf("expected canonical parameter error, got %q", result["error"])
-		}
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "notion")
-		if err != nil {
-			t.Fatalf("ListCredentialsForProvider: %v", err)
-		}
-		if len(tokens) != 2 {
-			t.Fatalf("expected both tokens to remain after rejected disconnect, got %d", len(tokens))
+		if !strings.Contains(result["error"], "_connection") || !strings.Contains(result["error"], "connection") {
+			t.Fatalf("expected conflict error, got %q", result["error"])
 		}
 	})
 
@@ -18729,6 +18761,59 @@ func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
 	}
 	if errObj["message"] != "invalid parameter: limit" {
 		t.Fatalf("message = %v, want %q", errObj["message"], "invalid parameter: limit")
+	}
+}
+
+func TestExecuteOperation_UpstreamUnauthorizedRequiresReconnect(t *testing.T) {
+	t.Parallel()
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+		},
+	}
+	invoker := &testutil.StubInvoker{
+		Err: &apiexec.UpstreamHTTPError{
+			Status: http.StatusUnauthorized,
+			Body:   "",
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Invoker = invoker
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	var errResp struct {
+		Error       string `json:"error"`
+		Code        string `json:"code"`
+		Integration string `json:"integration"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp.Code != "reconnect_required" {
+		t.Fatalf("expected reconnect_required code, got %q", errResp.Code)
+	}
+	if errResp.Integration != "test-int" {
+		t.Fatalf("expected integration test-int, got %q", errResp.Integration)
+	}
+	if !strings.Contains(errResp.Error, "reconnect it") {
+		t.Fatalf("expected reconnect hint, got %q", errResp.Error)
 	}
 }
 

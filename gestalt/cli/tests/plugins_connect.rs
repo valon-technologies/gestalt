@@ -174,7 +174,7 @@ fn test_disconnect_sends_delete_with_connection_and_instance() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/integrations/widget_metrics?connection=oauth&instance=prod",
+        "/api/v1/integrations/widget_metrics?_connection=oauth&_instance=prod",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
@@ -198,7 +198,7 @@ fn test_disconnect_normalizes_plugin_connection_name() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/integrations/acme_crm?connection=_plugin",
+        "/api/v1/integrations/acme_crm?_connection=_plugin",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
