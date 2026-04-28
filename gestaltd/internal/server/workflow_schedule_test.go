@@ -23,6 +23,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
+const (
+	canonicalSchedulePluginWorkflowTargetFingerprint = "70af38da089061d9dec9094d8c2439074f5f9f860f63f1939a6c48d8796e3818"
+	canonicalScheduleAgentWorkflowTargetFingerprint  = "da243c789ae45205cb83ddcb7fce750a3e6e09cc3d7fac6d037b2b7ba05ce2de"
+)
+
 type stubWorkflowControl struct {
 	defaultProviderName string
 	provider            coreworkflow.Provider
@@ -702,6 +707,9 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if ref.SubjectKind != "user" || ref.DisplayName != "Ada" || ref.AuthSource != "session" {
 		t.Fatalf("execution ref subject metadata = (%q, %q, %q), want user/Ada/session", ref.SubjectKind, ref.DisplayName, ref.AuthSource)
 	}
+	if ref.TargetFingerprint != canonicalSchedulePluginWorkflowTargetFingerprint {
+		t.Fatalf("execution ref target fingerprint = %q, want canonical %q", ref.TargetFingerprint, canonicalSchedulePluginWorkflowTargetFingerprint)
+	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -877,6 +885,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if ref.Target.Agent == nil || ref.TargetFingerprint == "" {
 		t.Fatalf("execution ref = %#v", ref)
+	}
+	if ref.TargetFingerprint != canonicalScheduleAgentWorkflowTargetFingerprint {
+		t.Fatalf("execution ref target fingerprint = %q, want canonical %q", ref.TargetFingerprint, canonicalScheduleAgentWorkflowTargetFingerprint)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
