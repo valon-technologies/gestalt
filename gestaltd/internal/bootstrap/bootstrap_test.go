@@ -2430,8 +2430,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.CreatedBy.SubjectID != p.SubjectID {
 		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", createTurnReq.CreatedBy.SubjectID, p.SubjectID)
 	}
-	if len(createTurnReq.Tools) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
+	if len(createTurnReq.Tools) != 1 || createTurnReq.Tools[0].Target.Plugin != "roadmap" || createTurnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("CreateTurn tools = %#v, want preloaded roadmap.sync", createTurnReq.Tools)
 	}
 	if createTurnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
 		t.Fatalf("CreateTurn tool source = %q, want native search", createTurnReq.ToolSource)

@@ -3951,8 +3951,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if requireInteraction, _ := turnReq.Metadata["requireInteraction"].(bool); !requireInteraction {
 		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnReq.Metadata)
 	}
-	if len(turnReq.Tools) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
+	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.Plugin != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("CreateTurn tools = %#v, want preloaded roadmap.sync", turnReq.Tools)
 	}
 	if turnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
 		t.Fatalf("CreateTurn tool source = %q, want native search", turnReq.ToolSource)

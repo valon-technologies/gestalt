@@ -560,6 +560,9 @@ func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.Too
 func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef) bool {
 	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
 	for _, ref := range refs {
+		if strings.TrimSpace(ref.Plugin) == "*" && strings.TrimSpace(ref.Operation) == "" {
+			return true
+		}
 		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
 			continue
 		}
