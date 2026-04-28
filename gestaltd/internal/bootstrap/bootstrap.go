@@ -158,6 +158,7 @@ type Deps struct {
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
 	PluginRuntimeRegistry *pluginRuntimeRegistry
+	PublicHostServices    *providerhost.PublicHostServiceRegistry
 	Telemetry             core.TelemetryProvider
 }
 
@@ -222,6 +223,7 @@ type Result struct {
 	Telemetry             core.TelemetryProvider
 	PluginRuntimes        RuntimeInspector
 	ProviderDevSessions   *providerdev.Manager
+	PublicHostServices    *providerhost.PublicHostServiceRegistry
 
 	pluginRuntimeRegistry *pluginRuntimeRegistry
 	auditClose            func(context.Context) error
@@ -951,9 +953,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
+	prepared.Deps.PublicHostServices = publicHostServices
 	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
 
 	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
@@ -1097,6 +1101,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:             prepared.Telemetry,
 		PluginRuntimes:        prepared.pluginRuntimeRegistry,
 		ProviderDevSessions:   providerDevSessions,
+		PublicHostServices:    publicHostServices,
 		pluginRuntimeRegistry: prepared.pluginRuntimeRegistry,
 		auditClose:            auditClose,
 	}, nil

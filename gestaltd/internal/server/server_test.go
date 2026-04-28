@@ -239,12 +239,14 @@ type relayTestCacheServer struct {
 	proto.UnimplementedCacheServer
 
 	mu             sync.Mutex
+	keys           []string
 	receivedTokens []string
 }
 
 func (s *relayTestCacheServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		s.mu.Lock()
+		s.keys = append(s.keys, req.GetKey())
 		s.receivedTokens = append(s.receivedTokens, md.Get(providerhost.HostServiceRelayTokenHeader)...)
 		s.mu.Unlock()
 	}
@@ -260,36 +262,65 @@ func (s *relayTestCacheServer) relayTokens() []string {
 	return append([]string(nil), s.receivedTokens...)
 }
 
+func (s *relayTestCacheServer) calls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.keys)
+}
+
+type relayTestSessionVerifier struct {
+	mu     sync.Mutex
+	active map[string]bool
+}
+
+func newRelayTestSessionVerifier(sessionIDs ...string) *relayTestSessionVerifier {
+	verifier := &relayTestSessionVerifier{active: map[string]bool{}}
+	for _, sessionID := range sessionIDs {
+		verifier.active[sessionID] = true
+	}
+	return verifier
+}
+
+func (v *relayTestSessionVerifier) VerifyHostServiceSession(_ context.Context, sessionID string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.active[strings.TrimSpace(sessionID)] {
+		return nil
+	}
+	return fmt.Errorf("runtime session %q is not active", sessionID)
+}
+
+func (v *relayTestSessionVerifier) setActive(sessionID string, active bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.active[sessionID] = active
+}
+
 func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
-	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
-		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	sessionVerifier := newRelayTestSessionVerifier("session-1")
+	hostService := providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
-	}})
-	if err != nil {
-		t.Fatalf("StartHostServices: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = hostServices.Close()
-	})
-
-	bindings := hostServices.Bindings()
-	if len(bindings) != 1 {
-		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
 	}))
 	ts.EnableHTTP2 = true
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
+	publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
 
 	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
@@ -299,7 +330,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		SocketPath:   bindings[0].SocketPath,
+		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
 		TTL:          time.Minute,
 	})
@@ -326,6 +357,95 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	}
 	if got := cacheSrv.relayTokens(); len(got) != 0 {
 		t.Fatalf("backend unexpectedly received relay token metadata: %#v", got)
+	}
+
+	sessionVerifier.setActive("session-1", false)
+	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer staleCancel()
+	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
+	if grpcstatus.Code(err) != codes.Unauthenticated {
+		t.Fatalf("Cache.Get stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+	}
+	if got := cacheSrv.calls(); got != 1 {
+		t.Fatalf("backend calls = %d, want only the verified call", got)
+	}
+
+	sessionVerifier.setActive("session-1", true)
+	publicHostServices.Unregister("support", hostService)
+	unregisteredCtx, unregisteredCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer unregisteredCancel()
+	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	_, err = proto.NewCacheClient(conn).Get(unregisteredCtx, &proto.CacheGetRequest{Key: "unregistered"})
+	if grpcstatus.Code(err) != codes.Unavailable {
+		t.Fatalf("Cache.Get unregistered provider code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+	}
+	if got := cacheSrv.calls(); got != 1 {
+		t.Fatalf("backend calls = %d, want no calls after unregister", got)
+	}
+}
+
+func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	cacheSrv := &relayTestCacheServer{}
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	hostService := providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv)
+		},
+	}
+	publicHostServices.RegisterSession("support", "session-1", hostService)
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		Service:      "cache",
+		EnvVar:       envVar,
+		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "active"}); err != nil {
+		t.Fatalf("Cache.Get via session relay: %v", err)
+	}
+
+	publicHostServices.UnregisterSession("support", "session-1", hostService)
+	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer staleCancel()
+	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
+	if grpcstatus.Code(err) != codes.Unavailable {
+		t.Fatalf("Cache.Get unregistered session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+	}
+	if got := cacheSrv.calls(); got != 1 {
+		t.Fatalf("backend calls = %d, want only the registered call", got)
 	}
 }
 
@@ -359,27 +479,20 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
-	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
-		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("support", providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
-	}})
-	if err != nil {
-		t.Fatalf("StartHostServices: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = hostServices.Close()
 	})
-
-	bindings := hostServices.Bindings()
-	if len(bindings) != 1 {
-		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
-	}
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
 	}))
 	ts.EnableHTTP2 = true
 	ts.StartTLS()
@@ -393,7 +506,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		SocketPath:   bindings[0].SocketPath,
+		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.IndexedDB/",
 		TTL:          time.Minute,
 	})
@@ -419,29 +532,21 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	stubDB := &coretesting.StubIndexedDB{}
-	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("relay-plugin", providerhost.HostService{
+		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stubDB, "relay-plugin", providerhost.IndexedDBServerOptions{
 				AllowedStores: []string{"tasks"},
 			}))
 		},
-	}})
-	if err != nil {
-		t.Fatalf("StartHostServices: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = hostServices.Close()
 	})
-
-	bindings := hostServices.Bindings()
-	if len(bindings) != 1 {
-		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
-	}
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
 	}))
 	ts.EnableHTTP2 = true
 	ts.StartTLS()
@@ -455,7 +560,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
-		SocketPath:   bindings[0].SocketPath,
+		EnvVar:       providerhost.DefaultIndexedDBSocketEnv,
 		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})

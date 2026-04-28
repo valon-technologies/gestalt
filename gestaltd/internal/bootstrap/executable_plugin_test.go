@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -53,7 +52,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -350,6 +348,7 @@ type capturingBundlePluginRuntime struct {
 	mu                  sync.Mutex
 	bindRequests        []pluginruntime.BindHostServiceRequest
 	startPluginRequests []pluginruntime.StartPluginRequest
+	sessionLifecycles   map[string]*pluginruntime.SessionLifecycle
 	fakePlugins         map[string]*fakeHostedPluginServer
 }
 
@@ -379,15 +378,32 @@ func (r *capturingBundlePluginRuntime) Support(context.Context) (pluginruntime.S
 }
 
 func (r *capturingBundlePluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
-	return r.provider.StartSession(ctx, req)
+	session, err := r.provider.StartSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	r.attachSessionLifecycle(session)
+	return session, nil
 }
 
 func (r *capturingBundlePluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
-	return r.provider.ListSessions(ctx)
+	sessions, err := r.provider.ListSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range sessions {
+		r.attachSessionLifecycle(&sessions[i])
+	}
+	return sessions, nil
 }
 
 func (r *capturingBundlePluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
-	return r.provider.GetSession(ctx, req)
+	session, err := r.provider.GetSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	r.attachSessionLifecycle(session)
+	return session, nil
 }
 
 func (r *capturingBundlePluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
@@ -1303,6 +1319,25 @@ func (r *capturingBundlePluginRuntime) bindHostServiceRequests() []pluginruntime
 		out[i] = cloneBindHostServiceRequest(req)
 	}
 	return out
+}
+
+func (r *capturingBundlePluginRuntime) setSessionLifecycle(sessionID string, lifecycle *pluginruntime.SessionLifecycle) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.sessionLifecycles == nil {
+		r.sessionLifecycles = make(map[string]*pluginruntime.SessionLifecycle)
+	}
+	r.sessionLifecycles[sessionID] = clonePluginRuntimeSessionLifecycle(lifecycle)
+}
+
+func (r *capturingBundlePluginRuntime) attachSessionLifecycle(session *pluginruntime.Session) {
+	if session == nil || session.ID == "" {
+		return
+	}
+	r.mu.Lock()
+	lifecycle := clonePluginRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	r.mu.Unlock()
+	session.Lifecycle = lifecycle
 }
 
 func cloneRuntimeMetadata(values map[string]string) map[string]string {
@@ -3767,7 +3802,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -3865,11 +3901,12 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	}
 
 	deps := Deps{
-		BaseURL:       relaySrv.URL,
-		EncryptionKey: secret,
-		Services:      services,
-		AgentRuntime:  agentRuntime,
-		AgentManager:  manager,
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		Services:           services,
+		AgentRuntime:       agentRuntime,
+		AgentManager:       manager,
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -5906,11 +5943,19 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	t.Parallel()
 
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
 	env, err := buildProviderDevRuntimeEnv("echoext", &config.ProviderEntry{
 		S3: []string{"main"},
 	}, Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		PublicHostServices: publicHostServices,
 		S3: map[string]s3store.Client{
 			"main": &coretesting.StubS3{},
 		},
@@ -5918,24 +5963,40 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildProviderDevRuntimeEnv: %v", err)
 	}
+	cleanup := env.Cleanup
 	t.Cleanup(func() {
-		if env.Cleanup != nil {
-			env.Cleanup()
+		if cleanup != nil {
+			cleanup()
 		}
 	})
 
 	for _, binding := range []string{"", "main"} {
 		socketEnv := providerhost.S3SocketEnv(binding)
-		if got := env.Env[socketEnv]; got != "tls://gestalt.example.test:443" {
-			t.Fatalf("runtime env %s = %q, want %q", socketEnv, got, "tls://gestalt.example.test:443")
+		if got := env.Env[socketEnv]; !strings.HasPrefix(got, "tls://") {
+			t.Fatalf("runtime env %s = %q, want tls relay target", socketEnv, got)
 		}
 		tokenEnv := providerhost.S3SocketTokenEnv(binding)
 		if got := env.Env[tokenEnv]; got == "" {
 			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
 		}
 	}
-	if !slices.Contains(env.AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("allowed hosts = %#v, want gestalt.example.test", env.AllowedHosts)
+	if !slices.Contains(env.AllowedHosts, "127.0.0.1") {
+		t.Fatalf("allowed hosts = %#v, want relay server host", env.AllowedHosts)
+	}
+
+	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env.Env)
+	if err != nil {
+		t.Fatalf("S3 round trip via provider-dev relay: %v", err)
+	}
+	if got := record["body"]; got != "ship-it" {
+		t.Fatalf("S3 body = %#v, want ship-it", got)
+	}
+	if cleanup != nil {
+		cleanup()
+		cleanup = nil
+	}
+	if _, err := fakeHostedS3RoundTrip("assets", "plans/stale.txt", "stale", "main", env.Env); err == nil {
+		t.Fatalf("S3 round trip after provider-dev cleanup succeeded, want stale relay failure")
 	}
 }
 
@@ -6209,7 +6270,8 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -6275,6 +6337,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
 			return boundDB, nil
 		},
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6327,6 +6390,19 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
+	}
+
+	expiredAt := time.Now().Add(-time.Minute)
+	runtimeProvider.setSessionLifecycle(startRequests[0].SessionID, &pluginruntime.SessionLifecycle{
+		ExpiresAt: &expiredAt,
+	})
+	_, err = prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-2",
+		"value": "expired-session",
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "invalid-host-service-relay-session") {
+		t.Fatalf("Execute indexeddb_roundtrip after runtime expiry error = %v, want relay session rejection", err)
 	}
 }
 
@@ -6454,7 +6530,8 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -6515,6 +6592,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
 			return boundCache, nil
 		},
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6581,7 +6659,8 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -6640,6 +6719,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 		S3: map[string]s3store.Client{
 			"main": boundS3,
 		},
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6725,7 +6805,8 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -6799,9 +6880,10 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	}
 
 	deps := Deps{
-		BaseURL:       relaySrv.URL,
-		EncryptionKey: secret,
-		PluginInvoker: bridge,
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		PluginInvoker:      bridge,
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -7120,7 +7202,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 }
 
-func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte) http.Handler {
+func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *providerhost.PublicHostServiceRegistry) http.Handler {
 	t.Helper()
 
 	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(stateSecret)
@@ -7138,8 +7220,60 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte) http.Handler {
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
-		newRuntimeRelayProxy(target.SocketPath).ServeHTTP(w, r)
+		handler, err := runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target)
+		if err != nil {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
+			return
+		}
+		if handler == nil {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
+			return
+		}
+		relayReq := r.Clone(r.Context())
+		relayReq.Header = r.Header.Clone()
+		relayReq.Header.Del(providerhost.HostServiceRelayTokenHeader)
+		handler.ServeHTTP(w, relayReq)
 	})
+}
+
+func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target providerhost.HostServiceRelayTarget) (http.Handler, error) {
+	handler, err := runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, target.SessionID)
+	if handler != nil || err != nil || strings.TrimSpace(target.SessionID) == "" {
+		return handler, err
+	}
+	return runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, "")
+}
+
+func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target providerhost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
+	if registry == nil {
+		return nil, nil
+	}
+	for _, entry := range registry.Services() {
+		if strings.TrimSpace(entry.PluginName) != strings.TrimSpace(target.PluginName) {
+			continue
+		}
+		if strings.TrimSpace(entry.SessionID) != strings.TrimSpace(sessionID) {
+			continue
+		}
+		if strings.TrimSpace(entry.Service.Name) != strings.TrimSpace(target.Service) {
+			continue
+		}
+		if strings.TrimSpace(entry.Service.EnvVar) != strings.TrimSpace(target.EnvVar) {
+			continue
+		}
+		if entry.Service.Register == nil {
+			continue
+		}
+		if entry.SessionVerifier != nil {
+			if err := entry.SessionVerifier.VerifyHostServiceSession(ctx, target.SessionID); err != nil {
+				return nil, err
+			}
+		}
+		srv := grpc.NewServer()
+		entry.Service.Register(srv)
+		return http.HandlerFunc(srv.ServeHTTP), nil
+	}
+	return nil, nil
 }
 
 func newRuntimeEgressProxyTestHandler(t *testing.T, stateSecret []byte) http.Handler {
@@ -7318,31 +7452,6 @@ func runtimeRelayMethodAllowed(path, methodPrefix string) bool {
 	return strings.HasPrefix(path, methodPrefix+"/")
 }
 
-func newRuntimeRelayProxy(socketPath string) *httputil.ReverseProxy {
-	target := &url.URL{
-		Scheme: "http",
-		Host:   "gestalt-test-host-service-relay",
-	}
-	return &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(target)
-			pr.Out.Host = target.Host
-			pr.Out.Header.Del(providerhost.HostServiceRelayTokenHeader)
-		},
-		Transport: &http2.Transport{
-			AllowHTTP: true,
-			DialTLSContext: func(ctx context.Context, _, _ string, _ *tls.Config) (net.Conn, error) {
-				var dialer net.Dialer
-				return dialer.DialContext(ctx, "unix", socketPath)
-			},
-		},
-		FlushInterval: -1,
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
-		},
-	}
-}
-
 func writeRuntimeRelayGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, message string) {
 	headers := w.Header()
 	headers.Set("Content-Type", "application/grpc")
@@ -7358,7 +7467,8 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -7403,9 +7513,10 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 
 	manager := newStubWorkflowManager()
 	deps := Deps{
-		BaseURL:         relaySrv.URL,
-		EncryptionKey:   secret,
-		WorkflowManager: manager,
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		WorkflowManager:    manager,
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -7493,7 +7604,8 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -7559,6 +7671,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 		BaseURL:               relaySrv.URL,
 		EncryptionKey:         secret,
 		AuthorizationProvider: authz,
+		PublicHostServices:    publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 

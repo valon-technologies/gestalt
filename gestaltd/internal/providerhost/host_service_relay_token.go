@@ -3,7 +3,6 @@ package providerhost
 import (
 	"crypto/rand"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,7 +29,7 @@ type HostServiceRelayTokenRequest struct {
 	PluginName   string
 	SessionID    string
 	Service      string
-	SocketPath   string
+	EnvVar       string
 	MethodPrefix string
 	TTL          time.Duration
 }
@@ -39,7 +38,7 @@ type HostServiceRelayTarget struct {
 	PluginName   string
 	SessionID    string
 	Service      string
-	SocketPath   string
+	EnvVar       string
 	MethodPrefix string
 }
 
@@ -48,7 +47,7 @@ type hostServiceRelayTokenClaims struct {
 	PluginName   string `json:"plugin,omitempty"`
 	SessionID    string `json:"session_id,omitempty"`
 	Service      string `json:"service,omitempty"`
-	SocketPath   string `json:"socket_path,omitempty"`
+	EnvVar       string `json:"env_var,omitempty"`
 	MethodPrefix string `json:"method_prefix,omitempty"`
 }
 
@@ -71,7 +70,7 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 	if m == nil {
 		return "", fmt.Errorf("host service relay tokens are not available")
 	}
-	socketPath, methodPrefix, err := normalizeHostServiceRelayTarget(req.SocketPath, req.MethodPrefix)
+	service, envVar, methodPrefix, err := normalizeHostServiceRelayTarget(req.Service, req.EnvVar, req.MethodPrefix)
 	if err != nil {
 		return "", err
 	}
@@ -98,8 +97,8 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 		},
 		PluginName:   strings.TrimSpace(req.PluginName),
 		SessionID:    strings.TrimSpace(req.SessionID),
-		Service:      strings.TrimSpace(req.Service),
-		SocketPath:   socketPath,
+		Service:      service,
+		EnvVar:       envVar,
 		MethodPrefix: methodPrefix,
 	})
 }
@@ -112,15 +111,15 @@ func (m *HostServiceRelayTokenManager) ResolveToken(token string) (HostServiceRe
 	if err != nil {
 		return HostServiceRelayTarget{}, err
 	}
-	socketPath, methodPrefix, err := normalizeHostServiceRelayTarget(claims.SocketPath, claims.MethodPrefix)
+	service, envVar, methodPrefix, err := normalizeHostServiceRelayTarget(claims.Service, claims.EnvVar, claims.MethodPrefix)
 	if err != nil {
 		return HostServiceRelayTarget{}, fmt.Errorf("host service relay token is invalid or expired")
 	}
 	return HostServiceRelayTarget{
 		PluginName:   strings.TrimSpace(claims.PluginName),
 		SessionID:    strings.TrimSpace(claims.SessionID),
-		Service:      strings.TrimSpace(claims.Service),
-		SocketPath:   socketPath,
+		Service:      service,
+		EnvVar:       envVar,
 		MethodPrefix: methodPrefix,
 	}, nil
 }
@@ -161,17 +160,21 @@ func (m *HostServiceRelayTokenManager) tokenTTL(ttl time.Duration) time.Duration
 	return ttl
 }
 
-func normalizeHostServiceRelayTarget(socketPath, methodPrefix string) (string, string, error) {
-	socketPath = strings.TrimSpace(socketPath)
-	if socketPath == "" {
-		return "", "", fmt.Errorf("host service relay socket path is required")
+func normalizeHostServiceRelayTarget(service, envVar, methodPrefix string) (string, string, string, error) {
+	service = strings.TrimSpace(service)
+	if service == "" {
+		return "", "", "", fmt.Errorf("host service relay service is required")
 	}
-	if !filepath.IsAbs(socketPath) {
-		return "", "", fmt.Errorf("host service relay socket path must be absolute")
+	envVar = strings.TrimSpace(envVar)
+	if envVar == "" {
+		return "", "", "", fmt.Errorf("host service relay env var is required")
 	}
 	methodPrefix = strings.TrimSpace(methodPrefix)
-	if methodPrefix != "" && !strings.HasPrefix(methodPrefix, "/") {
+	if methodPrefix == "" {
+		return "", "", "", fmt.Errorf("host service relay method prefix is required")
+	}
+	if !strings.HasPrefix(methodPrefix, "/") {
 		methodPrefix = "/" + methodPrefix
 	}
-	return socketPath, methodPrefix, nil
+	return service, envVar, methodPrefix, nil
 }

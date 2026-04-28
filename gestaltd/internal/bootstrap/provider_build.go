@@ -886,7 +886,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, err
 	}
-	cleanup = chainCleanup(cleanup, runtimeCleanup)
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimePlan, runtimeProvider)
+	if err != nil {
+		return nil, err
+	}
+	cleanup = chainCleanup(cleanup, runtimeCleanup, publicHostServicesCleanup)
 	startedHostServices, err := providerhost.StartHostServices(
 		hostServices,
 		providerhost.WithHostServicesProviderName(name),
@@ -990,6 +994,12 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 		launch.close()
 		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.HostedRuntimeRestartPolicyAlways)
 	}
+	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimePlan, launch.runtimeProvider)
+	if err != nil {
+		launch.close()
+		return nil, err
+	}
+	launch.cleanup = chainCleanup(launch.cleanup, publicHostServicesCleanup)
 	return newHostedAgentProviderPool(ctx, launch, hostServices, deps, policy)
 }
 
@@ -1607,6 +1617,63 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 	}, nil, "", nil
 }
 
+type runtimeHostServiceSessionVerifier struct {
+	providerName string
+	provider     pluginruntime.Provider
+}
+
+func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return fmt.Errorf("runtime session id is required")
+	}
+	if v.provider == nil {
+		return fmt.Errorf("plugin runtime provider is not configured")
+	}
+	session, err := v.provider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		return fmt.Errorf("plugin runtime session %q was not found", sessionID)
+	}
+	if expected := strings.TrimSpace(v.providerName); expected != "" {
+		if got := strings.TrimSpace(session.Metadata["provider_name"]); got != "" && got != expected {
+			return fmt.Errorf("plugin runtime session %q belongs to provider %q", sessionID, got)
+		}
+	}
+	if session.Lifecycle != nil && session.Lifecycle.ExpiresAt != nil {
+		expiresAt := session.Lifecycle.ExpiresAt.UTC()
+		if !time.Now().UTC().Before(expiresAt) {
+			return fmt.Errorf("plugin runtime session %q expired at %s", sessionID, expiresAt.Format(time.RFC3339Nano))
+		}
+	}
+	switch session.State {
+	case pluginruntime.SessionStatePending, pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
+		return nil
+	default:
+		return fmt.Errorf("plugin runtime session %q is %s", sessionID, session.State)
+	}
+}
+
+func registerPublicRuntimeHostServices(providerName string, hostServices []providerhost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
+		return nil, nil
+	}
+	for _, hostService := range hostServices {
+		if strings.TrimSpace(hostService.Name) == "" {
+			return nil, fmt.Errorf("host service %q requires a service name for public relay", hostService.EnvVar)
+		}
+	}
+	deps.PublicHostServices.RegisterVerified(providerName, runtimeHostServiceSessionVerifier{
+		providerName: providerName,
+		provider:     runtimeProvider,
+	}, hostServices...)
+	return func() {
+		deps.PublicHostServices.Unregister(providerName, hostServices...)
+	}, nil
+}
+
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", providerName)
@@ -1653,7 +1720,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 		PluginName:   providerName,
 		SessionID:    sessionID,
 		Service:      serviceKey,
-		SocketPath:   hostService.SocketPath,
+		EnvVar:       hostService.EnvVar,
 		MethodPrefix: methodPrefix,
 		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
 	})
@@ -1900,6 +1967,7 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 	}
 
 	hostServices := []providerhost.HostService{{
+		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{

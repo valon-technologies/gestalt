@@ -56,33 +56,26 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &runtimeTestCacheServer{}
-	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
-		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("relay-plugin", providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
-	}})
-	if err != nil {
-		t.Fatalf("StartHostServices: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = hostServices.Close()
 	})
-
-	bindings := hostServices.Bindings()
-	if len(bindings) != 1 {
-		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
-	}
 
 	reg := registry.New()
 	services := coretesting.NewStubServices(t)
 	handler, err := New(Config{
-		Auth:         &coretesting.StubAuthProvider{N: "none"},
-		Services:     services,
-		Providers:    &reg.Providers,
-		StateSecret:  secret,
-		RouteProfile: RouteProfilePublic,
-		Invoker:      invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials),
+		Auth:               &coretesting.StubAuthProvider{N: "none"},
+		Services:           services,
+		Providers:          &reg.Providers,
+		StateSecret:        secret,
+		RouteProfile:       RouteProfilePublic,
+		Invoker:            invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials),
+		PublicHostServices: publicHostServices,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -118,7 +111,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "cache",
-		SocketPath:   bindings[0].SocketPath,
+		EnvVar:       envVar,
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})

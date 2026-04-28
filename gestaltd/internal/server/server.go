@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -113,6 +114,10 @@ type Server struct {
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
+	hostServiceMu          sync.Mutex
+	hostServiceHandlers    map[hostServiceHandlerKey]hostServiceHandlerEntry
+	hostServiceVersion     uint64
+	publicHostServices     *providerhost.PublicHostServiceRegistry
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
 	providerDevSessions    *providerdev.Manager
 	mountedHTTPBindings    []MountedHTTPBinding
@@ -159,6 +164,7 @@ type Config struct {
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
+	PublicHostServices    *providerhost.PublicHostServiceRegistry
 	ProviderDevSessions   *providerdev.Manager
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
@@ -286,6 +292,11 @@ func New(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 		}
 	}
+	publicHostServices, hostServiceVersion := cfg.PublicHostServices.Snapshot()
+	hostServiceHandlers, err := newPublicHostServiceHandlers(publicHostServices)
+	if err != nil {
+		return nil, fmt.Errorf("init public host services: %w", err)
+	}
 	s := &Server{
 		router:                 router,
 		handler:                withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
@@ -322,6 +333,9 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
+		hostServiceHandlers:    hostServiceHandlers,
+		hostServiceVersion:     hostServiceVersion,
+		publicHostServices:     cfg.PublicHostServices,
 		egressProxyTokens:      egressProxyTokens,
 		providerDevSessions:    cfg.ProviderDevSessions,
 		mountedHTTPBindings:    mountedHTTPBindings,

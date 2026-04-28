@@ -1,21 +1,13 @@
 package server
 
 import (
-	"context"
-	"crypto/tls"
-	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
-	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 )
-
-const hostServiceRelayBackendHost = "gestalt-host-service-relay"
 
 func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +31,19 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		newHostServiceRelayProxy(target.SocketPath).ServeHTTP(w, r)
+		handler, err := s.hostServiceHandler(r.Context(), target)
+		if err != nil {
+			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
+			return
+		}
+		if handler == nil {
+			writeGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
+			return
+		}
+		relayReq := r.Clone(r.Context())
+		relayReq.Header = r.Header.Clone()
+		relayReq.Header.Del(providerhost.HostServiceRelayTokenHeader)
+		handler.ServeHTTP(w, relayReq)
 	})
 }
 
@@ -70,31 +74,6 @@ func hostServiceRelayMethodAllowed(path, methodPrefix string) bool {
 		return strings.HasPrefix(path, methodPrefix)
 	}
 	return strings.HasPrefix(path, methodPrefix+"/")
-}
-
-func newHostServiceRelayProxy(socketPath string) *httputil.ReverseProxy {
-	target := &url.URL{
-		Scheme: "http",
-		Host:   hostServiceRelayBackendHost,
-	}
-	return &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(target)
-			pr.Out.Host = hostServiceRelayBackendHost
-			pr.Out.Header.Del(providerhost.HostServiceRelayTokenHeader)
-		},
-		Transport: &http2.Transport{
-			AllowHTTP: true,
-			DialTLSContext: func(ctx context.Context, _, _ string, _ *tls.Config) (net.Conn, error) {
-				var dialer net.Dialer
-				return dialer.DialContext(ctx, "unix", socketPath)
-			},
-		},
-		FlushInterval: -1,
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			writeGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
-		},
-	}
 }
 
 func writeGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, message string) {
