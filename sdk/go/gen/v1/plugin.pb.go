@@ -32,6 +32,7 @@ const (
 	ConnectionMode_CONNECTION_MODE_NONE        ConnectionMode = 1
 	ConnectionMode_CONNECTION_MODE_USER        ConnectionMode = 2
 	ConnectionMode_CONNECTION_MODE_IDENTITY    ConnectionMode = 3
+	ConnectionMode_CONNECTION_MODE_PLATFORM    ConnectionMode = 5
 )
 
 // Enum value maps for ConnectionMode.
@@ -41,12 +42,14 @@ var (
 		1: "CONNECTION_MODE_NONE",
 		2: "CONNECTION_MODE_USER",
 		3: "CONNECTION_MODE_IDENTITY",
+		5: "CONNECTION_MODE_PLATFORM",
 	}
 	ConnectionMode_value = map[string]int32{
 		"CONNECTION_MODE_UNSPECIFIED": 0,
 		"CONNECTION_MODE_NONE":        1,
 		"CONNECTION_MODE_USER":        2,
 		"CONNECTION_MODE_IDENTITY":    3,
+		"CONNECTION_MODE_PLATFORM":    5,
 	}
 )
 
@@ -2383,12 +2386,13 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +
 	"\x10protocol_version\x18\x04 \x01(\x05R\x0fprotocolVersion\"B\n" +
 	"\x15StartProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\xa1\x01\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\xbf\x01\n" +
 	"\x0eConnectionMode\x12\x1f\n" +
 	"\x1bCONNECTION_MODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x18\n" +
 	"\x14CONNECTION_MODE_USER\x10\x02\x12\x1c\n" +
-	"\x18CONNECTION_MODE_IDENTITY\x10\x03\"\x04\b\x04\x10\x04*\x16CONNECTION_MODE_EITHER2\xee\x04\n" +
+	"\x18CONNECTION_MODE_IDENTITY\x10\x03\x12\x1c\n" +
+	"\x18CONNECTION_MODE_PLATFORM\x10\x05\"\x04\b\x04\x10\x04*\x16CONNECTION_MODE_EITHER2\xee\x04\n" +
 	"\x13IntegrationProvider\x12L\n" +
 	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderMetadata\x12f\n" +
 	"\rStartProvider\x12).gestalt.provider.v1.StartProviderRequest\x1a*.gestalt.provider.v1.StartProviderResponse\x12T\n" +

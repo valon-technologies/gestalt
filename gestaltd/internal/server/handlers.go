@@ -63,6 +63,9 @@ type credentialFieldInfo struct {
 type connectionDefInfo struct {
 	DisplayName      string                `json:"displayName,omitempty"`
 	Name             string                `json:"name"`
+	Mode             string                `json:"mode,omitempty"`
+	Connected        bool                  `json:"connected"`
+	Connectable      bool                  `json:"connectable"`
 	AuthTypes        []string              `json:"authTypes"`
 	CredentialFields []credentialFieldInfo `json:"credentialFields"`
 }
@@ -183,9 +186,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
 		instances := connected[name]
-		info.Connected = len(instances) > 0 || core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModeNone
+		providerMode := core.NormalizeConnectionMode(prov.ConnectionMode())
+		info.Connected = len(instances) > 0 || providerMode == core.ConnectionModeNone || s.hasConfiguredPlatformConnection(name)
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
-		s.populateIntegrationSettings(&info, prov)
+		s.populateIntegrationSettings(&info, prov, instances)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
 			continue
@@ -667,12 +671,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
-	metricutil.AddHTTPAttributes(r.Context(),
-		metricutil.AttrProvider.String(metricutil.AttrValue(providerName)),
-		metricutil.AttrOperation.String(metricutil.AttrValue(opMeta.ID)),
-		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(prov.ConnectionMode())),
-		metricutil.AttrInvocationSurface.String("http"),
-	)
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
 		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
 			Policy:   access.Policy,
@@ -723,6 +721,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connection = config.ResolveConnectionAlias(connection)
 		ctx = invocation.WithConnection(ctx, connection)
 	}
+	metricutil.AddHTTPAttributes(r.Context(),
+		metricutil.AttrProvider.String(metricutil.AttrValue(providerName)),
+		metricutil.AttrOperation.String(metricutil.AttrValue(opMeta.ID)),
+		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(s.invocationConnectionMode(prov, providerName, connection))),
+		metricutil.AttrInvocationSurface.String("http"),
+	)
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)

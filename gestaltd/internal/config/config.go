@@ -1433,7 +1433,7 @@ func (s ServerConfig) ManagementBaseURL() string {
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
-// connection. All connections in a single integration must share the same Mode.
+// connection.
 type ConnectionDef struct {
 	DisplayName      string                                `yaml:"displayName,omitempty"`
 	Mode             providermanifestv1.ConnectionMode     `yaml:"mode"`
@@ -1444,6 +1444,7 @@ type ConnectionDef struct {
 
 type ConnectionAuthDef struct {
 	Type                providermanifestv1.AuthType `yaml:"type"`
+	Token               string                      `yaml:"token"`
 	AuthorizationURL    string                      `yaml:"authorizationUrl"`
 	TokenURL            string                      `yaml:"tokenUrl"`
 	ClientID            string                      `yaml:"clientId"`
@@ -1498,6 +1499,7 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 	if src.Type != "" {
 		dst.Type = src.Type
 	}
+	setString(&dst.Token, src.Token)
 	setString(&dst.AuthorizationURL, src.AuthorizationURL)
 	setString(&dst.TokenURL, src.TokenURL)
 	setString(&dst.ClientID, src.ClientID)

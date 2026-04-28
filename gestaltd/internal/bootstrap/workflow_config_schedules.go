@@ -439,7 +439,7 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, pluginName
 		return err
 	}
 	switch mode {
-	case core.ConnectionModeNone:
+	case core.ConnectionModeNone, core.ConnectionModePlatform:
 		return nil
 	case core.ConnectionModeUser:
 		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(pluginName))

@@ -32,6 +32,7 @@ const (
 	tokenRefreshThreshold = 5 * time.Minute
 	tracerName            = "gestaltd"
 	graphQLOperationID    = "graphql"
+	platformSubjectID     = "system:platform-config"
 
 	attrProvider       = metricutil.AttrProvider
 	attrOperation      = metricutil.AttrOperation
@@ -112,6 +113,7 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionAuth    RefresherResolver
+	connectionRuntime ConnectionRuntimeResolver
 	providerOverrides ProviderOverrideResolver
 	refreshGroup      singleflight.Group
 }
@@ -128,6 +130,10 @@ func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
+}
+
+func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
+	return func(b *Broker) { b.connectionRuntime = r }
 }
 
 func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
@@ -225,8 +231,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	metricProvider = providerName
-	metricConnectionMode = metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -298,6 +302,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
+	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if transport == catalog.TransportMCPPassthrough {
 		toolResult, err := CallDirectTool(ctx, b, p, execProv, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
@@ -391,8 +397,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 
 	metricProvider = providerName
-	metricConnectionMode = metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov))
-	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
 		return fail(ErrNotAuthenticated)
@@ -425,6 +429,8 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
+	metricConnectionMode = metricutil.NormalizeConnectionMode(b.resolveConnectionMode(ctx, prov, providerName, conn))
+	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
 	if err != nil {
@@ -533,6 +539,18 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
 }
 
+func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {
+	if override := CredentialModeOverrideFromContext(ctx); override != "" {
+		return override
+	}
+	if b != nil && b.connectionRuntime != nil {
+		if info, ok := b.connectionRuntime(providerName, connection); ok && info.Mode != "" {
+			return core.NormalizeConnectionMode(info.Mode)
+		}
+	}
+	return effectiveConnectionMode(ctx, prov)
+}
+
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
@@ -631,12 +649,15 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		ctx = withResolvedPrincipal(ctx, p)
 	}
 
-	mode := effectiveConnectionMode(ctx, prov)
+	mode := b.resolveConnectionMode(ctx, prov, providerName, connection)
 	switch mode {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, "", nil
+
+	case core.ConnectionModePlatform:
+		return b.resolvePlatformCredential(ctx, providerName, connection, instance)
 
 	case core.ConnectionModeUser:
 		subjectID := principal.EffectiveCredentialSubjectID(p)
@@ -648,6 +669,32 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
+}
+
+func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, connection, instance string) (context.Context, string, error) {
+	if b == nil || b.connectionRuntime == nil {
+		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q", ErrNoCredential, providerName)
+	}
+	instance = strings.TrimSpace(instance)
+	if instance != "" {
+		return ctx, "", fmt.Errorf("%w: deployment-managed connection for integration %q does not support instances", ErrNoCredential, providerName)
+	}
+	connection = strings.TrimSpace(connection)
+	if connection == "" {
+		connection = runtimePluginConnectionName
+	}
+	info, ok := b.connectionRuntime(providerName, connection)
+	token := strings.TrimSpace(info.Token)
+	if !ok || token == "" {
+		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
+	}
+	SetCredentialAudit(ctx, core.ConnectionModePlatform, platformSubjectID, connection, "")
+	ctx = WithCredentialContext(ctx, CredentialContext{
+		Mode:       core.ConnectionModePlatform,
+		SubjectID:  platformSubjectID,
+		Connection: connection,
+	})
+	return ctx, token, nil
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
@@ -732,7 +779,7 @@ func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provide
 		}
 	}
 
-	accessToken, err := b.refreshCredentialIfNeeded(ctx, storedCredential, providerName, connection, metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov)))
+	accessToken, err := b.refreshCredentialIfNeeded(ctx, storedCredential, providerName, connection, metricutil.NormalizeConnectionMode(credentialMode))
 	return ctx, accessToken, err
 }
 

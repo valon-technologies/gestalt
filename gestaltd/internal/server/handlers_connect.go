@@ -67,8 +67,18 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
-	if !manualConnectionAllowed(prov, auth) {
+	conn, hasConnectionDef := s.effectiveConnectionDef(req.Integration, manualConnection)
+	if hasConnectionDef {
+		mode := config.ConnectionModeForConnection(conn)
+		connectionMode = metricutil.NormalizeConnectionMode(mode)
+		if mode == core.ConnectionModePlatform {
+			auditErr = errors.New("deployment-managed connection cannot be connected by users")
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("connection %q is deployment-managed and cannot be connected by users", userFacingConnectionName(manualConnection)))
+			return
+		}
+	}
+	auth := conn.Auth
+	if !manualConnectionAllowed(prov, conn, hasConnectionDef) {
 		auditErr = errors.New("integration does not support manual auth")
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
@@ -456,8 +466,11 @@ func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provide
 	return tm, nil
 }
 
-func manualConnectionAllowed(prov core.Provider, auth config.ConnectionAuthDef) bool {
-	if authTypesContain(connectionAuthTypes(auth, nil), "manual") {
+func manualConnectionAllowed(prov core.Provider, conn config.ConnectionDef, hasConnectionDef bool) bool {
+	if hasConnectionDef && config.ConnectionModeForConnection(conn) == core.ConnectionModePlatform {
+		return false
+	}
+	if hasConnectionDef && authTypesContain(connectionAuthTypes(conn.Auth, nil), "manual") {
 		return true
 	}
 	return authTypesContain(userFacingAuthTypes(prov.AuthTypes()), "manual")
@@ -475,22 +488,6 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 		}
 	}
 	return out
-}
-
-func (s *Server) effectiveConnectionAuth(integration, connection string) config.ConnectionAuthDef {
-	entry, ok := s.pluginDefs[integration]
-	if !ok || entry == nil {
-		return config.ConnectionAuthDef{}
-	}
-	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
-	if err != nil {
-		return config.ConnectionAuthDef{}
-	}
-	conn, ok := plan.LookupConnection(connection)
-	if !ok {
-		return config.ConnectionAuthDef{}
-	}
-	return conn.Auth
 }
 
 func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef) (string, error) {

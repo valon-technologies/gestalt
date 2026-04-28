@@ -977,6 +977,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
+	connRuntime, err := BuildConnectionRuntime(cfg)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return nil, err
+	}
 	baseAuthz, err := authorization.New(cfg.Authorization, cfg.Plugins)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
@@ -1007,6 +1012,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
+		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)

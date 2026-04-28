@@ -60,6 +60,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
@@ -10238,7 +10239,10 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 			DefaultConnection: "default",
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {Mode: providermanifestv1.ConnectionModeUser},
-				"bot":     {Mode: providermanifestv1.ConnectionModeUser},
+				"bot": {
+					Mode: providermanifestv1.ConnectionModePlatform,
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+				},
 			},
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				REST: &providermanifestv1.RESTSurface{
@@ -10298,7 +10302,18 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 			},
 		},
 	}
-	entry := &config.ProviderEntry{ResolvedManifest: manifest}
+	entry := &config.ProviderEntry{
+		ResolvedManifest: manifest,
+		Connections: map[string]*config.ConnectionDef{
+			"bot": {
+				Mode: providermanifestv1.ConnectionModePlatform,
+				Auth: config.ConnectionAuthDef{
+					Type:  providermanifestv1.AuthTypeBearer,
+					Token: "bot-slack-token",
+				},
+			},
+		},
+	}
 	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
 	if err != nil {
 		t.Fatalf("BuildStaticConnectionPlan: %v", err)
@@ -10331,16 +10346,28 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		Instance:    "default",
 		AccessToken: "user-slack-token",
 	})
-	seedToken(t, svc, &core.ExternalCredential{
-		ID:          "slack-bot",
-		SubjectID:   subjectID,
-		Integration: "slack",
-		Connection:  "bot",
-		Instance:    "default",
-		AccessToken: "bot-slack-token",
+	connectionRuntime, err := bootstrap.BuildConnectionRuntime(&config.Config{
+		Plugins: map[string]*config.ProviderEntry{"slack": entry},
 	})
+	if err != nil {
+		t.Fatalf("BuildConnectionRuntime: %v", err)
+	}
+	if runtimeInfo, ok := connectionRuntime.Resolve("slack", "bot"); !ok || runtimeInfo.Mode != core.ConnectionModePlatform || runtimeInfo.Token != "bot-slack-token" {
+		t.Fatalf("runtime bot connection = (%+v, %v), want configured platform token", runtimeInfo, ok)
+	}
+	broker := invocation.NewBroker(
+		testutil.NewProviderRegistry(t, prov),
+		svc.Users,
+		svc.ExternalCredentials,
+		invocation.WithConnectionRuntime(connectionRuntime.Resolve),
+	)
+	if _, token, err := broker.ResolveToken(context.Background(), &principal.Principal{SubjectID: subjectID}, "slack", "bot", ""); err != nil || token != "bot-slack-token" {
+		t.Fatalf("ResolveToken bot = token %q, err %v; want platform token", token, err)
+	}
+	metrics := metrictest.NewManualMeterProvider(t)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
 			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
@@ -10352,8 +10379,93 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
 		cfg.Services = svc
+		cfg.PluginDefs = map[string]*config.ProviderEntry{"slack": entry}
+		cfg.Invoker = broker
 	})
 	testutil.CloseOnCleanup(t, ts)
+
+	integrationsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	integrationsReq.Header.Set("Authorization", "Bearer api-token")
+	integrationsResp, err := http.DefaultClient.Do(integrationsReq)
+	if err != nil {
+		t.Fatalf("integrations request: %v", err)
+	}
+	defer func() { _ = integrationsResp.Body.Close() }()
+	if integrationsResp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(integrationsResp.Body)
+		t.Fatalf("integrations status = %d: %s", integrationsResp.StatusCode, payload)
+	}
+	var integrations []struct {
+		Name        string `json:"name"`
+		Connected   bool   `json:"connected"`
+		Connections []struct {
+			Name        string   `json:"name"`
+			Mode        string   `json:"mode"`
+			Connected   bool     `json:"connected"`
+			Connectable bool     `json:"connectable"`
+			AuthTypes   []string `json:"authTypes"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(integrationsResp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decode integrations: %v", err)
+	}
+	var botConnection *struct {
+		Name        string   `json:"name"`
+		Mode        string   `json:"mode"`
+		Connected   bool     `json:"connected"`
+		Connectable bool     `json:"connectable"`
+		AuthTypes   []string `json:"authTypes"`
+	}
+	slackConnected := false
+	for i := range integrations {
+		if integrations[i].Name != "slack" {
+			continue
+		}
+		slackConnected = integrations[i].Connected
+		for j := range integrations[i].Connections {
+			if integrations[i].Connections[j].Name == "bot" {
+				botConnection = &integrations[i].Connections[j]
+			}
+		}
+	}
+	if botConnection == nil {
+		t.Fatal("bot connection missing from integrations response")
+	}
+	if !slackConnected {
+		t.Fatal("slack integration connected = false, want true when a platform connection is configured")
+	}
+	if botConnection.Mode != "platform" || !botConnection.Connected || botConnection.Connectable || len(botConnection.AuthTypes) != 0 {
+		t.Fatalf("bot connection metadata = %+v, want connected platform non-connectable with no auth types", *botConnection)
+	}
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "oauth",
+			path: "/api/v1/auth/start-oauth",
+			body: `{"integration":"slack","connection":"bot"}`,
+		},
+		{
+			name: "manual",
+			path: "/api/v1/auth/connect-manual",
+			body: `{"integration":"slack","connection":"bot","credential":"user-supplied"}`,
+		},
+	} {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Authorization", "Bearer api-token")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s connect request: %v", tc.name, err)
+		}
+		payload, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "deployment-managed") {
+			t.Fatalf("%s connect response = %d %s, want 400 deployment-managed", tc.name, resp.StatusCode, payload)
+		}
+	}
 
 	doInvoke := func(operation, body string) int {
 		t.Helper()
@@ -10364,10 +10476,13 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		if err != nil {
 			t.Fatalf("request: %v", err)
 		}
-		defer func() { _ = resp.Body.Close() }()
+		payload, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 500 {
-			payload, _ := io.ReadAll(resp.Body)
 			t.Fatalf("status = %d: %s", resp.StatusCode, payload)
+		}
+		if resp.StatusCode >= 400 {
+			t.Logf("%s response = %d: %s", operation, resp.StatusCode, payload)
 		}
 		return resp.StatusCode
 	}
@@ -10387,6 +10502,20 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"bad actor","actor":"workspace"}`); status != http.StatusBadRequest {
 		t.Fatalf("invalid actor status = %d, want %d", status, http.StatusBadRequest)
 	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	httpOperationAttrs := map[string]string{
+		"http.route":                 "/api/v1/{integration}/{operation}",
+		"gestalt.provider":           "slack",
+		"gestalt.operation":          "chat.postMessage",
+		"gestalt.invocation_surface": "http",
+	}
+	userAttrs := maps.Clone(httpOperationAttrs)
+	userAttrs["gestalt.connection_mode"] = "user"
+	platformAttrs := maps.Clone(httpOperationAttrs)
+	platformAttrs["gestalt.connection_mode"] = "platform"
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", userAttrs)
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", platformAttrs)
 
 	mu.Lock()
 	defer mu.Unlock()

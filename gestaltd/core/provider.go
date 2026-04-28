@@ -9,8 +9,9 @@ import (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone ConnectionMode = "none"
-	ConnectionModeUser ConnectionMode = "user"
+	ConnectionModeNone     ConnectionMode = "none"
+	ConnectionModeUser     ConnectionMode = "user"
+	ConnectionModePlatform ConnectionMode = "platform"
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
@@ -19,6 +20,8 @@ func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 		return ConnectionModeUser
 	case ConnectionModeNone:
 		return ConnectionModeNone
+	case ConnectionModePlatform:
+		return ConnectionModePlatform
 	default:
 		return mode
 	}

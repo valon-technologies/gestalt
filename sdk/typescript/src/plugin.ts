@@ -37,6 +37,7 @@ export type ConnectionMode =
   | "unspecified"
   | "none"
   | "user"
+  | "platform"
   | "identity";
 
 /**
@@ -517,6 +518,8 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
       return 2;
     case "identity":
       return 3;
+    case "platform":
+      return 5;
     case "unspecified":
     default:
       return 0;

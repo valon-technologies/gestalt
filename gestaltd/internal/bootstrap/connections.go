@@ -2,8 +2,11 @@ package bootstrap
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -42,6 +45,65 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	}
 
 	return maps, nil
+}
+
+func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap, error) {
+	runtime := invocation.ConnectionRuntimeMap{}
+	if cfg == nil {
+		return runtime, nil
+	}
+
+	for name, entry := range cfg.Plugins {
+		if entry == nil {
+			continue
+		}
+		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+		if err != nil {
+			return nil, fmt.Errorf("integration %q: %w", name, err)
+		}
+		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
+			info, err := connectionRuntimeInfo(name, connName, conn)
+			if err != nil {
+				return err
+			}
+			if _, ok := runtime[name]; !ok {
+				runtime[name] = map[string]invocation.ConnectionRuntimeInfo{}
+			}
+			runtime[name][connName] = info
+			return nil
+		}
+
+		pluginConn := plan.PluginConnection()
+		if err := addRuntimeInfo(config.PluginConnectionName, &pluginConn); err != nil {
+			return nil, err
+		}
+		for _, connName := range plan.NamedConnectionNames() {
+			conn, _ := plan.NamedConnectionDef(connName)
+			if err := addRuntimeInfo(connName, &conn); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return runtime, nil
+}
+
+func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
+	mode := config.ConnectionModeForConnection(*conn)
+	info := invocation.ConnectionRuntimeInfo{Mode: mode}
+	if mode != core.ConnectionModePlatform {
+		return info, nil
+	}
+	if conn.Auth.Type != providermanifestv1.AuthTypeBearer {
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer", integration, connection)
+	}
+	if strings.TrimSpace(conn.Auth.Token) == "" {
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.token in deployment config", integration, connection)
+	}
+	if len(conn.Auth.Credentials) > 0 || conn.Auth.AuthMapping != nil {
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform does not support user credential fields", integration, connection)
+	}
+	info.Token = strings.TrimSpace(conn.Auth.Token)
+	return info, nil
 }
 
 func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {

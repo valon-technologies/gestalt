@@ -57,6 +57,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
+	connRuntime, err := BuildConnectionRuntime(cfg)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return warnings, err
+	}
 	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
@@ -75,6 +80,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
 			return connectionAuthToRefreshers(connAuthResolver())
 		}),
+		invocation.WithConnectionRuntime(connRuntime.Resolve),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)

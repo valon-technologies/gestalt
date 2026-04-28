@@ -254,13 +254,19 @@ func (plan StaticConnectionPlan) AdvertisedConnectionNames() []string {
 }
 
 func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
-	if connectionModeForConnection(plan.pluginConnection) == core.ConnectionModeUser {
+	if ConnectionModeForConnection(plan.pluginConnection) == core.ConnectionModeUser {
 		return core.ConnectionModeUser
 	}
+	hasPlatform := ConnectionModeForConnection(plan.pluginConnection) == core.ConnectionModePlatform
 	for _, name := range plan.NamedConnectionNames() {
-		if connectionModeForConnection(plan.namedConnections[name]) == core.ConnectionModeUser {
+		mode := ConnectionModeForConnection(plan.namedConnections[name])
+		if mode == core.ConnectionModeUser {
 			return core.ConnectionModeUser
 		}
+		hasPlatform = hasPlatform || mode == core.ConnectionModePlatform
+	}
+	if hasPlatform {
+		return core.ConnectionModePlatform
 	}
 	return core.ConnectionModeNone
 }
@@ -268,20 +274,18 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 func (plan StaticConnectionPlan) validateConnectionModes() error {
 	addMode := func(scope string, mode core.ConnectionMode) error {
 		switch core.NormalizeConnectionMode(mode) {
-		case core.ConnectionModeNone:
-			return nil
-		case core.ConnectionModeUser:
+		case core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModePlatform:
 			return nil
 		default:
 			return fmt.Errorf("%s uses unsupported connection mode %q", scope, mode)
 		}
 	}
 
-	if err := addMode("plugin connection", connectionModeForConnection(plan.pluginConnection)); err != nil {
+	if err := addMode("plugin connection", ConnectionModeForConnection(plan.pluginConnection)); err != nil {
 		return err
 	}
 	for _, name := range plan.NamedConnectionNames() {
-		if err := addMode(fmt.Sprintf("connection %q", name), connectionModeForConnection(plan.namedConnections[name])); err != nil {
+		if err := addMode(fmt.Sprintf("connection %q", name), ConnectionModeForConnection(plan.namedConnections[name])); err != nil {
 			return err
 		}
 	}
@@ -442,7 +446,9 @@ func namedConnectionNames(plugin *ProviderEntry, manifestPlugin *providermanifes
 	return names
 }
 
-func connectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
+// ConnectionModeForConnection returns the effective credential mode for a
+// merged connection definition.
+func ConnectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
 	if conn.Mode != "" {
 		return core.NormalizeConnectionMode(core.ConnectionMode(conn.Mode))
 	}
