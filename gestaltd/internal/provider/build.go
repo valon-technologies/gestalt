@@ -209,6 +209,9 @@ func ReadIconFile(path string) (string, error) {
 // ApplyConnectionAuth merges connection auth overrides into the Definition.
 func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	o := conn.Auth
+	if o.Type == providermanifestv1.AuthTypeOAuth2 && def.Auth.Type != string(providermanifestv1.AuthTypeOAuth2) {
+		clearManualAuthMaterialization(def)
+	}
 	setStr(&def.Auth.Type, string(o.Type))
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
 	setStr(&def.Auth.TokenURL, o.TokenURL)
@@ -243,6 +246,14 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	if o.AuthMapping != nil {
 		def.AuthMapping = config.CloneAuthMapping(o.AuthMapping)
 	}
+}
+
+func clearManualAuthMaterialization(def *Definition) {
+	def.AuthStyle = ""
+	def.AuthHeader = ""
+	def.TokenPrefix = ""
+	def.AuthMapping = nil
+	def.CredentialFields = nil
 }
 
 func parseMappedToken(token string) (map[string]any, error) {

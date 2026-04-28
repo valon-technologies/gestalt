@@ -13,6 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func testDefinition(name string) *Definition {
@@ -383,6 +384,63 @@ func TestBuildAuthHeader(t *testing.T) {
 	}
 	if resp["auth"] != "" {
 		t.Errorf("Authorization should be empty, got %v", resp["auth"])
+	}
+}
+
+func TestBuildOAuthConnectionOverrideClearsOpenAPIManualAuth(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"authorization": r.Header.Get("Authorization"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "oauth_override",
+		DisplayName: "OAuth Override API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		AuthStyle:   "raw",
+		AuthHeader:  "Authorization",
+		CredentialFields: []CredentialFieldDef{
+			{Name: "api_key", Label: "API Key"},
+		},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List items", Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, config.ConnectionDef{
+		Auth: config.ConnectionAuthDef{
+			Type:             providermanifestv1.AuthTypeOAuth2,
+			AuthorizationURL: "https://identity.example.com/oauth/authorize",
+			TokenURL:         "https://identity.example.com/oauth/token",
+			ClientID:         "client-id",
+			ClientSecret:     "client-secret",
+			RedirectURL:      "https://gestalt.example.com/api/v1/auth/callback",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "list", nil, "oauth-access-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["authorization"] != "Bearer oauth-access-token" {
+		t.Errorf("Authorization = %v, want Bearer oauth-access-token", resp["authorization"])
+	}
+	if fields := prov.CredentialFields(); len(fields) != 0 {
+		t.Fatalf("CredentialFields len = %d, want 0: %+v", len(fields), fields)
 	}
 }
 
