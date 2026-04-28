@@ -6,13 +6,16 @@ import (
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type fakeAgentProviderClient struct {
 	getCapabilities func(context.Context, *proto.GetAgentProviderCapabilitiesRequest, ...grpc.CallOption) (*proto.AgentProviderCapabilities, error)
+	listTurnEvents  func(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error)
 }
 
 func (c *fakeAgentProviderClient) CreateSession(context.Context, *proto.CreateAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error) {
@@ -47,7 +50,10 @@ func (c *fakeAgentProviderClient) CancelTurn(context.Context, *proto.CancelAgent
 	return nil, errors.New("unexpected CancelTurn call")
 }
 
-func (c *fakeAgentProviderClient) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error) {
+func (c *fakeAgentProviderClient) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest, opts ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error) {
+	if c.listTurnEvents != nil {
+		return c.listTurnEvents(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected ListTurnEvents call")
 }
 
@@ -85,5 +91,91 @@ func TestRemoteAgentPingRequiresAgentProviderSurface(t *testing.T) {
 	err := agent.Ping(context.Background())
 	if status.Code(err) != codes.Unimplemented {
 		t.Fatalf("Ping error code = %s, want %s (err=%v)", status.Code(err), codes.Unimplemented, err)
+	}
+}
+
+func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
+	t.Parallel()
+
+	input, err := structpb.NewValue(map[string]any{"query": "docs"})
+	if err != nil {
+		t.Fatalf("NewValue input: %v", err)
+	}
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			listTurnEvents: func(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error) {
+				return &proto.ListAgentProviderTurnEventsResponse{
+					Events: []*proto.AgentTurnEvent{{
+						Id:         "event-1",
+						TurnId:     "turn-1",
+						Seq:        7,
+						Type:       "provider.tool",
+						Visibility: "public",
+						Display: &proto.AgentTurnDisplay{
+							Kind:  "tool",
+							Phase: "started",
+							Label: "Search docs",
+							Ref:   "call-1",
+							Input: input,
+						},
+					}},
+				}, nil
+			},
+		},
+	}
+
+	events, err := agent.ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("ListTurnEvents: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(events))
+	}
+	display := events[0].Display
+	if display == nil || display.Kind != "tool" || display.Phase != "started" || display.Label != "Search docs" || display.Ref != "call-1" {
+		t.Fatalf("display = %#v", display)
+	}
+	inputMap, ok := display.Input.(map[string]any)
+	if !ok || inputMap["query"] != "docs" {
+		t.Fatalf("display input = %#v, want query docs", display.Input)
+	}
+}
+
+func TestTurnEventsToProtoPreservesEnvelopeWhenDataInvalid(t *testing.T) {
+	t.Parallel()
+
+	events := turnEventsToProto([]*coreagent.TurnEvent{{
+		ID:         "event-1",
+		TurnID:     "turn-1",
+		Seq:        1,
+		Type:       "tool.started",
+		Visibility: "public",
+		Data: map[string]any{
+			"bad": map[int]string{1: "not a protobuf struct"},
+		},
+		Display: &coreagent.TurnDisplay{
+			Kind:  "tool",
+			Phase: "started",
+			Label: "Search docs",
+			Ref:   "call-1",
+			Input: map[string]any{
+				"query": "docs",
+			},
+		},
+	}})
+
+	if len(events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(events))
+	}
+	if events[0].GetData() != nil {
+		t.Fatalf("event data = %#v, want omitted invalid data", events[0].GetData())
+	}
+	display := events[0].GetDisplay()
+	if display == nil || display.GetKind() != "tool" || display.GetPhase() != "started" || display.GetRef() != "call-1" {
+		t.Fatalf("display = %#v", display)
+	}
+	inputMap := display.GetInput().GetStructValue().AsMap()
+	if inputMap["query"] != "docs" {
+		t.Fatalf("display input = %#v, want query docs", inputMap)
 	}
 }

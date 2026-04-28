@@ -2,6 +2,7 @@ package providerhost
 
 import (
 	"fmt"
+	"log/slog"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -321,6 +322,7 @@ func agentTurnEventFromProto(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
 		Visibility: event.GetVisibility(),
 		Data:       mapFromStruct(event.GetData()),
 		CreatedAt:  timeFromProto(event.GetCreatedAt()),
+		Display:    agentTurnDisplayFromProto(event.GetDisplay()),
 	}
 }
 
@@ -333,6 +335,52 @@ func agentTurnEventsFromProto(events []*proto.AgentTurnEvent) []*coreagent.TurnE
 		out = append(out, agentTurnEventFromProto(event))
 	}
 	return out
+}
+
+func agentTurnDisplayFromProto(display *proto.AgentTurnDisplay) *coreagent.TurnDisplay {
+	if display == nil {
+		return nil
+	}
+	return &coreagent.TurnDisplay{
+		Kind:      display.GetKind(),
+		Phase:     display.GetPhase(),
+		Text:      display.GetText(),
+		Label:     display.GetLabel(),
+		Ref:       display.GetRef(),
+		ParentRef: display.GetParentRef(),
+		Input:     protoValueToAny(display.GetInput()),
+		Output:    protoValueToAny(display.GetOutput()),
+		Error:     protoValueToAny(display.GetError()),
+	}
+}
+
+func agentTurnDisplayToProto(display *coreagent.TurnDisplay) (*proto.AgentTurnDisplay, error) {
+	if display == nil {
+		return nil, nil
+	}
+	input, err := protoValueFromAny(display.Input)
+	if err != nil {
+		return nil, fmt.Errorf("agent turn display input: %w", err)
+	}
+	output, err := protoValueFromAny(display.Output)
+	if err != nil {
+		return nil, fmt.Errorf("agent turn display output: %w", err)
+	}
+	displayErr, err := protoValueFromAny(display.Error)
+	if err != nil {
+		return nil, fmt.Errorf("agent turn display error: %w", err)
+	}
+	return &proto.AgentTurnDisplay{
+		Kind:      display.Kind,
+		Phase:     display.Phase,
+		Text:      display.Text,
+		Label:     display.Label,
+		Ref:       display.Ref,
+		ParentRef: display.ParentRef,
+		Input:     input,
+		Output:    output,
+		Error:     displayErr,
+	}, nil
 }
 
 func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error) {
@@ -398,7 +446,13 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 		}
 		data, err := structFromMap(value.Data)
 		if err != nil {
-			continue
+			slog.Warn("omit invalid agent turn event data during proto conversion", "turn_id", value.TurnID, "event_id", value.ID, "type", value.Type, "error", err)
+			data = nil
+		}
+		display, err := agentTurnDisplayToProto(value.Display)
+		if err != nil {
+			slog.Warn("omit invalid agent turn event display during proto conversion", "turn_id", value.TurnID, "event_id", value.ID, "type", value.Type, "error", err)
+			display = nil
 		}
 		out = append(out, &proto.AgentTurnEvent{
 			Id:         value.ID,
@@ -409,6 +463,7 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 			Visibility: value.Visibility,
 			Data:       data,
 			CreatedAt:  timeToProto(value.CreatedAt),
+			Display:    display,
 		})
 	}
 	return out

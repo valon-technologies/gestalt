@@ -200,6 +200,18 @@ message AgentTurn {
   string execution_ref = 14;
 }
 
+message AgentTurnDisplay {
+  string kind = 1;
+  string phase = 2;
+  string text = 3;
+  string label = 4;
+  string ref = 5;
+  string parent_ref = 6;
+  google.protobuf.Value input = 7;
+  google.protobuf.Value output = 8;
+  google.protobuf.Value error = 9;
+}
+
 message CreateAgentProviderTurnRequest {
   string turn_id = 1;
   string session_id = 2;
@@ -242,6 +254,7 @@ message AgentTurnEvent {
   string visibility = 6;
   google.protobuf.Struct data = 7;
   google.protobuf.Timestamp created_at = 8;
+  AgentTurnDisplay display = 9;
 }
 
 message ListAgentProviderTurnEventsRequest {

@@ -207,6 +207,19 @@ type TurnEvent struct {
 	Visibility string
 	Data       map[string]any
 	CreatedAt  *time.Time
+	Display    *TurnDisplay
+}
+
+type TurnDisplay struct {
+	Kind      string
+	Phase     string
+	Text      string
+	Label     string
+	Ref       string
+	ParentRef string
+	Input     any
+	Output    any
+	Error     any
 }
 
 type ListTurnEventsRequest struct {

@@ -84,10 +84,33 @@ Key fields:
 - sessions carry `id`, `provider_name`, `model`, `client_ref`, `state`, and timestamps
 - turns carry `id`, `session_id`, `status`, `messages`, `output_text`, optional `structured_output`, and timestamps
 - interactions carry `id`, `turn_id`, `session_id`, `type`, `state`, `request`, and `resolution`
-- turn events carry `turn_id`, monotonically increasing `seq`, canonical `type`, `source`, `visibility`, and structured `data`
+- turn events carry `turn_id`, monotonically increasing `seq`, canonical `type`, `source`, `visibility`, structured `data`, and optional `display`
 
 Providers should return canonical IDs exactly as persisted. Gestalt does not
 rewrite session or turn IDs on the provider's behalf.
+
+### Turn event display
+
+`AgentTurnEvent.display` is an optional, provider-neutral projection for CLIs and
+other clients. It does not replace the raw `type` and `data` fields; clients can
+fall back to raw events when `display` is absent or malformed.
+
+The initial `display.kind` values are `text`, `reasoning`, `tool`,
+`interaction`, `status`, and `error`. The initial `display.phase` values are
+`delta`, `completed`, `started`, `progress`, `failed`, `requested`, `resolved`,
+and `canceled`. `display.ref` is a stable correlation ID scoped to the turn,
+most commonly a tool call ID.
+
+Gestalt synthesizes `display` for a small set of known raw event types when a
+provider omits it, but never overwrites provider-supplied display. Tool input
+and output are synthesized from the tool payload keys Gestalt clients already
+render (`arguments`, `input`, `request`, `output`, `result`, and `body`) plus
+explicit preview aliases. `display` is not a privacy boundary: clients must
+still honor the event's `visibility`. Gestalt may synthesize display for known
+private events to preserve existing CLI behavior, but unknown private events are
+not normalized. `AgentHost.ExecuteTool` does not emit turn lifecycle events by
+itself; providers should still persist tool events or set `display` on their own
+events.
 
 ## Go example
 

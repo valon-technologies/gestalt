@@ -653,11 +653,15 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, tu
 	if err != nil {
 		return nil, err
 	}
-	return provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
+	events, err = provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
 		TurnID:   ref.ID,
 		AfterSeq: afterSeq,
 		Limit:    limit,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return normalizeTurnEventsForDisplay(events), nil
 }
 
 func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, turnID string) (out []*coreagent.Interaction, err error) {

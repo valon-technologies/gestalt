@@ -150,6 +150,17 @@ func protoValueToAny(v *structpb.Value) any {
 	return v.AsInterface()
 }
 
+func protoValueFromAny(value any) (*structpb.Value, error) {
+	if value == nil {
+		return nil, nil
+	}
+	normalized, err := normalizeStructValue(value)
+	if err != nil {
+		return nil, err
+	}
+	return structpb.NewValue(normalized)
+}
+
 func normalizeStructMap(values map[string]any) (map[string]any, error) {
 	normalized := make(map[string]any, len(values))
 	for key, value := range values {
