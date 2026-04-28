@@ -29,7 +29,7 @@ pub(super) enum WorkerCommand {
 
 pub(super) enum WorkerEvent {
     TurnCreated(AgentTurnInfo),
-    TurnEvent(AgentTurnEventInfo),
+    TurnEvent(Box<AgentTurnEventInfo>),
     TurnSnapshot(AgentTurnInfo),
     WaitingForInput(AgentInteractionInfo),
     InteractionResolved(AgentInteractionInfo),
@@ -74,7 +74,7 @@ fn run_turn_worker(
                 after_seq = after_seq.max(event.seq as u64);
             }
             event_tx
-                .send(WorkerEvent::TurnEvent(event))
+                .send(WorkerEvent::TurnEvent(Box::new(event)))
                 .context("terminal UI closed while streaming events")
         })?;
 

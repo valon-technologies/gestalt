@@ -5,8 +5,11 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use super::super::{
-    AgentInteractionInfo, AgentSessionInfo, AgentTurnEventInfo, AgentTurnInfo, compact_json,
-    number_any_field, pretty_json, string_any_field, string_field, value_any_field,
+    AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
+    AgentTurnInfo, compact_json, display_status, display_text, display_tool_error,
+    display_tool_input, display_tool_label, display_tool_output, display_tool_ref,
+    display_value_text, number_any_field, pretty_json, string_any_field, string_field,
+    turn_event_display, value_any_field,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
@@ -72,6 +75,9 @@ impl AgentUiState {
     }
 
     pub(super) fn apply_turn_event(&mut self, event: AgentTurnEventInfo) {
+        if self.apply_display_turn_event(&event) {
+            return;
+        }
         match event.event_type.as_str() {
             "agent.message.delta" | "assistant.delta" => {
                 if let Some(text) = string_any_field(&event.data, &["text", "delta", "content"]) {
@@ -131,6 +137,132 @@ impl AgentUiState {
             "turn.completed" => {}
             _ if event.visibility == "private" => {}
             _ => self.push_system(generic_event_text(&event)),
+        }
+    }
+
+    fn apply_display_turn_event(&mut self, event: &AgentTurnEventInfo) -> bool {
+        let Some(display) = turn_event_display(event) else {
+            return false;
+        };
+        match display.kind.trim() {
+            "text" => {
+                match display.phase.trim() {
+                    "delta" => {
+                        if let Some(text) = display_text(display) {
+                            self.push_assistant_delta(text);
+                        } else {
+                            return false;
+                        }
+                    }
+                    "completed" => {
+                        if let Some(text) = display_text(display) {
+                            self.complete_assistant(text);
+                        } else {
+                            return false;
+                        }
+                    }
+                    _ => {
+                        if let Some(text) = display_text(display) {
+                            self.push_assistant(text.to_string());
+                        } else {
+                            return false;
+                        }
+                    }
+                }
+                true
+            }
+            "reasoning" => {
+                if let Some(text) = display_text(display) {
+                    self.push_system(format!("reasoning: {text}"));
+                } else {
+                    return false;
+                }
+                true
+            }
+            "tool" => {
+                match display.phase.trim() {
+                    "started" => {
+                        let activity = ToolActivity::started_display(event, display);
+                        let tool = activity.name.clone();
+                        self.push_tool_activity(activity);
+                        self.status = format!("{tool} running");
+                    }
+                    "progress" => {
+                        self.apply_tool_progress(event, display);
+                    }
+                    "completed" | "failed" => {
+                        let info = ToolTerminalEvent::from_display(event, display);
+                        self.finish_tool_activity(info);
+                    }
+                    _ => return false,
+                }
+                true
+            }
+            "interaction" => {
+                let id = if display.display_ref.trim().is_empty() {
+                    "interaction".to_string()
+                } else {
+                    display.display_ref.trim().to_string()
+                };
+                match display.phase.trim() {
+                    "requested" => {
+                        self.push_interaction(format!("requested {id}"));
+                        self.status = "waiting for input".to_string();
+                    }
+                    "resolved" => {
+                        self.push_interaction(format!("resolved {id}"));
+                        self.status = "interaction resolved".to_string();
+                    }
+                    _ => return false,
+                }
+                true
+            }
+            "status" => {
+                match display.phase.trim() {
+                    "started" => {
+                        self.status = display_text(display)
+                            .map(|status| format!("turn {status}"))
+                            .unwrap_or_else(|| "turn started".to_string());
+                    }
+                    "canceled" => {
+                        if let Some(reason) = display_text(display) {
+                            self.push_system(format!("turn canceled: {reason}"));
+                        } else {
+                            self.push_system("turn canceled");
+                        }
+                    }
+                    "progress" => {
+                        if let Some(text) = display_text(display) {
+                            self.status = text.to_string();
+                        }
+                    }
+                    "completed" => {
+                        self.status = display_text(display)
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| "completed".to_string());
+                    }
+                    _ => return false,
+                }
+                true
+            }
+            "error" => {
+                let text = display_text(display).map(ToString::to_string).or_else(|| {
+                    display
+                        .error
+                        .as_ref()
+                        .and_then(|value| display_value_text(value).ok())
+                });
+                let Some(text) = text else {
+                    return false;
+                };
+                if display.label.trim() == "turn" || display.phase.trim() == "failed" {
+                    self.push_error(format!("turn failed: {text}"));
+                } else {
+                    self.push_error(text.to_string());
+                }
+                true
+            }
+            _ => false,
         }
     }
 
@@ -241,6 +373,20 @@ impl AgentUiState {
             self.push_tool_activity(ToolActivity::terminal(terminal));
         }
         self.status = terminal_status.unwrap_or_else(|| format!("{tool} completed"));
+    }
+
+    fn apply_tool_progress(&mut self, event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) {
+        let progress = ToolTerminalEvent::from_display_progress(event, display);
+        let tool = progress.name.clone();
+        if let Some(item) = self.find_running_tool_activity_mut(&progress) {
+            if let Some(activity) = item.tool_activity.as_mut() {
+                activity.update_progress(progress);
+                item.text = activity.render_text();
+            }
+        } else {
+            self.push_tool_activity(ToolActivity::progress(progress));
+        }
+        self.status = format!("{tool} running");
     }
 
     fn find_running_tool_activity_mut(
@@ -453,6 +599,32 @@ impl ToolActivity {
         }
     }
 
+    fn started_display(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
+        Self {
+            key: display_tool_ref(event, display),
+            name: display_tool_label(event, display),
+            status: ToolActivityStatus::Running,
+            started_at: Some(Instant::now()),
+            elapsed: None,
+            args: preview_display_value(display_tool_input(event, display)),
+            output: None,
+            error: None,
+        }
+    }
+
+    fn progress(progress: ToolTerminalEvent) -> Self {
+        Self {
+            key: progress.key.clone(),
+            name: progress.name.clone(),
+            status: ToolActivityStatus::Running,
+            started_at: Some(Instant::now()),
+            elapsed: None,
+            args: progress.args.clone(),
+            output: progress.output.clone(),
+            error: progress.error.clone(),
+        }
+    }
+
     fn terminal(terminal: ToolTerminalEvent) -> Self {
         let mut activity = Self {
             key: terminal.key.clone(),
@@ -476,6 +648,18 @@ impl ToolActivity {
         self.output = terminal.output;
         self.error = terminal.error;
         self.elapsed = self.started_at.map(|started_at| started_at.elapsed());
+    }
+
+    fn update_progress(&mut self, progress: ToolTerminalEvent) {
+        if self.args.is_none() {
+            self.args = progress.args;
+        }
+        if progress.output.is_some() {
+            self.output = progress.output;
+        }
+        if progress.error.is_some() {
+            self.error = progress.error;
+        }
     }
 
     fn end(&mut self, reason: &str) {
@@ -552,6 +736,35 @@ impl ToolTerminalEvent {
             output: preview_value(&event.data, &["output", "result", "body"]),
             error: string_any_field(&event.data, &["error", "message"])
                 .map(|value| truncate_preview(&value)),
+        }
+    }
+
+    fn from_display(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
+        let error = preview_display_error(display_tool_error(event, display));
+        let status = if display.phase.trim() == "failed" || error.is_some() {
+            ToolActivityStatus::Failed(display_status(event, display))
+        } else {
+            ToolActivityStatus::Completed(display_status(event, display))
+        };
+        Self {
+            key: display_tool_ref(event, display),
+            name: display_tool_label(event, display),
+            status,
+            args: preview_display_value(display_tool_input(event, display)),
+            output: preview_display_value(display_tool_output(event, display)),
+            error,
+        }
+    }
+
+    fn from_display_progress(event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Self {
+        Self {
+            key: display_tool_ref(event, display),
+            name: display_tool_label(event, display),
+            status: ToolActivityStatus::Running,
+            args: preview_display_value(display_tool_input(event, display)),
+            output: preview_display_value(display_tool_output(event, display))
+                .or_else(|| display_text(display).map(truncate_preview)),
+            error: preview_display_error(display_tool_error(event, display)),
         }
     }
 
@@ -632,6 +845,18 @@ fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
 fn preview_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
     value_any_field(data, keys)
         .and_then(|value| compact_json(value).ok())
+        .map(|value| truncate_preview(&value))
+}
+
+fn preview_display_value(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| compact_json(value).ok())
+        .map(|value| truncate_preview(&value))
+}
+
+fn preview_display_error(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| display_value_text(value).ok())
         .map(|value| truncate_preview(&value))
 }
 

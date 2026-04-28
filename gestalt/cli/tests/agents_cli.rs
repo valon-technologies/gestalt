@@ -392,6 +392,99 @@ fn test_cli_runs_interactive_agent_session() {
         .stderr(predicate::str::contains("Type /quit to exit."));
 }
 
+#[test]
+fn test_cli_runs_interactive_agent_session_with_display_events() {
+    let mut server = Server::new();
+    let _session = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/sessions",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"provider":"managed","model":"gpt-5.4"}"#.to_string(),
+    ))
+    .with_body(SESSION_JSON)
+    .create();
+    let _turn = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/sessions/session-1/turns",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}]}"#.to_string(),
+    ))
+    .with_body(TURN_JSON)
+    .create();
+    let _events = server
+        .mock(
+            Method::GET.as_str(),
+            "/api/v1/agent/turns/turn-1/events/stream?after=0&limit=100&until=blocked_or_terminal",
+        )
+        .match_header(header::AUTHORIZATION.as_str(), Matcher::Exact(test_bearer()))
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header(header::CONTENT_TYPE.as_str(), "text/event-stream")
+        .with_body(
+            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"input\":{\"ticket\":\"INC-42\"}}}\n\n\
+             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"ok\":true}}}\n\n\
+             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_INPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"redacted\",\"ref\":\"call-redacted\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_OUTPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"redacted\",\"ref\":\"call-redacted\",\"text\":\"done\"}}\n\n\
+             data: {\"seq\":5,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"hello\"}}\n\n\
+             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"\\n  display\"}}\n\n\
+             data: {\"seq\":7,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"hello\\n  display\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":8,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"raw fallback\"},\"display\":{\"kind\":123,\"text\":42}}\n\n\
+             data: {\"seq\":9,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"missing display text fallback\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":10,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"tools synced\"}}\n\n\
+             data: {\"seq\":11,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"error\",\"phase\":\"failed\",\"text\":\"hidden secret\"}}\n\n\
+             data: {\"seq\":12,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        )
+        .create();
+    let _get_turn = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"{
+            "id":"turn-1",
+            "sessionId":"session-1",
+            "provider":"managed",
+            "model":"gpt-5.4",
+            "status":"succeeded",
+            "outputText":"hello\n  display"
+        }"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .write_stdin("display events\n/quit\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            r#"tool> lookup started {"ticket":"INC-42"}"#,
+        ))
+        .stdout(predicate::str::contains(
+            r#"tool> lookup completed (200) {"ok":true}"#,
+        ))
+        .stdout(predicate::str::contains("tool> redacted started"))
+        .stdout(predicate::str::contains("tool> redacted completed (done)"))
+        .stdout(predicate::str::contains("assistant> hello\n  display"))
+        .stdout(predicate::str::contains("assistant> raw fallback"))
+        .stdout(predicate::str::contains(
+            "assistant> missing display text fallback",
+        ))
+        .stdout(predicate::str::contains("turn> completed (tools synced)"))
+        .stdout(predicate::str::contains("RAW_INPUT_SENTINEL").not())
+        .stdout(predicate::str::contains("RAW_OUTPUT_SENTINEL").not())
+        .stdout(predicate::str::contains("hidden secret").not());
+}
+
 #[cfg(unix)]
 #[test]
 fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
@@ -457,6 +550,99 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     session.write("/quit\r");
     session.wait_for_exit();
 
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_renders_display_tool_activity_rows() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display tools"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-display-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-display-tools/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_TUI_INPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"search\",\"ref\":\"call-search\",\"input\":{\"query\":\"roadmap\"}}}\n\n\
+             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"halfway\"}}\n\n\
+             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"almost done\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_TUI_OUTPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"200\",\"output\":{\"matches\":1}}}\n\n\
+             data: {\"seq\":5,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"sync complete\"}}\n\n\
+             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"tui\"}}\n\n\
+             data: {\"seq\":7,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"tui suffix\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":8,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"completed\",\"text\":\"display done\"}}\n\n\
+             data: {\"seq\":9,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"raw tui fallback\"},\"display\":{\"kind\":123,\"text\":42}}\n\n\
+             data: {\"seq\":10,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"text\",\"phase\":\"completed\",\"text\":\"hidden secret\"}}\n\n\
+             data: {\"seq\":11,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-display-tools",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-display-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"display done"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("display tools\r");
+    session.wait_for(&mut output, "search");
+    session.wait_for(&mut output, "completed");
+    session.wait_for(&mut output, "200");
+    session.wait_for(&mut output, "matches");
+    session.wait_for(&mut output, "suffix");
+    session.wait_for(&mut output, "done");
+    session.wait_for(&mut output, "fallback");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("hidden secret"),
+        "unknown private display event was rendered:\n{output}"
+    );
+    assert!(
+        !output.contains("RAW_TUI_INPUT") && !output.contains("RAW_TUI_OUTPUT"),
+        "display tool rendering leaked raw tool payload data:\n{output}"
+    );
+    assert!(
+        !output.contains("ended"),
+        "tool progress events left duplicate running tool rows:\n{output}"
+    );
     server.assert_finished();
 }
 

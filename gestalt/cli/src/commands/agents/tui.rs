@@ -521,7 +521,7 @@ impl TuiApp {
                 self.state.current_turn_id = Some(turn.id.clone());
                 self.state.status = turn_status_label(&turn);
             }
-            WorkerEvent::TurnEvent(event) => self.state.apply_turn_event(event),
+            WorkerEvent::TurnEvent(event) => self.state.apply_turn_event(*event),
             WorkerEvent::TurnSnapshot(turn) => self.state.finish_turn(&turn),
             WorkerEvent::WaitingForInput(interaction) => {
                 self.interaction_input = InteractionInput::for_interaction(&interaction);
