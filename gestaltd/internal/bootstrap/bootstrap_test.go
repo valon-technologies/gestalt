@@ -501,6 +501,12 @@ func (s *stubWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRe
 func (s *stubWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
+func (s *stubWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+func (s *stubWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
 func (s *stubWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	return &coreworkflow.Schedule{}, nil
 }
@@ -1199,6 +1205,12 @@ func (p *recordingWorkflowProvider) ListRuns(context.Context, coreworkflow.ListR
 }
 func (p *recordingWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
+}
+func (p *recordingWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+func (p *recordingWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
 func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, req)

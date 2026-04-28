@@ -121,6 +121,14 @@ func (p *memoryWorkflowProvider) StartRun(context.Context, coreworkflow.StartRun
 	return nil, errors.New("not implemented")
 }
 
+func (p *memoryWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (p *memoryWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (p *memoryWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 	if p.getRunErr != nil {
 		return nil, p.getRunErr

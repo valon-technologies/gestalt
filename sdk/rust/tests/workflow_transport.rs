@@ -99,6 +99,22 @@ impl WorkflowProviderGrpc for TestWorkflowProvider {
         Err(Status::unimplemented("not used"))
     }
 
+    async fn signal_run(
+        &self,
+        _request: GrpcRequest<gestalt::proto::v1::SignalWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::SignalWorkflowRunResponse>, Status>
+    {
+        Err(Status::unimplemented("not used"))
+    }
+
+    async fn signal_or_start_run(
+        &self,
+        _request: GrpcRequest<gestalt::proto::v1::SignalOrStartWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::SignalWorkflowRunResponse>, Status>
+    {
+        Err(Status::unimplemented("not used"))
+    }
+
     async fn upsert_schedule(
         &self,
         _request: GrpcRequest<gestalt::proto::v1::UpsertWorkflowProviderScheduleRequest>,

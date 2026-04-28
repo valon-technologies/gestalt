@@ -145,6 +145,14 @@ func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Princip
 	return target.ListRuns(ctx, p)
 }
 
+func (l *lazyWorkflowManager) StartRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.StartRun(ctx, p, req)
+}
+
 func (l *lazyWorkflowManager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {
@@ -159,6 +167,22 @@ func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Princi
 		return nil, err
 	}
 	return target.CancelRun(ctx, p, runID, reason)
+}
+
+func (l *lazyWorkflowManager) SignalRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SignalRun(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SignalOrStartRun(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {

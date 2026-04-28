@@ -13,16 +13,18 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
 ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET"
+ENV_WORKFLOW_HOST_SOCKET_TOKEN = f"{ENV_WORKFLOW_HOST_SOCKET}_TOKEN"
 ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET"
 ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = f"{ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN"
 
 
 class WorkflowHost:
     def __init__(self) -> None:
-        socket_path = os.environ.get(ENV_WORKFLOW_HOST_SOCKET, "")
-        if not socket_path:
+        target = os.environ.get(ENV_WORKFLOW_HOST_SOCKET, "")
+        if not target:
             raise RuntimeError(f"{ENV_WORKFLOW_HOST_SOCKET} is not set")
-        self._channel = grpc.insecure_channel(f"unix:{socket_path}")
+        relay_token = os.environ.get(ENV_WORKFLOW_HOST_SOCKET_TOKEN, "")
+        self._channel = host_service_channel("workflow host", target, token=relay_token)
         self._stub = pb_grpc.WorkflowHostStub(self._channel)
 
     def close(self) -> None:
@@ -59,6 +61,66 @@ class WorkflowManager:
 
     def close(self) -> None:
         self._channel.close()
+
+    def start_run(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.StartRun, request)
+
+    def signal_run(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.SignalRun, request)
+
+    def signal_or_start_run(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.SignalOrStartRun, request)
+
+    def create_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.CreateSchedule, request)
+
+    def get_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.GetSchedule, request)
+
+    def update_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.UpdateSchedule, request)
+
+    def delete_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.DeleteSchedule, request)
+
+    def pause_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.PauseSchedule, request)
+
+    def resume_schedule(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ResumeSchedule, request)
+
+    def create_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.CreateEventTrigger, request)
+
+    def get_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.GetEventTrigger, request)
+
+    def update_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.UpdateEventTrigger, request)
+
+    def delete_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.DeleteEventTrigger, request)
+
+    def pause_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.PauseEventTrigger, request)
+
+    def resume_trigger(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ResumeEventTrigger, request)
 
     def publish_event(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token

@@ -103,6 +103,7 @@ message BoundWorkflowRun {
   string result_body = 9;
   WorkflowActor created_by = 10;
   string execution_ref = 11;
+  string workflow_key = 12;
 }
 
 message BoundWorkflowSchedule {
@@ -147,6 +148,18 @@ message WorkflowExecutionReference {
   string subject_kind = 10;
   string display_name = 11;
   string auth_source = 12;
+  string caller_plugin_name = 13;
+}
+
+message WorkflowSignal {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Struct payload = 3;
+  google.protobuf.Struct metadata = 4;
+  WorkflowActor created_by = 5;
+  google.protobuf.Timestamp created_at = 6;
+  string idempotency_key = 7;
+  int64 sequence = 8;
 }
 
 message StartWorkflowProviderRunRequest {
@@ -154,6 +167,7 @@ message StartWorkflowProviderRunRequest {
   string idempotency_key = 2;
   WorkflowActor created_by = 4;
   string execution_ref = 5;
+  string workflow_key = 6;
 }
 
 message GetWorkflowProviderRunRequest {
@@ -169,6 +183,27 @@ message ListWorkflowProviderRunsResponse {
 message CancelWorkflowProviderRunRequest {
   string run_id = 2;
   string reason = 3;
+}
+
+message SignalWorkflowProviderRunRequest {
+  string run_id = 1;
+  WorkflowSignal signal = 2;
+}
+
+message SignalOrStartWorkflowProviderRunRequest {
+  string workflow_key = 1;
+  BoundWorkflowTarget target = 2;
+  string idempotency_key = 3;
+  WorkflowActor created_by = 4;
+  string execution_ref = 5;
+  WorkflowSignal signal = 6;
+}
+
+message SignalWorkflowRunResponse {
+  BoundWorkflowRun run = 1;
+  WorkflowSignal signal = 2;
+  bool started_run = 3;
+  string workflow_key = 4;
 }
 
 message UpsertWorkflowProviderScheduleRequest {
@@ -264,6 +299,7 @@ message InvokeWorkflowOperationRequest {
   google.protobuf.Struct metadata = 5;
   WorkflowActor created_by = 7;
   string execution_ref = 8;
+  repeated WorkflowSignal signals = 9;
 }
 
 message InvokeWorkflowOperationResponse {
@@ -279,6 +315,19 @@ message ManagedWorkflowSchedule {
 message ManagedWorkflowEventTrigger {
   string provider_name = 1;
   BoundWorkflowEventTrigger trigger = 2;
+}
+
+message ManagedWorkflowRun {
+  string provider_name = 1;
+  BoundWorkflowRun run = 2;
+}
+
+message ManagedWorkflowRunSignal {
+  string provider_name = 1;
+  BoundWorkflowRun run = 2;
+  WorkflowSignal signal = 3;
+  bool started_run = 4;
+  string workflow_key = 5;
 }
 
 message WorkflowManagerCreateScheduleRequest {
@@ -388,11 +437,42 @@ message WorkflowManagerPublishEventRequest {
   string invocation_token = 3;
 }
 
+message WorkflowManagerStartRunRequest {
+  reserved 1;
+  reserved "request_handle";
+  string provider_name = 2;
+  BoundWorkflowTarget target = 3;
+  string idempotency_key = 4;
+  string workflow_key = 5;
+  string invocation_token = 6;
+}
+
+message WorkflowManagerSignalRunRequest {
+  reserved 1;
+  reserved "request_handle";
+  string run_id = 2;
+  WorkflowSignal signal = 3;
+  string invocation_token = 4;
+}
+
+message WorkflowManagerSignalOrStartRunRequest {
+  reserved 1;
+  reserved "request_handle";
+  string provider_name = 2;
+  string workflow_key = 3;
+  BoundWorkflowTarget target = 4;
+  string idempotency_key = 5;
+  WorkflowSignal signal = 6;
+  string invocation_token = 7;
+}
+
 service WorkflowProvider {
   rpc StartRun(StartWorkflowProviderRunRequest) returns (BoundWorkflowRun);
   rpc GetRun(GetWorkflowProviderRunRequest) returns (BoundWorkflowRun);
   rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse);
   rpc CancelRun(CancelWorkflowProviderRunRequest) returns (BoundWorkflowRun);
+  rpc SignalRun(SignalWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse);
+  rpc SignalOrStartRun(SignalOrStartWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse);
 
   rpc UpsertSchedule(UpsertWorkflowProviderScheduleRequest) returns (BoundWorkflowSchedule);
   rpc GetSchedule(GetWorkflowProviderScheduleRequest) returns (BoundWorkflowSchedule);
@@ -420,6 +500,10 @@ service WorkflowHost {
 }
 
 service WorkflowManagerHost {
+  rpc StartRun(WorkflowManagerStartRunRequest) returns (ManagedWorkflowRun);
+  rpc SignalRun(WorkflowManagerSignalRunRequest) returns (ManagedWorkflowRunSignal);
+  rpc SignalOrStartRun(WorkflowManagerSignalOrStartRunRequest) returns (ManagedWorkflowRunSignal);
+
   rpc CreateSchedule(WorkflowManagerCreateScheduleRequest) returns (ManagedWorkflowSchedule);
   rpc GetSchedule(WorkflowManagerGetScheduleRequest) returns (ManagedWorkflowSchedule);
   rpc UpdateSchedule(WorkflowManagerUpdateScheduleRequest) returns (ManagedWorkflowSchedule);

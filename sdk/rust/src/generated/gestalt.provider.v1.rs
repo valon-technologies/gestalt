@@ -9270,6 +9270,8 @@ pub struct BoundWorkflowRun {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowSchedule {
@@ -9346,6 +9348,27 @@ pub struct WorkflowExecutionReference {
     pub display_name: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
     pub auth_source: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub caller_plugin_name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowSignal {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub payload: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "4")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(message, optional, tag = "6")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "7")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(int64, tag = "8")]
+    pub sequence: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -9357,6 +9380,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "5")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderRunRequest {
@@ -9376,6 +9401,39 @@ pub struct CancelWorkflowProviderRunRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub reason: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignalWorkflowProviderRunRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignalOrStartWorkflowProviderRunRequest {
+    #[prost(string, tag = "1")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(string, tag = "3")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "5")]
+    pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignalWorkflowRunResponse {
+    #[prost(message, optional, tag = "1")]
+    pub run: ::core::option::Option<BoundWorkflowRun>,
+    #[prost(message, optional, tag = "2")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(bool, tag = "3")]
+    pub started_run: bool,
+    #[prost(string, tag = "4")]
+    pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpsertWorkflowProviderScheduleRequest {
@@ -9508,6 +9566,8 @@ pub struct InvokeWorkflowOperationRequest {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "9")]
+    pub signals: ::prost::alloc::vec::Vec<WorkflowSignal>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InvokeWorkflowOperationResponse {
@@ -9529,6 +9589,26 @@ pub struct ManagedWorkflowEventTrigger {
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub trigger: ::core::option::Option<BoundWorkflowEventTrigger>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManagedWorkflowRun {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub run: ::core::option::Option<BoundWorkflowRun>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManagedWorkflowRunSignal {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub run: ::core::option::Option<BoundWorkflowRun>,
+    #[prost(message, optional, tag = "3")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(bool, tag = "4")]
+    pub started_run: bool,
+    #[prost(string, tag = "5")]
+    pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerCreateScheduleRequest {
@@ -9651,6 +9731,43 @@ pub struct WorkflowManagerPublishEventRequest {
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerStartRunRequest {
+    #[prost(string, tag = "2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(string, tag = "4")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerSignalRunRequest {
+    #[prost(string, tag = "2")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(string, tag = "4")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerSignalOrStartRunRequest {
+    #[prost(string, tag = "2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(string, tag = "5")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -9853,6 +9970,44 @@ pub mod workflow_provider_client {
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.WorkflowProvider",
                 "CancelRun",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn signal_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SignalWorkflowProviderRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowProvider/SignalRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SignalRun",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn signal_or_start_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SignalOrStartWorkflowProviderRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SignalOrStartRun",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -10197,6 +10352,14 @@ pub mod workflow_provider_server {
             &self,
             request: tonic::Request<super::CancelWorkflowProviderRunRequest>,
         ) -> std::result::Result<tonic::Response<super::BoundWorkflowRun>, tonic::Status>;
+        async fn signal_run(
+            &self,
+            request: tonic::Request<super::SignalWorkflowProviderRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>;
+        async fn signal_or_start_run(
+            &self,
+            request: tonic::Request<super::SignalOrStartWorkflowProviderRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>;
         async fn upsert_schedule(
             &self,
             request: tonic::Request<super::UpsertWorkflowProviderScheduleRequest>,
@@ -10497,6 +10660,90 @@ pub mod workflow_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = CancelRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowProvider/SignalRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct SignalRunSvc<T: WorkflowProvider>(pub Arc<T>);
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::SignalWorkflowProviderRunRequest>
+                        for SignalRunSvc<T>
+                    {
+                        type Response = super::SignalWorkflowRunResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SignalWorkflowProviderRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowProvider>::signal_run(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SignalRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct SignalOrStartRunSvc<T: WorkflowProvider>(pub Arc<T>);
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::SignalOrStartWorkflowProviderRunRequest>
+                        for SignalOrStartRunSvc<T>
+                    {
+                        type Response = super::SignalWorkflowRunResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SignalOrStartWorkflowProviderRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowProvider>::signal_or_start_run(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SignalOrStartRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -11607,6 +11854,63 @@ pub mod workflow_manager_host_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        pub async fn start_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerStartRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRun>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/StartRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "StartRun",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn signal_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerSignalRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRunSignal>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/SignalRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "SignalRun",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn signal_or_start_run(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerSignalOrStartRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRunSignal>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "SignalOrStartRun",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn create_schedule(
             &mut self,
             request: impl tonic::IntoRequest<super::WorkflowManagerCreateScheduleRequest>,
@@ -11866,6 +12170,18 @@ pub mod workflow_manager_host_server {
     /// Generated trait containing gRPC methods that should be implemented for use with WorkflowManagerHostServer.
     #[async_trait]
     pub trait WorkflowManagerHost: std::marker::Send + std::marker::Sync + 'static {
+        async fn start_run(
+            &self,
+            request: tonic::Request<super::WorkflowManagerStartRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRun>, tonic::Status>;
+        async fn signal_run(
+            &self,
+            request: tonic::Request<super::WorkflowManagerSignalRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRunSignal>, tonic::Status>;
+        async fn signal_or_start_run(
+            &self,
+            request: tonic::Request<super::WorkflowManagerSignalOrStartRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowRunSignal>, tonic::Status>;
         async fn create_schedule(
             &self,
             request: tonic::Request<super::WorkflowManagerCreateScheduleRequest>,
@@ -11992,6 +12308,133 @@ pub mod workflow_manager_host_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.WorkflowManagerHost/StartRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct StartRunSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerStartRunRequest>
+                        for StartRunSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowRun;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerStartRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::start_run(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StartRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/SignalRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct SignalRunSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerSignalRunRequest>
+                        for SignalRunSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowRunSignal;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerSignalRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::signal_run(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SignalRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun" => {
+                    #[allow(non_camel_case_types)]
+                    struct SignalOrStartRunSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerSignalOrStartRunRequest>
+                        for SignalOrStartRunSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowRunSignal;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerSignalOrStartRunRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::signal_or_start_run(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SignalOrStartRunSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule" => {
                     #[allow(non_camel_case_types)]
                     struct CreateScheduleSvc<T: WorkflowManagerHost>(pub Arc<T>);

@@ -2036,11 +2036,23 @@ func (unavailableWorkflowManager) ListRuns(context.Context, *principal.Principal
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
+func (unavailableWorkflowManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
 func (unavailableWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
 func (unavailableWorkflowManager) CancelRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SignalRun(context.Context, *principal.Principal, workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 

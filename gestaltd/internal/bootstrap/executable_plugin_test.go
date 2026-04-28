@@ -1675,11 +1675,23 @@ func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([
 	return nil, nil
 }
 
+func (m *stubWorkflowManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+	return nil, core.ErrNotFound
+}
+
 func (m *stubWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
 	return nil, core.ErrNotFound
 }
 
 func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) SignalRun(context.Context, *principal.Principal, workflowmanager.RunSignal) (*workflowmanager.ManagedRunSignal, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
 	return nil, core.ErrNotFound
 }
 

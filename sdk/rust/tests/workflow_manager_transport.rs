@@ -8,15 +8,17 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowSchedule,
-    BoundWorkflowTarget, ManagedWorkflowEventTrigger, ManagedWorkflowSchedule, WorkflowEvent,
-    WorkflowEventMatch, WorkflowManagerCreateEventTriggerRequest,
-    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteEventTriggerRequest,
-    WorkflowManagerDeleteScheduleRequest, WorkflowManagerGetEventTriggerRequest,
-    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseEventTriggerRequest,
-    WorkflowManagerPauseScheduleRequest, WorkflowManagerPublishEventRequest,
-    WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
-    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest,
+    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule,
+    BoundWorkflowTarget, ManagedWorkflowEventTrigger, ManagedWorkflowRun, ManagedWorkflowRunSignal,
+    ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
+    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
+    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
+    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
+    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
+    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
+    WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
+    WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
+    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, WorkflowSignal,
 };
 use gestalt::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowManager,
@@ -55,6 +57,95 @@ fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
 
 #[async_trait]
 impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
+    async fn start_run(
+        &self,
+        request: GrpcRequest<WorkflowManagerStartRunRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRun>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "start-run".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowRun {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            run: Some(BoundWorkflowRun {
+                id: "run-1".to_string(),
+                target: request.target,
+                workflow_key: request.workflow_key,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn signal_run(
+        &self,
+        request: GrpcRequest<WorkflowManagerSignalRunRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "signal-run".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: request
+                .signal
+                .as_ref()
+                .map(|signal| signal.name.clone())
+                .unwrap_or_default(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
+            provider_name: "basic".to_string(),
+            run: Some(BoundWorkflowRun {
+                id: request.run_id,
+                ..Default::default()
+            }),
+            signal: request.signal,
+            started_run: false,
+            workflow_key: String::new(),
+        }))
+    }
+
+    async fn signal_or_start_run(
+        &self,
+        request: GrpcRequest<WorkflowManagerSignalOrStartRunRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "signal-or-start-run".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: request
+                .signal
+                .as_ref()
+                .map(|signal| signal.name.clone())
+                .unwrap_or_default(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            run: Some(BoundWorkflowRun {
+                id: "run-1".to_string(),
+                target: request.target,
+                workflow_key: request.workflow_key.clone(),
+                ..Default::default()
+            }),
+            signal: request.signal,
+            started_run: true,
+            workflow_key: request.workflow_key,
+        }))
+    }
+
     async fn create_schedule(
         &self,
         request: GrpcRequest<WorkflowManagerCreateScheduleRequest>,
@@ -426,6 +517,39 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let mut manager = WorkflowManager::connect("token-123")
         .await
         .expect("connect workflow manager");
+    let started_run = manager
+        .start_run(WorkflowManagerStartRunRequest {
+            provider_name: "basic".to_string(),
+            workflow_key: "workflow-key-1".to_string(),
+            target: Some(plugin_target("roadmap", "sync")),
+            ..Default::default()
+        })
+        .await
+        .expect("start run");
+    let signaled_run = manager
+        .signal_run(WorkflowManagerSignalRunRequest {
+            run_id: "run-1".to_string(),
+            signal: Some(WorkflowSignal {
+                name: "slack.event".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("signal run");
+    let signaled_or_started_run = manager
+        .signal_or_start_run(WorkflowManagerSignalOrStartRunRequest {
+            provider_name: "basic".to_string(),
+            workflow_key: "workflow-key-1".to_string(),
+            target: Some(plugin_target("roadmap", "sync")),
+            signal: Some(WorkflowSignal {
+                name: "slack.event".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("signal or start run");
     let created = manager
         .create_schedule(WorkflowManagerCreateScheduleRequest {
             provider_name: "basic".to_string(),
@@ -545,6 +669,13 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("publish event");
 
+    let started = started_run.run.expect("started run");
+    assert_eq!(started.id, "run-1");
+    assert_eq!(started.workflow_key, "workflow-key-1");
+    let signaled = signaled_run.signal.expect("signaled signal");
+    assert_eq!(signaled.name, "slack.event");
+    assert!(signaled_or_started_run.started_run);
+    assert_eq!(signaled_or_started_run.workflow_key, "workflow-key-1");
     assert_eq!(created.provider_name, "basic");
     assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
     assert_eq!(fetched.schedule.expect("fetched schedule").id, "sched-1");
@@ -571,6 +702,27 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert_eq!(
         seen,
         vec![
+            SeenRequest {
+                method: "start-run".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "signal-run".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: "slack.event".to_string(),
+            },
+            SeenRequest {
+                method: "signal-or-start-run".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: "slack.event".to_string(),
+            },
             SeenRequest {
                 method: "create".to_string(),
                 invocation_token: "token-123".to_string(),

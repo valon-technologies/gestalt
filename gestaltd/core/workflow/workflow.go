@@ -63,6 +63,7 @@ type ExecutionReference struct {
 	ProviderName        string
 	Target              Target
 	TargetFingerprint   string
+	CallerPluginName    string
 	SubjectID           string
 	SubjectKind         string
 	DisplayName         string
@@ -116,6 +117,7 @@ type RunTrigger struct {
 type Run struct {
 	ID            string
 	Status        RunStatus
+	WorkflowKey   string
 	Target        Target
 	Trigger       RunTrigger
 	ExecutionRef  string
@@ -154,6 +156,7 @@ type EventTrigger struct {
 type StartRunRequest struct {
 	Target         Target
 	IdempotencyKey string
+	WorkflowKey    string
 	CreatedBy      Actor
 	ExecutionRef   string
 }
@@ -167,6 +170,38 @@ type ListRunsRequest struct{}
 type CancelRunRequest struct {
 	RunID  string
 	Reason string
+}
+
+type Signal struct {
+	ID             string
+	Name           string
+	Payload        map[string]any
+	Metadata       map[string]any
+	CreatedBy      Actor
+	CreatedAt      *time.Time
+	IdempotencyKey string
+	Sequence       int64
+}
+
+type SignalRunRequest struct {
+	RunID  string
+	Signal Signal
+}
+
+type SignalOrStartRunRequest struct {
+	WorkflowKey    string
+	Target         Target
+	IdempotencyKey string
+	CreatedBy      Actor
+	ExecutionRef   string
+	Signal         Signal
+}
+
+type SignalRunResponse struct {
+	Run         *Run
+	Signal      Signal
+	StartedRun  bool
+	WorkflowKey string
 }
 
 type UpsertScheduleRequest struct {
@@ -239,6 +274,7 @@ type InvokeOperationRequest struct {
 	Metadata     map[string]any
 	CreatedBy    Actor
 	ExecutionRef string
+	Signals      []Signal
 }
 
 type InvokeOperationResponse struct {
@@ -251,6 +287,8 @@ type Provider interface {
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
 	ListRuns(ctx context.Context, req ListRunsRequest) ([]*Run, error)
 	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
+	SignalRun(ctx context.Context, req SignalRunRequest) (*SignalRunResponse, error)
+	SignalOrStartRun(ctx context.Context, req SignalOrStartRunRequest) (*SignalRunResponse, error)
 	UpsertSchedule(ctx context.Context, req UpsertScheduleRequest) (*Schedule, error)
 	GetSchedule(ctx context.Context, req GetScheduleRequest) (*Schedule, error)
 	ListSchedules(ctx context.Context, req ListSchedulesRequest) ([]*Schedule, error)

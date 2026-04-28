@@ -523,6 +523,8 @@ def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
                 "GetRun",
                 "ListRuns",
                 "CancelRun",
+                "SignalRun",
+                "SignalOrStartRun",
                 "UpsertSchedule",
                 "GetSchedule",
                 "ListSchedules",

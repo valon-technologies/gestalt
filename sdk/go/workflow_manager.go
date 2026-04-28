@@ -50,6 +50,42 @@ func (c *WorkflowManagerClient) Close() error {
 	return nil
 }
 
+func (c *WorkflowManagerClient) StartRun(ctx context.Context, req *proto.WorkflowManagerStartRunRequest) (*proto.ManagedWorkflowRun, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerStartRunRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerStartRunRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.StartRun(ctx, value)
+}
+
+func (c *WorkflowManagerClient) SignalRun(ctx context.Context, req *proto.WorkflowManagerSignalRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerSignalRunRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerSignalRunRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.SignalRun(ctx, value)
+}
+
+func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerSignalOrStartRunRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerSignalOrStartRunRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.SignalOrStartRun(ctx, value)
+}
+
 func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, req *proto.WorkflowManagerCreateScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")

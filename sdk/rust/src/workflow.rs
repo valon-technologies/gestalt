@@ -132,6 +132,20 @@ where
         self.provider.cancel_run(request).await
     }
 
+    async fn signal_run(
+        &self,
+        request: GrpcRequest<pb::SignalWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::SignalWorkflowRunResponse>, Status> {
+        self.provider.signal_run(request).await
+    }
+
+    async fn signal_or_start_run(
+        &self,
+        request: GrpcRequest<pb::SignalOrStartWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::SignalWorkflowRunResponse>, Status> {
+        self.provider.signal_or_start_run(request).await
+    }
+
     async fn upsert_schedule(
         &self,
         request: GrpcRequest<pb::UpsertWorkflowProviderScheduleRequest>,
