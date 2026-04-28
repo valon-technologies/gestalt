@@ -177,7 +177,7 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
 		return []connectionDefInfo{}
 	}
@@ -196,7 +196,7 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if name == config.PluginConnectionName {
 			conn = displayPluginConnectionDef(plugin, manifestSpec, conn)
 		}
-		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
+		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, instances, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -234,14 +234,17 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
-func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Provider) {
+func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Provider, instances []instanceInfo) {
 	authTypes := userFacingAuthTypes(prov.AuthTypes())
+	if core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModePlatform {
+		authTypes = nil
+	}
 	info.ConnectionParams = connectionParamInfosFromProvider(prov)
 	info.CredentialFields = credentialFieldInfosFromProvider(prov, authTypes)
-	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
+	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], instances, authTypes, info.CredentialFields)
 	info.AuthTypes = resolvedIntegrationAuthTypes(prov, authTypes, info.Connections)
 	if len(authTypes) == 0 && len(info.AuthTypes) > 0 {
-		info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], info.AuthTypes, info.CredentialFields)
+		info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], instances, info.AuthTypes, info.CredentialFields)
 	}
 }
 
@@ -289,16 +292,35 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, includeWithoutAuth bool) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, includeWithoutAuth bool) (connectionDefInfo, bool) {
+	mode := config.ConnectionModeForConnection(conn)
+	if mode == core.ConnectionModePlatform {
+		return connectionDefInfo{
+			DisplayName:      connectionDisplayName(name, conn.DisplayName),
+			Name:             name,
+			Mode:             string(mode),
+			Connected:        strings.TrimSpace(conn.Auth.Token) != "",
+			Connectable:      false,
+			AuthTypes:        []string{},
+			CredentialFields: []credentialFieldInfo{},
+		}, true
+	}
 	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)
 	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
 	if len(authTypes) == 0 && !includeWithoutAuth {
 		return connectionDefInfo{}, false
 	}
+	displayMode := mode
+	if displayMode == core.ConnectionModeNone && len(authTypes) > 0 {
+		displayMode = core.ConnectionModeUser
+	}
 
 	info := connectionDefInfo{
 		DisplayName:      connectionDisplayName(name, conn.DisplayName),
 		Name:             name,
+		Mode:             string(displayMode),
+		Connected:        connectionConnected(instances, name),
+		Connectable:      len(authTypes) > 0,
 		AuthTypes:        []string{},
 		CredentialFields: []credentialFieldInfo{},
 	}
@@ -319,6 +341,65 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 		info.CredentialFields = defaultManualCredentialFieldInfos()
 	}
 	return info, true
+}
+
+func connectionConnected(instances []instanceInfo, connection string) bool {
+	connection = strings.TrimSpace(connection)
+	for _, instance := range instances {
+		if strings.TrimSpace(instance.Connection) == connection {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) hasConfiguredPlatformConnection(integration string) bool {
+	entry := s.pluginDefs[integration]
+	if entry == nil {
+		return false
+	}
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return false
+	}
+	if platformConnectionConfigured(plan.PluginConnection()) {
+		return true
+	}
+	for _, name := range plan.NamedConnectionNames() {
+		conn, _ := plan.NamedConnectionDef(name)
+		if platformConnectionConfigured(conn) {
+			return true
+		}
+	}
+	return false
+}
+
+func platformConnectionConfigured(conn config.ConnectionDef) bool {
+	return config.ConnectionModeForConnection(conn) == core.ConnectionModePlatform && strings.TrimSpace(conn.Auth.Token) != ""
+}
+
+func (s *Server) invocationConnectionMode(prov core.Provider, integration, connection string) core.ConnectionMode {
+	if conn, ok := s.effectiveConnectionDef(integration, connection); ok {
+		if mode := config.ConnectionModeForConnection(conn); mode != "" {
+			return mode
+		}
+	}
+	if prov == nil {
+		return ""
+	}
+	return core.NormalizeConnectionMode(prov.ConnectionMode())
+}
+
+func (s *Server) effectiveConnectionDef(integration, connection string) (config.ConnectionDef, bool) {
+	entry, ok := s.pluginDefs[integration]
+	if !ok || entry == nil {
+		return config.ConnectionDef{}, false
+	}
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return config.ConnectionDef{}, false
+	}
+	return plan.LookupConnection(connection)
 }
 
 func shouldHidePassiveNamedConnection(plan config.StaticConnectionPlan, name string, conn config.ConnectionDef, integrationAuthTypes []string) bool {
