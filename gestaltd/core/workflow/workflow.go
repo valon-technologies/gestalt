@@ -311,25 +311,49 @@ type Host interface {
 }
 
 func TargetFingerprint(target Target) (string, error) {
-	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
-		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+	return legacyTargetFingerprint(target)
+}
+
+// TargetFingerprintMatches reports whether fingerprint matches the canonical
+// target fingerprint or a legacy fingerprint written before target nesting.
+func TargetFingerprintMatches(target Target, fingerprint string) (bool, error) {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return false, nil
 	}
-	payload, err := json.Marshal(normalizedTargetFingerprintPayload(target))
+	current, err := TargetFingerprint(target)
+	if err != nil {
+		return false, err
+	}
+	if current == fingerprint {
+		return true, nil
+	}
+	canonical, err := canonicalTargetFingerprint(target)
+	if err != nil {
+		return false, err
+	}
+	return canonical == fingerprint, nil
+}
+
+func targetFingerprint(payload any) (string, error) {
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(payload)
+	sum := sha256.Sum256(payloadJSON)
 	return hex.EncodeToString(sum[:]), nil
 }
 
 type targetFingerprintPayload struct {
-	PluginName string
-	Operation  string
-	Connection string
-	Instance   string
-	Input      map[string]any
-	Plugin     *PluginTarget
-	Agent      *AgentTarget
+	Plugin *PluginTarget
+	Agent  *AgentTarget
+}
+
+func canonicalTargetFingerprint(target Target) (string, error) {
+	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
+		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+	}
+	return targetFingerprint(normalizedTargetFingerprintPayload(target))
 }
 
 func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload {
@@ -362,6 +386,28 @@ func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload 
 		out.Plugin = &pluginTarget
 	}
 	return out
+}
+
+func legacyTargetFingerprint(target Target) (string, error) {
+	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
+		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+	}
+	normalized := normalizedTargetFingerprintPayload(target)
+	payload := legacyTargetFingerprintPayload{
+		Plugin: normalized.Plugin,
+		Agent:  normalized.Agent,
+	}
+	return targetFingerprint(payload)
+}
+
+type legacyTargetFingerprintPayload struct {
+	PluginName string
+	Operation  string
+	Connection string
+	Instance   string
+	Input      map[string]any
+	Plugin     *PluginTarget
+	Agent      *AgentTarget
 }
 
 // PluginTargetSet reports whether a workflow target contains any plugin target field.

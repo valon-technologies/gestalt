@@ -1445,8 +1445,8 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 		return false
 	}
 	if strings.TrimSpace(ref.TargetFingerprint) != "" {
-		fingerprint, err := coreworkflow.TargetFingerprint(target)
-		return err == nil && fingerprint == strings.TrimSpace(ref.TargetFingerprint)
+		matches, err := coreworkflow.TargetFingerprintMatches(target, ref.TargetFingerprint)
+		return err == nil && matches
 	}
 	if ref.Target.Agent != nil || target.Agent != nil {
 		return false
