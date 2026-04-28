@@ -101,6 +101,7 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 			Source: strings.TrimSpace(entry.ResolvedManifest.Source),
 			Spec:   providerDevStaticSpecFromProvider(targetName, entry, provider),
 			Config: pluginConfig,
+			UIPath: strings.TrimSpace(entry.MountPath),
 			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
 				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID)
 			},

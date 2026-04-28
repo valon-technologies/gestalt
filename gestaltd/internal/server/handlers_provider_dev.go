@@ -15,8 +15,7 @@ import (
 )
 
 func (s *Server) createProviderDevSession(w http.ResponseWriter, r *http.Request) {
-	if s.providerDevSessions == nil {
-		writeError(w, http.StatusNotFound, "provider dev is not configured")
+	if !s.providerDevAvailable(w) {
 		return
 	}
 	var req providerdev.CreateSessionRequest
@@ -34,6 +33,30 @@ func (s *Server) createProviderDevSession(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (s *Server) listProviderDevAttachments(w http.ResponseWriter, r *http.Request) {
+	if !s.providerDevAvailable(w) {
+		return
+	}
+	resp, err := s.providerDevSessions.ListSessions(PrincipalFromContext(r.Context()))
+	if err != nil {
+		writeProviderDevError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"attachments": resp})
+}
+
+func (s *Server) getProviderDevAttachment(w http.ResponseWriter, r *http.Request) {
+	if !s.providerDevAvailable(w) {
+		return
+	}
+	resp, err := s.providerDevSessions.GetSession(PrincipalFromContext(r.Context()), providerDevAttachmentID(r))
+	if err != nil {
+		writeProviderDevError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *http.Request, p *principal.Principal, req providerdev.CreateSessionRequest) error {
@@ -59,14 +82,13 @@ func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *ht
 }
 
 func (s *Server) pollProviderDevSession(w http.ResponseWriter, r *http.Request) {
-	if s.providerDevSessions == nil {
-		writeError(w, http.StatusNotFound, "provider dev is not configured")
+	if !s.providerDevAvailable(w) {
 		return
 	}
-	sessionID := chi.URLParam(r, "sessionID")
+	sessionID := providerDevAttachmentID(r)
 	ctx, cancel := context.WithTimeout(r.Context(), providerdev.DefaultPollTimeout)
 	defer cancel()
-	resp, ok, err := s.providerDevSessions.PollSession(ctx, PrincipalFromContext(r.Context()), sessionID)
+	resp, ok, err := s.providerDevSessions.PollSessionWithDispatcherSecret(ctx, PrincipalFromContext(r.Context()), sessionID, providerDevDispatcherSecret(r))
 	if err != nil {
 		writeProviderDevError(w, err)
 		return
@@ -79,8 +101,14 @@ func (s *Server) pollProviderDevSession(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) completeProviderDevCall(w http.ResponseWriter, r *http.Request) {
-	if s.providerDevSessions == nil {
-		writeError(w, http.StatusNotFound, "provider dev is not configured")
+	if !s.providerDevAvailable(w) {
+		return
+	}
+	p := PrincipalFromContext(r.Context())
+	sessionID := providerDevAttachmentID(r)
+	dispatcherSecret := providerDevDispatcherSecret(r)
+	if err := s.providerDevSessions.VerifyDispatcherSecret(p, sessionID, dispatcherSecret); err != nil {
+		writeProviderDevError(w, err)
 		return
 	}
 	var req providerdev.CompleteCallRequest
@@ -89,9 +117,9 @@ func (s *Server) completeProviderDevCall(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	err := s.providerDevSessions.CompleteCall(
-		PrincipalFromContext(r.Context()),
-		chi.URLParam(r, "sessionID"),
-		chi.URLParam(r, "callID"),
+		p,
+		sessionID,
+		providerDevCallID(r),
 		req,
 	)
 	if err != nil {
@@ -102,16 +130,49 @@ func (s *Server) completeProviderDevCall(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) closeProviderDevSession(w http.ResponseWriter, r *http.Request) {
-	if s.providerDevSessions == nil {
-		writeError(w, http.StatusNotFound, "provider dev is not configured")
+	if !s.providerDevAvailable(w) {
 		return
 	}
-	err := s.providerDevSessions.CloseSession(PrincipalFromContext(r.Context()), chi.URLParam(r, "sessionID"))
+	err := s.providerDevSessions.CloseSession(PrincipalFromContext(r.Context()), providerDevAttachmentID(r))
 	if err != nil {
 		writeProviderDevError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "closed"})
+}
+
+func (s *Server) providerDevAvailable(w http.ResponseWriter) bool {
+	if s.providerDevSessions == nil {
+		writeError(w, http.StatusNotFound, "provider dev is not configured")
+		return false
+	}
+	if !s.providerDevAttach {
+		writeError(w, http.StatusForbidden, "provider dev remote attach is disabled")
+		return false
+	}
+	if s.noAuth {
+		writeError(w, http.StatusForbidden, "provider dev remote attach requires server authentication")
+		return false
+	}
+	return true
+}
+
+func providerDevAttachmentID(r *http.Request) string {
+	if id := chi.URLParam(r, "attachmentID"); id != "" {
+		return id
+	}
+	return chi.URLParam(r, "sessionID")
+}
+
+func providerDevCallID(r *http.Request) string {
+	if id := chi.URLParam(r, "callID"); id != "" {
+		return id
+	}
+	return chi.URLParam(r, "call")
+}
+
+func providerDevDispatcherSecret(r *http.Request) string {
+	return r.Header.Get(providerdev.HeaderDispatcherSecret)
 }
 
 func writeProviderDevError(w http.ResponseWriter, err error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -369,6 +370,122 @@ func TestHTTPTransportCreateSessionExplicitConfigOverridesRemoteConfig(t *testin
 	}
 }
 
+func TestHTTPTransportRequiresDispatcherSecretForDispatcherTraffic(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{Name: "roadmap"}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	ts := httptest.NewServer(providerDevTestHandler(t, manager, p))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if session.DispatcherSecret == "" {
+		t.Fatal("DispatcherSecret is empty")
+	}
+
+	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+PathAttachments+"/"+session.ID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("build poll request: %v", err)
+	}
+	pollResp, err := ts.Client().Do(pollReq)
+	if err != nil {
+		t.Fatalf("poll without dispatcher secret: %v", err)
+	}
+	_ = pollResp.Body.Close()
+	if pollResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("poll status = %d, want 401", pollResp.StatusCode)
+	}
+
+	completeReq, err := http.NewRequest(http.MethodPost, ts.URL+PathAttachments+"/"+session.ID+"/calls/call-1", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("build complete request: %v", err)
+	}
+	completeReq.Header.Set("Content-Type", "application/json")
+	completeResp, err := ts.Client().Do(completeReq)
+	if err != nil {
+		t.Fatalf("complete without dispatcher secret: %v", err)
+	}
+	_ = completeResp.Body.Close()
+	if completeResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("complete status = %d, want 401", completeResp.StatusCode)
+	}
+
+	closeReq, err := http.NewRequest(http.MethodDelete, ts.URL+PathAttachments+"/"+session.ID, nil)
+	if err != nil {
+		t.Fatalf("build close request: %v", err)
+	}
+	closeResp, err := ts.Client().Do(closeReq)
+	if err != nil {
+		t.Fatalf("close without dispatcher secret: %v", err)
+	}
+	_ = closeResp.Body.Close()
+	if closeResp.StatusCode != http.StatusOK {
+		t.Fatalf("close status = %d, want 200", closeResp.StatusCode)
+	}
+}
+
+func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{
+		Name:   "roadmap",
+		Source: "github.com/acme/plugins/roadmap",
+		UIPath: "/roadmap",
+		RuntimeEnv: func(string) (RuntimeEnv, error) {
+			return RuntimeEnv{
+				Env:          map[string]string{"SECRET": "do-not-return"},
+				AllowedHosts: []string{"example.test"},
+			}, nil
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	ts := httptest.NewServer(providerDevTestHandler(t, manager, p))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
+		Name: "roadmap",
+		UI:   &AttachUI{},
+	}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	for _, path := range []string{PathAttachments, PathAttachments + "/" + session.ID} {
+		resp, err := ts.Client().Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		payload, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, body = %s", path, resp.StatusCode, payload)
+		}
+		body := string(payload)
+		for _, forbidden := range []string{session.DispatcherSecret, "do-not-return", "allowedHosts", "SECRET"} {
+			if forbidden != "" && strings.Contains(body, forbidden) {
+				t.Fatalf("GET %s leaked %q in %s", path, forbidden, body)
+			}
+		}
+		if !strings.Contains(body, `"attachId":"`+session.ID+`"`) {
+			t.Fatalf("GET %s body missing attachId %q: %s", path, session.ID, body)
+		}
+	}
+}
+
 func TestCreateSessionRejectsAmbiguousProviderSource(t *testing.T) {
 	t.Parallel()
 
@@ -499,7 +616,7 @@ func TestSessionCloseReturnsSameErrorToConcurrentCallers(t *testing.T) {
 func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Principal) http.Handler {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc(PathSessions, func(w http.ResponseWriter, r *http.Request) {
+	handleCreate := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.NotFound(w, r)
 			return
@@ -515,48 +632,77 @@ func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Princip
 			return
 		}
 		writeProviderDevTestJSON(w, http.StatusCreated, resp)
-	})
-	mux.HandleFunc(PathSessions+"/", func(w http.ResponseWriter, r *http.Request) {
-		rest := strings.TrimPrefix(r.URL.Path, PathSessions+"/")
-		parts := strings.Split(rest, "/")
-		if len(parts) == 2 && parts[1] == "poll" && r.Method == http.MethodGet {
-			ctx, cancel := context.WithTimeout(r.Context(), DefaultPollTimeout)
-			defer cancel()
-			resp, ok, err := manager.PollSession(ctx, p, parts[0])
+	}
+	mux.HandleFunc(PathSessions, handleCreate)
+	mux.HandleFunc(PathAttachments, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			handleCreate(w, r)
+		case http.MethodGet:
+			resp, err := manager.ListSessions(p)
 			if err != nil {
 				writeProviderDevTestError(w, err)
 				return
 			}
-			if !ok {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			writeProviderDevTestJSON(w, http.StatusOK, resp)
-			return
+			writeProviderDevTestJSON(w, http.StatusOK, map[string]any{"attachments": resp})
+		default:
+			http.NotFound(w, r)
 		}
-		if len(parts) == 3 && parts[1] == "calls" && r.Method == http.MethodPost {
-			var req CompleteCallRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if err := manager.CompleteCall(p, parts[0], parts[2], req); err != nil {
-				writeProviderDevTestError(w, err)
-				return
-			}
-			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-			return
-		}
-		if len(parts) == 1 && r.Method == http.MethodDelete {
-			if err := manager.CloseSession(p, parts[0]); err != nil {
-				writeProviderDevTestError(w, err)
-				return
-			}
-			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "closed"})
-			return
-		}
-		http.NotFound(w, r)
 	})
+	handleAttachment := func(basePath string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			rest := strings.TrimPrefix(r.URL.Path, basePath+"/")
+			parts := strings.Split(rest, "/")
+			if basePath == PathAttachments && len(parts) == 1 && r.Method == http.MethodGet {
+				resp, err := manager.GetSession(p, parts[0])
+				if err != nil {
+					writeProviderDevTestError(w, err)
+					return
+				}
+				writeProviderDevTestJSON(w, http.StatusOK, resp)
+				return
+			}
+			if len(parts) == 2 && parts[1] == "poll" && r.Method == http.MethodGet {
+				ctx, cancel := context.WithTimeout(r.Context(), DefaultPollTimeout)
+				defer cancel()
+				resp, ok, err := manager.PollSessionWithDispatcherSecret(ctx, p, parts[0], r.Header.Get(HeaderDispatcherSecret))
+				if err != nil {
+					writeProviderDevTestError(w, err)
+					return
+				}
+				if !ok {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				writeProviderDevTestJSON(w, http.StatusOK, resp)
+				return
+			}
+			if len(parts) == 3 && parts[1] == "calls" && r.Method == http.MethodPost {
+				var req CompleteCallRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				if err := manager.CompleteCallWithDispatcherSecret(p, parts[0], parts[2], r.Header.Get(HeaderDispatcherSecret), req); err != nil {
+					writeProviderDevTestError(w, err)
+					return
+				}
+				writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+				return
+			}
+			if len(parts) == 1 && r.Method == http.MethodDelete {
+				if err := manager.CloseSession(p, parts[0]); err != nil {
+					writeProviderDevTestError(w, err)
+					return
+				}
+				writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "closed"})
+				return
+			}
+			http.NotFound(w, r)
+		}
+	}
+	mux.HandleFunc(PathSessions+"/", handleAttachment(PathSessions))
+	mux.HandleFunc(PathAttachments+"/", handleAttachment(PathAttachments))
 	return mux
 }
 

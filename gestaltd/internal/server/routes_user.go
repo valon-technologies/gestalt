@@ -64,6 +64,12 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/provider-dev/sessions/{sessionID}/poll", s.pollProviderDevSession)
 		r.Post("/provider-dev/sessions/{sessionID}/calls/{callID}", s.completeProviderDevCall)
 		r.Delete("/provider-dev/sessions/{sessionID}", s.closeProviderDevSession)
+		r.Post("/provider-dev/attachments", s.createProviderDevSession)
+		r.Get("/provider-dev/attachments", s.listProviderDevAttachments)
+		r.Get("/provider-dev/attachments/{attachmentID}", s.getProviderDevAttachment)
+		r.Get("/provider-dev/attachments/{attachmentID}/poll", s.pollProviderDevSession)
+		r.Post("/provider-dev/attachments/{attachmentID}/calls/{callID}", s.completeProviderDevCall)
+		r.Delete("/provider-dev/attachments/{attachmentID}", s.closeProviderDevSession)
 
 		r.Post("/tokens", s.createAPIToken)
 		r.Get("/tokens", s.listAPITokens)

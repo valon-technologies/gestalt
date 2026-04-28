@@ -387,6 +387,13 @@ func TestMaxBodyMiddlewareAllowsLargeProviderDevCallCompletions(t *testing.T) {
 		t.Fatalf("provider dev completion status = %d, want %d", providerDevRec.Code, http.StatusNoContent)
 	}
 
+	providerDevAttachmentReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1", bytes.NewReader(largeBody))
+	providerDevAttachmentRec := httptest.NewRecorder()
+	handler.ServeHTTP(providerDevAttachmentRec, providerDevAttachmentReq)
+	if providerDevAttachmentRec.Code != http.StatusNoContent {
+		t.Fatalf("provider dev attachment completion status = %d, want %d", providerDevAttachmentRec.Code, http.StatusNoContent)
+	}
+
 	extraPathReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/sessions/session-1/calls/call-1/extra", bytes.NewReader(largeBody))
 	extraPathRec := httptest.NewRecorder()
 	handler.ServeHTTP(extraPathRec, extraPathReq)

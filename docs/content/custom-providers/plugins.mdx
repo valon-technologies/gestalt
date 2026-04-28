@@ -840,10 +840,15 @@ gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
 
 The remote URL is environment-agnostic; it can point at any `gestaltd` instance
-that exposes provider-dev attach targets. The local command replaces only the
+that exposes provider-dev attach targets and has opted in with
+`server.providerDev.remoteAttach: true`. The local command replaces only the
 source plugin attached by your authenticated session. Providers that are not
 attached locally continue to run through the remote server and its existing
 configuration.
+Remote attach v1 is process-local. On a load-balanced remote, enable it only
+when the deployment is single-replica or sticky-routes attach creation, CLI
+poll/complete traffic, provider invocations, and provider-owned UI requests for
+the same authenticated owner to the same `gestaltd` process.
 Remote provider dev authenticates with `--remote-token` first, then
 `GESTALT_API_KEY`, then the stored CLI token from `gestalt auth login` when the
 stored credential's server base URL matches `--remote`. A stored credential for
@@ -851,6 +856,15 @@ a different server URL, including a different path prefix on the same host, is
 not sent; the command exits with the stored credential's server and file path
 plus commands to log in for the requested server or pass an explicit token. Use
 `--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
+
+Remote attach creates an owner-scoped attachment. The server returns an
+`attachId` and a one-time dispatcher secret; the CLI uses both for local
+poll/complete traffic. Other users keep seeing the deployed provider and UI.
+Owner cleanup can detach a stuck attachment by `attachId`, but diagnostic
+list/get responses never expose dispatcher secrets, host-service env, plugin
+config, access tokens, or browser binding URLs.
+Attach creation currently uses the same provider access checks as normal
+provider use. A dedicated `provider_dev.attach` capability is planned separately.
 
 For `--remote --path` without `--config`, Gestalt matches the local manifest
 `source` to a configured plugin on the remote server. The remote plugin's

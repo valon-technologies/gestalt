@@ -82,7 +82,10 @@ func isProviderDevCompleteCallRequest(r *http.Request) bool {
 	}
 	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathSessions+"/")
 	if !ok {
-		return false
+		rest, ok = strings.CutPrefix(r.URL.Path, providerdev.PathAttachments+"/")
+		if !ok {
+			return false
+		}
 	}
 	sessionID, callID, ok := strings.Cut(rest, "/calls/")
 	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")
