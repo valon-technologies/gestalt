@@ -92,6 +92,57 @@ func TestWorkflowTargetFromProtoRejectsNestedPluginAndAgent(t *testing.T) {
 	}
 }
 
+func TestWorkflowPublishEventRequestCarriesPrivateInputAndPublisherActor(t *testing.T) {
+	t.Parallel()
+
+	privateInput, err := structpb.NewStruct(map[string]any{
+		"reply_ref": "signed-ref",
+	})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+	req, err := workflowEventFromProto(&proto.WorkflowEvent{
+		Id:     "evt-1",
+		Source: "slack",
+		Type:   "com.valon.slack.event",
+	})
+	if err != nil {
+		t.Fatalf("workflowEventFromProto: %v", err)
+	}
+	publishedBy := workflowActorFromProto(&proto.WorkflowActor{
+		SubjectId:           "user:ada",
+		CredentialSubjectId: "user:ada-credential",
+		SubjectKind:         "user",
+		DisplayName:         "Ada",
+		AuthSource:          "http_binding",
+	})
+	coreReq := coreworkflow.PublishEventRequest{
+		PluginName:   "slack",
+		Event:        req,
+		PrivateInput: mapFromStruct(privateInput),
+		PublishedBy:  publishedBy,
+	}
+	pbEvent, err := workflowEventToProto(coreReq.Event)
+	if err != nil {
+		t.Fatalf("workflowEventToProto: %v", err)
+	}
+	roundTrip := &proto.PublishWorkflowProviderEventRequest{
+		PluginName:   coreReq.PluginName,
+		Event:        pbEvent,
+		PrivateInput: privateInput,
+		PublishedBy:  workflowActorToProto(coreReq.PublishedBy),
+	}
+	if roundTrip.GetPluginName() != "slack" {
+		t.Fatalf("plugin name = %q, want slack", roundTrip.GetPluginName())
+	}
+	if got := mapFromStruct(roundTrip.GetPrivateInput())["reply_ref"]; got != "signed-ref" {
+		t.Fatalf("private input reply_ref = %#v, want signed-ref", got)
+	}
+	if got := workflowActorFromProto(roundTrip.GetPublishedBy()).CredentialSubjectID; got != "user:ada-credential" {
+		t.Fatalf("published_by credential subject = %q, want user:ada-credential", got)
+	}
+}
+
 func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	t.Parallel()
 

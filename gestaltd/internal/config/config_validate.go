@@ -1196,9 +1196,10 @@ func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowS
 		if _, ok := cfg.Plugins[schedule.Target.Plugin.Name]; !ok {
 			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, schedule.Target.Plugin.Name)
 		}
-		return nil
+	} else if err := validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Target.Agent); err != nil {
+		return err
 	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Target.Agent)
+	return validateWorkflowCompletionConfig(cfg, "workflows.schedules."+key+".completion", schedule.Completion)
 }
 
 func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
@@ -1213,9 +1214,10 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		if _, ok := cfg.Plugins[trigger.Target.Plugin.Name]; !ok {
 			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, trigger.Target.Plugin.Name)
 		}
-		return nil
+	} else if err := validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent); err != nil {
+		return err
 	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
+	return validateWorkflowCompletionConfig(cfg, "workflows.eventTriggers."+key+".completion", trigger.Completion)
 }
 
 func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
@@ -1241,6 +1243,34 @@ func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
 		}
 		target.Plugin = &plugin
 		return nil
+	}
+	return nil
+}
+
+func validateWorkflowCompletionConfig(cfg *Config, path string, completion *WorkflowCompletionConfig) error {
+	if completion == nil {
+		return nil
+	}
+	if err := validateWorkflowCompletionDeliveryConfig(cfg, path+".onSuccess", completion.OnSuccess); err != nil {
+		return err
+	}
+	return validateWorkflowCompletionDeliveryConfig(cfg, path+".onFailure", completion.OnFailure)
+}
+
+func validateWorkflowCompletionDeliveryConfig(cfg *Config, path string, delivery *WorkflowCompletionDeliveryConfig) error {
+	if delivery == nil {
+		return nil
+	}
+	if delivery.Plugin == nil {
+		return fmt.Errorf("config validation: %s.plugin is required", path)
+	}
+	target := &WorkflowTargetConfig{Plugin: delivery.Plugin}
+	if err := normalizeWorkflowTarget(path, target); err != nil {
+		return err
+	}
+	delivery.Plugin = target.Plugin
+	if _, ok := cfg.Plugins[delivery.Plugin.Name]; !ok {
+		return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", path, delivery.Plugin.Name)
 	}
 	return nil
 }

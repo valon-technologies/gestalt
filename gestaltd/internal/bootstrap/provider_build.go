@@ -2044,7 +2044,7 @@ func (unavailableWorkflowManager) CancelRun(context.Context, *principal.Principa
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
+func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.PublishEventRequest) (coreworkflow.Event, error) {
 	return coreworkflow.Event{}, fmt.Errorf("workflow manager is not available")
 }
 

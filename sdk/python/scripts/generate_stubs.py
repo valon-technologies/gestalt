@@ -7,6 +7,7 @@ from pathlib import Path
 PROTO_MODULES = (
     "agent",
     "authentication",
+    "authorization",
     "cache",
     "datastore",
     "plugin",

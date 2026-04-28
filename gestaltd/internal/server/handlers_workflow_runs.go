@@ -19,10 +19,11 @@ import (
 )
 
 type workflowActorInfo struct {
-	SubjectID   string `json:"subjectId,omitempty"`
-	SubjectKind string `json:"subjectKind,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	AuthSource  string `json:"authSource,omitempty"`
+	SubjectID           string `json:"subjectId,omitempty"`
+	CredentialSubjectID string `json:"credentialSubjectId,omitempty"`
+	SubjectKind         string `json:"subjectKind,omitempty"`
+	DisplayName         string `json:"displayName,omitempty"`
+	AuthSource          string `json:"authSource,omitempty"`
 }
 
 type workflowRunEventInfo struct {
@@ -50,6 +51,7 @@ type workflowRunInfo struct {
 	Provider      string                     `json:"provider"`
 	Status        string                     `json:"status,omitempty"`
 	Target        workflowScheduleTargetInfo `json:"target"`
+	Completion    *workflowCompletionInfo    `json:"completion,omitempty"`
 	Trigger       *workflowRunTriggerInfo    `json:"trigger,omitempty"`
 	CreatedBy     *workflowActorInfo         `json:"createdBy,omitempty"`
 	CreatedAt     *time.Time                 `json:"createdAt,omitempty"`
@@ -145,6 +147,7 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.StatusMessage = run.StatusMessage
 	info.ResultBody = run.ResultBody
 	info.Target = workflowScheduleTargetInfoFromCore(run.Target)
+	info.Completion = workflowCompletionInfoFromCore(run.Completion)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
 	info.CreatedBy = workflowActorInfoFromCore(run.CreatedBy)
 	return info
@@ -186,10 +189,11 @@ func workflowActorInfoFromCore(actor coreworkflow.Actor) *workflowActorInfo {
 		return nil
 	}
 	return &workflowActorInfo{
-		SubjectID:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
+		SubjectID:           actor.SubjectID,
+		CredentialSubjectID: actor.CredentialSubjectID,
+		SubjectKind:         actor.SubjectKind,
+		DisplayName:         actor.DisplayName,
+		AuthSource:          actor.AuthSource,
 	}
 }
 

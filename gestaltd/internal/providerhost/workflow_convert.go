@@ -163,15 +163,72 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 	}
 }
 
+func workflowCompletionToProto(completion coreworkflow.Completion) (*proto.WorkflowCompletion, error) {
+	if coreworkflow.CompletionEmpty(completion) {
+		return nil, nil
+	}
+	onSuccess, err := workflowCompletionDeliveryToProto(completion.OnSuccess)
+	if err != nil {
+		return nil, fmt.Errorf("workflow completion on_success: %w", err)
+	}
+	onFailure, err := workflowCompletionDeliveryToProto(completion.OnFailure)
+	if err != nil {
+		return nil, fmt.Errorf("workflow completion on_failure: %w", err)
+	}
+	return &proto.WorkflowCompletion{
+		OnSuccess: onSuccess,
+		OnFailure: onFailure,
+	}, nil
+}
+
+func workflowCompletionFromProto(completion *proto.WorkflowCompletion) coreworkflow.Completion {
+	if completion == nil {
+		return coreworkflow.Completion{}
+	}
+	return coreworkflow.Completion{
+		OnSuccess: workflowCompletionDeliveryFromProto(completion.GetOnSuccess()),
+		OnFailure: workflowCompletionDeliveryFromProto(completion.GetOnFailure()),
+	}
+}
+
+func workflowCompletionDeliveryToProto(delivery *coreworkflow.CompletionDelivery) (*proto.WorkflowCompletionDelivery, error) {
+	if coreworkflow.CompletionDeliveryEmpty(delivery) {
+		return nil, nil
+	}
+	plugin, err := workflowPluginTargetToProto(*delivery.Plugin)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowCompletionDelivery{
+		Plugin:     plugin,
+		BestEffort: delivery.BestEffort,
+	}, nil
+}
+
+func workflowCompletionDeliveryFromProto(delivery *proto.WorkflowCompletionDelivery) *coreworkflow.CompletionDelivery {
+	if delivery == nil {
+		return nil
+	}
+	plugin := workflowPluginTargetFromProto(delivery.GetPlugin())
+	if coreworkflow.PluginTargetEmpty(plugin) {
+		return nil
+	}
+	return &coreworkflow.CompletionDelivery{
+		Plugin:     &plugin,
+		BestEffort: delivery.GetBestEffort(),
+	}
+}
+
 func workflowActorToProto(actor coreworkflow.Actor) *proto.WorkflowActor {
 	if actor == (coreworkflow.Actor{}) {
 		return nil
 	}
 	return &proto.WorkflowActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
+		SubjectId:           actor.SubjectID,
+		CredentialSubjectId: actor.CredentialSubjectID,
+		SubjectKind:         actor.SubjectKind,
+		DisplayName:         actor.DisplayName,
+		AuthSource:          actor.AuthSource,
 	}
 }
 
@@ -180,10 +237,11 @@ func workflowActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
 		return coreworkflow.Actor{}
 	}
 	return coreworkflow.Actor{
-		SubjectID:   actor.GetSubjectId(),
-		SubjectKind: actor.GetSubjectKind(),
-		DisplayName: actor.GetDisplayName(),
-		AuthSource:  actor.GetAuthSource(),
+		SubjectID:           actor.GetSubjectId(),
+		CredentialSubjectID: actor.GetCredentialSubjectId(),
+		SubjectKind:         actor.GetSubjectKind(),
+		DisplayName:         actor.GetDisplayName(),
+		AuthSource:          actor.GetAuthSource(),
 	}
 }
 
@@ -195,10 +253,15 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(ref.Completion)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.WorkflowExecutionReference{
 		Id:                  ref.ID,
 		ProviderName:        ref.ProviderName,
 		Target:              target,
+		Completion:          completion,
 		TargetFingerprint:   ref.TargetFingerprint,
 		SubjectId:           ref.SubjectID,
 		CredentialSubjectId: ref.CredentialSubjectID,
@@ -220,6 +283,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
+		Completion:          workflowCompletionFromProto(ref.GetCompletion()),
 		TargetFingerprint:   strings.TrimSpace(ref.GetTargetFingerprint()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		CredentialSubjectID: strings.TrimSpace(ref.GetCredentialSubjectId()),
@@ -417,6 +481,7 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 		ID:            run.GetId(),
 		Status:        status,
 		Target:        workflowTargetFromProto(run.GetTarget()),
+		Completion:    workflowCompletionFromProto(run.GetCompletion()),
 		Trigger:       trigger,
 		ExecutionRef:  run.GetExecutionRef(),
 		CreatedBy:     workflowActorFromProto(run.GetCreatedBy()),
@@ -437,6 +502,7 @@ func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*corework
 		Cron:         schedule.GetCron(),
 		Timezone:     schedule.GetTimezone(),
 		Target:       workflowTargetFromProto(schedule.GetTarget()),
+		Completion:   workflowCompletionFromProto(schedule.GetCompletion()),
 		Paused:       schedule.GetPaused(),
 		ExecutionRef: schedule.GetExecutionRef(),
 		CreatedBy:    workflowActorFromProto(schedule.GetCreatedBy()),
@@ -454,11 +520,16 @@ func workflowScheduleToProto(schedule *coreworkflow.Schedule) (*proto.BoundWorkf
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(schedule.Completion)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.BoundWorkflowSchedule{
 		Id:           schedule.ID,
 		Cron:         schedule.Cron,
 		Timezone:     schedule.Timezone,
 		Target:       target,
+		Completion:   completion,
 		Paused:       schedule.Paused,
 		CreatedAt:    timeToProto(schedule.CreatedAt),
 		UpdatedAt:    timeToProto(schedule.UpdatedAt),
@@ -476,6 +547,7 @@ func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*c
 		ID:           trigger.GetId(),
 		Match:        workflowEventMatchFromProto(trigger.GetMatch()),
 		Target:       workflowTargetFromProto(trigger.GetTarget()),
+		Completion:   workflowCompletionFromProto(trigger.GetCompletion()),
 		Paused:       trigger.GetPaused(),
 		ExecutionRef: trigger.GetExecutionRef(),
 		CreatedBy:    workflowActorFromProto(trigger.GetCreatedBy()),
@@ -492,10 +564,15 @@ func workflowEventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.Bou
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(trigger.Completion)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.BoundWorkflowEventTrigger{
 		Id:           trigger.ID,
 		Match:        workflowEventMatchToProto(trigger.Match),
 		Target:       target,
+		Completion:   completion,
 		Paused:       trigger.Paused,
 		CreatedAt:    timeToProto(trigger.CreatedAt),
 		UpdatedAt:    timeToProto(trigger.UpdatedAt),
@@ -520,7 +597,9 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 		RunID:        req.GetRunId(),
 		Trigger:      trigger,
 		Target:       target,
+		Completion:   workflowCompletionFromProto(req.GetCompletion()),
 		Input:        mapFromStruct(req.GetInput()),
+		PrivateInput: mapFromStruct(req.GetPrivateInput()),
 		Metadata:     mapFromStruct(req.GetMetadata()),
 		CreatedBy:    workflowActorFromProto(req.GetCreatedBy()),
 		ExecutionRef: req.GetExecutionRef(),

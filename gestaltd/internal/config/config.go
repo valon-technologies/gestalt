@@ -610,18 +610,20 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Cron     string                `yaml:"cron,omitempty"`
-	Timezone string                `yaml:"timezone,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+	Provider   string                    `yaml:"provider,omitempty"`
+	Target     *WorkflowTargetConfig     `yaml:"target,omitempty"`
+	Completion *WorkflowCompletionConfig `yaml:"completion,omitempty"`
+	Cron       string                    `yaml:"cron,omitempty"`
+	Timezone   string                    `yaml:"timezone,omitempty"`
+	Paused     bool                      `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+	Provider   string                    `yaml:"provider,omitempty"`
+	Target     *WorkflowTargetConfig     `yaml:"target,omitempty"`
+	Completion *WorkflowCompletionConfig `yaml:"completion,omitempty"`
+	Match      WorkflowEventMatch        `yaml:"match,omitempty"`
+	Paused     bool                      `yaml:"paused,omitempty"`
 }
 
 type WorkflowTargetConfig struct {
@@ -647,6 +649,16 @@ type WorkflowAgentConfig struct {
 	Metadata        map[string]any         `yaml:"metadata,omitempty"`
 	ProviderOptions map[string]any         `yaml:"providerOptions,omitempty"`
 	Timeout         string                 `yaml:"timeout,omitempty"`
+}
+
+type WorkflowCompletionConfig struct {
+	OnSuccess *WorkflowCompletionDeliveryConfig `yaml:"onSuccess,omitempty"`
+	OnFailure *WorkflowCompletionDeliveryConfig `yaml:"onFailure,omitempty"`
+}
+
+type WorkflowCompletionDeliveryConfig struct {
+	Plugin     *WorkflowPluginTargetConfig `yaml:"plugin,omitempty"`
+	BestEffort bool                        `yaml:"bestEffort,omitempty"`
 }
 
 type WorkflowAgentMessage struct {

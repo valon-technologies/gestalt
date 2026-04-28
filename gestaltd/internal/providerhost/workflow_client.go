@@ -63,8 +63,13 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRun
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(req.Completion)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.client.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
 		Target:         target,
+		Completion:     completion,
 		IdempotencyKey: req.IdempotencyKey,
 		CreatedBy:      workflowActorToProto(req.CreatedBy),
 		ExecutionRef:   req.ExecutionRef,
@@ -125,11 +130,16 @@ func (r *remoteWorkflow) UpsertSchedule(ctx context.Context, req coreworkflow.Up
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(req.Completion)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.client.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
 		ScheduleId:   req.ScheduleID,
 		Cron:         req.Cron,
 		Timezone:     req.Timezone,
 		Target:       target,
+		Completion:   completion,
 		Paused:       req.Paused,
 		RequestedBy:  workflowActorToProto(req.RequestedBy),
 		ExecutionRef: req.ExecutionRef,
@@ -210,10 +220,15 @@ func (r *remoteWorkflow) UpsertEventTrigger(ctx context.Context, req coreworkflo
 	if err != nil {
 		return nil, err
 	}
+	completion, err := workflowCompletionToProto(req.Completion)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := r.client.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
 		TriggerId:    req.TriggerID,
 		Match:        workflowEventMatchToProto(req.Match),
 		Target:       target,
+		Completion:   completion,
 		Paused:       req.Paused,
 		RequestedBy:  workflowActorToProto(req.RequestedBy),
 		ExecutionRef: req.ExecutionRef,
@@ -294,9 +309,15 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 	if err != nil {
 		return err
 	}
+	privateInput, err := structFromMap(req.PrivateInput)
+	if err != nil {
+		return err
+	}
 	_, err = r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-		PluginName: req.PluginName,
-		Event:      pbEvent,
+		PluginName:   req.PluginName,
+		Event:        pbEvent,
+		PrivateInput: privateInput,
+		PublishedBy:  workflowActorToProto(req.PublishedBy),
 	})
 	return err
 }

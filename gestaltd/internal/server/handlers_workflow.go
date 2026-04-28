@@ -47,11 +47,12 @@ type workflowAgentTargetRequest struct {
 }
 
 type workflowScheduleUpsertRequest struct {
-	Provider string                        `json:"provider,omitempty"`
-	Cron     string                        `json:"cron"`
-	Timezone string                        `json:"timezone,omitempty"`
-	Target   workflowScheduleTargetRequest `json:"target"`
-	Paused   bool                          `json:"paused,omitempty"`
+	Provider   string                        `json:"provider,omitempty"`
+	Cron       string                        `json:"cron"`
+	Timezone   string                        `json:"timezone,omitempty"`
+	Target     workflowScheduleTargetRequest `json:"target"`
+	Completion workflowCompletionRequest     `json:"completion,omitempty"`
+	Paused     bool                          `json:"paused,omitempty"`
 }
 
 type workflowScheduleTargetInfo struct {
@@ -80,15 +81,36 @@ type workflowAgentTargetInfo struct {
 }
 
 type workflowScheduleInfo struct {
-	ID        string                     `json:"id"`
-	Provider  string                     `json:"provider"`
-	Cron      string                     `json:"cron"`
-	Timezone  string                     `json:"timezone,omitempty"`
-	Target    workflowScheduleTargetInfo `json:"target"`
-	Paused    bool                       `json:"paused"`
-	CreatedAt *time.Time                 `json:"createdAt,omitempty"`
-	UpdatedAt *time.Time                 `json:"updatedAt,omitempty"`
-	NextRunAt *time.Time                 `json:"nextRunAt,omitempty"`
+	ID         string                     `json:"id"`
+	Provider   string                     `json:"provider"`
+	Cron       string                     `json:"cron"`
+	Timezone   string                     `json:"timezone,omitempty"`
+	Target     workflowScheduleTargetInfo `json:"target"`
+	Completion *workflowCompletionInfo    `json:"completion,omitempty"`
+	Paused     bool                       `json:"paused"`
+	CreatedAt  *time.Time                 `json:"createdAt,omitempty"`
+	UpdatedAt  *time.Time                 `json:"updatedAt,omitempty"`
+	NextRunAt  *time.Time                 `json:"nextRunAt,omitempty"`
+}
+
+type workflowCompletionRequest struct {
+	OnSuccess *workflowCompletionDeliveryRequest `json:"onSuccess,omitempty"`
+	OnFailure *workflowCompletionDeliveryRequest `json:"onFailure,omitempty"`
+}
+
+type workflowCompletionDeliveryRequest struct {
+	Plugin     *workflowPluginTargetRequest `json:"plugin,omitempty"`
+	BestEffort bool                         `json:"bestEffort,omitempty"`
+}
+
+type workflowCompletionInfo struct {
+	OnSuccess *workflowCompletionDeliveryInfo `json:"onSuccess,omitempty"`
+	OnFailure *workflowCompletionDeliveryInfo `json:"onFailure,omitempty"`
+}
+
+type workflowCompletionDeliveryInfo struct {
+	Plugin     *workflowPluginTargetInfo `json:"plugin,omitempty"`
+	BestEffort bool                      `json:"bestEffort,omitempty"`
 }
 
 func (s *Server) listGlobalWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +150,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
 		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Completion:   workflowCompletionFromRequest(req.Completion),
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -171,6 +194,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		Cron:         strings.TrimSpace(req.Cron),
 		Timezone:     strings.TrimSpace(req.Timezone),
 		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Completion:   workflowCompletionFromRequest(req.Completion),
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -249,6 +273,31 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 	}
 	return coreworkflow.Target{
 		Plugin: &pluginTarget,
+	}
+}
+
+func workflowCompletionFromRequest(completion workflowCompletionRequest) coreworkflow.Completion {
+	return coreworkflow.Completion{
+		OnSuccess: workflowCompletionDeliveryFromRequest(completion.OnSuccess),
+		OnFailure: workflowCompletionDeliveryFromRequest(completion.OnFailure),
+	}
+}
+
+func workflowCompletionDeliveryFromRequest(delivery *workflowCompletionDeliveryRequest) *coreworkflow.CompletionDelivery {
+	if delivery == nil || delivery.Plugin == nil {
+		return nil
+	}
+	plugin := workflowPluginTargetFromRequest(delivery.Plugin)
+	pluginTarget := coreworkflow.PluginTarget{
+		PluginName: strings.TrimSpace(plugin.Name),
+		Operation:  strings.TrimSpace(plugin.Operation),
+		Connection: strings.TrimSpace(plugin.Connection),
+		Instance:   strings.TrimSpace(plugin.Instance),
+		Input:      maps.Clone(plugin.Input),
+	}
+	return &coreworkflow.CompletionDelivery{
+		Plugin:     &pluginTarget,
+		BestEffort: delivery.BestEffort,
 	}
 }
 
@@ -335,6 +384,7 @@ func workflowScheduleInfoFromCore(schedule *coreworkflow.Schedule, providerName 
 	info.UpdatedAt = schedule.UpdatedAt
 	info.NextRunAt = schedule.NextRunAt
 	info.Target = workflowScheduleTargetInfoFromCore(schedule.Target)
+	info.Completion = workflowCompletionInfoFromCore(schedule.Completion)
 	return info
 }
 
@@ -367,6 +417,36 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 			Instance:   pluginTarget.Instance,
 			Input:      maps.Clone(pluginTarget.Input),
 		},
+	}
+}
+
+func workflowCompletionInfoFromCore(completion coreworkflow.Completion) *workflowCompletionInfo {
+	if coreworkflow.CompletionEmpty(completion) {
+		return nil
+	}
+	return &workflowCompletionInfo{
+		OnSuccess: workflowCompletionDeliveryInfoFromCore(completion.OnSuccess),
+		OnFailure: workflowCompletionDeliveryInfoFromCore(completion.OnFailure),
+	}
+}
+
+func workflowCompletionDeliveryInfoFromCore(delivery *coreworkflow.CompletionDelivery) *workflowCompletionDeliveryInfo {
+	if coreworkflow.CompletionDeliveryEmpty(delivery) {
+		return nil
+	}
+	return &workflowCompletionDeliveryInfo{
+		Plugin:     workflowPluginTargetInfoFromCore(*delivery.Plugin),
+		BestEffort: delivery.BestEffort,
+	}
+}
+
+func workflowPluginTargetInfoFromCore(pluginTarget coreworkflow.PluginTarget) *workflowPluginTargetInfo {
+	return &workflowPluginTargetInfo{
+		Name:       pluginTarget.PluginName,
+		Operation:  pluginTarget.Operation,
+		Connection: userFacingConnectionName(pluginTarget.Connection),
+		Instance:   pluginTarget.Instance,
+		Input:      maps.Clone(pluginTarget.Input),
 	}
 }
 

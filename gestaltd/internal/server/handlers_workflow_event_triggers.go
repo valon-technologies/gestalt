@@ -24,10 +24,11 @@ type workflowEventTriggerMatchRequest struct {
 }
 
 type workflowEventTriggerUpsertRequest struct {
-	Provider string                           `json:"provider,omitempty"`
-	Match    workflowEventTriggerMatchRequest `json:"match"`
-	Target   workflowScheduleTargetRequest    `json:"target"`
-	Paused   bool                             `json:"paused,omitempty"`
+	Provider   string                           `json:"provider,omitempty"`
+	Match      workflowEventTriggerMatchRequest `json:"match"`
+	Target     workflowScheduleTargetRequest    `json:"target"`
+	Completion workflowCompletionRequest        `json:"completion,omitempty"`
+	Paused     bool                             `json:"paused,omitempty"`
 }
 
 type workflowEventTriggerMatchInfo struct {
@@ -37,13 +38,14 @@ type workflowEventTriggerMatchInfo struct {
 }
 
 type workflowEventTriggerInfo struct {
-	ID        string                        `json:"id"`
-	Provider  string                        `json:"provider"`
-	Match     workflowEventTriggerMatchInfo `json:"match"`
-	Target    workflowScheduleTargetInfo    `json:"target"`
-	Paused    bool                          `json:"paused"`
-	CreatedAt *time.Time                    `json:"createdAt,omitempty"`
-	UpdatedAt *time.Time                    `json:"updatedAt,omitempty"`
+	ID         string                        `json:"id"`
+	Provider   string                        `json:"provider"`
+	Match      workflowEventTriggerMatchInfo `json:"match"`
+	Target     workflowScheduleTargetInfo    `json:"target"`
+	Completion *workflowCompletionInfo       `json:"completion,omitempty"`
+	Paused     bool                          `json:"paused"`
+	CreatedAt  *time.Time                    `json:"createdAt,omitempty"`
+	UpdatedAt  *time.Time                    `json:"updatedAt,omitempty"`
 }
 
 func (s *Server) listGlobalWorkflowEventTriggers(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +88,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		ProviderName: strings.TrimSpace(req.Provider),
 		Match:        workflowEventMatchFromRequest(req.Match),
 		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Completion:   workflowCompletionFromRequest(req.Completion),
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -132,6 +135,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		ProviderName: strings.TrimSpace(req.Provider),
 		Match:        workflowEventMatchFromRequest(req.Match),
 		Target:       workflowScheduleTargetFromRequest(req.Target),
+		Completion:   workflowCompletionFromRequest(req.Completion),
 		Paused:       req.Paused,
 	})
 	if err != nil {
@@ -209,6 +213,7 @@ func workflowEventTriggerInfoFromCore(trigger *coreworkflow.EventTrigger, provid
 		Subject: trigger.Match.Subject,
 	}
 	info.Target = workflowScheduleTargetInfoFromCore(trigger.Target)
+	info.Completion = workflowCompletionInfoFromCore(trigger.Completion)
 	info.Paused = trigger.Paused
 	info.CreatedAt = trigger.CreatedAt
 	info.UpdatedAt = trigger.UpdatedAt

@@ -161,12 +161,12 @@ func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Princi
 	return target.CancelRun(ctx, p, runID, reason)
 }
 
-func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, req coreworkflow.PublishEventRequest) (coreworkflow.Event, error) {
 	target, err := l.current()
 	if err != nil {
 		return coreworkflow.Event{}, err
 	}
-	return target.PublishEvent(ctx, p, event)
+	return target.PublishEvent(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {
