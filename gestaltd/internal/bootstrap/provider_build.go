@@ -2180,6 +2180,10 @@ func (unavailableAgentManager) Available() bool {
 	return false
 }
 
+func (unavailableAgentManager) ResolveTool(context.Context, *principal.Principal, coreagent.ToolRef) (coreagent.Tool, error) {
+	return coreagent.Tool{}, fmt.Errorf("agent manager is not available")
+}
+
 func (unavailableAgentManager) ResolveTools(context.Context, *principal.Principal, coreagent.ResolveToolsRequest) ([]coreagent.Tool, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }

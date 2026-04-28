@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -153,6 +154,7 @@ type Deps struct {
 	S3                    map[string]s3store.Client
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
+	AgentToolGrants       *agentgrant.Manager
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
@@ -416,7 +418,6 @@ func (p *agentProviderWithCleanup) Close() error {
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
-	runtime      *agentRuntime
 }
 
 func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
@@ -462,44 +463,20 @@ func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req coreagen
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	trackReq := req
-	trackReq.TurnID = strings.TrimSpace(trackReq.TurnID)
-	tracked := p.runtime != nil && trackReq.TurnID != ""
-	if tracked {
-		if err := p.runtime.TrackTurn(ctx, p.providerName, trackReq); err != nil {
-			return nil, err
-		}
-	}
 	turn, err := p.delegate.CreateTurn(ctx, req)
 	if err != nil {
-		if tracked {
-			if existing, getErr := p.delegate.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: trackReq.TurnID}); getErr != nil || existing == nil {
-				_ = p.runtime.DeleteTrackedTurn(context.Background(), trackReq.TurnID)
-			}
-		}
 		return nil, err
 	}
-	requestedID := strings.TrimSpace(trackReq.TurnID)
+	requestedID := strings.TrimSpace(req.TurnID)
 	if requestedID != "" && turn != nil {
 		actualID := strings.TrimSpace(turn.ID)
-		if actualID != "" && actualID != requestedID {
-			trackErr := fmt.Errorf("%w: agent provider %q returned turn id %q for requested turn id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
-			_ = p.runtime.DeleteTrackedTurn(context.Background(), requestedID)
+		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.IdempotencyKey) == "" {
+			err := fmt.Errorf("%w: agent provider %q returned turn id %q for requested turn id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
 			cancelErr := p.cancelProviderTurn(actualID, "agent provider returned mismatched turn id")
 			if cancelErr != nil {
-				return nil, errors.Join(trackErr, cancelErr)
+				return nil, errors.Join(err, cancelErr)
 			}
-			return nil, trackErr
-		}
-	}
-	if !tracked && p.runtime != nil && turn != nil && strings.TrimSpace(turn.ID) != "" {
-		trackReq.TurnID = strings.TrimSpace(turn.ID)
-		if trackErr := p.runtime.TrackTurn(ctx, p.providerName, trackReq); trackErr != nil {
-			cancelErr := p.cancelTrackedTurn(trackReq.TurnID)
-			if cancelErr != nil {
-				return nil, errors.Join(trackErr, cancelErr)
-			}
-			return nil, trackErr
+			return nil, err
 		}
 	}
 	return turn, nil
@@ -523,20 +500,7 @@ func (p *agentProviderWithTracking) CancelTurn(ctx context.Context, req coreagen
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	turn, err := p.delegate.CancelTurn(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if p.runtime != nil {
-		turnID := strings.TrimSpace(req.TurnID)
-		if turnID == "" && turn != nil && strings.TrimSpace(turn.ID) != "" {
-			turnID = strings.TrimSpace(turn.ID)
-		}
-		if turnID != "" {
-			_ = p.runtime.RevokeTrackedTurn(context.Background(), turnID)
-		}
-	}
-	return turn, nil
+	return p.delegate.CancelTurn(ctx, req)
 }
 
 func (p *agentProviderWithTracking) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
@@ -579,13 +543,6 @@ func (p *agentProviderWithTracking) Ping(ctx context.Context) error {
 		return fmt.Errorf("agent provider is not configured")
 	}
 	return p.delegate.Ping(ctx)
-}
-
-func (p *agentProviderWithTracking) cancelTrackedTurn(turnID string) error {
-	if p.runtime != nil {
-		_ = p.runtime.DeleteTrackedTurn(context.Background(), turnID)
-	}
-	return p.cancelProviderTurn(turnID, "agent turn tracking failed")
 }
 
 func (p *agentProviderWithTracking) cancelProviderTurn(turnID string, reason string) error {
@@ -764,12 +721,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if requireEncryptionKey && encKey == nil {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required")
 	}
+	agentToolGrants, err := agentgrant.NewManager(encKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: agent tool grants: %w", err)
+	}
 
 	deps := Deps{
-		EncryptionKey: encKey,
-		BaseURL:       cfg.Server.BaseURL,
-		SecretManager: sm,
-		Telemetry:     tp,
+		EncryptionKey:   encKey,
+		BaseURL:         cfg.Server.BaseURL,
+		SecretManager:   sm,
+		Telemetry:       tp,
+		AgentToolGrants: agentToolGrants,
 	}
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
@@ -782,6 +744,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AgentRuntime = agentRuntime
+	deps.AgentRuntime.SetToolGrants(agentToolGrants)
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -1005,7 +968,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 	}
-	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
@@ -1037,8 +999,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
 		WorkflowTools:     workflowTools,
-		SessionMetadata:   prepared.Services.AgentSessions,
-		RunMetadata:       prepared.Services.AgentRunMetadata,
+		ToolGrants:        prepared.Deps.AgentToolGrants,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -1751,7 +1712,6 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	tracked := &agentProviderWithTracking{
 		delegate:     provider,
 		providerName: name,
-		runtime:      deps.AgentRuntime,
 	}
 	if cleanup != nil {
 		provider := &agentProviderWithCleanup{

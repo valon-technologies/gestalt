@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -22,13 +23,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	t.Parallel()
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
-	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
-		ID:                  "turn-1",
-		SessionID:           "session-1",
-		ProviderName:        "managed",
-		SubjectID:           principal.UserSubjectID("ada"),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -38,15 +34,14 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 			{Plugin: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-	}); err != nil {
-		t.Fatalf("put agent execution ref: %v", err)
-	}
+	})
 
 	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
+		ToolGrant:    toolGrant,
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
@@ -107,13 +102,8 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
-	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
-		ID:                  "turn-1",
-		SessionID:           "session-1",
-		ProviderName:        "managed",
-		SubjectID:           principal.UserSubjectID("ada"),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -122,15 +112,14 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-	}); err != nil {
-		t.Fatalf("put agent execution ref: %v", err)
-	}
+	})
 
 	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
+		ToolGrant:    toolGrant,
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
 			"target": map[string]any{
@@ -153,13 +142,8 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
-	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
-		ID:                  "turn-1",
-		SessionID:           "session-1",
-		ProviderName:        "managed",
-		SubjectID:           principal.UserSubjectID("ada"),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -169,15 +153,14 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 			{Plugin: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-	}); err != nil {
-		t.Fatalf("put agent execution ref: %v", err)
-	}
+	})
 
 	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
+		ToolGrant:    toolGrant,
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
 			"target": map[string]any{
@@ -207,13 +190,8 @@ func TestAgentRuntimeWorkflowSystemToolCreateScheduleFallsBackFromNullToolRefsTo
 	t.Parallel()
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
-	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
-		ID:                  "turn-1",
-		SessionID:           "session-1",
-		ProviderName:        "managed",
-		SubjectID:           principal.UserSubjectID("ada"),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -223,15 +201,14 @@ func TestAgentRuntimeWorkflowSystemToolCreateScheduleFallsBackFromNullToolRefsTo
 			{Plugin: "roadmap", Operation: "sync"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-	}); err != nil {
-		t.Fatalf("put agent execution ref: %v", err)
-	}
+	})
 
 	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
+		ToolGrant:    toolGrant,
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
 			"target": map[string]any{
@@ -265,29 +242,21 @@ func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesList)
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: principal.UserSubjectID("ada"),
-		Kind:      principal.KindUser,
-	})
-
-	if err := runtime.TrackTurn(ctx, "managed", coreagent.CreateTurnRequest{
-		TurnID:    "turn-1",
-		SessionID: "session-1",
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesList)
+	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
 		ToolRefs: []coreagent.ToolRef{{
 			System:    coreagent.SystemToolWorkflow,
 			Operation: workflowSystemToolSchedulesList,
 		}},
 		Tools: []coreagent.Tool{workflowTool},
-	}); err != nil {
-		t.Fatalf("TrackTurn: %v", err)
-	}
+	})
 
 	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
+		ToolGrant:    toolGrant,
 	})
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
@@ -309,7 +278,6 @@ func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
 func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemToolRecordingProvider) {
 	t.Helper()
 
-	services := coretesting.NewStubServices(t)
 	reg := registry.New()
 	if err := reg.Providers.Register("roadmap", &coretesting.StubIntegration{
 		N:        "roadmap",
@@ -334,7 +302,18 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 	runtime := &agentRuntime{
 		defaultProviderName: "managed",
 		providers: map[string]coreagent.Provider{
-			"managed": coreagent.UnimplementedProvider{},
+			"managed": &routingAgentProvider{
+				getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        req.TurnID,
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+						CreatedBy: coreagent.Actor{
+							SubjectID: req.Subject.SubjectID,
+						},
+					}, nil
+				},
+			},
 		},
 	}
 	agentManager := workflowSystemToolAgentManagerStub{}
@@ -345,9 +324,23 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		Agent:        runtime,
 		AgentManager: agentManager,
 	})
-	runtime.SetRunMetadata(services.AgentRunMetadata)
+	runtime.SetToolGrants(newTestAgentToolGrants(t))
+	runtime.SetToolSearcher(workflowSystemToolResolver{})
 	runtime.SetSystemToolExecutor(newWorkflowSystemTools(workflowManager, workflowRuntime))
 	return runtime, workflowProvider
+}
+
+type workflowSystemToolResolver struct{}
+
+func (workflowSystemToolResolver) SearchTools(context.Context, *principal.Principal, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
+	return &coreagent.SearchToolsResponse{}, nil
+}
+
+func (workflowSystemToolResolver) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	if ref.System != coreagent.SystemToolWorkflow {
+		return coreagent.Tool{}, core.ErrNotFound
+	}
+	return workflowSystemToolFromRef(ref)
 }
 
 type workflowSystemToolAgentManagerStub struct {
@@ -474,7 +467,47 @@ func (p *workflowSystemToolRecordingProvider) ListExecutionReferences(_ context.
 func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { return nil }
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
-func mustWorkflowSystemTool(t *testing.T, operation string) coreagent.Tool {
+type workflowSystemToolGrantScope struct {
+	Permissions []core.AccessPermission
+	ToolRefs    []coreagent.ToolRef
+	Tools       []coreagent.Tool
+}
+
+func mustMintWorkflowSystemToolGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemToolGrantScope) string {
+	t.Helper()
+
+	grants := workflowSystemToolGrants(t, runtime)
+	grant, err := grants.Mint(agentgrant.Grant{
+		ProviderName:        "managed",
+		SessionID:           "session-1",
+		TurnID:              "turn-1",
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
+		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
+		ToolSource:          coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint workflow system tool grant: %v", err)
+	}
+	return grant
+}
+
+func workflowSystemToolGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Manager {
+	t.Helper()
+
+	runtime.mu.RLock()
+	grants := runtime.toolGrants
+	runtime.mu.RUnlock()
+	if grants == nil {
+		t.Fatal("runtime tool grants are not configured")
+	}
+	return grants
+}
+
+func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation string) coreagent.Tool {
 	t.Helper()
 
 	tool, err := workflowSystemToolFromRef(coreagent.ToolRef{
@@ -484,5 +517,6 @@ func mustWorkflowSystemTool(t *testing.T, operation string) coreagent.Tool {
 	if err != nil {
 		t.Fatalf("workflowSystemToolFromRef: %v", err)
 	}
+	tool.ID = mustMintAgentToolID(t, workflowSystemToolGrants(t, runtime), tool.Target)
 	return tool
 }

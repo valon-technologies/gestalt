@@ -10142,7 +10142,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 	}
 }
 
-func TestExecuteOperation_HumanAuthorizationUsesSessionMetadataOnCollision(t *testing.T) {
+func TestExecuteOperation_HumanAuthorizationUsesCanonicalSubjectOnCollision(t *testing.T) {
 	t.Parallel()
 
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)

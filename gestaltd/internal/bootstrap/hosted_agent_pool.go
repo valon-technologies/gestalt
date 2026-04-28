@@ -1064,7 +1064,7 @@ func (p *hostedAgentProviderPool) recordTurn(turn *coreagent.Turn, backend *host
 		return
 	}
 	switch {
-	case turnStatusIsLive(turn.Status):
+	case coreagent.ExecutionStatusIsLive(turn.Status):
 		p.turnBackends[turnID] = backend
 		backend.liveTurns[turnID] = struct{}{}
 		return
@@ -1479,15 +1479,6 @@ func sessionIDForSession(session *coreagent.Session) string {
 		return ""
 	}
 	return session.ID
-}
-
-func turnStatusIsLive(status coreagent.ExecutionStatus) bool {
-	switch status {
-	case coreagent.ExecutionStatusPending, coreagent.ExecutionStatusRunning, coreagent.ExecutionStatusWaitingForInput:
-		return true
-	default:
-		return false
-	}
 }
 
 func turnIDForTurn(turn *coreagent.Turn) string {

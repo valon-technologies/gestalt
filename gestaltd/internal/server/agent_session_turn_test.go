@@ -17,12 +17,22 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
+
+func newServerTestAgentToolGrants(t testing.TB) *agentgrant.Manager {
+	t.Helper()
+	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("agentgrant.NewManager: %v", err)
+	}
+	return grants
+}
 
 type stubAgentControl struct {
 	defaultProviderName string
@@ -478,8 +488,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 					ReadOnly: true,
 				}}},
 			}),
-			SessionMetadata: services.AgentSessions,
-			RunMetadata:     services.AgentRunMetadata,
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -634,9 +643,8 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			SessionMetadata: services.AgentSessions,
-			RunMetadata:     services.AgentRunMetadata,
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -722,10 +730,9 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			Providers:       testutil.NewProviderRegistry(t),
-			SessionMetadata: services.AgentSessions,
-			RunMetadata:     services.AgentRunMetadata,
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Providers:  testutil.NewProviderRegistry(t),
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -773,10 +780,6 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		"gestalt.agent.provider":  "managed",
 		"gestalt.agent.operation": "create_turn",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.run_metadata.write.count", 1, map[string]string{
-		"gestalt.agent.provider":  "managed",
-		"gestalt.agent.operation": "create_turn",
-	})
 }
 
 func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
@@ -788,9 +791,8 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			SessionMetadata: services.AgentSessions,
-			RunMetadata:     services.AgentRunMetadata,
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -847,9 +849,8 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			SessionMetadata: services.AgentSessions,
-			RunMetadata:     services.AgentRunMetadata,
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)

@@ -443,7 +443,6 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
 	reg := registry.New()
 	if err := reg.Providers.Register("roadmap", &coretesting.StubIntegration{
 		N:        "roadmap",
@@ -462,12 +461,12 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		defaultProviderName: "managed",
 		providers:           map[string]coreagent.Provider{"managed": agentProvider},
 	}
-	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	toolGrants := newTestAgentToolGrants(t)
+	agentRuntime.SetToolGrants(toolGrants)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:       &reg.Providers,
-		Agent:           agentRuntime,
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
+		Providers:  &reg.Providers,
+		Agent:      agentRuntime,
+		ToolGrants: toolGrants,
 	})
 	runtime := &workflowRuntime{
 		providers: map[string]coreworkflow.Provider{},

@@ -252,11 +252,11 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                 "candidate_limit": request.candidate_limit,
                 "load_refs": [
                     {
+                        "system": ref.system,
                         "plugin": ref.plugin,
                         "operation": ref.operation,
                         "connection": ref.connection,
                         "instance": ref.instance,
-                        "credential_mode": ref.credential_mode,
                     }
                     for ref in request.load_refs
                 ],
@@ -268,22 +268,11 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                     id="slack.send_message",
                     name="Send Slack message",
                     description="Send a direct message",
-                    target=agent_pb2.BoundAgentToolTarget(
-                        plugin="slack",
-                        operation="send_message",
-                        connection="workspace",
-                        instance="primary",
-                        credential_mode="user",
-                    ),
                 ),
                 agent_pb2.ResolvedAgentTool(
                     id="system.workflow.schedules.list",
                     name="List workflow schedules",
                     description="List schedules owned by the caller",
-                    target=agent_pb2.BoundAgentToolTarget(
-                        system="workflow",
-                        operation="schedules.list",
-                    ),
                 )
             ],
             candidates=[
@@ -293,9 +282,8 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                         operation="search_messages",
                         connection="workspace",
                         instance="primary",
-                        credential_mode="user",
                     ),
-                    id="slack/search_messages/workspace/primary/user",
+                    id="slack/search_messages/workspace/primary",
                     name="Search Slack messages",
                     description="Search messages",
                     parameters=["query", "channel"],
@@ -810,7 +798,6 @@ class AgentTransportTests(unittest.TestCase):
                             operation="search_messages",
                             connection="workspace",
                             instance="primary",
-                            credential_mode="user",
                         )
                     ],
                 )
@@ -826,15 +813,13 @@ class AgentTransportTests(unittest.TestCase):
             )
 
         self.assertEqual(len(search_response.tools), 2)
-        self.assertEqual(search_response.tools[0].target.plugin, "slack")
-        self.assertEqual(search_response.tools[0].target.operation, "send_message")
-        self.assertEqual(search_response.tools[0].target.credential_mode, "user")
         self.assertEqual(len(search_response.candidates), 1)
         self.assertEqual(search_response.candidates[0].ref.operation, "search_messages")
-        self.assertEqual(search_response.candidates[0].ref.credential_mode, "user")
         self.assertTrue(search_response.has_more)
-        self.assertEqual(search_response.tools[1].target.system, "workflow")
-        self.assertEqual(search_response.tools[1].target.operation, "schedules.list")
+        self.assertEqual(search_response.tools[0].id, "slack.send_message")
+        self.assertEqual(search_response.tools[0].name, "Send Slack message")
+        self.assertEqual(search_response.tools[1].id, "system.workflow.schedules.list")
+        self.assertEqual(search_response.tools[1].name, "List workflow schedules")
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
         self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])
@@ -849,11 +834,11 @@ class AgentTransportTests(unittest.TestCase):
                     "candidate_limit": 12,
                     "load_refs": [
                         {
+                            "system": "",
                             "plugin": "slack",
                             "operation": "search_messages",
                             "connection": "workspace",
                             "instance": "primary",
-                            "credential_mode": "user",
                         }
                     ],
                 }

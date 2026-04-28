@@ -19,6 +19,15 @@ const (
 	ExecutionStatusWaitingForInput ExecutionStatus = "waiting_for_input"
 )
 
+func ExecutionStatusIsLive(status ExecutionStatus) bool {
+	switch status {
+	case ExecutionStatusPending, ExecutionStatusRunning, ExecutionStatusWaitingForInput:
+		return true
+	default:
+		return false
+	}
+}
+
 type SessionState string
 
 const (
@@ -31,6 +40,14 @@ type Actor struct {
 	SubjectKind string
 	DisplayName string
 	AuthSource  string
+}
+
+type SubjectContext struct {
+	SubjectID           string
+	SubjectKind         string
+	CredentialSubjectID string
+	DisplayName         string
+	AuthSource          string
 }
 
 type Message struct {
@@ -94,6 +111,7 @@ type Tool struct {
 	Description      string
 	ParametersSchema map[string]any
 	Target           ToolTarget
+	Hidden           bool
 }
 
 type ToolRef struct {
@@ -150,19 +168,24 @@ type CreateSessionRequest struct {
 	Metadata        map[string]any
 	ProviderOptions map[string]any
 	CreatedBy       Actor
+	Subject         SubjectContext
 }
 
 type GetSessionRequest struct {
 	SessionID string
+	Subject   SubjectContext
 }
 
-type ListSessionsRequest struct{}
+type ListSessionsRequest struct {
+	Subject SubjectContext
+}
 
 type UpdateSessionRequest struct {
 	SessionID string
 	ClientRef string
 	State     SessionState
 	Metadata  map[string]any
+	Subject   SubjectContext
 }
 
 type Turn struct {
@@ -196,19 +219,24 @@ type CreateTurnRequest struct {
 	ProviderOptions map[string]any
 	CreatedBy       Actor
 	ExecutionRef    string
+	Subject         SubjectContext
+	ToolGrant       string
 }
 
 type GetTurnRequest struct {
-	TurnID string
+	TurnID  string
+	Subject SubjectContext
 }
 
 type ListTurnsRequest struct {
 	SessionID string
+	Subject   SubjectContext
 }
 
 type CancelTurnRequest struct {
-	TurnID string
-	Reason string
+	TurnID  string
+	Reason  string
+	Subject SubjectContext
 }
 
 type TurnEvent struct {
@@ -239,6 +267,7 @@ type ListTurnEventsRequest struct {
 	TurnID   string
 	AfterSeq int64
 	Limit    int
+	Subject  SubjectContext
 }
 
 type GetCapabilitiesRequest struct{}
@@ -256,15 +285,18 @@ type ProviderCapabilities struct {
 
 type GetInteractionRequest struct {
 	InteractionID string
+	Subject       SubjectContext
 }
 
 type ListInteractionsRequest struct {
-	TurnID string
+	TurnID  string
+	Subject SubjectContext
 }
 
 type ResolveInteractionRequest struct {
 	InteractionID string
 	Resolution    map[string]any
+	Subject       SubjectContext
 }
 
 type ExecuteToolRequest struct {
@@ -274,6 +306,7 @@ type ExecuteToolRequest struct {
 	ToolCallID   string
 	ToolID       string
 	Arguments    map[string]any
+	ToolGrant    string
 }
 
 type ExecuteToolResponse struct {
@@ -291,6 +324,7 @@ type SearchToolsRequest struct {
 	LoadRefs       []ToolRef
 	ToolRefs       []ToolRef
 	ToolSource     ToolSourceMode
+	ToolGrant      string
 }
 
 type SearchToolsResponse struct {
@@ -369,31 +403,6 @@ type ManagerListTurnsRequest struct {
 type ManagerCancelTurnRequest struct {
 	TurnID string
 	Reason string
-}
-
-type SessionReference struct {
-	ID                  string
-	ProviderName        string
-	SubjectID           string
-	CredentialSubjectID string
-	IdempotencyKey      string
-	CreatedAt           *time.Time
-	ArchivedAt          *time.Time
-}
-
-type ExecutionReference struct {
-	ID                  string
-	SessionID           string
-	ProviderName        string
-	SubjectID           string
-	CredentialSubjectID string
-	IdempotencyKey      string
-	Permissions         []core.AccessPermission
-	ToolRefs            []ToolRef
-	ToolSource          ToolSourceMode
-	Tools               []Tool
-	CreatedAt           *time.Time
-	RevokedAt           *time.Time
 }
 
 type Provider interface {

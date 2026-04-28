@@ -54,6 +54,7 @@ func (s *AgentHostServer) SearchTools(ctx context.Context, req *proto.SearchAgen
 		MaxResults:     int(req.GetMaxResults()),
 		CandidateLimit: int(req.GetCandidateLimit()),
 		LoadRefs:       agentToolRefsFromProto(req.GetLoadRefs()),
+		ToolGrant:      strings.TrimSpace(req.GetToolGrant()),
 	})
 	if err != nil {
 		return nil, status.Errorf(agentHostErrorCode(err), "agent search tools: %v", err)
@@ -100,6 +101,7 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 		ToolCallID:   strings.TrimSpace(req.GetToolCallId()),
 		ToolID:       toolID,
 		Arguments:    mapFromStruct(req.GetArguments()),
+		ToolGrant:    strings.TrimSpace(req.GetToolGrant()),
 	})
 	if err != nil {
 		return nil, status.Errorf(agentHostErrorCode(err), "agent execute tool: %v", err)

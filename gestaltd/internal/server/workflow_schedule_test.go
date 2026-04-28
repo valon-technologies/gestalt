@@ -840,9 +840,10 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 		})
 		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Providers: cfg.Providers,
-			Agent:     cfg.Agent,
-			Invoker:   cfg.Invoker,
+			Providers:  cfg.Providers,
+			Agent:      cfg.Agent,
+			Invoker:    cfg.Invoker,
+			ToolGrants: newServerTestAgentToolGrants(t),
 		})
 		cfg.Workflow = &stubWorkflowControl{
 			defaultProviderName: "basic",

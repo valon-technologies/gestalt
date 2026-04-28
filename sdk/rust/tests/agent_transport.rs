@@ -14,10 +14,10 @@ use gestalt::proto::v1::{
     AgentMessagePart, AgentMessagePartType, AgentSessionState, ConfigureProviderRequest,
     ProviderKind,
 };
-use gestalt::{AgentHost, AgentProvider, RuntimeMetadata};
+use gestalt::{AgentHost, AgentProvider, ENV_AGENT_HOST_SOCKET_TOKEN, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
-use tokio::net::{UnixListener, UnixStream};
-use tokio_stream::wrappers::UnixListenerStream;
+use tokio::net::{TcpListener, UnixListener, UnixStream};
+use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
@@ -28,7 +28,9 @@ struct TestAgentProvider {
 }
 
 #[derive(Default, Clone)]
-struct TestAgentHostService;
+struct TestAgentHostService {
+    relay_tokens: Arc<Mutex<Vec<String>>>,
+}
 
 #[gestalt::async_trait]
 impl AgentProvider for TestAgentProvider {
@@ -335,12 +337,6 @@ impl AgentHostRpc for TestAgentHostService {
                 id: format!("{}:{}:lookup", request.session_id, request.turn_id),
                 name: "lookup".to_string(),
                 description: request.query,
-                target: Some(pb::BoundAgentToolTarget {
-                    plugin: "search".to_string(),
-                    operation: "lookup".to_string(),
-                    credential_mode: "user".to_string(),
-                    ..Default::default()
-                }),
                 parameters_schema: Some(helpers::struct_from_json(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -352,10 +348,9 @@ impl AgentHostRpc for TestAgentHostService {
                 r#ref: Some(pb::AgentToolRef {
                     plugin: "search".to_string(),
                     operation: "lookup_more".to_string(),
-                    credential_mode: "user".to_string(),
                     ..Default::default()
                 }),
-                id: "search/lookup_more///user".to_string(),
+                id: "search/lookup_more".to_string(),
                 name: "lookup_more".to_string(),
                 description: "Lookup more records".to_string(),
                 parameters: vec!["query".to_string()],
@@ -369,6 +364,12 @@ impl AgentHostRpc for TestAgentHostService {
         &self,
         request: GrpcRequest<pb::ExecuteAgentToolRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ExecuteAgentToolResponse>, Status> {
+        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
+            self.relay_tokens
+                .lock()
+                .expect("lock relay tokens")
+                .push(token.to_str().expect("relay token ascii").to_string());
+        }
         let request = request.into_inner();
         Ok(GrpcResponse::new(pb::ExecuteAgentToolResponse {
             status: 207,
@@ -456,7 +457,9 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     );
 
     let listed_sessions = client
-        .list_sessions(pb::ListAgentProviderSessionsRequest {})
+        .list_sessions(pb::ListAgentProviderSessionsRequest {
+            ..Default::default()
+        })
         .await
         .expect("list sessions")
         .into_inner();
@@ -465,6 +468,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let fetched_session = client
         .get_session(pb::GetAgentProviderSessionRequest {
             session_id: "session-1".to_string(),
+            ..Default::default()
         })
         .await
         .expect("get session")
@@ -484,6 +488,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             metadata: Some(helpers::struct_from_json(serde_json::json!({
                 "source": "rust-test-updated"
             }))),
+            ..Default::default()
         })
         .await
         .expect("update session")
@@ -525,6 +530,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let listed_turns = client
         .list_turns(pb::ListAgentProviderTurnsRequest {
             session_id: "session-1".to_string(),
+            ..Default::default()
         })
         .await
         .expect("list turns")
@@ -534,6 +540,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let fetched_turn = client
         .get_turn(pb::GetAgentProviderTurnRequest {
             turn_id: "turn-1".to_string(),
+            ..Default::default()
         })
         .await
         .expect("get turn")
@@ -545,6 +552,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             after_seq: 0,
             limit: 10,
+            ..Default::default()
         })
         .await
         .expect("list turn events")
@@ -564,6 +572,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let listed_interactions = client
         .list_interactions(pb::ListAgentProviderInteractionsRequest {
             turn_id: "turn-1".to_string(),
+            ..Default::default()
         })
         .await
         .expect("list interactions")
@@ -573,6 +582,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let fetched_interaction = client
         .get_interaction(pb::GetAgentProviderInteractionRequest {
             interaction_id: "interaction-1".to_string(),
+            ..Default::default()
         })
         .await
         .expect("get interaction")
@@ -590,6 +600,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             resolution: Some(helpers::struct_from_json(serde_json::json!({
                 "approved": true
             }))),
+            ..Default::default()
         })
         .await
         .expect("resolve interaction")
@@ -630,7 +641,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let host_socket = helpers::temp_socket("gestalt-rust-agent-host.sock");
     let _agent_host_env =
         helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, host_socket.as_os_str());
-    let host_service = TestAgentHostService;
+    let host_service = TestAgentHostService::default();
 
     let host_socket_for_task = host_socket.clone();
     let host_task = tokio::spawn(async move {
@@ -655,30 +666,15 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             load_refs: vec![pb::AgentToolRef {
                 plugin: "search".to_string(),
                 operation: "lookup_more".to_string(),
-                credential_mode: "user".to_string(),
                 ..Default::default()
             }],
+            ..Default::default()
         })
         .await
         .expect("search tools");
     assert_eq!(searched.tools.len(), 1);
     assert_eq!(searched.tools[0].id, "session-1:turn-1:lookup");
-    assert_eq!(
-        searched.tools[0]
-            .target
-            .as_ref()
-            .expect("tool target")
-            .plugin,
-        "search"
-    );
-    assert_eq!(
-        searched.tools[0]
-            .target
-            .as_ref()
-            .expect("tool target")
-            .credential_mode,
-        "user"
-    );
+    assert_eq!(searched.tools[0].name, "lookup");
     assert!(searched.has_more);
     assert_eq!(searched.candidates.len(), 1);
     assert_eq!(
@@ -686,8 +682,8 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             .r#ref
             .as_ref()
             .expect("candidate ref")
-            .credential_mode,
-        "user"
+            .operation,
+        "lookup_more"
     );
 
     let invoked = host
@@ -699,11 +695,60 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             arguments: Some(helpers::struct_from_json(serde_json::json!({
                 "query": "Ada Lovelace"
             }))),
+            ..Default::default()
         })
         .await
         .expect("execute tool");
     assert_eq!(invoked.status, 207);
     assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
+
+    host_task.abort();
+    let _ = host_task.await;
+}
+
+#[tokio::test]
+async fn agent_host_client_round_trip_over_tcp_and_sends_relay_token() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind tcp listener");
+    let address = listener.local_addr().expect("local addr");
+    let _agent_host_env =
+        helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(ENV_AGENT_HOST_SOCKET_TOKEN, "relay-token-rust");
+
+    let host_service = TestAgentHostService::default();
+    let served_service = host_service.clone();
+    let host_task = tokio::spawn(async move {
+        Server::builder()
+            .add_service(AgentHostGrpcServer::new(served_service))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .expect("serve agent host");
+    });
+
+    let mut host = AgentHost::connect().await.expect("connect agent host");
+    let invoked = host
+        .execute_tool(pb::ExecuteAgentToolRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            tool_call_id: "call-7".to_string(),
+            tool_id: "lookup".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("execute tool");
+
+    assert_eq!(invoked.status, 207);
+    assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
+    assert_eq!(
+        host_service
+            .relay_tokens
+            .lock()
+            .expect("lock relay tokens")
+            .clone(),
+        vec!["relay-token-rust".to_string()]
+    );
 
     host_task.abort();
     let _ = host_task.await;

@@ -291,7 +291,7 @@ func TestTransport_CreateObjectStorePreservesColumns(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	err = client.CreateObjectStore(context.Background(), "agent_session_metadata", gestalt.ObjectStoreSchema{
+	err = client.CreateObjectStore(context.Background(), "session_records", gestalt.ObjectStoreSchema{
 		Indexes: []gestalt.IndexSchema{
 			{Name: "by_subject", KeyPath: []string{"subject_id"}},
 			{Name: "by_subject_session", KeyPath: []string{"subject_id", "session_id"}, Unique: true},
@@ -313,8 +313,8 @@ func TestTransport_CreateObjectStorePreservesColumns(t *testing.T) {
 		t.Fatalf("create object store requests len = %d, want 1", len(harness.requests))
 	}
 	req := harness.requests[0]
-	if req.GetName() != "agent_session_metadata" {
-		t.Fatalf("request name = %q, want agent_session_metadata", req.GetName())
+	if req.GetName() != "session_records" {
+		t.Fatalf("request name = %q, want session_records", req.GetName())
 	}
 	if len(req.GetSchema().GetIndexes()) != 2 {
 		t.Fatalf("index count = %d, want 2", len(req.GetSchema().GetIndexes()))

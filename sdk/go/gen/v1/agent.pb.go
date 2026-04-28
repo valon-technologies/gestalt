@@ -741,32 +741,31 @@ func (x *AgentActor) GetAuthSource() string {
 	return ""
 }
 
-type BoundAgentToolTarget struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Plugin         string                 `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	Operation      string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
-	Connection     string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
-	Instance       string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
-	CredentialMode string                 `protobuf:"bytes,5,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
-	System         string                 `protobuf:"bytes,6,opt,name=system,proto3" json:"system,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+type AgentSubjectContext struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	SubjectId           string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	SubjectKind         string                 `protobuf:"bytes,2,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
+	CredentialSubjectId string                 `protobuf:"bytes,3,opt,name=credential_subject_id,json=credentialSubjectId,proto3" json:"credential_subject_id,omitempty"`
+	DisplayName         string                 `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	AuthSource          string                 `protobuf:"bytes,5,opt,name=auth_source,json=authSource,proto3" json:"auth_source,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
-func (x *BoundAgentToolTarget) Reset() {
-	*x = BoundAgentToolTarget{}
+func (x *AgentSubjectContext) Reset() {
+	*x = AgentSubjectContext{}
 	mi := &file_v1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BoundAgentToolTarget) String() string {
+func (x *AgentSubjectContext) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BoundAgentToolTarget) ProtoMessage() {}
+func (*AgentSubjectContext) ProtoMessage() {}
 
-func (x *BoundAgentToolTarget) ProtoReflect() protoreflect.Message {
+func (x *AgentSubjectContext) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -778,49 +777,42 @@ func (x *BoundAgentToolTarget) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BoundAgentToolTarget.ProtoReflect.Descriptor instead.
-func (*BoundAgentToolTarget) Descriptor() ([]byte, []int) {
+// Deprecated: Use AgentSubjectContext.ProtoReflect.Descriptor instead.
+func (*AgentSubjectContext) Descriptor() ([]byte, []int) {
 	return file_v1_agent_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *BoundAgentToolTarget) GetPlugin() string {
+func (x *AgentSubjectContext) GetSubjectId() string {
 	if x != nil {
-		return x.Plugin
+		return x.SubjectId
 	}
 	return ""
 }
 
-func (x *BoundAgentToolTarget) GetOperation() string {
+func (x *AgentSubjectContext) GetSubjectKind() string {
 	if x != nil {
-		return x.Operation
+		return x.SubjectKind
 	}
 	return ""
 }
 
-func (x *BoundAgentToolTarget) GetConnection() string {
+func (x *AgentSubjectContext) GetCredentialSubjectId() string {
 	if x != nil {
-		return x.Connection
+		return x.CredentialSubjectId
 	}
 	return ""
 }
 
-func (x *BoundAgentToolTarget) GetInstance() string {
+func (x *AgentSubjectContext) GetDisplayName() string {
 	if x != nil {
-		return x.Instance
+		return x.DisplayName
 	}
 	return ""
 }
 
-func (x *BoundAgentToolTarget) GetCredentialMode() string {
+func (x *AgentSubjectContext) GetAuthSource() string {
 	if x != nil {
-		return x.CredentialMode
-	}
-	return ""
-}
-
-func (x *BoundAgentToolTarget) GetSystem() string {
-	if x != nil {
-		return x.System
+		return x.AuthSource
 	}
 	return ""
 }
@@ -830,7 +822,6 @@ type ResolvedAgentTool struct {
 	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name             string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Description      string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Target           *BoundAgentToolTarget  `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	ParametersSchema *structpb.Struct       `protobuf:"bytes,5,opt,name=parameters_schema,json=parametersSchema,proto3" json:"parameters_schema,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -887,13 +878,6 @@ func (x *ResolvedAgentTool) GetDescription() string {
 	return ""
 }
 
-func (x *ResolvedAgentTool) GetTarget() *BoundAgentToolTarget {
-	if x != nil {
-		return x.Target
-	}
-	return nil
-}
-
 func (x *ResolvedAgentTool) GetParametersSchema() *structpb.Struct {
 	if x != nil {
 		return x.ParametersSchema
@@ -902,17 +886,16 @@ func (x *ResolvedAgentTool) GetParametersSchema() *structpb.Struct {
 }
 
 type AgentToolRef struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Plugin         string                 `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	Operation      string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
-	Connection     string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
-	Instance       string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
-	Title          string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
-	Description    string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
-	CredentialMode string                 `protobuf:"bytes,7,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
-	System         string                 `protobuf:"bytes,8,opt,name=system,proto3" json:"system,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plugin        string                 `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Connection    string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
+	Instance      string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
+	Title         string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	System        string                 `protobuf:"bytes,8,opt,name=system,proto3" json:"system,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentToolRef) Reset() {
@@ -983,13 +966,6 @@ func (x *AgentToolRef) GetTitle() string {
 func (x *AgentToolRef) GetDescription() string {
 	if x != nil {
 		return x.Description
-	}
-	return ""
-}
-
-func (x *AgentToolRef) GetCredentialMode() string {
-	if x != nil {
-		return x.CredentialMode
 	}
 	return ""
 }
@@ -1470,6 +1446,7 @@ type CreateAgentProviderSessionRequest struct {
 	Metadata        *structpb.Struct       `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	ProviderOptions *structpb.Struct       `protobuf:"bytes,6,opt,name=provider_options,json=providerOptions,proto3" json:"provider_options,omitempty"`
 	CreatedBy       *AgentActor            `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	Subject         *AgentSubjectContext   `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1553,9 +1530,17 @@ func (x *CreateAgentProviderSessionRequest) GetCreatedBy() *AgentActor {
 	return nil
 }
 
+func (x *CreateAgentProviderSessionRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type GetAgentProviderSessionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1597,8 +1582,16 @@ func (x *GetAgentProviderSessionRequest) GetSessionId() string {
 	return ""
 }
 
+func (x *GetAgentProviderSessionRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type ListAgentProviderSessionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1631,6 +1624,13 @@ func (x *ListAgentProviderSessionsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListAgentProviderSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentProviderSessionsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListAgentProviderSessionsRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
 }
 
 type ListAgentProviderSessionsResponse struct {
@@ -1683,6 +1683,7 @@ type UpdateAgentProviderSessionRequest struct {
 	ClientRef     string                 `protobuf:"bytes,2,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
 	State         AgentSessionState      `protobuf:"varint,3,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
 	Metadata      *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1741,6 +1742,13 @@ func (x *UpdateAgentProviderSessionRequest) GetState() AgentSessionState {
 func (x *UpdateAgentProviderSessionRequest) GetMetadata() *structpb.Struct {
 	if x != nil {
 		return x.Metadata
+	}
+	return nil
+}
+
+func (x *UpdateAgentProviderSessionRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
 	}
 	return nil
 }
@@ -2016,6 +2024,8 @@ type CreateAgentProviderTurnRequest struct {
 	ExecutionRef    string                 `protobuf:"bytes,11,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	ToolRefs        []*AgentToolRef        `protobuf:"bytes,12,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
 	ToolSource      AgentToolSourceMode    `protobuf:"varint,13,opt,name=tool_source,json=toolSource,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"tool_source,omitempty"`
+	Subject         *AgentSubjectContext   `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
+	ToolGrant       string                 `protobuf:"bytes,15,opt,name=tool_grant,json=toolGrant,proto3" json:"tool_grant,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2141,9 +2151,24 @@ func (x *CreateAgentProviderTurnRequest) GetToolSource() AgentToolSourceMode {
 	return AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 }
 
+func (x *CreateAgentProviderTurnRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
+func (x *CreateAgentProviderTurnRequest) GetToolGrant() string {
+	if x != nil {
+		return x.ToolGrant
+	}
+	return ""
+}
+
 type GetAgentProviderTurnRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2185,9 +2210,17 @@ func (x *GetAgentProviderTurnRequest) GetTurnId() string {
 	return ""
 }
 
+func (x *GetAgentProviderTurnRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type ListAgentProviderTurnsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2227,6 +2260,13 @@ func (x *ListAgentProviderTurnsRequest) GetSessionId() string {
 		return x.SessionId
 	}
 	return ""
+}
+
+func (x *ListAgentProviderTurnsRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
 }
 
 type ListAgentProviderTurnsResponse struct {
@@ -2277,6 +2317,7 @@ type CancelAgentProviderTurnRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2323,6 +2364,13 @@ func (x *CancelAgentProviderTurnRequest) GetReason() string {
 		return x.Reason
 	}
 	return ""
+}
+
+func (x *CancelAgentProviderTurnRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
 }
 
 type AgentTurnEvent struct {
@@ -2438,6 +2486,7 @@ type ListAgentProviderTurnEventsRequest struct {
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
 	AfterSeq      int64                  `protobuf:"varint,2,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2493,6 +2542,13 @@ func (x *ListAgentProviderTurnEventsRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *ListAgentProviderTurnEventsRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type ListAgentProviderTurnEventsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Events        []*AgentTurnEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
@@ -2540,6 +2596,7 @@ func (x *ListAgentProviderTurnEventsResponse) GetEvents() []*AgentTurnEvent {
 type GetAgentProviderInteractionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InteractionId string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2581,9 +2638,17 @@ func (x *GetAgentProviderInteractionRequest) GetInteractionId() string {
 	return ""
 }
 
+func (x *GetAgentProviderInteractionRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type ListAgentProviderInteractionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2623,6 +2688,13 @@ func (x *ListAgentProviderInteractionsRequest) GetTurnId() string {
 		return x.TurnId
 	}
 	return ""
+}
+
+func (x *ListAgentProviderInteractionsRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
 }
 
 type ListAgentProviderInteractionsResponse struct {
@@ -2673,6 +2745,7 @@ type ResolveAgentProviderInteractionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	InteractionId string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
 	Resolution    *structpb.Struct       `protobuf:"bytes,2,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	Subject       *AgentSubjectContext   `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2721,6 +2794,13 @@ func (x *ResolveAgentProviderInteractionRequest) GetResolution() *structpb.Struc
 	return nil
 }
 
+func (x *ResolveAgentProviderInteractionRequest) GetSubject() *AgentSubjectContext {
+	if x != nil {
+		return x.Subject
+	}
+	return nil
+}
+
 type ExecuteAgentToolRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -2728,6 +2808,7 @@ type ExecuteAgentToolRequest struct {
 	ToolCallId    string                 `protobuf:"bytes,3,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	ToolId        string                 `protobuf:"bytes,4,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
 	Arguments     *structpb.Struct       `protobuf:"bytes,5,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	ToolGrant     string                 `protobuf:"bytes,6,opt,name=tool_grant,json=toolGrant,proto3" json:"tool_grant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2797,6 +2878,13 @@ func (x *ExecuteAgentToolRequest) GetArguments() *structpb.Struct {
 	return nil
 }
 
+func (x *ExecuteAgentToolRequest) GetToolGrant() string {
+	if x != nil {
+		return x.ToolGrant
+	}
+	return ""
+}
+
 type ExecuteAgentToolResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        int32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
@@ -2857,6 +2945,7 @@ type SearchAgentToolsRequest struct {
 	MaxResults     int32                  `protobuf:"varint,4,opt,name=max_results,json=maxResults,proto3" json:"max_results,omitempty"`
 	CandidateLimit int32                  `protobuf:"varint,5,opt,name=candidate_limit,json=candidateLimit,proto3" json:"candidate_limit,omitempty"`
 	LoadRefs       []*AgentToolRef        `protobuf:"bytes,6,rep,name=load_refs,json=loadRefs,proto3" json:"load_refs,omitempty"`
+	ToolGrant      string                 `protobuf:"bytes,7,opt,name=tool_grant,json=toolGrant,proto3" json:"tool_grant,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2931,6 +3020,13 @@ func (x *SearchAgentToolsRequest) GetLoadRefs() []*AgentToolRef {
 		return x.LoadRefs
 	}
 	return nil
+}
+
+func (x *SearchAgentToolsRequest) GetToolGrant() string {
+	if x != nil {
+		return x.ToolGrant
+	}
+	return ""
 }
 
 type SearchAgentToolsResponse struct {
@@ -3947,22 +4043,20 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\fsubject_kind\x18\x02 \x01(\tR\vsubjectKind\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vauth_source\x18\x04 \x01(\tR\n" +
-	"authSource\"\xc9\x01\n" +
-	"\x14BoundAgentToolTarget\x12\x16\n" +
-	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1c\n" +
-	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
+	"authSource\"\xcf\x01\n" +
+	"\x13AgentSubjectContext\x12\x1d\n" +
 	"\n" +
-	"connection\x18\x03 \x01(\tR\n" +
-	"connection\x12\x1a\n" +
-	"\binstance\x18\x04 \x01(\tR\binstance\x12'\n" +
-	"\x0fcredential_mode\x18\x05 \x01(\tR\x0ecredentialMode\x12\x16\n" +
-	"\x06system\x18\x06 \x01(\tR\x06system\"\xe2\x01\n" +
+	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12!\n" +
+	"\fsubject_kind\x18\x02 \x01(\tR\vsubjectKind\x122\n" +
+	"\x15credential_subject_id\x18\x03 \x01(\tR\x13credentialSubjectId\x12!\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\x12\x1f\n" +
+	"\vauth_source\x18\x05 \x01(\tR\n" +
+	"authSource\"\xad\x01\n" +
 	"\x11ResolvedAgentTool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12A\n" +
-	"\x06target\x18\x04 \x01(\v2).gestalt.provider.v1.BoundAgentToolTargetR\x06target\x12D\n" +
-	"\x11parameters_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x10parametersSchema\"\xf9\x01\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12D\n" +
+	"\x11parameters_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x10parametersSchemaJ\x04\b\x04\x10\x05R\x06target\"\xe7\x01\n" +
 	"\fAgentToolRef\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
@@ -3971,9 +4065,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\x12'\n" +
-	"\x0fcredential_mode\x18\a \x01(\tR\x0ecredentialMode\x12\x16\n" +
-	"\x06system\x18\b \x01(\tR\x06system\"\xc5\x01\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06system\x18\b \x01(\tR\x06systemJ\x04\b\a\x10\bR\x0fcredential_mode\"\xc5\x01\n" +
 	"\x12AgentToolCandidate\x123\n" +
 	"\x03ref\x18\x01 \x01(\v2!.gestalt.provider.v1.AgentToolRefR\x03ref\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
@@ -4028,7 +4121,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12<\n" +
 	"\flast_turn_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastTurnAt\"\xd9\x02\n" +
+	"lastTurnAt\"\x9d\x03\n" +
 	"!CreateAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
@@ -4039,20 +4132,24 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12B\n" +
 	"\x10provider_options\x18\x06 \x01(\v2\x17.google.protobuf.StructR\x0fproviderOptions\x12>\n" +
 	"\n" +
-	"created_by\x18\a \x01(\v2\x1f.gestalt.provider.v1.AgentActorR\tcreatedBy\"?\n" +
+	"created_by\x18\a \x01(\v2\x1f.gestalt.provider.v1.AgentActorR\tcreatedBy\x12B\n" +
+	"\asubject\x18\b \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\x83\x01\n" +
 	"\x1eGetAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\"\n" +
-	" ListAgentProviderSessionsRequest\"b\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12B\n" +
+	"\asubject\x18\x02 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"f\n" +
+	" ListAgentProviderSessionsRequest\x12B\n" +
+	"\asubject\x18\x01 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"b\n" +
 	"!ListAgentProviderSessionsResponse\x12=\n" +
-	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\xd4\x01\n" +
+	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\x98\x02\n" +
 	"!UpdateAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
 	"\n" +
 	"client_ref\x18\x02 \x01(\tR\tclientRef\x12<\n" +
 	"\x05state\x18\x03 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x123\n" +
-	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x9f\x05\n" +
+	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12B\n" +
+	"\asubject\x18\x05 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\x9f\x05\n" +
 	"\tAgentTurn\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4084,7 +4181,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"parent_ref\x18\x06 \x01(\tR\tparentRef\x12,\n" +
 	"\x05input\x18\a \x01(\v2\x16.google.protobuf.ValueR\x05input\x12.\n" +
 	"\x06output\x18\b \x01(\v2\x16.google.protobuf.ValueR\x06output\x12,\n" +
-	"\x05error\x18\t \x01(\v2\x16.google.protobuf.ValueR\x05error\"\xbf\x05\n" +
+	"\x05error\x18\t \x01(\v2\x16.google.protobuf.ValueR\x05error\"\xa2\x06\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +
@@ -4102,17 +4199,23 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\rexecution_ref\x18\v \x01(\tR\fexecutionRef\x12>\n" +
 	"\ttool_refs\x18\f \x03(\v2!.gestalt.provider.v1.AgentToolRefR\btoolRefs\x12I\n" +
 	"\vtool_source\x18\r \x01(\x0e2(.gestalt.provider.v1.AgentToolSourceModeR\n" +
-	"toolSource\"6\n" +
+	"toolSource\x12B\n" +
+	"\asubject\x18\x0e \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\x12\x1d\n" +
+	"\n" +
+	"tool_grant\x18\x0f \x01(\tR\ttoolGrant\"z\n" +
 	"\x1bGetAgentProviderTurnRequest\x12\x17\n" +
-	"\aturn_id\x18\x01 \x01(\tR\x06turnId\">\n" +
+	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12B\n" +
+	"\asubject\x18\x02 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\x82\x01\n" +
 	"\x1dListAgentProviderTurnsRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"V\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12B\n" +
+	"\asubject\x18\x02 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"V\n" +
 	"\x1eListAgentProviderTurnsResponse\x124\n" +
-	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"Q\n" +
+	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\x95\x01\n" +
 	"\x1eCancelAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xc0\x02\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x12B\n" +
+	"\asubject\x18\x03 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\xc0\x02\n" +
 	"\x0eAgentTurnEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12\x10\n" +
@@ -4125,24 +4228,28 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x04data\x18\a \x01(\v2\x17.google.protobuf.StructR\x04data\x129\n" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12?\n" +
-	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"p\n" +
+	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"\xb4\x01\n" +
 	"\"ListAgentProviderTurnEventsRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1b\n" +
 	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"b\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12B\n" +
+	"\asubject\x18\x04 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"b\n" +
 	"#ListAgentProviderTurnEventsResponse\x12;\n" +
-	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"K\n" +
+	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"\x8f\x01\n" +
 	"\"GetAgentProviderInteractionRequest\x12%\n" +
-	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\"?\n" +
+	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x12B\n" +
+	"\asubject\x18\x02 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\x83\x01\n" +
 	"$ListAgentProviderInteractionsRequest\x12\x17\n" +
-	"\aturn_id\x18\x01 \x01(\tR\x06turnId\"r\n" +
+	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12B\n" +
+	"\asubject\x18\x02 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"r\n" +
 	"%ListAgentProviderInteractionsResponse\x12I\n" +
-	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\x88\x01\n" +
+	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\xcc\x01\n" +
 	"&ResolveAgentProviderInteractionRequest\x12%\n" +
 	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x127\n" +
 	"\n" +
 	"resolution\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
-	"resolution\"\xc3\x01\n" +
+	"resolution\x12B\n" +
+	"\asubject\x18\x03 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\xe2\x01\n" +
 	"\x17ExecuteAgentToolRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -4150,10 +4257,12 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\ftool_call_id\x18\x03 \x01(\tR\n" +
 	"toolCallId\x12\x17\n" +
 	"\atool_id\x18\x04 \x01(\tR\x06toolId\x125\n" +
-	"\targuments\x18\x05 \x01(\v2\x17.google.protobuf.StructR\targuments\"F\n" +
+	"\targuments\x18\x05 \x01(\v2\x17.google.protobuf.StructR\targuments\x12\x1d\n" +
+	"\n" +
+	"tool_grant\x18\x06 \x01(\tR\ttoolGrant\"F\n" +
 	"\x18ExecuteAgentToolResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\"\xf1\x01\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\"\x90\x02\n" +
 	"\x17SearchAgentToolsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -4162,7 +4271,9 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\vmax_results\x18\x04 \x01(\x05R\n" +
 	"maxResults\x12'\n" +
 	"\x0fcandidate_limit\x18\x05 \x01(\x05R\x0ecandidateLimit\x12>\n" +
-	"\tload_refs\x18\x06 \x03(\v2!.gestalt.provider.v1.AgentToolRefR\bloadRefs\"\xbc\x01\n" +
+	"\tload_refs\x18\x06 \x03(\v2!.gestalt.provider.v1.AgentToolRefR\bloadRefs\x12\x1d\n" +
+	"\n" +
+	"tool_grant\x18\a \x01(\tR\ttoolGrant\"\xbc\x01\n" +
 	"\x18SearchAgentToolsResponse\x12<\n" +
 	"\x05tools\x18\x01 \x03(\v2&.gestalt.provider.v1.ResolvedAgentToolR\x05tools\x12G\n" +
 	"\n" +
@@ -4338,7 +4449,7 @@ var file_v1_agent_proto_goTypes = []any{
 	(*AgentMessagePartImageRef)(nil),               // 9: gestalt.provider.v1.AgentMessagePartImageRef
 	(*AgentMessagePart)(nil),                       // 10: gestalt.provider.v1.AgentMessagePart
 	(*AgentActor)(nil),                             // 11: gestalt.provider.v1.AgentActor
-	(*BoundAgentToolTarget)(nil),                   // 12: gestalt.provider.v1.BoundAgentToolTarget
+	(*AgentSubjectContext)(nil),                    // 12: gestalt.provider.v1.AgentSubjectContext
 	(*ResolvedAgentTool)(nil),                      // 13: gestalt.provider.v1.ResolvedAgentTool
 	(*AgentToolRef)(nil),                           // 14: gestalt.provider.v1.AgentToolRef
 	(*AgentToolCandidate)(nil),                     // 15: gestalt.provider.v1.AgentToolCandidate
@@ -4398,128 +4509,139 @@ var file_v1_agent_proto_depIdxs = []int32{
 	7,   // 6: gestalt.provider.v1.AgentMessagePart.tool_call:type_name -> gestalt.provider.v1.AgentMessagePartToolCall
 	8,   // 7: gestalt.provider.v1.AgentMessagePart.tool_result:type_name -> gestalt.provider.v1.AgentMessagePartToolResult
 	9,   // 8: gestalt.provider.v1.AgentMessagePart.image_ref:type_name -> gestalt.provider.v1.AgentMessagePartImageRef
-	12,  // 9: gestalt.provider.v1.ResolvedAgentTool.target:type_name -> gestalt.provider.v1.BoundAgentToolTarget
-	58,  // 10: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
-	14,  // 11: gestalt.provider.v1.AgentToolCandidate.ref:type_name -> gestalt.provider.v1.AgentToolRef
-	4,   // 12: gestalt.provider.v1.AgentInteraction.type:type_name -> gestalt.provider.v1.AgentInteractionType
-	5,   // 13: gestalt.provider.v1.AgentInteraction.state:type_name -> gestalt.provider.v1.AgentInteractionState
-	58,  // 14: gestalt.provider.v1.AgentInteraction.request:type_name -> google.protobuf.Struct
-	58,  // 15: gestalt.provider.v1.AgentInteraction.resolution:type_name -> google.protobuf.Struct
-	59,  // 16: gestalt.provider.v1.AgentInteraction.created_at:type_name -> google.protobuf.Timestamp
-	59,  // 17: gestalt.provider.v1.AgentInteraction.resolved_at:type_name -> google.protobuf.Timestamp
-	3,   // 18: gestalt.provider.v1.AgentSession.state:type_name -> gestalt.provider.v1.AgentSessionState
-	58,  // 19: gestalt.provider.v1.AgentSession.metadata:type_name -> google.protobuf.Struct
-	11,  // 20: gestalt.provider.v1.AgentSession.created_by:type_name -> gestalt.provider.v1.AgentActor
-	59,  // 21: gestalt.provider.v1.AgentSession.created_at:type_name -> google.protobuf.Timestamp
-	59,  // 22: gestalt.provider.v1.AgentSession.updated_at:type_name -> google.protobuf.Timestamp
-	59,  // 23: gestalt.provider.v1.AgentSession.last_turn_at:type_name -> google.protobuf.Timestamp
-	58,  // 24: gestalt.provider.v1.CreateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
-	58,  // 25: gestalt.provider.v1.CreateAgentProviderSessionRequest.provider_options:type_name -> google.protobuf.Struct
-	11,  // 26: gestalt.provider.v1.CreateAgentProviderSessionRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
-	19,  // 27: gestalt.provider.v1.ListAgentProviderSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
-	3,   // 28: gestalt.provider.v1.UpdateAgentProviderSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	58,  // 29: gestalt.provider.v1.UpdateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
-	2,   // 30: gestalt.provider.v1.AgentTurn.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
-	6,   // 31: gestalt.provider.v1.AgentTurn.messages:type_name -> gestalt.provider.v1.AgentMessage
-	58,  // 32: gestalt.provider.v1.AgentTurn.structured_output:type_name -> google.protobuf.Struct
-	11,  // 33: gestalt.provider.v1.AgentTurn.created_by:type_name -> gestalt.provider.v1.AgentActor
-	59,  // 34: gestalt.provider.v1.AgentTurn.created_at:type_name -> google.protobuf.Timestamp
-	59,  // 35: gestalt.provider.v1.AgentTurn.started_at:type_name -> google.protobuf.Timestamp
-	59,  // 36: gestalt.provider.v1.AgentTurn.completed_at:type_name -> google.protobuf.Timestamp
-	60,  // 37: gestalt.provider.v1.AgentTurnDisplay.input:type_name -> google.protobuf.Value
-	60,  // 38: gestalt.provider.v1.AgentTurnDisplay.output:type_name -> google.protobuf.Value
-	60,  // 39: gestalt.provider.v1.AgentTurnDisplay.error:type_name -> google.protobuf.Value
-	6,   // 40: gestalt.provider.v1.CreateAgentProviderTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	13,  // 41: gestalt.provider.v1.CreateAgentProviderTurnRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
-	58,  // 42: gestalt.provider.v1.CreateAgentProviderTurnRequest.response_schema:type_name -> google.protobuf.Struct
-	58,  // 43: gestalt.provider.v1.CreateAgentProviderTurnRequest.metadata:type_name -> google.protobuf.Struct
-	58,  // 44: gestalt.provider.v1.CreateAgentProviderTurnRequest.provider_options:type_name -> google.protobuf.Struct
-	11,  // 45: gestalt.provider.v1.CreateAgentProviderTurnRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
-	14,  // 46: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	1,   // 47: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	25,  // 48: gestalt.provider.v1.ListAgentProviderTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
-	58,  // 49: gestalt.provider.v1.AgentTurnEvent.data:type_name -> google.protobuf.Struct
-	59,  // 50: gestalt.provider.v1.AgentTurnEvent.created_at:type_name -> google.protobuf.Timestamp
-	26,  // 51: gestalt.provider.v1.AgentTurnEvent.display:type_name -> gestalt.provider.v1.AgentTurnDisplay
-	32,  // 52: gestalt.provider.v1.ListAgentProviderTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
-	18,  // 53: gestalt.provider.v1.ListAgentProviderInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
-	58,  // 54: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.resolution:type_name -> google.protobuf.Struct
-	58,  // 55: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
-	14,  // 56: gestalt.provider.v1.SearchAgentToolsRequest.load_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	13,  // 57: gestalt.provider.v1.SearchAgentToolsResponse.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
-	15,  // 58: gestalt.provider.v1.SearchAgentToolsResponse.candidates:type_name -> gestalt.provider.v1.AgentToolCandidate
-	58,  // 59: gestalt.provider.v1.AgentManagerCreateSessionRequest.metadata:type_name -> google.protobuf.Struct
-	58,  // 60: gestalt.provider.v1.AgentManagerCreateSessionRequest.provider_options:type_name -> google.protobuf.Struct
-	19,  // 61: gestalt.provider.v1.AgentManagerListSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
-	3,   // 62: gestalt.provider.v1.AgentManagerUpdateSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	58,  // 63: gestalt.provider.v1.AgentManagerUpdateSessionRequest.metadata:type_name -> google.protobuf.Struct
-	6,   // 64: gestalt.provider.v1.AgentManagerCreateTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	14,  // 65: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	1,   // 66: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	58,  // 67: gestalt.provider.v1.AgentManagerCreateTurnRequest.response_schema:type_name -> google.protobuf.Struct
-	58,  // 68: gestalt.provider.v1.AgentManagerCreateTurnRequest.metadata:type_name -> google.protobuf.Struct
-	58,  // 69: gestalt.provider.v1.AgentManagerCreateTurnRequest.provider_options:type_name -> google.protobuf.Struct
-	25,  // 70: gestalt.provider.v1.AgentManagerListTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
-	32,  // 71: gestalt.provider.v1.AgentManagerListTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
-	18,  // 72: gestalt.provider.v1.AgentManagerListInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
-	58,  // 73: gestalt.provider.v1.AgentManagerResolveInteractionRequest.resolution:type_name -> google.protobuf.Struct
-	20,  // 74: gestalt.provider.v1.AgentProvider.CreateSession:input_type -> gestalt.provider.v1.CreateAgentProviderSessionRequest
-	21,  // 75: gestalt.provider.v1.AgentProvider.GetSession:input_type -> gestalt.provider.v1.GetAgentProviderSessionRequest
-	22,  // 76: gestalt.provider.v1.AgentProvider.ListSessions:input_type -> gestalt.provider.v1.ListAgentProviderSessionsRequest
-	24,  // 77: gestalt.provider.v1.AgentProvider.UpdateSession:input_type -> gestalt.provider.v1.UpdateAgentProviderSessionRequest
-	27,  // 78: gestalt.provider.v1.AgentProvider.CreateTurn:input_type -> gestalt.provider.v1.CreateAgentProviderTurnRequest
-	28,  // 79: gestalt.provider.v1.AgentProvider.GetTurn:input_type -> gestalt.provider.v1.GetAgentProviderTurnRequest
-	29,  // 80: gestalt.provider.v1.AgentProvider.ListTurns:input_type -> gestalt.provider.v1.ListAgentProviderTurnsRequest
-	31,  // 81: gestalt.provider.v1.AgentProvider.CancelTurn:input_type -> gestalt.provider.v1.CancelAgentProviderTurnRequest
-	33,  // 82: gestalt.provider.v1.AgentProvider.ListTurnEvents:input_type -> gestalt.provider.v1.ListAgentProviderTurnEventsRequest
-	35,  // 83: gestalt.provider.v1.AgentProvider.GetInteraction:input_type -> gestalt.provider.v1.GetAgentProviderInteractionRequest
-	36,  // 84: gestalt.provider.v1.AgentProvider.ListInteractions:input_type -> gestalt.provider.v1.ListAgentProviderInteractionsRequest
-	38,  // 85: gestalt.provider.v1.AgentProvider.ResolveInteraction:input_type -> gestalt.provider.v1.ResolveAgentProviderInteractionRequest
-	17,  // 86: gestalt.provider.v1.AgentProvider.GetCapabilities:input_type -> gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
-	41,  // 87: gestalt.provider.v1.AgentHost.SearchTools:input_type -> gestalt.provider.v1.SearchAgentToolsRequest
-	39,  // 88: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
-	43,  // 89: gestalt.provider.v1.AgentManagerHost.CreateSession:input_type -> gestalt.provider.v1.AgentManagerCreateSessionRequest
-	44,  // 90: gestalt.provider.v1.AgentManagerHost.GetSession:input_type -> gestalt.provider.v1.AgentManagerGetSessionRequest
-	45,  // 91: gestalt.provider.v1.AgentManagerHost.ListSessions:input_type -> gestalt.provider.v1.AgentManagerListSessionsRequest
-	47,  // 92: gestalt.provider.v1.AgentManagerHost.UpdateSession:input_type -> gestalt.provider.v1.AgentManagerUpdateSessionRequest
-	48,  // 93: gestalt.provider.v1.AgentManagerHost.CreateTurn:input_type -> gestalt.provider.v1.AgentManagerCreateTurnRequest
-	49,  // 94: gestalt.provider.v1.AgentManagerHost.GetTurn:input_type -> gestalt.provider.v1.AgentManagerGetTurnRequest
-	50,  // 95: gestalt.provider.v1.AgentManagerHost.ListTurns:input_type -> gestalt.provider.v1.AgentManagerListTurnsRequest
-	52,  // 96: gestalt.provider.v1.AgentManagerHost.CancelTurn:input_type -> gestalt.provider.v1.AgentManagerCancelTurnRequest
-	53,  // 97: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:input_type -> gestalt.provider.v1.AgentManagerListTurnEventsRequest
-	55,  // 98: gestalt.provider.v1.AgentManagerHost.ListInteractions:input_type -> gestalt.provider.v1.AgentManagerListInteractionsRequest
-	57,  // 99: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:input_type -> gestalt.provider.v1.AgentManagerResolveInteractionRequest
-	19,  // 100: gestalt.provider.v1.AgentProvider.CreateSession:output_type -> gestalt.provider.v1.AgentSession
-	19,  // 101: gestalt.provider.v1.AgentProvider.GetSession:output_type -> gestalt.provider.v1.AgentSession
-	23,  // 102: gestalt.provider.v1.AgentProvider.ListSessions:output_type -> gestalt.provider.v1.ListAgentProviderSessionsResponse
-	19,  // 103: gestalt.provider.v1.AgentProvider.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
-	25,  // 104: gestalt.provider.v1.AgentProvider.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
-	25,  // 105: gestalt.provider.v1.AgentProvider.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
-	30,  // 106: gestalt.provider.v1.AgentProvider.ListTurns:output_type -> gestalt.provider.v1.ListAgentProviderTurnsResponse
-	25,  // 107: gestalt.provider.v1.AgentProvider.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
-	34,  // 108: gestalt.provider.v1.AgentProvider.ListTurnEvents:output_type -> gestalt.provider.v1.ListAgentProviderTurnEventsResponse
-	18,  // 109: gestalt.provider.v1.AgentProvider.GetInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	37,  // 110: gestalt.provider.v1.AgentProvider.ListInteractions:output_type -> gestalt.provider.v1.ListAgentProviderInteractionsResponse
-	18,  // 111: gestalt.provider.v1.AgentProvider.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	16,  // 112: gestalt.provider.v1.AgentProvider.GetCapabilities:output_type -> gestalt.provider.v1.AgentProviderCapabilities
-	42,  // 113: gestalt.provider.v1.AgentHost.SearchTools:output_type -> gestalt.provider.v1.SearchAgentToolsResponse
-	40,  // 114: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
-	19,  // 115: gestalt.provider.v1.AgentManagerHost.CreateSession:output_type -> gestalt.provider.v1.AgentSession
-	19,  // 116: gestalt.provider.v1.AgentManagerHost.GetSession:output_type -> gestalt.provider.v1.AgentSession
-	46,  // 117: gestalt.provider.v1.AgentManagerHost.ListSessions:output_type -> gestalt.provider.v1.AgentManagerListSessionsResponse
-	19,  // 118: gestalt.provider.v1.AgentManagerHost.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
-	25,  // 119: gestalt.provider.v1.AgentManagerHost.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
-	25,  // 120: gestalt.provider.v1.AgentManagerHost.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
-	51,  // 121: gestalt.provider.v1.AgentManagerHost.ListTurns:output_type -> gestalt.provider.v1.AgentManagerListTurnsResponse
-	25,  // 122: gestalt.provider.v1.AgentManagerHost.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
-	54,  // 123: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:output_type -> gestalt.provider.v1.AgentManagerListTurnEventsResponse
-	56,  // 124: gestalt.provider.v1.AgentManagerHost.ListInteractions:output_type -> gestalt.provider.v1.AgentManagerListInteractionsResponse
-	18,  // 125: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	100, // [100:126] is the sub-list for method output_type
-	74,  // [74:100] is the sub-list for method input_type
-	74,  // [74:74] is the sub-list for extension type_name
-	74,  // [74:74] is the sub-list for extension extendee
-	0,   // [0:74] is the sub-list for field type_name
+	58,  // 9: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
+	14,  // 10: gestalt.provider.v1.AgentToolCandidate.ref:type_name -> gestalt.provider.v1.AgentToolRef
+	4,   // 11: gestalt.provider.v1.AgentInteraction.type:type_name -> gestalt.provider.v1.AgentInteractionType
+	5,   // 12: gestalt.provider.v1.AgentInteraction.state:type_name -> gestalt.provider.v1.AgentInteractionState
+	58,  // 13: gestalt.provider.v1.AgentInteraction.request:type_name -> google.protobuf.Struct
+	58,  // 14: gestalt.provider.v1.AgentInteraction.resolution:type_name -> google.protobuf.Struct
+	59,  // 15: gestalt.provider.v1.AgentInteraction.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 16: gestalt.provider.v1.AgentInteraction.resolved_at:type_name -> google.protobuf.Timestamp
+	3,   // 17: gestalt.provider.v1.AgentSession.state:type_name -> gestalt.provider.v1.AgentSessionState
+	58,  // 18: gestalt.provider.v1.AgentSession.metadata:type_name -> google.protobuf.Struct
+	11,  // 19: gestalt.provider.v1.AgentSession.created_by:type_name -> gestalt.provider.v1.AgentActor
+	59,  // 20: gestalt.provider.v1.AgentSession.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 21: gestalt.provider.v1.AgentSession.updated_at:type_name -> google.protobuf.Timestamp
+	59,  // 22: gestalt.provider.v1.AgentSession.last_turn_at:type_name -> google.protobuf.Timestamp
+	58,  // 23: gestalt.provider.v1.CreateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
+	58,  // 24: gestalt.provider.v1.CreateAgentProviderSessionRequest.provider_options:type_name -> google.protobuf.Struct
+	11,  // 25: gestalt.provider.v1.CreateAgentProviderSessionRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
+	12,  // 26: gestalt.provider.v1.CreateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	12,  // 27: gestalt.provider.v1.GetAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	12,  // 28: gestalt.provider.v1.ListAgentProviderSessionsRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	19,  // 29: gestalt.provider.v1.ListAgentProviderSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
+	3,   // 30: gestalt.provider.v1.UpdateAgentProviderSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
+	58,  // 31: gestalt.provider.v1.UpdateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
+	12,  // 32: gestalt.provider.v1.UpdateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	2,   // 33: gestalt.provider.v1.AgentTurn.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
+	6,   // 34: gestalt.provider.v1.AgentTurn.messages:type_name -> gestalt.provider.v1.AgentMessage
+	58,  // 35: gestalt.provider.v1.AgentTurn.structured_output:type_name -> google.protobuf.Struct
+	11,  // 36: gestalt.provider.v1.AgentTurn.created_by:type_name -> gestalt.provider.v1.AgentActor
+	59,  // 37: gestalt.provider.v1.AgentTurn.created_at:type_name -> google.protobuf.Timestamp
+	59,  // 38: gestalt.provider.v1.AgentTurn.started_at:type_name -> google.protobuf.Timestamp
+	59,  // 39: gestalt.provider.v1.AgentTurn.completed_at:type_name -> google.protobuf.Timestamp
+	60,  // 40: gestalt.provider.v1.AgentTurnDisplay.input:type_name -> google.protobuf.Value
+	60,  // 41: gestalt.provider.v1.AgentTurnDisplay.output:type_name -> google.protobuf.Value
+	60,  // 42: gestalt.provider.v1.AgentTurnDisplay.error:type_name -> google.protobuf.Value
+	6,   // 43: gestalt.provider.v1.CreateAgentProviderTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
+	13,  // 44: gestalt.provider.v1.CreateAgentProviderTurnRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
+	58,  // 45: gestalt.provider.v1.CreateAgentProviderTurnRequest.response_schema:type_name -> google.protobuf.Struct
+	58,  // 46: gestalt.provider.v1.CreateAgentProviderTurnRequest.metadata:type_name -> google.protobuf.Struct
+	58,  // 47: gestalt.provider.v1.CreateAgentProviderTurnRequest.provider_options:type_name -> google.protobuf.Struct
+	11,  // 48: gestalt.provider.v1.CreateAgentProviderTurnRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
+	14,  // 49: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	1,   // 50: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
+	12,  // 51: gestalt.provider.v1.CreateAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	12,  // 52: gestalt.provider.v1.GetAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	12,  // 53: gestalt.provider.v1.ListAgentProviderTurnsRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	25,  // 54: gestalt.provider.v1.ListAgentProviderTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
+	12,  // 55: gestalt.provider.v1.CancelAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	58,  // 56: gestalt.provider.v1.AgentTurnEvent.data:type_name -> google.protobuf.Struct
+	59,  // 57: gestalt.provider.v1.AgentTurnEvent.created_at:type_name -> google.protobuf.Timestamp
+	26,  // 58: gestalt.provider.v1.AgentTurnEvent.display:type_name -> gestalt.provider.v1.AgentTurnDisplay
+	12,  // 59: gestalt.provider.v1.ListAgentProviderTurnEventsRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	32,  // 60: gestalt.provider.v1.ListAgentProviderTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
+	12,  // 61: gestalt.provider.v1.GetAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	12,  // 62: gestalt.provider.v1.ListAgentProviderInteractionsRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	18,  // 63: gestalt.provider.v1.ListAgentProviderInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
+	58,  // 64: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.resolution:type_name -> google.protobuf.Struct
+	12,  // 65: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.AgentSubjectContext
+	58,  // 66: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
+	14,  // 67: gestalt.provider.v1.SearchAgentToolsRequest.load_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	13,  // 68: gestalt.provider.v1.SearchAgentToolsResponse.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
+	15,  // 69: gestalt.provider.v1.SearchAgentToolsResponse.candidates:type_name -> gestalt.provider.v1.AgentToolCandidate
+	58,  // 70: gestalt.provider.v1.AgentManagerCreateSessionRequest.metadata:type_name -> google.protobuf.Struct
+	58,  // 71: gestalt.provider.v1.AgentManagerCreateSessionRequest.provider_options:type_name -> google.protobuf.Struct
+	19,  // 72: gestalt.provider.v1.AgentManagerListSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
+	3,   // 73: gestalt.provider.v1.AgentManagerUpdateSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
+	58,  // 74: gestalt.provider.v1.AgentManagerUpdateSessionRequest.metadata:type_name -> google.protobuf.Struct
+	6,   // 75: gestalt.provider.v1.AgentManagerCreateTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
+	14,  // 76: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	1,   // 77: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
+	58,  // 78: gestalt.provider.v1.AgentManagerCreateTurnRequest.response_schema:type_name -> google.protobuf.Struct
+	58,  // 79: gestalt.provider.v1.AgentManagerCreateTurnRequest.metadata:type_name -> google.protobuf.Struct
+	58,  // 80: gestalt.provider.v1.AgentManagerCreateTurnRequest.provider_options:type_name -> google.protobuf.Struct
+	25,  // 81: gestalt.provider.v1.AgentManagerListTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
+	32,  // 82: gestalt.provider.v1.AgentManagerListTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
+	18,  // 83: gestalt.provider.v1.AgentManagerListInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
+	58,  // 84: gestalt.provider.v1.AgentManagerResolveInteractionRequest.resolution:type_name -> google.protobuf.Struct
+	20,  // 85: gestalt.provider.v1.AgentProvider.CreateSession:input_type -> gestalt.provider.v1.CreateAgentProviderSessionRequest
+	21,  // 86: gestalt.provider.v1.AgentProvider.GetSession:input_type -> gestalt.provider.v1.GetAgentProviderSessionRequest
+	22,  // 87: gestalt.provider.v1.AgentProvider.ListSessions:input_type -> gestalt.provider.v1.ListAgentProviderSessionsRequest
+	24,  // 88: gestalt.provider.v1.AgentProvider.UpdateSession:input_type -> gestalt.provider.v1.UpdateAgentProviderSessionRequest
+	27,  // 89: gestalt.provider.v1.AgentProvider.CreateTurn:input_type -> gestalt.provider.v1.CreateAgentProviderTurnRequest
+	28,  // 90: gestalt.provider.v1.AgentProvider.GetTurn:input_type -> gestalt.provider.v1.GetAgentProviderTurnRequest
+	29,  // 91: gestalt.provider.v1.AgentProvider.ListTurns:input_type -> gestalt.provider.v1.ListAgentProviderTurnsRequest
+	31,  // 92: gestalt.provider.v1.AgentProvider.CancelTurn:input_type -> gestalt.provider.v1.CancelAgentProviderTurnRequest
+	33,  // 93: gestalt.provider.v1.AgentProvider.ListTurnEvents:input_type -> gestalt.provider.v1.ListAgentProviderTurnEventsRequest
+	35,  // 94: gestalt.provider.v1.AgentProvider.GetInteraction:input_type -> gestalt.provider.v1.GetAgentProviderInteractionRequest
+	36,  // 95: gestalt.provider.v1.AgentProvider.ListInteractions:input_type -> gestalt.provider.v1.ListAgentProviderInteractionsRequest
+	38,  // 96: gestalt.provider.v1.AgentProvider.ResolveInteraction:input_type -> gestalt.provider.v1.ResolveAgentProviderInteractionRequest
+	17,  // 97: gestalt.provider.v1.AgentProvider.GetCapabilities:input_type -> gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
+	41,  // 98: gestalt.provider.v1.AgentHost.SearchTools:input_type -> gestalt.provider.v1.SearchAgentToolsRequest
+	39,  // 99: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
+	43,  // 100: gestalt.provider.v1.AgentManagerHost.CreateSession:input_type -> gestalt.provider.v1.AgentManagerCreateSessionRequest
+	44,  // 101: gestalt.provider.v1.AgentManagerHost.GetSession:input_type -> gestalt.provider.v1.AgentManagerGetSessionRequest
+	45,  // 102: gestalt.provider.v1.AgentManagerHost.ListSessions:input_type -> gestalt.provider.v1.AgentManagerListSessionsRequest
+	47,  // 103: gestalt.provider.v1.AgentManagerHost.UpdateSession:input_type -> gestalt.provider.v1.AgentManagerUpdateSessionRequest
+	48,  // 104: gestalt.provider.v1.AgentManagerHost.CreateTurn:input_type -> gestalt.provider.v1.AgentManagerCreateTurnRequest
+	49,  // 105: gestalt.provider.v1.AgentManagerHost.GetTurn:input_type -> gestalt.provider.v1.AgentManagerGetTurnRequest
+	50,  // 106: gestalt.provider.v1.AgentManagerHost.ListTurns:input_type -> gestalt.provider.v1.AgentManagerListTurnsRequest
+	52,  // 107: gestalt.provider.v1.AgentManagerHost.CancelTurn:input_type -> gestalt.provider.v1.AgentManagerCancelTurnRequest
+	53,  // 108: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:input_type -> gestalt.provider.v1.AgentManagerListTurnEventsRequest
+	55,  // 109: gestalt.provider.v1.AgentManagerHost.ListInteractions:input_type -> gestalt.provider.v1.AgentManagerListInteractionsRequest
+	57,  // 110: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:input_type -> gestalt.provider.v1.AgentManagerResolveInteractionRequest
+	19,  // 111: gestalt.provider.v1.AgentProvider.CreateSession:output_type -> gestalt.provider.v1.AgentSession
+	19,  // 112: gestalt.provider.v1.AgentProvider.GetSession:output_type -> gestalt.provider.v1.AgentSession
+	23,  // 113: gestalt.provider.v1.AgentProvider.ListSessions:output_type -> gestalt.provider.v1.ListAgentProviderSessionsResponse
+	19,  // 114: gestalt.provider.v1.AgentProvider.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
+	25,  // 115: gestalt.provider.v1.AgentProvider.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
+	25,  // 116: gestalt.provider.v1.AgentProvider.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
+	30,  // 117: gestalt.provider.v1.AgentProvider.ListTurns:output_type -> gestalt.provider.v1.ListAgentProviderTurnsResponse
+	25,  // 118: gestalt.provider.v1.AgentProvider.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
+	34,  // 119: gestalt.provider.v1.AgentProvider.ListTurnEvents:output_type -> gestalt.provider.v1.ListAgentProviderTurnEventsResponse
+	18,  // 120: gestalt.provider.v1.AgentProvider.GetInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	37,  // 121: gestalt.provider.v1.AgentProvider.ListInteractions:output_type -> gestalt.provider.v1.ListAgentProviderInteractionsResponse
+	18,  // 122: gestalt.provider.v1.AgentProvider.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	16,  // 123: gestalt.provider.v1.AgentProvider.GetCapabilities:output_type -> gestalt.provider.v1.AgentProviderCapabilities
+	42,  // 124: gestalt.provider.v1.AgentHost.SearchTools:output_type -> gestalt.provider.v1.SearchAgentToolsResponse
+	40,  // 125: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
+	19,  // 126: gestalt.provider.v1.AgentManagerHost.CreateSession:output_type -> gestalt.provider.v1.AgentSession
+	19,  // 127: gestalt.provider.v1.AgentManagerHost.GetSession:output_type -> gestalt.provider.v1.AgentSession
+	46,  // 128: gestalt.provider.v1.AgentManagerHost.ListSessions:output_type -> gestalt.provider.v1.AgentManagerListSessionsResponse
+	19,  // 129: gestalt.provider.v1.AgentManagerHost.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
+	25,  // 130: gestalt.provider.v1.AgentManagerHost.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
+	25,  // 131: gestalt.provider.v1.AgentManagerHost.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
+	51,  // 132: gestalt.provider.v1.AgentManagerHost.ListTurns:output_type -> gestalt.provider.v1.AgentManagerListTurnsResponse
+	25,  // 133: gestalt.provider.v1.AgentManagerHost.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
+	54,  // 134: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:output_type -> gestalt.provider.v1.AgentManagerListTurnEventsResponse
+	56,  // 135: gestalt.provider.v1.AgentManagerHost.ListInteractions:output_type -> gestalt.provider.v1.AgentManagerListInteractionsResponse
+	18,  // 136: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	111, // [111:137] is the sub-list for method output_type
+	85,  // [85:111] is the sub-list for method input_type
+	85,  // [85:85] is the sub-list for extension type_name
+	85,  // [85:85] is the sub-list for extension extendee
+	0,   // [0:85] is the sub-list for field type_name
 }
 
 func init() { file_v1_agent_proto_init() }

@@ -64,19 +64,17 @@ pub struct AgentActor {
     pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BoundAgentToolTarget {
+pub struct AgentSubjectContext {
     #[prost(string, tag = "1")]
-    pub plugin: ::prost::alloc::string::String,
+    pub subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub operation: ::prost::alloc::string::String,
+    pub subject_kind: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub connection: ::prost::alloc::string::String,
+    pub credential_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub instance: ::prost::alloc::string::String,
+    pub display_name: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
-    pub credential_mode: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub system: ::prost::alloc::string::String,
+    pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentTool {
@@ -86,8 +84,6 @@ pub struct ResolvedAgentTool {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub description: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundAgentToolTarget>,
     #[prost(message, optional, tag = "5")]
     pub parameters_schema: ::core::option::Option<::prost_types::Struct>,
 }
@@ -105,8 +101,6 @@ pub struct AgentToolRef {
     pub title: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub credential_mode: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub system: ::prost::alloc::string::String,
 }
@@ -210,14 +204,21 @@ pub struct CreateAgentProviderSessionRequest {
     pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "7")]
     pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(message, optional, tag = "8")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderSessionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListAgentProviderSessionsRequest {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListAgentProviderSessionsRequest {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsResponse {
     #[prost(message, repeated, tag = "1")]
@@ -233,6 +234,8 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: i32,
     #[prost(message, optional, tag = "4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurn {
@@ -314,16 +317,24 @@ pub struct CreateAgentProviderTurnRequest {
     pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
     #[prost(enumeration = "AgentToolSourceMode", tag = "13")]
     pub tool_source: i32,
+    #[prost(message, optional, tag = "14")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
+    #[prost(string, tag = "15")]
+    pub tool_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
     #[prost(string, tag = "1")]
     pub turn_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderTurnsRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsResponse {
@@ -336,6 +347,8 @@ pub struct CancelAgentProviderTurnRequest {
     pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub reason: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnEvent {
@@ -366,6 +379,8 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub after_seq: i64,
     #[prost(int32, tag = "3")]
     pub limit: i32,
+    #[prost(message, optional, tag = "4")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsResponse {
@@ -376,11 +391,15 @@ pub struct ListAgentProviderTurnEventsResponse {
 pub struct GetAgentProviderInteractionRequest {
     #[prost(string, tag = "1")]
     pub interaction_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderInteractionsRequest {
     #[prost(string, tag = "1")]
     pub turn_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderInteractionsResponse {
@@ -393,6 +412,8 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "3")]
+    pub subject: ::core::option::Option<AgentSubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecuteAgentToolRequest {
@@ -406,6 +427,8 @@ pub struct ExecuteAgentToolRequest {
     pub tool_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub arguments: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "6")]
+    pub tool_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
@@ -428,6 +451,8 @@ pub struct SearchAgentToolsRequest {
     pub candidate_limit: i32,
     #[prost(message, repeated, tag = "6")]
     pub load_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    #[prost(string, tag = "7")]
+    pub tool_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchAgentToolsResponse {

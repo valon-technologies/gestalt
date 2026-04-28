@@ -101,6 +101,7 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,
 		CreatedBy:       agentActorToProto(req.CreatedBy),
+		Subject:         agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -111,7 +112,10 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 func (r *remoteAgent) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: req.SessionID})
+	resp, err := r.client.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId: req.SessionID,
+		Subject:   agentSubjectContextToProto(req.Subject),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +125,9 @@ func (r *remoteAgent) GetSession(ctx context.Context, req coreagent.GetSessionRe
 func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{})
+	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{
+		Subject: agentSubjectContextToProto(req.Subject),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -148,6 +154,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req coreagent.UpdateSes
 		ClientRef: req.ClientRef,
 		State:     agentSessionStateToProto(req.State),
 		Metadata:  metadata,
+		Subject:   agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -192,6 +199,8 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 		ExecutionRef:    req.ExecutionRef,
 		ToolRefs:        agentToolRefsToProto(req.ToolRefs),
 		ToolSource:      agentToolSourceModeToProto(req.ToolSource),
+		Subject:         agentSubjectContextToProto(req.Subject),
+		ToolGrant:       req.ToolGrant,
 	})
 	if err != nil {
 		return nil, err
@@ -202,7 +211,10 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: req.TurnID})
+	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
+		TurnId:  req.TurnID,
+		Subject: agentSubjectContextToProto(req.Subject),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +224,10 @@ func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest)
 func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{SessionId: req.SessionID})
+	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{
+		SessionId: req.SessionID,
+		Subject:   agentSubjectContextToProto(req.Subject),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -231,8 +246,9 @@ func (r *remoteAgent) CancelTurn(ctx context.Context, req coreagent.CancelTurnRe
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.CancelTurn(ctx, &proto.CancelAgentProviderTurnRequest{
-		TurnId: req.TurnID,
-		Reason: req.Reason,
+		TurnId:  req.TurnID,
+		Reason:  req.Reason,
+		Subject: agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -247,6 +263,7 @@ func (r *remoteAgent) ListTurnEvents(ctx context.Context, req coreagent.ListTurn
 		TurnId:   req.TurnID,
 		AfterSeq: req.AfterSeq,
 		Limit:    int32(req.Limit),
+		Subject:  agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -259,6 +276,7 @@ func (r *remoteAgent) GetInteraction(ctx context.Context, req coreagent.GetInter
 	defer cancel()
 	resp, err := r.client.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{
 		InteractionId: req.InteractionID,
+		Subject:       agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -270,7 +288,8 @@ func (r *remoteAgent) ListInteractions(ctx context.Context, req coreagent.ListIn
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
-		TurnId: req.TurnID,
+		TurnId:  req.TurnID,
+		Subject: agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -288,6 +307,7 @@ func (r *remoteAgent) ResolveInteraction(ctx context.Context, req coreagent.Reso
 	resp, err := r.client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
 		InteractionId: req.InteractionID,
 		Resolution:    resolution,
+		Subject:       agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package agentmanager
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,49 +9,46 @@ import (
 	"maps"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core/integration"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
-	ErrAgentNotConfigured                = errors.New("agent is not configured")
-	ErrAgentProviderRequired             = errors.New("agent provider is required")
-	ErrAgentProviderNotAvailable         = errors.New("agent provider is not available")
-	ErrAgentSessionMetadataNotConfigured = errors.New("agent session metadata is not configured")
-	ErrAgentTurnMetadataNotConfigured    = errors.New("agent turn metadata is not configured")
-	ErrAgentSubjectRequired              = errors.New("agent subject is required")
-	ErrAgentCallerPluginRequired         = errors.New("agent caller plugin is required for inherited tools")
-	ErrAgentInheritedSurfaceTool         = errors.New("agent inherited surface tools are not supported")
-	ErrAgentSessionCreationInProgress    = errors.New("agent session creation is already in progress for this idempotency key")
-	ErrAgentTurnCreationInProgress       = errors.New("agent turn creation is already in progress for this idempotency key")
-	ErrAgentInteractionRequired          = errors.New("agent interaction is required")
-	ErrAgentInteractionNotFound          = errors.New("agent interaction is not found")
-	ErrAgentWorkflowToolsNotConfigured   = errors.New("agent workflow tools are not configured")
+	ErrAgentNotConfigured              = errors.New("agent is not configured")
+	ErrAgentProviderRequired           = errors.New("agent provider is required")
+	ErrAgentProviderNotAvailable       = errors.New("agent provider is not available")
+	ErrAgentSubjectRequired            = errors.New("agent subject is required")
+	ErrAgentCallerPluginRequired       = errors.New("agent caller plugin is required for inherited tools")
+	ErrAgentInheritedSurfaceTool       = errors.New("agent inherited surface tools are not supported")
+	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
+	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
+	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
 )
 
 const (
-	agentSessionCreationWaitTimeout   = 5 * time.Second
-	agentSessionCreationPollInterval  = 100 * time.Millisecond
 	agentToolSearchAllPlugin          = "*"
 	agentToolSearchDefaultMaxResults  = 8
 	agentToolSearchAdaptiveMaxResults = 3
 	agentToolSearchMaxResults         = 20
 	agentToolSearchMaxCandidates      = 20
 	agentToolInputSchemaMaxBytes      = 128 * 1024
+	maxAgentRouteCacheEntries         = 20_000
 )
 
 type AgentProviderNotAvailableError struct {
@@ -88,6 +86,7 @@ type WorkflowSystemTools interface {
 
 type Service interface {
 	Available() bool
+	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
 	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
@@ -107,35 +106,31 @@ type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
 	WorkflowTools     WorkflowSystemTools
-	SessionMetadata   *coredata.AgentSessionMetadataService
-	RunMetadata       *coredata.AgentRunMetadataService
+	ToolGrants        *agentgrant.Manager
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	PluginInvokes     map[string][]config.PluginInvocationDependency
-	Now               func() time.Time
 }
 
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
 	workflowTools     WorkflowSystemTools
-	sessionMetadata   *coredata.AgentSessionMetadataService
-	runMetadata       *coredata.AgentRunMetadataService
+	toolGrants        *agentgrant.Manager
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
 	pluginInvokes     map[string][]config.PluginInvocationDependency
-	now               func() time.Time
+	// Route caches are process-local accelerators; providers remain the durable source of truth.
+	routeMu       sync.Mutex
+	sessionRoutes agentRouteCache
+	turnRoutes    agentRouteCache
 }
 
 func New(cfg Config) *Manager {
-	now := cfg.Now
-	if now == nil {
-		now = time.Now
-	}
 	pluginInvokes := make(map[string][]config.PluginInvocationDependency, len(cfg.PluginInvokes))
 	for pluginName, deps := range cfg.PluginInvokes {
 		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
@@ -144,14 +139,177 @@ func New(cfg Config) *Manager {
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
 		workflowTools:     cfg.WorkflowTools,
-		sessionMetadata:   cfg.SessionMetadata,
-		runMetadata:       cfg.RunMetadata,
+		toolGrants:        cfg.ToolGrants,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		pluginInvokes:     pluginInvokes,
-		now:               now,
+		sessionRoutes:     newAgentRouteCache(),
+		turnRoutes:        newAgentRouteCache(),
+	}
+}
+
+func (m *Manager) cachedSessionRoute(sessionID string) string {
+	if m == nil {
+		return ""
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return ""
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	return m.sessionRoutes.get(sessionID)
+}
+
+func (m *Manager) rememberSessionRoute(sessionID, providerName string) {
+	if m == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if sessionID == "" || providerName == "" {
+		return
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	m.sessionRoutes.remember(sessionID, providerName)
+}
+
+func (m *Manager) forgetSessionRoute(sessionID, providerName string) {
+	if m == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if sessionID == "" {
+		return
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	m.sessionRoutes.forget(sessionID, providerName)
+}
+
+func (m *Manager) cachedTurnRoute(turnID string) string {
+	if m == nil {
+		return ""
+	}
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
+		return ""
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	return m.turnRoutes.get(turnID)
+}
+
+func (m *Manager) rememberTurnRoute(turnID, providerName string) {
+	if m == nil {
+		return
+	}
+	turnID = strings.TrimSpace(turnID)
+	providerName = strings.TrimSpace(providerName)
+	if turnID == "" || providerName == "" {
+		return
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	m.turnRoutes.remember(turnID, providerName)
+}
+
+func (m *Manager) forgetTurnRoute(turnID, providerName string) {
+	if m == nil {
+		return
+	}
+	turnID = strings.TrimSpace(turnID)
+	providerName = strings.TrimSpace(providerName)
+	if turnID == "" {
+		return
+	}
+	m.routeMu.Lock()
+	defer m.routeMu.Unlock()
+	m.turnRoutes.forget(turnID, providerName)
+}
+
+type agentRouteCache struct {
+	values map[string]*list.Element
+	order  *list.List
+}
+
+type agentRouteEntry struct {
+	key   string
+	value string
+}
+
+func newAgentRouteCache() agentRouteCache {
+	return agentRouteCache{
+		values: map[string]*list.Element{},
+		order:  list.New(),
+	}
+}
+
+func (c *agentRouteCache) ensure() {
+	if c.values == nil {
+		c.values = map[string]*list.Element{}
+	}
+	if c.order == nil {
+		c.order = list.New()
+	}
+}
+
+func (c *agentRouteCache) get(key string) string {
+	if c == nil || c.values == nil {
+		return ""
+	}
+	elem := c.values[key]
+	if elem == nil {
+		return ""
+	}
+	c.order.MoveToBack(elem)
+	return elem.Value.(agentRouteEntry).value
+}
+
+func (c *agentRouteCache) remember(key, value string) {
+	c.ensure()
+	if elem := c.values[key]; elem != nil {
+		elem.Value = agentRouteEntry{key: key, value: value}
+		c.order.MoveToBack(elem)
+		c.trim(maxAgentRouteCacheEntries)
+		return
+	}
+	c.values[key] = c.order.PushBack(agentRouteEntry{key: key, value: value})
+	c.trim(maxAgentRouteCacheEntries)
+}
+
+func (c *agentRouteCache) forget(key, value string) {
+	if c == nil || c.values == nil {
+		return
+	}
+	elem := c.values[key]
+	if elem == nil {
+		return
+	}
+	entry := elem.Value.(agentRouteEntry)
+	if value != "" && entry.value != value {
+		return
+	}
+	delete(c.values, key)
+	c.order.Remove(elem)
+}
+
+func (c *agentRouteCache) trim(maxEntries int) {
+	if c == nil || c.values == nil || c.order == nil || maxEntries <= 0 {
+		return
+	}
+	for len(c.values) > maxEntries {
+		oldest := c.order.Front()
+		if oldest == nil {
+			return
+		}
+		entry := oldest.Value.(agentRouteEntry)
+		delete(c.values, entry.key)
+		c.order.Remove(oldest)
 	}
 }
 
@@ -215,14 +373,32 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	return tools, nil
 }
 
+func (m *Manager) ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (tool coreagent.Tool, err error) {
+	ctx, finish := startAgentOperation(ctx, "resolve_tool")
+	defer func() { finish(err) }()
+
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return coreagent.Tool{}, ErrAgentSubjectRequired
+	}
+	refs, err := normalizeToolRefs([]coreagent.ToolRef{ref})
+	if err != nil {
+		return coreagent.Tool{}, err
+	}
+	if len(refs) == 0 {
+		return coreagent.Tool{}, fmt.Errorf("%w: agent tool is required", invocation.ErrAuthorizationDenied)
+	}
+	if err := m.authorizeToolRefs(ctx, p, refs); err != nil {
+		return coreagent.Tool{}, err
+	}
+	return m.resolveTool(ctx, p, refs[0])
+}
+
 func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (session *coreagent.Session, err error) {
 	ctx, finish := startAgentOperation(ctx, "create_session")
 	defer func() { finish(err) }()
 
 	p = principal.Canonicalized(p)
-	if m == nil || m.sessionMetadata == nil {
-		return nil, ErrAgentSessionMetadataNotConfigured
-	}
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
@@ -234,42 +410,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	sessionID := uuid.NewString()
-	if idempotencyKey != "" {
-		for {
-			claimedSessionID, claimed, err := m.sessionMetadata.ClaimIdempotency(ctx, subjectID, providerName, idempotencyKey, sessionID, m.now())
-			if err != nil {
-				return nil, err
-			}
-			if claimed {
-				break
-			}
-			existing, err := m.sessionMetadata.Get(ctx, claimedSessionID)
-			if err != nil {
-				if errors.Is(err, indexeddb.ErrNotFound) {
-					existing, err = m.waitForClaimedSessionMetadata(ctx, subjectID, providerName, idempotencyKey, claimedSessionID)
-					if err != nil {
-						return nil, err
-					}
-				} else {
-					return nil, err
-				}
-			}
-			if !sessionRefOwnedBy(existing, p) {
-				return nil, core.ErrNotFound
-			}
-			session, err := m.getSessionByMetadata(ctx, p, existing)
-			if err == nil {
-				return session, nil
-			}
-			if !errors.Is(err, core.ErrNotFound) {
-				return nil, err
-			}
-			if deleteErr := m.sessionMetadata.Delete(ctx, existing.ID); deleteErr != nil {
-				return nil, deleteErr
-			}
-			sessionID = uuid.NewString()
-		}
-	}
 	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
 		SessionID:       sessionID,
 		IdempotencyKey:  idempotencyKey,
@@ -278,53 +418,26 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		Metadata:        maps.Clone(req.Metadata),
 		ProviderOptions: maps.Clone(req.ProviderOptions),
 		CreatedBy:       agentActorFromPrincipal(p),
+		Subject:         agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
-		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{SessionID: sessionID})
+		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{
+			SessionID: sessionID,
+			Subject:   agentSubjectFromPrincipal(p),
+		})
 		if getErr != nil {
-			if idempotencyKey != "" {
-				_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
-			}
 			return nil, err
 		}
 		session = fallback
 	}
 	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
 	if err != nil {
-		if idempotencyKey != "" {
-			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
-		}
 		return nil, err
 	}
-	var existingRef *coreagent.SessionReference
-	if strings.TrimSpace(normalized.ID) != strings.TrimSpace(sessionID) {
-		existingRef, err = m.validateIdempotentProviderSession(ctx, p, providerName, idempotencyKey, normalized)
-		if err != nil {
-			if idempotencyKey != "" {
-				_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
-			}
-			return nil, err
-		}
+	if !providerSessionOwnedBy(normalized, p) {
+		return nil, core.ErrNotFound
 	}
-	sessionRef := &coreagent.SessionReference{
-		ID:                  normalized.ID,
-		ProviderName:        providerName,
-		SubjectID:           subjectID,
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		IdempotencyKey:      idempotencyKey,
-	}
-	if existingRef != nil {
-		sessionRef = cloneSessionReference(existingRef)
-		if strings.TrimSpace(sessionRef.IdempotencyKey) == "" {
-			sessionRef.IdempotencyKey = idempotencyKey
-		}
-	}
-	if _, err := m.sessionMetadata.Put(ctx, sessionRef); err != nil {
-		if idempotencyKey != "" {
-			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
-		}
-		return nil, err
-	}
+	m.rememberSessionRoute(normalized.ID, providerName)
 	return normalized, nil
 }
 
@@ -332,57 +445,44 @@ func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessio
 	ctx, finish := startAgentOperation(ctx, "get_session")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
+	owned, err := m.findOwnedSession(ctx, p, sessionID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	return m.getSessionByMetadata(ctx, p, ref)
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	return owned.session, nil
 }
 
 func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) (sessions []*coreagent.Session, err error) {
 	ctx, finish := startAgentOperation(ctx, "list_sessions")
 	defer func() { finish(err) }()
 
-	refs, err := m.listOwnedSessionMetadata(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-	refsByProvider := sessionRefsByProvider(refs)
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
 		observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
 	}
-	if providerName != "" {
-		if providerRefs, ok := refsByProvider[providerName]; ok {
-			refsByProvider = map[string][]*coreagent.SessionReference{providerName: providerRefs}
-		} else {
-			refsByProvider = map[string][]*coreagent.SessionReference{}
-		}
+	candidates, err := m.providerCandidates(providerName)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]*coreagent.Session, 0, len(refs))
-	for providerName, providerRefs := range refsByProvider {
-		provider, err := m.resolveProviderByName(providerName)
+	out := make([]*coreagent.Session, 0)
+	for _, candidate := range candidates {
+		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{Subject: agentSubjectFromPrincipal(p)})
 		if err != nil {
 			return nil, err
 		}
-		sessions, err := provider.ListSessions(ctx, coreagent.ListSessionsRequest{})
-		if err != nil {
-			return nil, err
-		}
-		refIndex := sessionRefsByID(providerRefs)
 		for _, session := range sessions {
 			if session == nil {
 				continue
 			}
-			ref := refIndex[strings.TrimSpace(session.ID)]
-			if ref == nil || !sessionRefOwnedBy(ref, p) {
+			if !providerSessionOwnedBy(session, p) {
 				continue
 			}
-			normalized, err := normalizeProviderSession(providerName, ref.ID, session)
+			normalized, err := normalizeProviderSession(candidate.name, strings.TrimSpace(session.ID), session)
 			if err != nil {
 				return nil, err
 			}
+			m.rememberSessionRoute(normalized.ID, candidate.name)
 			out = append(out, normalized)
 		}
 	}
@@ -403,36 +503,29 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	ctx, finish := startAgentOperation(ctx, "update_session")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedSessionMetadata(ctx, req.SessionID, p)
+	owned, err := m.findOwnedSession(ctx, p, req.SessionID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	session, err = provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	session, err = owned.provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
 		SessionID: strings.TrimSpace(req.SessionID),
 		ClientRef: strings.TrimSpace(req.ClientRef),
 		State:     req.State,
 		Metadata:  maps.Clone(req.Metadata),
+		Subject:   agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
 	}
-	normalized, err := normalizeProviderSession(ref.ProviderName, ref.ID, session)
+	normalized, err := normalizeProviderSession(owned.providerName, owned.session.ID, session)
 	if err != nil {
 		return nil, err
 	}
-	ref.ArchivedAt = nil
-	if normalized.State == coreagent.SessionStateArchived {
-		now := m.now()
-		ref.ArchivedAt = &now
+	if !providerSessionOwnedBy(normalized, p) {
+		return nil, core.ErrNotFound
 	}
-	if _, err := m.sessionMetadata.Put(ctx, ref); err != nil {
-		return nil, err
-	}
+	m.rememberSessionRoute(normalized.ID, owned.providerName)
 	return normalized, nil
 }
 
@@ -441,22 +534,15 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	defer func() { finish(err) }()
 
 	p = principal.Canonicalized(p)
-	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentTurnMetadataNotConfigured
-	}
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
 	}
-	sessionRef, err := m.requireOwnedSessionMetadata(ctx, req.SessionID, p)
+	ownedSession, err := m.findOwnedSession(ctx, p, req.SessionID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(sessionRef.ProviderName))
-	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
-	if err != nil {
-		return nil, err
-	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
 	toolSource, err := validateToolSource(req.ToolSource)
 	if err != nil {
 		return nil, err
@@ -473,7 +559,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	var tools []coreagent.Tool
-	if _, err := agentProviderSupportsNativeToolSearch(ctx, provider); err != nil {
+	if _, err := agentProviderSupportsNativeToolSearch(ctx, ownedSession.provider); err != nil {
 		return nil, err
 	}
 	resolvableToolRefs := resolvableAgentToolRefs(toolRefs)
@@ -483,72 +569,15 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 			return nil, err
 		}
 	}
-	turnID := uuid.NewString()
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	if idempotencyKey != "" {
-		for {
-			claimedTurnID, claimed, err := m.runMetadata.ClaimIdempotency(ctx, subjectID, sessionRef.ProviderName, idempotencyKey, turnID, m.now())
-			if err != nil {
-				return nil, err
-			}
-			if claimed {
-				break
-			}
-			existing, err := m.runMetadata.Get(ctx, claimedTurnID)
-			if err != nil {
-				if errors.Is(err, indexeddb.ErrNotFound) {
-					return nil, ErrAgentTurnCreationInProgress
-				}
-				return nil, err
-			}
-			if !executionRefOwnedBy(existing, p) || existing.SessionID != sessionRef.ID {
-				return nil, core.ErrNotFound
-			}
-			if !m.allowRun(ctx, p, existing) {
-				return nil, core.ErrNotFound
-			}
-			turn, err := m.getTurnByMetadata(ctx, p, existing)
-			if err == nil {
-				return turn, nil
-			}
-			if !errors.Is(err, core.ErrNotFound) {
-				return nil, err
-			}
-			if deleteErr := m.runMetadata.Delete(ctx, existing.ID); deleteErr != nil {
-				return nil, deleteErr
-			}
-			turnID = uuid.NewString()
-		}
-	}
-	metadataStartedAt := time.Now()
-	metadataAttrs := []attribute.KeyValue{
-		observability.AttrAgentProvider.String(sessionRef.ProviderName),
-		observability.AttrAgentOperation.String("create_turn"),
-	}
-	metadataCtx, metadataSpan := observability.StartSpan(ctx, "agent.run_metadata.write", metadataAttrs...)
-	ref, err := m.runMetadata.Put(metadataCtx, &coreagent.ExecutionReference{
-		ID:                  turnID,
-		SessionID:           sessionRef.ID,
-		ProviderName:        sessionRef.ProviderName,
-		SubjectID:           subjectID,
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		IdempotencyKey:      idempotencyKey,
-		Permissions:         agentRunPermissions(ctx, p, req.CallerPluginName, toolRefs),
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolSource:          toolSource,
-		Tools:               tools,
-	})
-	observability.EndSpan(metadataSpan, err)
-	observability.RecordAgentRunMetadataWrite(metadataCtx, metadataStartedAt, err != nil, metadataAttrs...)
+	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
+	toolGrant, err := m.mintToolGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
 	if err != nil {
-		if idempotencyKey != "" {
-			_ = m.runMetadata.ReleaseIdempotency(ctx, subjectID, sessionRef.ProviderName, idempotencyKey)
-		}
 		return nil, err
 	}
-	turn, err = provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
+	turn, err = ownedSession.provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
 		TurnID:          turnID,
-		SessionID:       sessionRef.ID,
+		SessionID:       ownedSession.session.ID,
 		IdempotencyKey:  idempotencyKey,
 		Model:           strings.TrimSpace(req.Model),
 		Messages:        append([]coreagent.Message(nil), req.Messages...),
@@ -560,21 +589,28 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		ProviderOptions: maps.Clone(req.ProviderOptions),
 		CreatedBy:       agentActorFromPrincipal(p),
 		ExecutionRef:    turnID,
+		Subject:         agentSubjectFromPrincipal(p),
+		ToolGrant:       toolGrant,
 	})
 	if err != nil {
-		fallback, getErr := provider.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: turnID})
+		fallback, getErr := ownedSession.provider.GetTurn(ctx, coreagent.GetTurnRequest{
+			TurnID:  turnID,
+			Subject: agentSubjectFromPrincipal(p),
+		})
 		if getErr == nil {
 			turn = fallback
 		} else {
-			_ = m.runMetadata.Delete(ctx, ref.ID)
 			return nil, err
 		}
 	}
-	normalized, err := normalizeProviderTurn(sessionRef.ProviderName, sessionRef.ID, turnID, turn)
+	normalized, err := normalizeProviderTurnForCreate(ownedSession.providerName, ownedSession.session.ID, turnID, idempotencyKey, turn)
 	if err != nil {
-		_ = m.runMetadata.Delete(ctx, ref.ID)
 		return nil, err
 	}
+	if !providerTurnOwnedBy(normalized, p) {
+		return nil, core.ErrNotFound
+	}
+	m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
 	return normalized, nil
 }
 
@@ -582,49 +618,43 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID st
 	ctx, finish := startAgentOperation(ctx, "get_turn")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	owned, err := m.findOwnedTurn(ctx, p, turnID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	return m.getTurnByMetadata(ctx, p, ref)
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	return owned.turn, nil
 }
 
 func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) (turns []*coreagent.Turn, err error) {
 	ctx, finish := startAgentOperation(ctx, "list_turns")
 	defer func() { finish(err) }()
 
-	sessionRef, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
+	ownedSession, err := m.findOwnedSession(ctx, p, sessionID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(sessionRef.ProviderName))
-	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
+	turns, err = ownedSession.provider.ListTurns(ctx, coreagent.ListTurnsRequest{
+		SessionID: ownedSession.session.ID,
+		Subject:   agentSubjectFromPrincipal(p),
+	})
 	if err != nil {
 		return nil, err
 	}
-	turns, err = provider.ListTurns(ctx, coreagent.ListTurnsRequest{SessionID: sessionRef.ID})
-	if err != nil {
-		return nil, err
-	}
-	ownedRefs, err := m.listOwnedTurnMetadata(ctx, p, sessionRef.ID, false)
-	if err != nil {
-		return nil, err
-	}
-	refIndex := executionRefsByID(ownedRefs)
 	out := make([]*coreagent.Turn, 0, len(turns))
 	for _, turn := range turns {
 		if turn == nil {
 			continue
 		}
-		ref := refIndex[strings.TrimSpace(turn.ID)]
-		if ref == nil {
+		if !providerTurnOwnedBy(turn, p) {
 			continue
 		}
-		normalized, err := normalizeProviderTurn(sessionRef.ProviderName, sessionRef.ID, ref.ID, turn)
+		normalized, err := normalizeProviderTurn(ownedSession.providerName, ownedSession.session.ID, strings.TrimSpace(turn.ID), turn)
 		if err != nil {
 			return nil, err
 		}
+		m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
 		out = append(out, normalized)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -642,45 +672,53 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 	ctx, finish := startAgentOperation(ctx, "cancel_turn")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	owned, err := m.findOwnedTurn(ctx, p, turnID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	turn, err = provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
-		TurnID: strings.TrimSpace(turnID),
-		Reason: strings.TrimSpace(reason),
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	turn, err = owned.provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
+		TurnID:  strings.TrimSpace(turnID),
+		Reason:  strings.TrimSpace(reason),
+		Subject: agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := m.runMetadata.Revoke(ctx, ref.ID, m.now()); err != nil {
+	normalized, err := normalizeProviderTurn(owned.providerName, owned.turn.SessionID, owned.turn.ID, turn)
+	if err != nil {
 		return nil, err
 	}
-	return normalizeProviderTurn(ref.ProviderName, ref.SessionID, ref.ID, turn)
+	if !providerTurnOwnedBy(normalized, p) {
+		return nil, core.ErrNotFound
+	}
+	if coreagent.ExecutionStatusIsLive(normalized.Status) {
+		return nil, fmt.Errorf("%w: agent provider %q returned live turn %q after cancel", invocation.ErrInternal, owned.providerName, strings.TrimSpace(normalized.ID))
+	}
+	if m.toolGrants != nil {
+		m.toolGrants.RevokeTurn(owned.providerName, normalized.SessionID, normalized.ID)
+		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
+			m.toolGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
+		}
+	}
+	m.rememberTurnRoute(normalized.ID, owned.providerName)
+	return normalized, nil
 }
 
 func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) (events []*coreagent.TurnEvent, err error) {
 	ctx, finish := startAgentOperation(ctx, "list_turn_events")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	owned, err := m.findOwnedTurn(ctx, p, turnID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	events, err = provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
-		TurnID:   ref.ID,
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	events, err = owned.provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
+		TurnID:   owned.turn.ID,
 		AfterSeq: afterSeq,
 		Limit:    limit,
+		Subject:  agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -692,16 +730,15 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	ctx, finish := startAgentOperation(ctx, "list_interactions")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	owned, err := m.findOwnedTurn(ctx, p, turnID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	interactions, err := provider.ListInteractions(ctx, coreagent.ListInteractionsRequest{TurnID: ref.ID})
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	interactions, err := owned.provider.ListInteractions(ctx, coreagent.ListInteractionsRequest{
+		TurnID:  owned.turn.ID,
+		Subject: agentSubjectFromPrincipal(p),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -710,11 +747,11 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 		if interaction == nil {
 			continue
 		}
-		if strings.TrimSpace(interaction.TurnID) != ref.ID {
-			return nil, fmt.Errorf("agent provider returned interaction %q for turn %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.TurnID), ref.ID)
+		if strings.TrimSpace(interaction.TurnID) != owned.turn.ID {
+			return nil, fmt.Errorf("agent provider returned interaction %q for turn %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.TurnID), owned.turn.ID)
 		}
-		if strings.TrimSpace(interaction.SessionID) != ref.SessionID {
-			return nil, fmt.Errorf("agent provider returned interaction %q for session %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.SessionID), ref.SessionID)
+		if strings.TrimSpace(interaction.SessionID) != owned.turn.SessionID {
+			return nil, fmt.Errorf("agent provider returned interaction %q for session %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.SessionID), owned.turn.SessionID)
 		}
 		out = append(out, interaction)
 	}
@@ -725,22 +762,19 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	ctx, finish := startAgentOperation(ctx, "resolve_interaction")
 	defer func() { finish(err) }()
 
-	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	owned, err := m.findOwnedTurn(ctx, p, turnID, "")
 	if err != nil {
 		return nil, err
 	}
-	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	interactionID = strings.TrimSpace(interactionID)
 	if interactionID == "" {
 		return nil, ErrAgentInteractionRequired
 	}
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	interaction, err = provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
+	interaction, err = owned.provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
 		InteractionID: interactionID,
 		Resolution:    maps.Clone(resolution),
+		Subject:       agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -754,10 +788,10 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	if gotInteractionID := strings.TrimSpace(interaction.ID); gotInteractionID == "" || gotInteractionID != interactionID {
 		return nil, ErrAgentInteractionNotFound
 	}
-	if gotTurnID := strings.TrimSpace(interaction.TurnID); gotTurnID != "" && gotTurnID != ref.ID {
+	if gotTurnID := strings.TrimSpace(interaction.TurnID); gotTurnID != "" && gotTurnID != owned.turn.ID {
 		return nil, core.ErrNotFound
 	}
-	if gotSessionID := strings.TrimSpace(interaction.SessionID); gotSessionID != "" && gotSessionID != ref.SessionID {
+	if gotSessionID := strings.TrimSpace(interaction.SessionID); gotSessionID != "" && gotSessionID != owned.turn.SessionID {
 		return nil, core.ErrNotFound
 	}
 	if strings.TrimSpace(interaction.TurnID) == "" {
@@ -767,36 +801,6 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 		return nil, fmt.Errorf("agent provider returned interaction %q without session id", interactionID)
 	}
 	return interaction, nil
-}
-
-func (m *Manager) getSessionByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.SessionReference) (*coreagent.Session, error) {
-	if ref == nil || !sessionRefOwnedBy(ref, p) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	session, err := provider.GetSession(ctx, coreagent.GetSessionRequest{SessionID: ref.ID})
-	if err != nil {
-		return nil, err
-	}
-	return normalizeProviderSession(ref.ProviderName, ref.ID, session)
-}
-
-func (m *Manager) getTurnByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) (*coreagent.Turn, error) {
-	if ref == nil || !executionRefOwnedBy(ref, p) || !m.allowRun(ctx, p, ref) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(ref.ProviderName)
-	if err != nil {
-		return nil, err
-	}
-	turn, err := provider.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: strings.TrimSpace(ref.ID)})
-	if err != nil {
-		return nil, err
-	}
-	return normalizeProviderTurn(ref.ProviderName, ref.SessionID, ref.ID, turn)
 }
 
 func (m *Manager) resolveProviderSelection(providerName string) (string, coreagent.Provider, error) {
@@ -813,94 +817,222 @@ func (m *Manager) resolveProviderByName(providerName string) (coreagent.Provider
 	return m.agent.ResolveProvider(strings.TrimSpace(providerName))
 }
 
-func (m *Manager) listOwnedSessionMetadata(ctx context.Context, p *principal.Principal) ([]*coreagent.SessionReference, error) {
-	if m == nil || m.sessionMetadata == nil {
-		return nil, ErrAgentSessionMetadataNotConfigured
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	if subjectID == "" {
-		return nil, ErrAgentSubjectRequired
-	}
-	refs, err := m.sessionMetadata.ListBySubject(ctx, subjectID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*coreagent.SessionReference, 0, len(refs))
-	for _, ref := range refs {
-		if !sessionRefOwnedBy(ref, p) {
-			continue
-		}
-		out = append(out, ref)
-	}
-	return out, nil
+type namedAgentProvider struct {
+	name     string
+	provider coreagent.Provider
 }
 
-func (m *Manager) requireOwnedSessionMetadata(ctx context.Context, sessionID string, p *principal.Principal) (*coreagent.SessionReference, error) {
+type ownedAgentSession struct {
+	providerName string
+	provider     coreagent.Provider
+	session      *coreagent.Session
+}
+
+type ownedAgentTurn struct {
+	providerName string
+	provider     coreagent.Provider
+	turn         *coreagent.Turn
+}
+
+func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider, error) {
+	if m == nil || m.agent == nil {
+		return nil, ErrAgentNotConfigured
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return nil, err
+		}
+		return []namedAgentProvider{{name: providerName, provider: provider}}, nil
+	}
+	names := m.agent.ProviderNames()
+	candidates := make([]namedAgentProvider, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		provider, err := m.resolveProviderByName(name)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, namedAgentProvider{name: name, provider: provider})
+	}
+	return candidates, nil
+}
+
+func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, core.ErrNotFound
 	}
-	if m == nil || m.sessionMetadata == nil {
-		return nil, ErrAgentSessionMetadataNotConfigured
-	}
-	ref, err := m.sessionMetadata.Get(ctx, sessionID)
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, core.ErrNotFound
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, providerName)
+		if err != nil {
+			return nil, err
 		}
+		m.rememberSessionRoute(found.session.ID, found.providerName)
+		return found, nil
+	}
+	if cachedProviderName := m.cachedSessionRoute(sessionID); cachedProviderName != "" {
+		found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, cachedProviderName)
+		if err == nil {
+			m.rememberSessionRoute(found.session.ID, found.providerName)
+			return found, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+		m.forgetSessionRoute(sessionID, cachedProviderName)
+	}
+	found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, "")
+	if err != nil {
 		return nil, err
 	}
-	if !sessionRefOwnedBy(ref, p) {
+	m.rememberSessionRoute(found.session.ID, found.providerName)
+	return found, nil
+}
+
+func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
+	candidates, err := m.providerCandidates(providerName)
+	if err != nil {
+		return nil, err
+	}
+	var found *ownedAgentSession
+	for _, candidate := range candidates {
+		session, err := candidate.provider.GetSession(ctx, coreagent.GetSessionRequest{
+			SessionID: sessionID,
+			Subject:   agentSubjectFromPrincipal(p),
+		})
+		if err != nil {
+			if agentProviderReturnedNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		normalized, err := normalizeProviderSession(candidate.name, sessionID, session)
+		if err != nil {
+			return nil, err
+		}
+		if !providerSessionOwnedBy(normalized, p) {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("%w: agent session %q is present in multiple providers", invocation.ErrInternal, sessionID)
+		}
+		found = &ownedAgentSession{
+			providerName: candidate.name,
+			provider:     candidate.provider,
+			session:      normalized,
+		}
+	}
+	if found == nil {
 		return nil, core.ErrNotFound
 	}
-	return ref, nil
+	return found, nil
 }
 
-func (m *Manager) listOwnedTurnMetadata(ctx context.Context, p *principal.Principal, sessionID string, activeOnly bool) ([]*coreagent.ExecutionReference, error) {
-	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentTurnMetadataNotConfigured
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	if subjectID == "" {
-		return nil, ErrAgentSubjectRequired
-	}
-	refs, err := m.runMetadata.ListBySubject(ctx, subjectID)
-	if err != nil {
-		return nil, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	out := make([]*coreagent.ExecutionReference, 0, len(refs))
-	for _, ref := range refs {
-		if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
-			continue
-		}
-		if sessionID != "" && strings.TrimSpace(ref.SessionID) != sessionID {
-			continue
-		}
-		out = append(out, ref)
-	}
-	return out, nil
-}
-
-func (m *Manager) requireOwnedTurnMetadata(ctx context.Context, turnID string, p *principal.Principal) (*coreagent.ExecutionReference, error) {
+func (m *Manager) findOwnedTurn(ctx context.Context, p *principal.Principal, turnID, providerName string) (*ownedAgentTurn, error) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
 		return nil, core.ErrNotFound
 	}
-	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentTurnMetadataNotConfigured
-	}
-	ref, err := m.runMetadata.Get(ctx, turnID)
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, core.ErrNotFound
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, providerName)
+		if err != nil {
+			return nil, err
 		}
+		m.rememberTurnRoute(found.turn.ID, found.providerName)
+		return found, nil
+	}
+	if cachedProviderName := m.cachedTurnRoute(turnID); cachedProviderName != "" {
+		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, cachedProviderName)
+		if err == nil {
+			m.rememberTurnRoute(found.turn.ID, found.providerName)
+			return found, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+		m.forgetTurnRoute(turnID, cachedProviderName)
+	}
+	found, err := m.findOwnedTurnInProviders(ctx, p, turnID, "")
+	if err != nil {
 		return nil, err
 	}
-	if !executionRefOwnedBy(ref, p) || !m.allowRun(ctx, p, ref) {
+	m.rememberTurnRoute(found.turn.ID, found.providerName)
+	return found, nil
+}
+
+func (m *Manager) findOwnedTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName string) (*ownedAgentTurn, error) {
+	candidates, err := m.providerCandidates(providerName)
+	if err != nil {
+		return nil, err
+	}
+	var found *ownedAgentTurn
+	for _, candidate := range candidates {
+		turn, err := candidate.provider.GetTurn(ctx, coreagent.GetTurnRequest{
+			TurnID:  turnID,
+			Subject: agentSubjectFromPrincipal(p),
+		})
+		if err != nil {
+			if agentProviderReturnedNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		if turn == nil {
+			continue
+		}
+		sessionID := strings.TrimSpace(turn.SessionID)
+		normalized, err := normalizeProviderTurn(candidate.name, sessionID, turnID, turn)
+		if err != nil {
+			return nil, err
+		}
+		if !providerTurnOwnedBy(normalized, p) {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("%w: agent turn %q is present in multiple providers", invocation.ErrInternal, turnID)
+		}
+		found = &ownedAgentTurn{
+			providerName: candidate.name,
+			provider:     candidate.provider,
+			turn:         normalized,
+		}
+	}
+	if found == nil {
 		return nil, core.ErrNotFound
 	}
-	return ref, nil
+	return found, nil
+}
+
+func agentProviderReturnedNotFound(err error) bool {
+	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
+}
+
+func (m *Manager) mintToolGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
+	if m == nil || m.toolGrants == nil {
+		return "", fmt.Errorf("%w: agent tool grants are not configured", invocation.ErrInternal)
+	}
+	subject := agentSubjectFromPrincipal(p)
+	return m.toolGrants.Mint(agentgrant.Grant{
+		ProviderName:        providerName,
+		SessionID:           sessionID,
+		TurnID:              turnID,
+		SubjectID:           subject.SubjectID,
+		SubjectKind:         subject.SubjectKind,
+		CredentialSubjectID: subject.CredentialSubjectID,
+		DisplayName:         subject.DisplayName,
+		AuthSource:          subject.AuthSource,
+		Permissions:         agentRunPermissions(ctx, p, callerPluginName, toolRefs),
+		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
+		Tools:               append([]coreagent.Tool(nil), tools...),
+		ToolSource:          toolSource,
+	})
 }
 
 func (m *Manager) SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (resp *coreagent.SearchToolsResponse, err error) {
@@ -998,7 +1130,18 @@ func (m *Manager) searchWorkflowSystemTools(ctx context.Context, p *principal.Pr
 	if m == nil || m.workflowTools == nil || !m.workflowTools.Available() {
 		return nil, ErrAgentWorkflowToolsNotConfigured
 	}
-	return m.workflowTools.SearchTools(ctx, p, systemRefs)
+	tools, err := m.workflowTools.SearchTools(ctx, p, systemRefs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tools {
+		toolID, err := m.mintAgentToolID(tools[i].Target)
+		if err != nil {
+			return nil, err
+		}
+		tools[i].ID = toolID
+	}
+	return tools, nil
 }
 
 func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, failIfOnlyUnavailable bool) ([]coreagent.Tool, []agentToolTargetKey, error) {
@@ -1007,7 +1150,7 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 		tools = make([]coreagent.Tool, 0, min(maxResults, len(candidates)))
 	}
 	loadedCandidateKeys := make([]agentToolTargetKey, 0, cap(tools))
-	seen := map[string]struct{}{}
+	seen := map[agentToolTargetKey]struct{}{}
 	var firstUnavailableErr error
 	for i := range candidates {
 		candidate := &candidates[i]
@@ -1028,10 +1171,11 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 			return nil, nil, err
 		}
 		loadedCandidateKeys = append(loadedCandidateKeys, agentToolTargetKeyFromRef(candidate.ref))
-		if _, ok := seen[tool.ID]; ok {
+		key := agentToolTargetKeyFromTarget(tool.Target)
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[tool.ID] = struct{}{}
+		seen[key] = struct{}{}
 		tools = append(tools, tool)
 	}
 	if len(tools) == 0 && failIfOnlyUnavailable && firstUnavailableErr != nil {
@@ -1147,7 +1291,7 @@ func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Pr
 		return nil, nil
 	}
 	out := make([]coreagent.Tool, 0, len(refs))
-	seen := make(map[string]struct{}, len(refs))
+	seen := make(map[agentToolTargetKey]struct{}, len(refs))
 	for i := range refs {
 		if strings.TrimSpace(refs[i].Operation) == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d] requires native tool search", invocation.ErrInternal, i)
@@ -1156,10 +1300,11 @@ func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Pr
 		if err != nil {
 			return nil, fmt.Errorf("agent tool_refs[%d]: %w", i, err)
 		}
-		if _, ok := seen[tool.ID]; ok {
+		key := agentToolTargetKeyFromTarget(tool.Target)
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		seen[tool.ID] = struct{}{}
+		seen[key] = struct{}{}
 		out = append(out, tool)
 	}
 	return out, nil
@@ -1170,7 +1315,16 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		if m == nil || m.workflowTools == nil || !m.workflowTools.Available() {
 			return coreagent.Tool{}, ErrAgentWorkflowToolsNotConfigured
 		}
-		return m.workflowTools.ResolveTool(ctx, p, ref)
+		tool, err := m.workflowTools.ResolveTool(ctx, p, ref)
+		if err != nil {
+			return coreagent.Tool{}, err
+		}
+		toolID, err := m.mintAgentToolID(tool.Target)
+		if err != nil {
+			return coreagent.Tool{}, err
+		}
+		tool.ID = toolID
+		return tool, nil
 	}
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
@@ -1263,18 +1417,24 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if description == "" {
 		description = strings.TrimSpace(opMeta.Description)
 	}
+	target := coreagent.ToolTarget{
+		Plugin:         pluginName,
+		Operation:      opMeta.ID,
+		Connection:     connection,
+		Instance:       sessionInstance,
+		CredentialMode: credentialMode,
+	}
+	toolID, err := m.mintAgentToolID(target)
+	if err != nil {
+		return coreagent.Tool{}, err
+	}
 	return coreagent.Tool{
-		ID:               agentToolID(pluginName, opMeta.ID, connection, sessionInstance, credentialMode),
+		ID:               toolID,
 		Name:             name,
 		Description:      description,
 		ParametersSchema: parametersSchema,
-		Target: coreagent.ToolTarget{
-			Plugin:         pluginName,
-			Operation:      opMeta.ID,
-			Connection:     connection,
-			Instance:       sessionInstance,
-			CredentialMode: credentialMode,
-		},
+		Hidden:           !catalog.OperationVisibleByDefault(opMeta),
+		Target:           target,
 	}, nil
 }
 
@@ -1292,6 +1452,7 @@ type agentToolSearchCatalog struct {
 }
 
 type agentToolTargetKey struct {
+	system         string
 	plugin         string
 	operation      string
 	connection     string
@@ -1301,6 +1462,7 @@ type agentToolTargetKey struct {
 
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 	return agentToolTargetKey{
+		system:         strings.TrimSpace(ref.System),
 		plugin:         strings.TrimSpace(ref.Plugin),
 		operation:      strings.TrimSpace(ref.Operation),
 		connection:     config.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
@@ -1311,6 +1473,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 
 func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
 	return agentToolTargetKey{
+		system:         strings.TrimSpace(target.System),
 		plugin:         strings.TrimSpace(target.Plugin),
 		operation:      strings.TrimSpace(target.Operation),
 		connection:     config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
@@ -1320,6 +1483,9 @@ func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKe
 }
 
 func (k agentToolTargetKey) String() string {
+	if k.system != "" {
+		return strings.Join([]string{"system", k.system, k.operation}, "/")
+	}
 	parts := []string{k.plugin, k.operation}
 	if k.connection != "" || k.instance != "" || k.credentialMode != "" {
 		parts = append(parts, k.connection, k.instance, string(k.credentialMode))
@@ -1777,128 +1943,12 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 	return access
 }
 
-func (m *Manager) allowRun(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) bool {
-	if ref == nil {
-		return false
-	}
-	if !executionRefOwnedBy(ref, p) {
-		return false
-	}
-	if len(ref.Tools) == 0 {
-		return true
-	}
-	for i := range ref.Tools {
-		if !m.allowTool(ctx, p, ref.Tools[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *Manager) allowTool(ctx context.Context, p *principal.Principal, tool coreagent.Tool) bool {
-	if strings.TrimSpace(tool.Target.System) != "" {
-		return m != nil && m.workflowTools != nil && m.workflowTools.AllowTool(ctx, p, tool)
-	}
-	pluginName := strings.TrimSpace(tool.Target.Plugin)
-	operation := strings.TrimSpace(tool.Target.Operation)
-	if pluginName == "" || operation == "" {
-		return false
-	}
-	if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
-		return false
-	}
-	return principal.AllowsOperationPermission(p, pluginName, operation)
-}
-
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
 		DefaultConnection: m.defaultConnection,
 	}
-}
-
-func (m *Manager) waitForClaimedSessionMetadata(ctx context.Context, subjectID, providerName, idempotencyKey, sessionID string) (*coreagent.SessionReference, error) {
-	waitCtx, cancel := context.WithTimeout(ctx, agentSessionCreationWaitTimeout)
-	defer cancel()
-	ticker := time.NewTicker(agentSessionCreationPollInterval)
-	defer ticker.Stop()
-	currentSessionID := strings.TrimSpace(sessionID)
-	for {
-		select {
-		case <-waitCtx.Done():
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			return nil, ErrAgentSessionCreationInProgress
-		case <-ticker.C:
-			refreshedSessionID, err := m.sessionMetadata.SessionIDForIdempotency(ctx, subjectID, providerName, idempotencyKey)
-			if err == nil && strings.TrimSpace(refreshedSessionID) != "" {
-				currentSessionID = strings.TrimSpace(refreshedSessionID)
-			} else if err != nil && !errors.Is(err, indexeddb.ErrNotFound) {
-				return nil, err
-			}
-			existing, err := m.sessionMetadata.Get(ctx, currentSessionID)
-			if err == nil {
-				return existing, nil
-			}
-			if !errors.Is(err, indexeddb.ErrNotFound) {
-				return nil, err
-			}
-		}
-	}
-}
-
-func (m *Manager) validateIdempotentProviderSession(ctx context.Context, p *principal.Principal, providerName, idempotencyKey string, session *coreagent.Session) (*coreagent.SessionReference, error) {
-	if session == nil {
-		return nil, core.ErrNotFound
-	}
-	sessionID := strings.TrimSpace(session.ID)
-	if sessionID == "" {
-		return nil, fmt.Errorf("agent provider returned session without id")
-	}
-	ref, err := m.sessionMetadata.Get(ctx, sessionID)
-	if err == nil {
-		if strings.TrimSpace(ref.ProviderName) != strings.TrimSpace(providerName) || !sessionRefOwnedBy(ref, p) {
-			return nil, core.ErrNotFound
-		}
-		refIdempotencyKey := strings.TrimSpace(ref.IdempotencyKey)
-		if refIdempotencyKey != "" && refIdempotencyKey != strings.TrimSpace(idempotencyKey) {
-			return nil, fmt.Errorf("%w: agent provider returned session %q for idempotency key %q, but existing metadata uses idempotency key %q", invocation.ErrInternal, sessionID, strings.TrimSpace(idempotencyKey), refIdempotencyKey)
-		}
-		return ref, nil
-	}
-	if !errors.Is(err, indexeddb.ErrNotFound) {
-		return nil, err
-	}
-	if !providerSessionOwnedBy(session, p) {
-		return nil, core.ErrNotFound
-	}
-	return nil, nil
-}
-
-func executionRefOwnedBy(ref *coreagent.ExecutionReference, p *principal.Principal) bool {
-	if ref == nil || p == nil {
-		return false
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
-}
-
-func sessionRefOwnedBy(ref *coreagent.SessionReference, p *principal.Principal) bool {
-	if ref == nil || p == nil {
-		return false
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
-}
-
-func cloneSessionReference(ref *coreagent.SessionReference) *coreagent.SessionReference {
-	if ref == nil {
-		return nil
-	}
-	cloned := *ref
-	return &cloned
 }
 
 func providerSessionOwnedBy(session *coreagent.Session, p *principal.Principal) bool {
@@ -1909,62 +1959,12 @@ func providerSessionOwnedBy(session *coreagent.Session, p *principal.Principal) 
 	return subjectID != "" && strings.TrimSpace(session.CreatedBy.SubjectID) == subjectID
 }
 
-func executionRefActive(ref *coreagent.ExecutionReference) bool {
-	return ref != nil && (ref.RevokedAt == nil || ref.RevokedAt.IsZero())
-}
-
-func sessionRefsByProvider(refs []*coreagent.SessionReference) map[string][]*coreagent.SessionReference {
-	if len(refs) == 0 {
-		return nil
+func providerTurnOwnedBy(turn *coreagent.Turn, p *principal.Principal) bool {
+	if turn == nil || p == nil {
+		return false
 	}
-	out := make(map[string][]*coreagent.SessionReference)
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		providerName := strings.TrimSpace(ref.ProviderName)
-		if providerName == "" {
-			continue
-		}
-		out[providerName] = append(out[providerName], ref)
-	}
-	return out
-}
-
-func sessionRefsByID(refs []*coreagent.SessionReference) map[string]*coreagent.SessionReference {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make(map[string]*coreagent.SessionReference, len(refs))
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		id := strings.TrimSpace(ref.ID)
-		if id == "" {
-			continue
-		}
-		out[id] = ref
-	}
-	return out
-}
-
-func executionRefsByID(refs []*coreagent.ExecutionReference) map[string]*coreagent.ExecutionReference {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make(map[string]*coreagent.ExecutionReference, len(refs))
-	for _, ref := range refs {
-		if ref == nil {
-			continue
-		}
-		id := strings.TrimSpace(ref.ID)
-		if id == "" {
-			continue
-		}
-		out[id] = ref
-	}
-	return out
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	return subjectID != "" && strings.TrimSpace(turn.CreatedBy.SubjectID) == subjectID
 }
 
 func normalizeProviderSession(providerName, sessionID string, session *coreagent.Session) (*coreagent.Session, error) {
@@ -2024,6 +2024,37 @@ func normalizeProviderTurn(providerName, sessionID, turnID string, turn *coreage
 	return &cloned, nil
 }
 
+func normalizeProviderTurnForCreate(providerName, sessionID, turnID, idempotencyKey string, turn *coreagent.Turn) (*coreagent.Turn, error) {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return normalizeProviderTurn(providerName, sessionID, turnID, turn)
+	}
+	if turn == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := *turn
+	if strings.TrimSpace(cloned.ID) == "" {
+		return nil, fmt.Errorf("agent provider returned turn without id")
+	}
+	if strings.TrimSpace(cloned.SessionID) == "" {
+		return nil, fmt.Errorf("agent provider returned turn %q without session id", strings.TrimSpace(cloned.ID))
+	}
+	if strings.TrimSpace(cloned.SessionID) != strings.TrimSpace(sessionID) {
+		return nil, fmt.Errorf("agent provider returned turn session id %q, want %q", cloned.SessionID, sessionID)
+	}
+	if strings.TrimSpace(cloned.ProviderName) == "" {
+		cloned.ProviderName = strings.TrimSpace(providerName)
+	}
+	return &cloned, nil
+}
+
+func newAgentTurnID(sessionID, idempotencyKey string) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return uuid.NewString()
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt:agent-turn:"+strings.TrimSpace(sessionID)+":"+idempotencyKey)).String()
+}
+
 func sessionSortTime(session *coreagent.Session) *time.Time {
 	if session == nil {
 		return nil
@@ -2059,26 +2090,15 @@ func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
 	return json.RawMessage(`{"type":"object","additionalProperties":true}`)
 }
 
-func agentToolID(pluginName, operation, connection, instance string, credentialMode core.ConnectionMode) string {
-	id := strings.TrimSpace(pluginName) + "/" + strings.TrimSpace(operation)
-	if strings.TrimSpace(connection) != "" {
-		id += "?connection=" + strings.TrimSpace(connection)
+func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
+	if m == nil || m.toolGrants == nil {
+		return "", fmt.Errorf("%w: agent tool grants are not configured", invocation.ErrInternal)
 	}
-	if strings.TrimSpace(instance) != "" {
-		sep := "?"
-		if strings.Contains(id, "?") {
-			sep = "&"
-		}
-		id += sep + "instance=" + strings.TrimSpace(instance)
+	id, err := m.toolGrants.MintToolID(target)
+	if err != nil {
+		return "", fmt.Errorf("%w: mint agent tool id: %v", invocation.ErrInternal, err)
 	}
-	if credentialMode != "" {
-		sep := "?"
-		if strings.Contains(id, "?") {
-			sep = "&"
-		}
-		id += sep + "credentialMode=" + string(credentialMode)
-	}
-	return id
+	return id, nil
 }
 
 func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
@@ -2309,6 +2329,20 @@ func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {
 		SubjectKind: string(p.Kind),
 		DisplayName: agentActorDisplayName(p),
 		AuthSource:  p.AuthSource(),
+	}
+}
+
+func agentSubjectFromPrincipal(p *principal.Principal) coreagent.SubjectContext {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return coreagent.SubjectContext{}
+	}
+	return coreagent.SubjectContext{
+		SubjectID:           strings.TrimSpace(p.SubjectID),
+		SubjectKind:         string(p.Kind),
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		DisplayName:         agentActorDisplayName(p),
+		AuthSource:          p.AuthSource(),
 	}
 }
 

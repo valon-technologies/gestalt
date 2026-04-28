@@ -107,6 +107,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentPr
 		req.GetMetadata(),
 		req.GetCreatedBy(),
 		strings.TrimSpace(req.GetExecutionRef()),
+		strings.TrimSpace(req.GetToolGrant()),
 	)
 	return turn, err
 }
@@ -253,6 +254,7 @@ func (p *agentProvider) startTurn(
 	metadata *structpb.Struct,
 	createdBy *proto.AgentActor,
 	executionRef string,
+	toolGrant string,
 ) (*proto.AgentTurn, *proto.AgentInteraction, error) {
 	if turnID == "" {
 		turnID = "agent-turn-1"
@@ -270,6 +272,29 @@ func (p *agentProvider) startTurn(
 	if metadata != nil {
 		requireInteraction, _ = metadata.AsMap()["requireInteraction"].(bool)
 	}
+
+	now := timestamppb.Now()
+	p.mu.Lock()
+	session := p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
+	session.LastTurnAt = now
+	session.UpdatedAt = now
+	turn := &proto.AgentTurn{
+		Id:           turnID,
+		SessionId:    sessionID,
+		ProviderName: providerName,
+		Model:        model,
+		Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+		Messages:     cloneMessages(messages),
+		CreatedBy:    cloneActor(createdBy),
+		CreatedAt:    now,
+		StartedAt:    now,
+		ExecutionRef: executionRef,
+	}
+	p.turns[turnID] = turn
+	p.appendTurnEventLocked(turnID, "turn.started", map[string]any{
+		"session_id": sessionID,
+	})
+	p.mu.Unlock()
 
 	if len(tools) > 0 {
 		host, err := gestalt.AgentHost()
@@ -292,6 +317,7 @@ func (p *agentProvider) startTurn(
 				ToolCallId: "call-1",
 				ToolId:     tools[0].GetId(),
 				Arguments:  arguments,
+				ToolGrant:  toolGrant,
 			})
 			if err != nil {
 				output["tool_error"] = err.Error()
@@ -326,28 +352,29 @@ func (p *agentProvider) startTurn(
 		return nil, nil, fmt.Errorf("marshal output: %w", err)
 	}
 
-	now := timestamppb.Now()
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	session := p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
+	session = p.createOrUpdateSessionLocked(sessionID, model, "", createdBy, nil)
 	session.LastTurnAt = now
 	session.UpdatedAt = now
 
-	turn := &proto.AgentTurn{
-		Id:           turnID,
-		SessionId:    sessionID,
-		ProviderName: providerName,
-		Model:        model,
-		Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
-		Messages:     cloneMessages(messages),
-		OutputText:   string(body),
-		CreatedBy:    cloneActor(createdBy),
-		CreatedAt:    now,
-		StartedAt:    now,
-		ExecutionRef: executionRef,
+	turn = p.turns[turnID]
+	if turn == nil {
+		turn = &proto.AgentTurn{
+			Id:           turnID,
+			SessionId:    sessionID,
+			ProviderName: providerName,
+			Model:        model,
+			Messages:     cloneMessages(messages),
+			CreatedBy:    cloneActor(createdBy),
+			CreatedAt:    now,
+			StartedAt:    now,
+			ExecutionRef: executionRef,
+		}
 	}
+	turn.OutputText = string(body)
+	turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
 	if requireInteraction {
 		turn.Status = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
 		turn.StatusMessage = "waiting for input"
@@ -356,10 +383,6 @@ func (p *agentProvider) startTurn(
 	}
 
 	p.turns[turnID] = turn
-
-	p.appendTurnEventLocked(turnID, "turn.started", map[string]any{
-		"session_id": sessionID,
-	})
 	if output["event_emitted"] == true {
 		p.appendTurnEventLocked(turnID, "agent.test", map[string]any{"provider_name": providerName})
 	}
