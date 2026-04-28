@@ -49,10 +49,28 @@ func (h *agentHostTransportHarness) SearchTools(ctx context.Context, req *proto.
 			Name:        "Send Slack message",
 			Description: "Send a direct message",
 			Target: &proto.BoundAgentToolTarget{
-				Plugin:    "slack",
-				Operation: "send_message",
+				Plugin:         "slack",
+				Operation:      "send_message",
+				Connection:     "workspace",
+				Instance:       "primary",
+				CredentialMode: "user",
 			},
 		}},
+		Candidates: []*proto.AgentToolCandidate{{
+			Ref: &proto.AgentToolRef{
+				Plugin:         "slack",
+				Operation:      "search_messages",
+				Connection:     "workspace",
+				Instance:       "primary",
+				CredentialMode: "user",
+			},
+			Id:          "slack/search_messages/workspace/primary/user",
+			Name:        "Search Slack messages",
+			Description: "Search messages",
+			Parameters:  []string{"query", "channel"},
+			Score:       12.5,
+		}},
+		HasMore: true,
 	}, nil
 }
 
@@ -94,16 +112,33 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 		t.Fatalf("response = %#v", resp)
 	}
 	searchResp, err := client.SearchTools(context.Background(), &proto.SearchAgentToolsRequest{
-		SessionId:  "session-1",
-		TurnId:     "turn-1",
-		Query:      "send slack dm",
-		MaxResults: 3,
+		SessionId:      "session-1",
+		TurnId:         "turn-1",
+		Query:          "send slack dm",
+		MaxResults:     3,
+		CandidateLimit: 12,
+		LoadRefs: []*proto.AgentToolRef{{
+			Plugin:         "slack",
+			Operation:      "search_messages",
+			Connection:     "workspace",
+			Instance:       "primary",
+			CredentialMode: "user",
+		}},
 	})
 	if err != nil {
 		t.Fatalf("SearchTools: %v", err)
 	}
 	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetTarget().GetPlugin() != "slack" || searchResp.GetTools()[0].GetTarget().GetOperation() != "send_message" {
 		t.Fatalf("search response = %#v", searchResp)
+	}
+	if searchResp.GetTools()[0].GetTarget().GetCredentialMode() != "user" {
+		t.Fatalf("search tool credential mode = %q, want user", searchResp.GetTools()[0].GetTarget().GetCredentialMode())
+	}
+	if len(searchResp.GetCandidates()) != 1 || searchResp.GetCandidates()[0].GetRef().GetOperation() != "search_messages" || !searchResp.GetHasMore() {
+		t.Fatalf("search candidates response = %#v", searchResp)
+	}
+	if got := searchResp.GetCandidates()[0].GetRef().GetCredentialMode(); got != "user" {
+		t.Fatalf("candidate credential mode = %q, want user", got)
 	}
 
 	harness.mu.Lock()
@@ -117,8 +152,11 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.searchRequests) != 1 {
 		t.Fatalf("searchRequests len = %d, want 1", len(harness.searchRequests))
 	}
-	if harness.searchRequests[0].GetSessionId() != "session-1" || harness.searchRequests[0].GetTurnId() != "turn-1" || harness.searchRequests[0].GetQuery() != "send slack dm" || harness.searchRequests[0].GetMaxResults() != 3 {
+	if harness.searchRequests[0].GetSessionId() != "session-1" || harness.searchRequests[0].GetTurnId() != "turn-1" || harness.searchRequests[0].GetQuery() != "send slack dm" || harness.searchRequests[0].GetMaxResults() != 3 || harness.searchRequests[0].GetCandidateLimit() != 12 {
 		t.Fatalf("search request = %#v", harness.searchRequests[0])
+	}
+	if len(harness.searchRequests[0].GetLoadRefs()) != 1 || harness.searchRequests[0].GetLoadRefs()[0].GetOperation() != "search_messages" || harness.searchRequests[0].GetLoadRefs()[0].GetCredentialMode() != "user" {
+		t.Fatalf("search load refs = %#v, want search_messages user", harness.searchRequests[0].GetLoadRefs())
 	}
 	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
 		t.Fatalf("relay tokens = %#v, want two relay-token-go values", harness.tokens)

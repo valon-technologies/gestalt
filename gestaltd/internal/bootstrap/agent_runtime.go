@@ -448,22 +448,33 @@ func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchTool
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	resp, err := searcher.SearchTools(ctx, principalValue, coreagent.SearchToolsRequest{
-		ProviderName: strings.TrimSpace(ref.ProviderName),
-		SessionID:    sessionID,
-		TurnID:       turnID,
-		Query:        strings.TrimSpace(req.Query),
-		MaxResults:   req.MaxResults,
-		ToolRefs:     append([]coreagent.ToolRef(nil), ref.ToolRefs...),
-		ToolSource:   normalizeAgentToolSource(ref.ToolSource),
+		ProviderName:   strings.TrimSpace(ref.ProviderName),
+		SessionID:      sessionID,
+		TurnID:         turnID,
+		Query:          strings.TrimSpace(req.Query),
+		MaxResults:     req.MaxResults,
+		CandidateLimit: req.CandidateLimit,
+		LoadRefs:       append([]coreagent.ToolRef(nil), req.LoadRefs...),
+		ToolRefs:       append([]coreagent.ToolRef(nil), ref.ToolRefs...),
+		ToolSource:     normalizeAgentToolSource(ref.ToolSource),
 	})
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || len(resp.Tools) == 0 {
+	if resp == nil {
 		return &coreagent.SearchToolsResponse{}, nil
 	}
 	if err := validateAgentToolSearchResults(principalValue, ref.ToolRefs, normalizeAgentToolSource(ref.ToolSource), resp.Tools); err != nil {
 		return nil, err
+	}
+	if err := validateAgentToolSearchCandidates(principalValue, ref.ToolRefs, normalizeAgentToolSource(ref.ToolSource), resp.Candidates); err != nil {
+		return nil, err
+	}
+	if len(resp.Tools) == 0 {
+		return &coreagent.SearchToolsResponse{
+			Candidates: append([]coreagent.ToolCandidate(nil), resp.Candidates...),
+			HasMore:    resp.HasMore,
+		}, nil
 	}
 
 	r.toolMergeMu.Lock()
@@ -494,11 +505,18 @@ func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchTool
 	if err := validateAgentToolSearchResults(latestPrincipal, latestRef.ToolRefs, normalizeAgentToolSource(latestRef.ToolSource), resp.Tools); err != nil {
 		return nil, err
 	}
+	if err := validateAgentToolSearchCandidates(latestPrincipal, latestRef.ToolRefs, normalizeAgentToolSource(latestRef.ToolSource), resp.Candidates); err != nil {
+		return nil, err
+	}
 	latestRef.Tools = mergeAgentTools(latestRef.Tools, resp.Tools)
 	if _, err := runMetadata.Put(ctx, latestRef); err != nil {
 		return nil, err
 	}
-	return &coreagent.SearchToolsResponse{Tools: append([]coreagent.Tool(nil), resp.Tools...)}, nil
+	return &coreagent.SearchToolsResponse{
+		Tools:      append([]coreagent.Tool(nil), resp.Tools...),
+		Candidates: append([]coreagent.ToolCandidate(nil), resp.Candidates...),
+		HasMore:    resp.HasMore,
+	}, nil
 }
 
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {
@@ -567,6 +585,27 @@ func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.Too
 	return nil
 }
 
+func validateAgentToolSearchCandidates(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, candidates []coreagent.ToolCandidate) error {
+	if source != coreagent.ToolSourceModeNativeSearch {
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, source)
+	}
+	for i := range candidates {
+		ref := candidates[i].Ref
+		pluginName := strings.TrimSpace(ref.Plugin)
+		operation := strings.TrimSpace(ref.Operation)
+		if pluginName == "" || operation == "" {
+			return fmt.Errorf("%w: searched agent tool candidate target is incomplete", invocation.ErrAuthorizationDenied)
+		}
+		if !principal.AllowsProviderPermission(p, pluginName) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+			return fmt.Errorf("%w: searched agent tool candidate %q is not authorized", invocation.ErrAuthorizationDenied, candidates[i].ID)
+		}
+		if len(refs) > 0 && !agentToolCandidateMatchesRefs(ref, refs) {
+			return fmt.Errorf("%w: searched agent tool candidate %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, candidates[i].ID)
+		}
+	}
+	return nil
+}
+
 func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef) bool {
 	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
 	for _, ref := range refs {
@@ -591,6 +630,17 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 		return true
 	}
 	return false
+}
+
+func agentToolCandidateMatchesRefs(candidate coreagent.ToolRef, refs []coreagent.ToolRef) bool {
+	target := coreagent.ToolTarget{
+		Plugin:         candidate.Plugin,
+		Operation:      candidate.Operation,
+		Connection:     candidate.Connection,
+		Instance:       candidate.Instance,
+		CredentialMode: candidate.CredentialMode,
+	}
+	return agentToolMatchesRefs(target, refs)
 }
 
 func permissionsForAgentTools(tools []coreagent.Tool) []core.AccessPermission {

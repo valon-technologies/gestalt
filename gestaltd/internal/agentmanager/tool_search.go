@@ -99,7 +99,9 @@ func rankAgentToolSearchCandidates(query string, candidates []agentToolSearchCan
 
 	out := make([]agentToolSearchCandidate, 0, len(ranked))
 	for i := range ranked {
-		out = append(out, ranked[i].candidate)
+		candidate := ranked[i].candidate
+		candidate.score = ranked[i].score
+		out = append(out, candidate)
 	}
 	return out, nil
 }
@@ -241,7 +243,16 @@ func compareAgentToolSearchCandidates(a, b agentToolSearchCandidate) int {
 	if a.ref.Plugin != b.ref.Plugin {
 		return strings.Compare(a.ref.Plugin, b.ref.Plugin)
 	}
-	return strings.Compare(a.ref.Operation, b.ref.Operation)
+	if a.ref.Operation != b.ref.Operation {
+		return strings.Compare(a.ref.Operation, b.ref.Operation)
+	}
+	if a.ref.Connection != b.ref.Connection {
+		return strings.Compare(a.ref.Connection, b.ref.Connection)
+	}
+	if a.ref.Instance != b.ref.Instance {
+		return strings.Compare(a.ref.Instance, b.ref.Instance)
+	}
+	return strings.Compare(string(a.ref.CredentialMode), string(b.ref.CredentialMode))
 }
 
 func agentToolSearchText(value string) string {

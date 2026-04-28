@@ -48,6 +48,7 @@ _manager_socket = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
 _host_relay_tokens: list[str] = []
+_host_search_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -242,6 +243,25 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
     def SearchTools(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_host_relay_tokens(context)
+        _host_search_requests.append(
+            {
+                "session_id": request.session_id,
+                "turn_id": request.turn_id,
+                "query": request.query,
+                "max_results": request.max_results,
+                "candidate_limit": request.candidate_limit,
+                "load_refs": [
+                    {
+                        "plugin": ref.plugin,
+                        "operation": ref.operation,
+                        "connection": ref.connection,
+                        "instance": ref.instance,
+                        "credential_mode": ref.credential_mode,
+                    }
+                    for ref in request.load_refs
+                ],
+            }
+        )
         return agent_pb2.SearchAgentToolsResponse(
             tools=[
                 agent_pb2.ResolvedAgentTool(
@@ -251,9 +271,29 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                     target=agent_pb2.BoundAgentToolTarget(
                         plugin="slack",
                         operation="send_message",
+                        connection="workspace",
+                        instance="primary",
+                        credential_mode="user",
                     ),
                 )
-            ]
+            ],
+            candidates=[
+                agent_pb2.AgentToolCandidate(
+                    ref=agent_pb2.AgentToolRef(
+                        plugin="slack",
+                        operation="search_messages",
+                        connection="workspace",
+                        instance="primary",
+                        credential_mode="user",
+                    ),
+                    id="slack/search_messages/workspace/primary/user",
+                    name="Search Slack messages",
+                    description="Search messages",
+                    parameters=["query", "channel"],
+                    score=12.5,
+                )
+            ],
+            has_more=True,
         )
 
     def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
@@ -606,6 +646,7 @@ class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
         _host_relay_tokens.clear()
+        _host_search_requests.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
@@ -753,6 +794,16 @@ class AgentTransportTests(unittest.TestCase):
                     turn_id="turn-1",
                     query="send slack dm",
                     max_results=3,
+                    candidate_limit=12,
+                    load_refs=[
+                        agent_pb2.AgentToolRef(
+                            plugin="slack",
+                            operation="search_messages",
+                            connection="workspace",
+                            instance="primary",
+                            credential_mode="user",
+                        )
+                    ],
                 )
             )
             response = host.execute_tool(
@@ -768,9 +819,35 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(len(search_response.tools), 1)
         self.assertEqual(search_response.tools[0].target.plugin, "slack")
         self.assertEqual(search_response.tools[0].target.operation, "send_message")
+        self.assertEqual(search_response.tools[0].target.credential_mode, "user")
+        self.assertEqual(len(search_response.candidates), 1)
+        self.assertEqual(search_response.candidates[0].ref.operation, "search_messages")
+        self.assertEqual(search_response.candidates[0].ref.credential_mode, "user")
+        self.assertTrue(search_response.has_more)
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
         self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(
+            _host_search_requests,
+            [
+                {
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                    "query": "send slack dm",
+                    "max_results": 3,
+                    "candidate_limit": 12,
+                    "load_refs": [
+                        {
+                            "plugin": "slack",
+                            "operation": "search_messages",
+                            "connection": "workspace",
+                            "instance": "primary",
+                            "credential_mode": "user",
+                        }
+                    ],
+                }
+            ],
+        )
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:

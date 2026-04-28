@@ -62,6 +62,7 @@ message BoundAgentToolTarget {
   string operation = 2;
   string connection = 3;
   string instance = 4;
+  string credential_mode = 5;
 }
 
 message ResolvedAgentTool {
@@ -79,6 +80,16 @@ message AgentToolRef {
   string instance = 4;
   string title = 5;
   string description = 6;
+  string credential_mode = 7;
+}
+
+message AgentToolCandidate {
+  AgentToolRef ref = 1;
+  string id = 2;
+  string name = 3;
+  string description = 4;
+  repeated string parameters = 5;
+  double score = 6;
 }
 
 enum AgentToolSourceMode {
@@ -302,10 +313,14 @@ message SearchAgentToolsRequest {
   string turn_id = 2;
   string query = 3;
   int32 max_results = 4;
+  int32 candidate_limit = 5;
+  repeated AgentToolRef load_refs = 6;
 }
 
 message SearchAgentToolsResponse {
   repeated ResolvedAgentTool tools = 1;
+  repeated AgentToolCandidate candidates = 2;
+  bool has_more = 3;
 }
 
 message AgentManagerCreateSessionRequest {
