@@ -22,7 +22,7 @@ terminal_size = "0.4.4"
 url = "2"
 getrandom = "0.4"
 comfy-table = { version = "7.2.1", default-features = false }
-rpassword = "7"
+rpassword = "=7.4.0"
 time = { version = "0.3", features = ["parsing"] }
 rustyline = "18"
 ctrlc = "3"

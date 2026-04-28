@@ -788,11 +788,19 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     session.wait_for(&mut output, "\x1b[?1049h");
     session.wait_for(&mut output, "Session");
     session.write("hello tui\r");
-    session.wait_for(&mut output, "assistant>");
+    session.wait_for(&mut output, "Assistant");
     session.wait_for(&mut output, "hello");
     session.write("/quit\r");
     session.wait_for_exit();
 
+    assert!(
+        output.contains("You") && output.contains("Assistant"),
+        "TTY transcript did not render grouped message headers:\n{output}"
+    );
+    assert!(
+        !output.contains("you>") && !output.contains("assistant>"),
+        "TTY transcript still rendered legacy prompt labels:\n{output}"
+    );
     server.assert_finished();
 }
 
@@ -881,6 +889,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     assert!(
         !output.contains("RAW_TUI_INPUT") && !output.contains("RAW_TUI_OUTPUT"),
         "display tool rendering leaked raw tool payload data:\n{output}"
+    );
+    assert!(
+        output.contains("Tool") && !output.contains("tool>"),
+        "TTY tool transcript did not render grouped tool headers:\n{output}"
     );
     assert!(
         !output.contains("ended"),
@@ -1037,7 +1049,7 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("ambiguous tools\r");
-    session.wait_for(&mut output, "search");
+    session.wait_for(&mut output, "query");
     session.wait_for(&mut output, "completed");
     session.wait_for(&mut output, "lookup");
     session.wait_for(&mut output, "ended");
@@ -1119,7 +1131,7 @@ fn test_cli_tty_help_and_prompt_history() {
             "/api/v1/agent/turns/turn-history-2/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"second response\"}}\n\n\
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"beta response\"}}\n\n\
              data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
@@ -1133,7 +1145,7 @@ fn test_cli_tty_help_and_prompt_history() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"second response"
+                "outputText":"beta response"
             }"#,
         ),
         ExpectedRequest::json(
@@ -1155,7 +1167,7 @@ fn test_cli_tty_help_and_prompt_history() {
             "/api/v1/agent/turns/turn-history-3/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"third response\"}}\n\n\
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"gamma response\"}}\n\n\
              data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
@@ -1169,7 +1181,7 @@ fn test_cli_tty_help_and_prompt_history() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"third response"
+                "outputText":"gamma response"
             }"#,
         ),
     ]);
@@ -1186,10 +1198,16 @@ fn test_cli_tty_help_and_prompt_history() {
     session.wait_for(&mut output, "recalls");
     session.write("remember this\r");
     session.wait_for(&mut output, "first");
+    output.clear();
     session.write("\x1b[A\r");
-    session.wait_for(&mut output, "second");
+    session.wait_for(&mut output, "working");
+    output.clear();
+    session.wait_for(&mut output, "ready");
+    output.clear();
     session.write("draft text\x1b[A\x1b[B\r");
-    session.wait_for(&mut output, "third");
+    session.wait_for(&mut output, "working");
+    output.clear();
+    session.wait_for(&mut output, "ready");
     session.write("/quit\r");
     session.wait_for_exit();
 
@@ -1627,7 +1645,7 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
     session.write("\r");
     session.wait_for(&mut output, "A value is required.");
     session.write("supersecret\r");
-    session.wait_for(&mut output, "assistant>");
+    session.wait_for(&mut output, "Assistant");
     session.wait_for(&mut output, "accepted");
     session.write("/quit\r");
     session.wait_for_exit();
