@@ -447,9 +447,85 @@ func (p *agentProvider) appendTurnEventLocked(turnID, eventType string, data map
 		Source:     p.providerNameLocked(""),
 		Visibility: "private",
 		Data:       payload,
+		Display:    turnEventDisplay(eventType, data),
 		CreatedAt:  timestamppb.Now(),
 	}
 	p.turnEvents[turnID] = append(events, event)
+}
+
+func turnEventDisplay(eventType string, data map[string]any) *proto.AgentTurnDisplay {
+	switch eventType {
+	case "turn.started":
+		return &proto.AgentTurnDisplay{
+			Kind:  "status",
+			Phase: "started",
+			Label: "turn",
+			Text:  "provider turn started",
+		}
+	case "agent.test":
+		return &proto.AgentTurnDisplay{
+			Kind:  "status",
+			Phase: "completed",
+			Label: "provider event",
+			Text:  displayString(data, "provider_name"),
+		}
+	case "interaction.requested":
+		return &proto.AgentTurnDisplay{
+			Kind:  "interaction",
+			Phase: "requested",
+			Label: "approval",
+			Ref:   displayString(data, "interaction_id"),
+			Input: displayValue(data),
+		}
+	case "interaction.resolved":
+		return &proto.AgentTurnDisplay{
+			Kind:   "interaction",
+			Phase:  "resolved",
+			Label:  "approval",
+			Ref:    displayString(data, "interaction_id"),
+			Output: displayValue(data),
+		}
+	case "assistant.completed":
+		return &proto.AgentTurnDisplay{
+			Kind:  "text",
+			Phase: "completed",
+			Text:  "provider assistant completed",
+		}
+	case "turn.completed":
+		return &proto.AgentTurnDisplay{
+			Kind:   "status",
+			Phase:  "completed",
+			Label:  "turn",
+			Text:   "provider turn completed",
+			Output: displayValue(data),
+		}
+	case "turn.canceled":
+		return &proto.AgentTurnDisplay{
+			Kind:  "status",
+			Phase: "canceled",
+			Label: "turn",
+			Text:  displayString(data, "reason"),
+			Error: displayValue(data),
+		}
+	default:
+		return nil
+	}
+}
+
+func displayString(data map[string]any, key string) string {
+	if data == nil {
+		return ""
+	}
+	value, _ := data[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func displayValue(value any) *structpb.Value {
+	display, err := structpb.NewValue(value)
+	if err != nil {
+		return nil
+	}
+	return display
 }
 
 func (p *agentProvider) providerName() string {

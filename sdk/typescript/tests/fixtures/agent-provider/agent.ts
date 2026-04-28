@@ -8,21 +8,23 @@ import {
   AgentInteractionType,
   AgentSessionSchema,
   AgentSessionState,
-  AgentTurnEventSchema,
   AgentTurnSchema,
   type AgentInteraction,
   type AgentSession,
   type AgentTurn,
-  type AgentTurnEvent,
   type CreateAgentProviderTurnRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
 } from "../../../gen/v1/agent_pb.ts";
-import { defineAgentProvider } from "../../../src/index.ts";
+import {
+  defineAgentProvider,
+  type AgentTurnDisplayInit,
+  type AgentTurnEventInit,
+} from "../../../src/index.ts";
 
 const sessions = new Map<string, AgentSession>();
 const turns = new Map<string, AgentTurn>();
-const turnEvents = new Map<string, AgentTurnEvent[]>();
+const turnEvents = new Map<string, AgentTurnEventInit[]>();
 const interactions = new Map<string, AgentInteraction>();
 let canceledTurns = 0;
 
@@ -95,7 +97,7 @@ export const provider = defineAgentProvider({
   },
   async listTurnEvents(request) {
     return (turnEvents.get(request.turnId) || [])
-      .filter((event) => event.seq > request.afterSeq)
+      .filter((event) => (event.seq ?? 0n) > request.afterSeq)
       .slice(0, request.limit > 0 ? request.limit : undefined);
   },
   async getInteraction(request) {
@@ -303,19 +305,79 @@ async function resolveCanonicalInteraction(request: {
 
 function appendTurnEvent(turnId: string, type: string, data: JsonObject) {
   const events = turnEvents.get(turnId) || [];
-  events.push(
-    create(AgentTurnEventSchema, {
-      id: `${turnId}-event-${events.length + 1}`,
-      turnId,
-      seq: BigInt(events.length + 1),
-      type,
-      source: "fixture-agent",
-      visibility: "private",
-      data,
-      createdAt: timestampNow(),
-    }),
-  );
+  const display = turnEventDisplay(type, data);
+  events.push({
+    id: `${turnId}-event-${events.length + 1}`,
+    turnId,
+    seq: BigInt(events.length + 1),
+    type,
+    source: "fixture-agent",
+    visibility: "private",
+    data,
+    ...(display !== undefined ? { display } : {}),
+    createdAt: timestampNow(),
+  });
   turnEvents.set(turnId, events);
+}
+
+function turnEventDisplay(
+  type: string,
+  data: JsonObject,
+): AgentTurnDisplayInit | undefined {
+  switch (type) {
+    case "turn.started":
+      return {
+        kind: "status",
+        phase: "started",
+        label: "turn",
+        text: "provider turn started",
+      };
+    case "interaction.requested":
+      return {
+        kind: "interaction",
+        phase: "requested",
+        label: "approval",
+        ref: stringField(data, "interactionId"),
+        input: data,
+      };
+    case "interaction.resolved":
+      return {
+        kind: "interaction",
+        phase: "resolved",
+        label: "approval",
+        ref: stringField(data, "interactionId"),
+        output: data,
+      };
+    case "assistant.completed":
+      return {
+        kind: "text",
+        phase: "completed",
+        text: "provider assistant completed",
+      };
+    case "turn.completed":
+      return {
+        kind: "status",
+        phase: "completed",
+        label: "turn",
+        text: "provider turn completed",
+        output: data,
+      };
+    case "turn.canceled":
+      return {
+        kind: "status",
+        phase: "canceled",
+        label: "turn",
+        text: stringField(data, "reason"),
+        error: data,
+      };
+    default:
+      return undefined;
+  }
+}
+
+function stringField(data: JsonObject, key: string): string {
+  const value = data[key];
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function requireSession(request: GetAgentProviderSessionRequest) {
