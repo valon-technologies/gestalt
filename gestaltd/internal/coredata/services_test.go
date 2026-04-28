@@ -233,7 +233,7 @@ func TestNew(t *testing.T) {
 		if len(contexts) == 0 {
 			t.Fatal("NewWithContext did not create any object stores")
 		}
-		for _, store := range []string{coredata.StoreUsers, coredata.StoreRuntimeSessionLogs} {
+		for _, store := range []string{coredata.StoreUsers, coredata.StoreAgentRunIdempotency} {
 			if _, ok := contexts[store]; !ok {
 				t.Fatalf("NewWithContext did not create store %q", store)
 			}

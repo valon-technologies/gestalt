@@ -21,25 +21,6 @@ func recString(rec indexeddb.Record, key string) string {
 	}
 }
 
-func recInt64(rec indexeddb.Record, key string) int64 {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch n := v.(type) {
-	case int:
-		return int64(n)
-	case int32:
-		return int64(n)
-	case int64:
-		return n
-	case float64:
-		return int64(n)
-	default:
-		return 0
-	}
-}
-
 func recTime(rec indexeddb.Record, key string) time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {

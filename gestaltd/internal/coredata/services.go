@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 )
 
 type Services struct {
@@ -14,7 +15,7 @@ type Services struct {
 	APITokens           *APITokenService
 	AgentSessions       *AgentSessionMetadataService
 	AgentRunMetadata    *AgentRunMetadataService
-	RuntimeSessionLogs  *RuntimeSessionLogService
+	RuntimeSessionLogs  runtimelogs.Store
 	DB                  indexeddb.IndexedDB
 }
 
@@ -44,16 +45,10 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunIdempotency, AgentRunIdempotencySchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_idempotency store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreRuntimeSessions, RuntimeSessionsSchema); err != nil {
-		return nil, fmt.Errorf("create runtime_sessions store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreRuntimeSessionLogs, RuntimeSessionLogsSchema); err != nil {
-		return nil, fmt.Errorf("create runtime_session_logs store: %w", err)
-	}
 
 	agentSessions := NewAgentSessionMetadataService(ds)
 	agentRunMetadata := NewAgentRunMetadataService(ds)
-	runtimeSessionLogs := NewRuntimeSessionLogService(ds)
+	runtimeSessionLogs := runtimelogs.NewMemoryStore()
 
 	users := NewUserService(ds)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
