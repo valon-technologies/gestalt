@@ -41,6 +41,7 @@ const TURN_EVENTS_JSON: &str = r#"[
         "source":"managed",
         "visibility":"public",
         "data":{"status":"running"},
+        "display":{"kind":"status","phase":"started","label":"turn","text":"running"},
         "createdAt":"2026-04-22T00:00:01Z"
     },
     {
@@ -51,7 +52,63 @@ const TURN_EVENTS_JSON: &str = r#"[
         "source":"managed",
         "visibility":"public",
         "data":{"text":"risk is dependency churn"},
+        "display":{"kind":"text","phase":"delta","text":"risk is dependency churn"},
         "createdAt":"2026-04-22T00:00:02Z"
+    },
+    {
+        "id":"evt-3",
+        "turnId":"turn-1",
+        "seq":3,
+        "type":"tool.completed",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"output":{"secret":"RAW_OUTPUT_SENTINEL"}},
+        "display":{"kind":"tool","phase":"completed","label":"lookup","ref":"call-lookup","text":"200","output":{"ok":true}},
+        "createdAt":"2026-04-22T00:00:03Z"
+    },
+    {
+        "id":"evt-4",
+        "turnId":"turn-1",
+        "seq":4,
+        "type":"turn.failed",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"error":"fallback failure"},
+        "display":{"kind":"error","phase":"failed","label":"turn","error":"display failure"},
+        "createdAt":"2026-04-22T00:00:04Z"
+    },
+    {
+        "id":"evt-5",
+        "turnId":"turn-1",
+        "seq":5,
+        "type":"turn.failed",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"debug":"RAW_FAILED_SENTINEL"},
+        "display":{"kind":123,"text":"bad failure display"},
+        "createdAt":"2026-04-22T00:00:05Z"
+    },
+    {
+        "id":"evt-6",
+        "turnId":"turn-1",
+        "seq":6,
+        "type":"provider.secret",
+        "source":"managed",
+        "visibility":"private",
+        "data":{"secret":"RAW_PRIVATE_SENTINEL"},
+        "display":{"kind":123,"text":"hidden"},
+        "createdAt":"2026-04-22T00:00:06Z"
+    },
+    {
+        "id":"evt-7",
+        "turnId":"turn-1",
+        "seq":7,
+        "type":"assistant.completed",
+        "source":"managed",
+        "visibility":"private",
+        "data":{"text":"private known fallback"},
+        "display":{"kind":123,"text":"bad display"},
+        "createdAt":"2026-04-22T00:00:07Z"
     }
 ]"#;
 
@@ -284,6 +341,48 @@ fn test_cli_lists_agent_turn_events() {
         .success()
         .stdout(predicate::str::contains("agent.message.delta"))
         .stdout(predicate::str::contains("risk is dependency churn"));
+}
+
+#[test]
+fn test_cli_lists_agent_turn_events_table_uses_display_summary() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1/events?after=0&limit=10",
+        StatusCode::OK
+    )
+    .with_body(TURN_EVENTS_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "agent", "turns", "events", "list", "turn-1", "--after", "0", "--limit", "10",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Display"))
+        .stdout(predicate::str::contains("started:"))
+        .stdout(predicate::str::contains("running"))
+        .stdout(predicate::str::contains("assistant"))
+        .stdout(predicate::str::contains("dependency"))
+        .stdout(predicate::str::contains("lookup"))
+        .stdout(predicate::str::contains("completed"))
+        .stdout(predicate::str::contains(r#"{"ok"#))
+        .stdout(predicate::str::contains("failed:"))
+        .stdout(predicate::str::contains("display"))
+        .stdout(predicate::str::contains("failure"))
+        .stdout(predicate::str::contains("turn.failed"))
+        .stdout(predicate::str::contains("private"))
+        .stdout(predicate::str::contains("known"))
+        .stdout(predicate::str::contains("fallback"))
+        .stdout(predicate::str::contains("RAW_OUTPUT_SENTINEL").not())
+        .stdout(predicate::str::contains("RAW_FAILED_SENTINEL").not())
+        .stdout(predicate::str::contains("RAW_PRIVATE_SENTINEL").not())
+        .stdout(predicate::str::contains("bad display").not())
+        .stdout(predicate::str::contains("bad failure display").not())
+        .stdout(predicate::str::contains("fallback failure").not());
 }
 
 #[test]
