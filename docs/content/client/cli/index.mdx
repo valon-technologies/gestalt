@@ -218,6 +218,7 @@ gestalt agent turns create <session-id> \
   --tool roadmap:sync
 gestalt agent turns list <session-id> --status succeeded
 gestalt agent turns get <turn-id>
+gestalt agent turns transcript <turn-id>
 gestalt agent turns cancel <turn-id> --reason "operator requested"
 gestalt agent turns events list <turn-id> --after 0 --limit 100
 gestalt agent turns events stream <turn-id> --after 100
@@ -260,11 +261,15 @@ with `\` to continue the same user message on the next prompt.
 
 `gestalt agent turns create` is the non-interactive equivalent. It supports
 repeated `--system`, repeated `--message`, repeated `--tool plugin:operation`,
-`--idempotency-key`, and `--input`. `gestalt agent turns events list` reads
-stored events from `GET /api/v1/agent/turns/{turnID}/events`. `--after` is an
-event sequence cursor and `--limit` controls the page size. `gestalt agent
-turns events stream` reads `GET /api/v1/agent/turns/{turnID}/events/stream`
-and writes the raw server-sent event stream to stdout.
+`--idempotency-key`, and `--input`. `gestalt agent turns transcript` renders a
+stored turn by combining the turn's messages from
+`GET /api/v1/agent/turns/{turnID}` with stored display-projected events from
+`GET /api/v1/agent/turns/{turnID}/events`. `gestalt agent turns events list`
+reads stored events from `GET /api/v1/agent/turns/{turnID}/events`. `--after`
+is an event sequence cursor and `--limit` controls the page size. `gestalt
+agent turns events stream` reads
+`GET /api/v1/agent/turns/{turnID}/events/stream` and writes the raw
+server-sent event stream to stdout.
 
 Interactive sessions use `GET /api/v1/agent/turns/{turnID}/events/stream`
 with `until=blocked_or_terminal`, which lets the CLI switch immediately from

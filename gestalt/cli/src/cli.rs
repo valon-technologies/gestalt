@@ -400,6 +400,11 @@ pub enum AgentTurnCommands {
         /// Turn ID
         id: String,
     },
+    /// Render a stored turn as a transcript
+    Transcript {
+        /// Turn ID
+        id: String,
+    },
     /// Cancel an agent turn
     Cancel {
         /// Turn ID

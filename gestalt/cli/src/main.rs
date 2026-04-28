@@ -191,6 +191,9 @@ fn dispatch_agent_command(
                 commands::agents::list_turns(client, &session_id, status.as_deref(), format)
             }
             AgentTurnCommands::Get { id } => commands::agents::get_turn(client, &id, format),
+            AgentTurnCommands::Transcript { id } => {
+                commands::agents::transcript_turn(client, &id, format)
+            }
             AgentTurnCommands::Cancel { id, reason } => {
                 commands::agents::cancel_turn(client, &id, reason.as_deref(), format)
             }

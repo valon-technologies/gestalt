@@ -112,6 +112,87 @@ const TURN_EVENTS_JSON: &str = r#"[
     }
 ]"#;
 
+const TURN_TRANSCRIPT_JSON: &str = r#"{
+    "id":"turn-1",
+    "sessionId":"session-1",
+    "provider":"managed",
+    "model":"gpt-5.4",
+    "status":"succeeded",
+    "messages":[
+        {"role":"system","text":"Be concise."},
+        {"role":"user","text":"Summarize the roadmap risk."},
+        {"role":"user","parts":[
+            {"text":"Include filter "},
+            {"json":{"priority":"high"}}
+        ]}
+    ],
+    "outputText":"historical answer",
+    "structuredOutput":{"summary":"done"},
+    "createdAt":"2026-04-22T00:00:00Z",
+    "executionRef":"turn-1"
+}"#;
+
+const TURN_TRANSCRIPT_EVENTS_PAGE_1_JSON: &str = r#"[
+    {
+        "id":"evt-t1",
+        "turnId":"turn-1",
+        "seq":1,
+        "type":"provider.tool",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"arguments":{"secret":"RAW_TRANSCRIPT_INPUT"}},
+        "display":{"kind":"tool","phase":"started","label":"lookup","ref":"call-lookup","input":{"ticket":"INC-42"}},
+        "createdAt":"2026-04-22T00:00:01Z"
+    },
+    {
+        "id":"evt-t2",
+        "turnId":"turn-1",
+        "seq":2,
+        "type":"provider.tool",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"output":{"secret":"RAW_TRANSCRIPT_OUTPUT"}},
+        "display":{"kind":"tool","phase":"completed","label":"lookup","ref":"call-lookup","text":"200","output":{"ok":true}},
+        "createdAt":"2026-04-22T00:00:02Z"
+    }
+]"#;
+
+const TURN_TRANSCRIPT_EVENTS_PAGE_2_JSON: &str = r#"[
+    {
+        "id":"evt-t3",
+        "turnId":"turn-1",
+        "seq":3,
+        "type":"provider.text",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"text":"RAW_TRANSCRIPT_TEXT"},
+        "display":{"kind":"text","phase":"completed","text":"historical answer"},
+        "createdAt":"2026-04-22T00:00:03Z"
+    },
+    {
+        "id":"evt-t4",
+        "turnId":"turn-1",
+        "seq":4,
+        "type":"provider.secret",
+        "source":"managed",
+        "visibility":"private",
+        "data":{"secret":"RAW_TRANSCRIPT_PRIVATE"},
+        "display":{"kind":"error","phase":"failed","text":"hidden private display"},
+        "createdAt":"2026-04-22T00:00:04Z"
+    },
+    {
+        "id":"evt-t5",
+        "turnId":"turn-1",
+        "seq":5,
+        "type":"turn.completed",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"status":"succeeded"},
+        "display":{"kind":"status","phase":"completed","text":"done"},
+        "createdAt":"2026-04-22T00:00:05Z"
+    }
+]"#;
+
 #[test]
 fn test_cli_creates_agent_session() {
     let mut server = Server::new();
@@ -383,6 +464,69 @@ fn test_cli_lists_agent_turn_events_table_uses_display_summary() {
         .stdout(predicate::str::contains("bad display").not())
         .stdout(predicate::str::contains("bad failure display").not())
         .stdout(predicate::str::contains("fallback failure").not());
+}
+
+#[test]
+fn test_cli_renders_agent_turn_transcript_from_display_events() {
+    let mut server = Server::new();
+    let _turn = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1",
+        StatusCode::OK
+    )
+    .with_body(TURN_TRANSCRIPT_JSON)
+    .create();
+    let _events = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1/events?after=0&limit=100",
+        StatusCode::OK
+    )
+    .with_body(TURN_TRANSCRIPT_EVENTS_PAGE_1_JSON)
+    .create();
+    let _events_page_2 = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1/events?after=2&limit=100",
+        StatusCode::OK
+    )
+    .with_body(TURN_TRANSCRIPT_EVENTS_PAGE_2_JSON)
+    .create();
+    let _events_done = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/turns/turn-1/events?after=5&limit=100",
+        StatusCode::OK
+    )
+    .with_body("[]")
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["agent", "turns", "transcript", "turn-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("system> Be concise."))
+        .stdout(predicate::str::contains("you> Summarize the roadmap risk."))
+        .stdout(predicate::str::contains(
+            r#"you> Include filter {"priority":"high"}"#,
+        ))
+        .stdout(predicate::str::contains(
+            r#"tool> lookup started {"ticket":"INC-42"}"#,
+        ))
+        .stdout(predicate::str::contains(
+            r#"tool> lookup completed (200) {"ok":true}"#,
+        ))
+        .stdout(predicate::str::contains("assistant> historical answer"))
+        .stdout(predicate::str::contains("turn> completed (done)"))
+        .stdout(predicate::str::contains("structured>"))
+        .stdout(predicate::str::contains(r#""summary": "done""#))
+        .stdout(predicate::str::contains("RAW_TRANSCRIPT_INPUT").not())
+        .stdout(predicate::str::contains("RAW_TRANSCRIPT_OUTPUT").not())
+        .stdout(predicate::str::contains("RAW_TRANSCRIPT_TEXT").not())
+        .stdout(predicate::str::contains("RAW_TRANSCRIPT_PRIVATE").not())
+        .stdout(predicate::str::contains("hidden private display").not());
 }
 
 #[test]
