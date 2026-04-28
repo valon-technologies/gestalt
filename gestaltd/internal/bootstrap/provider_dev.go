@@ -157,6 +157,12 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			cleanup()
 		}
 	}()
+	if deps.PublicHostServices != nil {
+		deps.PublicHostServices.RegisterSession(name, sessionID, hostServices...)
+		cleanup = chainCleanup(cleanup, func() {
+			deps.PublicHostServices.UnregisterSession(name, sessionID, hostServices...)
+		})
+	}
 
 	env := map[string]string{}
 	var allowedHosts []string

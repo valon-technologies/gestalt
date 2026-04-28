@@ -1483,7 +1483,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 
 	bin := buildAgentProviderBinary(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
@@ -1520,9 +1521,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	runtimeState := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	runtimeState.SetRunMetadata(services.AgentRunMetadata)
 	deps := Deps{
-		BaseURL:       relaySrv.URL,
-		EncryptionKey: secret,
-		AgentRuntime:  runtimeState,
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		AgentRuntime:       runtimeState,
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
