@@ -2758,6 +2758,128 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 	}
 }
 
+func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
+		N:        "linear",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name:        "linear",
+			DisplayName: "Linear",
+			Description: "Manage issues, projects, and teams.",
+			Operations: []catalog.CatalogOperation{{
+				ID:          "issues",
+				Method:      http.MethodGet,
+				Description: "All issues visible to the authenticated user. Can be filtered by assignee.",
+				ReadOnly:    true,
+			}},
+		},
+		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			body, err := json.Marshal(map[string]any{
+				"provider":  "linear",
+				"operation": operation,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		},
+	})
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		value.searchQuery = "Linear list issues assigned to me"
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	slackOnly := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin: "slack",
+		Operations: []string{
+			"events.reply",
+			"events.setStatus",
+		},
+	}})
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		TokenPermissions: slackOnly,
+		Scopes:           principal.PermissionPlugins(slackOnly),
+	}
+	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
+
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-http-slack-search",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		CallerPluginName: "slack",
+		SessionID:        session.ID,
+		IdempotencyKey:   "http-slack-linear-search",
+		Model:            "gpt-test",
+		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn returned nil turn")
+	}
+
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get: %v", err)
+	}
+
+	provider.mu.Lock()
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
+		t.Fatalf("tool callback bodies = %#v, ref permissions = %#v, ref tools = %#v, want searched linear.issues", toolBodies, ref.Permissions, ref.Tools)
+	}
+	if ref.Permissions != nil {
+		t.Fatalf("stored permissions = %#v, want unrestricted resolved user scope", ref.Permissions)
+	}
+	if len(ref.ToolRefs) != 1 || ref.ToolRefs[0].Plugin != "*" {
+		t.Fatalf("stored tool refs = %#v, want global search ref", ref.ToolRefs)
+	}
+	if len(ref.Tools) == 0 || ref.Tools[0].Target.Plugin != "linear" || ref.Tools[0].Target.Operation != "issues" {
+		t.Fatalf("stored searched tools = %#v, want linear.issues", ref.Tools)
+	}
+}
+
 func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing.T) {
 	t.Parallel()
 
