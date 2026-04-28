@@ -84,8 +84,8 @@ pub fn disconnect(
     let normalized_connection = connection.map(|value| ConnectionName::new(value).canonical());
     let mut path = format!("/api/v1/integrations/{name}");
     let params: Vec<(&str, &str)> = [
-        ("connection", normalized_connection),
-        ("instance", instance),
+        ("_connection", normalized_connection),
+        ("_instance", instance),
     ]
     .into_iter()
     .filter_map(|(key, value)| value.map(|v| (key, v)))
