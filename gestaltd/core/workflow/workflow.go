@@ -311,7 +311,7 @@ type Host interface {
 }
 
 func TargetFingerprint(target Target) (string, error) {
-	return legacyTargetFingerprint(target)
+	return canonicalTargetFingerprint(target)
 }
 
 // TargetFingerprintMatches reports whether fingerprint matches the canonical
@@ -321,18 +321,18 @@ func TargetFingerprintMatches(target Target, fingerprint string) (bool, error) {
 	if fingerprint == "" {
 		return false, nil
 	}
-	current, err := TargetFingerprint(target)
+	canonical, err := TargetFingerprint(target)
 	if err != nil {
 		return false, err
 	}
-	if current == fingerprint {
+	if canonical == fingerprint {
 		return true, nil
 	}
-	canonical, err := canonicalTargetFingerprint(target)
+	legacy, err := legacyTargetFingerprint(target)
 	if err != nil {
 		return false, err
 	}
-	return canonical == fingerprint, nil
+	return legacy == fingerprint, nil
 }
 
 func targetFingerprint(payload any) (string, error) {
