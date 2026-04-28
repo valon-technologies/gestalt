@@ -339,7 +339,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 			},
 		},
 	}
-	configPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
+	configPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(nil, req.Target))
 	configPrincipal := principal.Canonicalize(&principal.Principal{
 		SubjectID:           "system:config",
 		CredentialSubjectID: "system:config",

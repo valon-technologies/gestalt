@@ -369,21 +369,18 @@ func workflowEnsureConfigExecutionRef(
 	return refID, true, nil
 }
 
-func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
+func workflowExecutionRefPermissionsForTarget(cfg *config.Config, target coreworkflow.Target) []core.AccessPermission {
 	if target.Agent != nil {
-		out := make([]core.AccessPermission, 0, len(target.Agent.ToolRefs))
+		permissions := make(map[string]map[string]struct{}, len(target.Agent.ToolRefs))
 		for _, tool := range target.Agent.ToolRefs {
 			pluginName := strings.TrimSpace(tool.Plugin)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" || operation == "" {
 				continue
 			}
-			out = append(out, core.AccessPermission{
-				Plugin:     pluginName,
-				Operations: []string{operation},
-			})
+			addWorkflowConfigPermission(permissions, pluginName, operation)
 		}
-		return out
+		return workflowConfigAccessPermissions(permissions)
 	}
 	if target.Plugin == nil {
 		return nil
@@ -394,10 +391,56 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 	if pluginName == "" || operation == "" {
 		return nil
 	}
-	return []core.AccessPermission{{
-		Plugin:     pluginName,
-		Operations: []string{operation},
-	}}
+	permissions := map[string]map[string]struct{}{}
+	addWorkflowConfigPermission(permissions, pluginName, operation)
+	for _, dep := range workflowConfigPluginInvokes(cfg, pluginName) {
+		addWorkflowConfigPermission(permissions, dep.Plugin, dep.Operation)
+	}
+	return workflowConfigAccessPermissions(permissions)
+}
+
+func workflowConfigPluginInvokes(cfg *config.Config, pluginName string) []config.PluginInvocationDependency {
+	if cfg == nil || cfg.Plugins == nil {
+		return nil
+	}
+	entry := cfg.Plugins[strings.TrimSpace(pluginName)]
+	if entry == nil || len(entry.Invokes) == 0 {
+		return nil
+	}
+	return entry.Invokes
+}
+
+func addWorkflowConfigPermission(permissions map[string]map[string]struct{}, pluginName, operation string) {
+	pluginName = strings.TrimSpace(pluginName)
+	operation = strings.TrimSpace(operation)
+	if pluginName == "" || operation == "" {
+		return
+	}
+	operations := permissions[pluginName]
+	if operations == nil {
+		operations = map[string]struct{}{}
+		permissions[pluginName] = operations
+	}
+	operations[operation] = struct{}{}
+}
+
+func workflowConfigAccessPermissions(permissions map[string]map[string]struct{}) []core.AccessPermission {
+	if len(permissions) == 0 {
+		return nil
+	}
+	plugins := slices.Sorted(maps.Keys(permissions))
+	out := make([]core.AccessPermission, 0, len(plugins))
+	for _, pluginName := range plugins {
+		operations := slices.Sorted(maps.Keys(permissions[pluginName]))
+		if len(operations) == 0 {
+			continue
+		}
+		out = append(out, core.AccessPermission{
+			Plugin:     pluginName,
+			Operations: operations,
+		})
+	}
+	return out
 }
 
 func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target) (*coreworkflow.ExecutionReference, error) {
@@ -409,7 +452,7 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		DisplayName:         "Gestalt config",
 		AuthSource:          "config",
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
-		Permissions:         workflowExecutionRefPermissionsForTarget(target),
+		Permissions:         workflowExecutionRefPermissionsForTarget(cfg, target),
 	}
 	fingerprint, err := coreworkflow.TargetFingerprint(target)
 	if err != nil {

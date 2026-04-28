@@ -5031,6 +5031,80 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if ref.SubjectID != "system:config" {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
+	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+		t.Fatalf("permissions = %#v", ref.Permissions)
+	}
+}
+
+func TestBootstrapConfiguredWorkflowEventTriggerExecutionRefInheritsPluginInvokes(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["github"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModeNone,
+		Invokes: []config.PluginInvocationDependency{
+			{
+				Plugin:         "github",
+				Operation:      "bot.commitFiles",
+				CredentialMode: providermanifestv1.ConnectionModeNone,
+			},
+			{
+				Plugin:         "github",
+				Operation:      "bot.openPullRequest",
+				CredentialMode: providermanifestv1.ConnectionModeNone,
+			},
+			{
+				Plugin:         "github",
+				Operation:      "bot.createPullRequest",
+				CredentialMode: providermanifestv1.ConnectionModeNone,
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "github", &workflowFixture{
+		Provider: "temporal",
+		EventTriggers: map[string]workflowFixtureEventTrigger{
+			"github_app_webhook": {
+				Match: workflowFixtureEventMatch{
+					Type:   "github.app.webhook",
+					Source: "github",
+				},
+				Operation: "events.runAgentFromWorkflowEvent",
+			},
+		},
+	})
+
+	factories := validFactories()
+	recorder := &recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedEventTriggers[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "github" {
+		t.Fatalf("permissions = %#v", ref.Permissions)
+	}
+	wantOperations := []string{
+		"bot.commitFiles",
+		"bot.createPullRequest",
+		"bot.openPullRequest",
+		"events.runAgentFromWorkflowEvent",
+	}
+	if !slices.Equal(ref.Permissions[0].Operations, wantOperations) {
+		t.Fatalf("github operations = %#v, want %#v", ref.Permissions[0].Operations, wantOperations)
+	}
 }
 
 func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {

@@ -251,7 +251,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
-		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+		Permissions:  workflowExecutionRefPermissionsForTarget(nil, target),
 	})
 	if err != nil {
 		t.Fatalf("store workflow execution ref: %v", err)
