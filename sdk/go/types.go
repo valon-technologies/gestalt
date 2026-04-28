@@ -11,10 +11,6 @@ import (
 type ProviderKind string
 
 const (
-	// HostedPluginBundleRoot is the guest-visible directory where the host stages
-	// bundle-based plugin payloads before a hosted runtime launches them.
-	HostedPluginBundleRoot = "/workspace/plugin"
-
 	// ProviderKindIntegration is the main executable provider surface used by
 	// integration plugins.
 	ProviderKindIntegration ProviderKind = "integration"

@@ -104,11 +104,6 @@ func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRun
 		CanHostPlugins:    true,
 		HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
 		EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-		LaunchMode:        proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE,
-		ExecutionTarget: &proto.PluginRuntimeExecutionTarget{
-			Goos:   "linux",
-			Goarch: "amd64",
-		},
 	}, nil
 }
 
@@ -175,11 +170,12 @@ Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
 it is not equivalent to hostname-based policy. If your backend can only express
 network controls at firewall or CIDR granularity, advertise `cidr`.
 
-`launch_mode` should be `host_path` only when the backend can execute directly
-from the host paths Gestalt provides. Otherwise advertise `bundle`, which tells
-the host to stage a runtime bundle first. When bundle launch is required,
-`execution_target` must accurately describe the platform the backend will
-actually run so the host can choose or stage the right artifact.
+Hosted runtime providers should run provider images rather than expect Gestalt
+to upload a provider bundle into the session. The `StartSession` request carries
+the selected image, template, and metadata. `StartPlugin` then carries the
+manifest-derived `command` and `args` to execute inside the image. Execute those
+values exactly as provided by the host after applying any environment variables,
+host-service bindings, and egress policy in the request.
 
 New providers should populate `support`. That grouped support shape is the
 runtime contract operators see in inspection.

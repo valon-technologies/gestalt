@@ -363,11 +363,6 @@ func newCapturingBundlePluginRuntime() *capturingBundlePluginRuntime {
 		provider: pluginruntime.NewLocalProvider(),
 		support: pluginruntime.Support{
 			CanHostPlugins: true,
-			LaunchMode:     pluginruntime.LaunchModeBundle,
-			ExecutionTarget: pluginruntime.ExecutionTarget{
-				GOOS:   runtime.GOOS,
-				GOARCH: runtime.GOARCH,
-			},
 		},
 		fakePlugins: make(map[string]*fakeHostedPluginServer),
 	}
@@ -427,35 +422,15 @@ func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req plug
 		Command:    req.Command,
 		Args:       slices.Clone(req.Args),
 		Env:        cloneRuntimeMetadata(req.Env),
-		BundleDir:  req.BundleDir,
 		Egress:     cloneRuntimeEgressPolicy(req.Egress),
 		HostBinary: req.HostBinary,
 	})
 	r.mu.Unlock()
 
-	translated := req
-	if req.BundleDir != "" && strings.HasPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/") {
-		rel := strings.TrimPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/")
-		translated.Command = filepath.Join(req.BundleDir, filepath.FromSlash(rel))
-	}
-	if req.BundleDir != "" {
-		translated.Args = make([]string, len(req.Args))
-		for i, arg := range req.Args {
-			switch {
-			case arg == pluginruntime.HostedPluginBundleRoot:
-				translated.Args[i] = req.BundleDir
-			case strings.HasPrefix(arg, pluginruntime.HostedPluginBundleRoot+"/"):
-				rel := strings.TrimPrefix(arg, pluginruntime.HostedPluginBundleRoot+"/")
-				translated.Args[i] = filepath.Join(req.BundleDir, filepath.FromSlash(rel))
-			default:
-				translated.Args[i] = arg
-			}
-		}
-	}
 	if r.fakeHosted {
 		return r.startFakeHostedPlugin(req)
 	}
-	return r.provider.StartPlugin(ctx, translated)
+	return r.provider.StartPlugin(ctx, req)
 }
 
 func (r *capturingBundlePluginRuntime) Close() error {
@@ -1303,7 +1278,6 @@ func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime
 			Command:    req.Command,
 			Args:       slices.Clone(req.Args),
 			Env:        cloneRuntimeMetadata(req.Env),
-			BundleDir:  req.BundleDir,
 			Egress:     cloneRuntimeEgressPolicy(req.Egress),
 			HostBinary: req.HostBinary,
 		}
@@ -3306,6 +3280,10 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: "bin/gestalt-plugin-echo",
+		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
+	}
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
 		"default": {
 			Auth: &providermanifestv1.ProviderAuth{
@@ -3867,7 +3845,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -5429,6 +5406,23 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	imageEntrypointDir, err := os.MkdirTemp(".", "plugin-image-entrypoint-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(imageEntrypointDir) })
+	imageEntrypoint := filepath.Join(imageEntrypointDir, "plugin")
+	pluginBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(plugin bin): %v", err)
+	}
+	if err := os.WriteFile(imageEntrypoint, pluginBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(image entrypoint): %v", err)
+	}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: filepath.ToSlash(imageEntrypoint),
+		Args:         []string{"provider"},
+	}
 	runtimeProvider := newCapturingPluginRuntime()
 	ctxSentinel := &struct{}{}
 	var factoryContextValue any
@@ -5514,7 +5508,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	}
 }
 
-func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
+func TestPluginRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5604,11 +5598,11 @@ func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
 		t.Fatalf("start plugin requests = %d, want 1", len(requests))
 	}
 	req := requests[0]
-	if req.BundleDir == "" {
-		t.Fatal("StartPlugin BundleDir = empty, want staged bundle")
+	if req.Command != bin {
+		t.Fatalf("StartPlugin Command = %q, want configured command", req.Command)
 	}
-	if !strings.HasPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/") {
-		t.Fatalf("StartPlugin Command = %q, want command under %s", req.Command, pluginruntime.HostedPluginBundleRoot)
+	if !slices.Equal(req.Args, []string{"provider"}) {
+		t.Fatalf("StartPlugin Args = %#v, want configured args", req.Args)
 	}
 	if got := runtimeProvider.bindHostCalls.Load(); got != 0 {
 		t.Fatalf("BindHostService calls = %d, want 0", got)
@@ -5617,55 +5611,25 @@ func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
 	if err := CloseProviders(providers); err != nil {
 		t.Fatalf("CloseProviders: %v", err)
 	}
-	if _, err := os.Stat(req.BundleDir); !os.IsNotExist(err) {
-		t.Fatalf("bundle dir stat after close = %v, want not-exist", err)
-	}
 }
 
-func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) {
+func TestPluginRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	bin := buildExampleProviderBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "example",
+		Name: "echoext",
 		Operations: []catalog.CatalogOperation{
-			{ID: "status", Method: http.MethodGet},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
 		},
 	})
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, filepath.Base(bin)))
-	artifactBytes, err := os.ReadFile(bin)
-	if err != nil {
-		t.Fatalf("ReadFile(binary): %v", err)
-	}
-	artifactFile := filepath.Join(manifestRoot, filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(artifactFile), 0o755); err != nil {
-		t.Fatalf("MkdirAll(artifact dir): %v", err)
-	}
-	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
-		t.Fatalf("WriteFile(artifact): %v", err)
-	}
-	digest, err := providerpkg.FileSHA256(artifactFile)
-	if err != nil {
-		t.Fatalf("FileSHA256(artifact): %v", err)
-	}
-	manifest := newExecutableManifest("Example Provider", "Prepared install artifact")
-	manifest.Artifacts = []providermanifestv1.Artifact{{
-		OS:     runtime.GOOS,
-		Arch:   runtime.GOARCH,
-		Path:   artifactPath,
-		SHA256: digest,
-	}}
-	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
-	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifestFormat(manifest): %v", err)
-	}
-	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
-	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
-		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: "bin/gestalt-plugin-echo",
+		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -5682,11 +5646,12 @@ func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) 
 			},
 		},
 		Plugins: map[string]*config.ProviderEntry{
-			"example": {
-				Args:                 []string{"-m", "gestalt._runtime", "/host/source", "pkg.provider", "integration"},
+			"echoext": {
 				ResolvedManifest:     manifest,
-				ResolvedManifestPath: manifestPath,
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+					Image: "ghcr.io/example/echo-plugin@sha256:abc123",
+				}),
 			},
 		},
 	}
@@ -5707,65 +5672,32 @@ func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) 
 	if len(requests) != 1 {
 		t.Fatalf("start plugin requests = %d, want 1", len(requests))
 	}
-	if len(requests[0].Args) != 0 {
-		t.Fatalf("StartPlugin Args = %#v, want source-style host args dropped", requests[0].Args)
+	req := requests[0]
+	if req.Command != "./bin/gestalt-plugin-echo" {
+		t.Fatalf("StartPlugin Command = %q, want manifest image entrypoint", req.Command)
 	}
-	if !strings.HasPrefix(requests[0].Command, pluginruntime.HostedPluginBundleRoot+"/") {
-		t.Fatalf("StartPlugin Command = %q, want command under %s", requests[0].Command, pluginruntime.HostedPluginBundleRoot)
+	if !slices.Equal(req.Args, []string{"--config", "/etc/gestalt/echo.yaml"}) {
+		t.Fatalf("StartPlugin Args = %#v, want manifest image args", req.Args)
 	}
 }
 
-func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) {
+func TestPluginRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
-	bin := buildExampleProviderBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "example",
+		Name: "echoext",
 		Operations: []catalog.CatalogOperation{
-			{ID: "status", Method: http.MethodGet},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
 		},
 	})
-	configPath := filepath.Join(manifestRoot, "fixtures", "config.json")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(fixtures): %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{"ok":true}`), 0o644); err != nil {
-		t.Fatalf("WriteFile(config.json): %v", err)
-	}
-	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, filepath.Base(bin)))
-	artifactBytes, err := os.ReadFile(bin)
-	if err != nil {
-		t.Fatalf("ReadFile(binary): %v", err)
-	}
-	artifactFile := filepath.Join(manifestRoot, filepath.FromSlash(artifactPath))
-	if err := os.MkdirAll(filepath.Dir(artifactFile), 0o755); err != nil {
-		t.Fatalf("MkdirAll(artifact dir): %v", err)
-	}
-	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
-		t.Fatalf("WriteFile(artifact): %v", err)
-	}
-	digest, err := providerpkg.FileSHA256(artifactFile)
-	if err != nil {
-		t.Fatalf("FileSHA256(artifact): %v", err)
-	}
-	manifest := newExecutableManifest("Example Provider", "Prepared install artifact")
-	manifest.Artifacts = []providermanifestv1.Artifact{{
-		OS:     runtime.GOOS,
-		Arch:   runtime.GOARCH,
-		Path:   artifactPath,
-		SHA256: digest,
-	}}
-	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
-	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifestFormat(manifest): %v", err)
-	}
-	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
-	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
-		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: "bin/gestalt-plugin-echo",
+		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
 	}
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -5782,19 +5714,74 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 			},
 		},
 		Plugins: map[string]*config.ProviderEntry{
-			"example": {
+			"echoext": {
+				Command:              "/host/only/plugin",
+				Args:                 []string{"host-arg"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+					Template: "python-runtime",
+				}),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() {
+		if err := CloseProviders(providers); err != nil {
+			t.Fatalf("CloseProviders: %v", err)
+		}
+	}()
+
+	requests := runtimeProvider.startPluginRequestsCopy()
+	if len(requests) != 1 {
+		t.Fatalf("start plugin requests = %d, want 1", len(requests))
+	}
+	req := requests[0]
+	if req.Command != "./bin/gestalt-plugin-echo" {
+		t.Fatalf("StartPlugin Command = %q, want manifest template entrypoint", req.Command)
+	}
+	if !slices.Equal(req.Args, []string{"--config", "/etc/gestalt/echo.yaml"}) {
+		t.Fatalf("StartPlugin Args = %#v, want manifest template args", req.Args)
+	}
+}
+
+func TestPluginRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{
+		ArtifactPath: "bin/gestalt-plugin-echo",
+		Args:         []string{"--config", "/etc/gestalt/echo.yaml"},
+	}
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
 				Command:              bin,
-				Args:                 []string{"--config", configPath, "--name", "example"},
+				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
-				ResolvedManifestPath: manifestPath,
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+					Image: "ghcr.io/example/echo-plugin@sha256:abc123",
+				}),
 			},
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -5804,15 +5791,12 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 		}
 	}()
 
-	requests := runtimeProvider.startPluginRequestsCopy()
-	if len(requests) != 1 {
-		t.Fatalf("start plugin requests = %d, want 1", len(requests))
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get(echoext): %v", err)
 	}
-	if requests[0].Args[1] != pluginruntime.HostedPluginBundleRoot+"/fixtures/config.json" {
-		t.Fatalf("StartPlugin Args = %#v, want staged bundle config path", requests[0].Args)
-	}
-	if requests[0].Args[3] != "example" {
-		t.Fatalf("StartPlugin Args = %#v, want non-path args preserved", requests[0].Args)
+	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
+		t.Fatalf("Execute(read_env): %v", err)
 	}
 }
 
@@ -5829,11 +5813,6 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
-	runtimeProvider.fakeHosted = true
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
-	runtimeProvider.fakeHosted = true
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6059,7 +6038,6 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6164,7 +6142,6 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6294,7 +6271,6 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6419,7 +6395,6 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6553,7 +6528,6 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6683,7 +6657,6 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6836,7 +6809,6 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6996,7 +6968,6 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7156,7 +7127,6 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 		inner: pluginruntime.NewLocalProvider(),
 		support: pluginruntime.Support{
 			CanHostPlugins: true,
-			LaunchMode:     pluginruntime.LaunchModeHostPath,
 		},
 	}
 	factories := NewFactoryRegistry()
@@ -7483,7 +7453,6 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7638,7 +7607,6 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	}
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7759,7 +7727,6 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7845,7 +7812,6 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7912,7 +7878,6 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -8014,7 +7979,6 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 	manifest := newExecutableManifest("Echo", "Hosted egress proxy roundtrip")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {

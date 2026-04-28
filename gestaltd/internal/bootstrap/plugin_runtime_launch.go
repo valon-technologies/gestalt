@@ -2,153 +2,73 @@ package bootstrap
 
 import (
 	"fmt"
-	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type pluginRuntimeLaunch struct {
-	command   string
-	args      []string
-	bundleDir string
-	cleanup   func()
+type hostedProcessLaunch struct {
+	command string
+	args    []string
+	cleanup func()
 }
 
-func prepareHostedRuntimeLaunch(kind, name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), behavior RuntimeBehavior) (pluginRuntimeLaunch, error) {
-	launch := pluginRuntimeLaunch{
-		command: command,
+func prepareHostedProcessLaunch(kind, name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), runtimeConfig config.EffectiveHostedRuntime) (hostedProcessLaunch, error) {
+	if hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
+		command, args, err := hostedRuntimeImageEntrypoint(kind, name, entry)
+		if err != nil {
+			return hostedProcessLaunch{}, err
+		}
+		return hostedProcessLaunch{
+			command: command,
+			args:    args,
+			cleanup: cleanup,
+		}, nil
+	}
+
+	launch := hostedProcessLaunch{
+		command: strings.TrimSpace(command),
 		args:    slices.Clone(args),
 		cleanup: cleanup,
 	}
-	if behavior.LaunchMode == RuntimeLaunchModeHostPath {
-		return launch, nil
+	if launch.command == "" {
+		return hostedProcessLaunch{}, fmt.Errorf("hosted runtime command is required")
 	}
-	if entry == nil {
-		return pluginRuntimeLaunch{}, fmt.Errorf("%s entry is required for non-local hosted runtime", kind)
-	}
-	manifestPath := strings.TrimSpace(entry.ResolvedManifestPath)
-	if manifestPath == "" {
-		return pluginRuntimeLaunch{}, fmt.Errorf("resolved manifest path is required for non-local hosted runtime")
-	}
-	rootDir := filepath.Dir(manifestPath)
-	if !behavior.ExecutionTarget.IsSet() {
-		return pluginRuntimeLaunch{}, fmt.Errorf("non-local hosted runtime must declare execution goos/goarch")
-	}
-
-	bundleDir, err := providerhost.NewPluginTempDir("gestalt-plugin-runtime-bundle-*")
-	if err != nil {
-		return pluginRuntimeLaunch{}, fmt.Errorf("create hosted runtime bundle dir: %w", err)
-	}
-	bundleCleanup := func() {
-		_ = os.RemoveAll(bundleDir)
-	}
-
-	localCommand, err := stageHostedRuntimeBundle(kind, name, manifestPath, bundleDir, behavior.ExecutionTarget.GOOS, behavior.ExecutionTarget.GOARCH)
-	if err != nil {
-		bundleCleanup()
-		return pluginRuntimeLaunch{}, err
-	}
-	rel, err := filepath.Rel(bundleDir, localCommand)
-	if err != nil {
-		bundleCleanup()
-		return pluginRuntimeLaunch{}, fmt.Errorf("resolve hosted runtime bundle command: %w", err)
-	}
-	if rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
-		bundleCleanup()
-		return pluginRuntimeLaunch{}, fmt.Errorf("hosted runtime bundle command %q is outside bundle %q", localCommand, bundleDir)
-	}
-
-	launch.command = path.Join(pluginruntime.HostedPluginBundleRoot, filepath.ToSlash(rel))
-	launch.args = rewriteHostedRuntimeBundleArgs(rootDir, launch.args)
-	launch.bundleDir = bundleDir
-	launch.cleanup = chainCleanup(cleanup, bundleCleanup)
 	return launch, nil
 }
 
-func rewriteHostedRuntimeBundleArgs(rootDir string, args []string) []string {
-	if len(args) == 0 {
-		return nil
+func hostedRuntimeUsesImageEntrypoint(runtimeConfig config.EffectiveHostedRuntime) bool {
+	hasRuntimeImageOrTemplate := strings.TrimSpace(runtimeConfig.Image) != "" || strings.TrimSpace(runtimeConfig.Template) != ""
+	if runtimeConfig.Provider != nil {
+		return runtimeConfig.Provider.Driver != config.RuntimeProviderDriverLocal && hasRuntimeImageOrTemplate
 	}
-	rewritten := slices.Clone(args)
-	for i, arg := range rewritten {
-		rewritten[i] = rewriteHostedRuntimeBundleArg(rootDir, arg)
-	}
-	return rewritten
+	return hasRuntimeImageOrTemplate
 }
 
-func rewriteHostedRuntimeBundleArg(rootDir, arg string) string {
-	arg = strings.TrimSpace(arg)
-	if arg == "" || !filepath.IsAbs(arg) {
-		return arg
+func hostedRuntimeImageEntrypoint(kind, name string, entry *config.ProviderEntry) (string, []string, error) {
+	label := strings.TrimSpace(kind)
+	if label == "" {
+		label = "provider"
 	}
-	rel, err := filepath.Rel(rootDir, arg)
-	if err != nil {
-		return arg
+	if trimmedName := strings.TrimSpace(name); trimmedName != "" {
+		label = fmt.Sprintf("%s %q", label, trimmedName)
 	}
-	switch {
-	case rel == ".":
-		return pluginruntime.HostedPluginBundleRoot
-	case rel == "..", strings.HasPrefix(rel, ".."+string(filepath.Separator)):
-		return arg
-	default:
-		return path.Join(pluginruntime.HostedPluginBundleRoot, filepath.ToSlash(rel))
+	if entry == nil || entry.ResolvedManifest == nil {
+		return "", nil, fmt.Errorf("%s manifest is required for hosted runtime image launch", label)
 	}
-}
-
-func stageHostedRuntimeBundle(kind, name, manifestPath, bundleDir, goos, goarch string) (string, error) {
-	rootDir := filepath.Dir(manifestPath)
-	hasSourceReleaseTarget, err := providerpkg.HasSourceReleaseTarget(rootDir, kind)
-	if err != nil {
-		return "", fmt.Errorf("prepare hosted runtime bundle: detect source release target: %w", err)
+	entrypoint := providerpkg.EntrypointForKind(entry.ResolvedManifest, kind)
+	if entrypoint == nil {
+		return "", nil, fmt.Errorf("%s manifest does not define an entrypoint for hosted runtime image launch", label)
 	}
-	if hasSourceReleaseTarget {
-		staged, err := providerpkg.StageSourcePreparedInstallDir(manifestPath, bundleDir, providerpkg.StageSourcePreparedInstallOptions{
-			Kind:       kind,
-			PluginName: name,
-			GOOS:       goos,
-			GOARCH:     goarch,
-		})
-		if err != nil {
-			return "", fmt.Errorf("prepare hosted runtime bundle: stage source install for %s/%s: %w", goos, goarch, err)
-		}
-		entry := providerpkg.EntrypointForKind(staged.Manifest, kind)
-		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-			return "", fmt.Errorf("prepare hosted runtime bundle: staged source install has no executable entrypoint")
-		}
-		return filepath.Join(bundleDir, filepath.FromSlash(entry.ArtifactPath)), nil
+	command := path.Clean(strings.TrimSpace(entrypoint.ArtifactPath))
+	if command == "." || command == "" {
+		return "", nil, fmt.Errorf("%s manifest entrypoint artifactPath is required for hosted runtime image launch", label)
 	}
-
-	if err := providerpkg.CopyPackageDir(rootDir, bundleDir); err != nil {
-		return "", fmt.Errorf("prepare hosted runtime bundle: copy package dir: %w", err)
+	if path.IsAbs(command) || command == ".." || strings.HasPrefix(command, "../") {
+		return "", nil, fmt.Errorf("%s manifest entrypoint artifactPath must be relative for hosted runtime image launch", label)
 	}
-	_, manifest, _, err := providerpkg.LoadManifestFromPath(bundleDir)
-	if err != nil {
-		return "", fmt.Errorf("prepare hosted runtime bundle: load staged manifest: %w", err)
-	}
-	artifact, err := artifactForPlatform(manifest, goos, goarch)
-	if err != nil {
-		return "", fmt.Errorf("prepare hosted runtime bundle: %w", err)
-	}
-	return filepath.Join(bundleDir, filepath.FromSlash(artifact.Path)), nil
-}
-
-func artifactForPlatform(manifest *providermanifestv1.Manifest, goos, goarch string) (*providermanifestv1.Artifact, error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("manifest is required")
-	}
-	for i := range manifest.Artifacts {
-		artifact := &manifest.Artifacts[i]
-		if artifact.OS == goos && artifact.Arch == goarch {
-			return artifact, nil
-		}
-	}
-	return nil, fmt.Errorf("no artifact for platform %s/%s", goos, goarch)
+	return "./" + command, slices.Clone(entrypoint.Args), nil
 }

@@ -3169,21 +3169,11 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 						CanHostPlugins:    true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
-						LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
-						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
-							GOOS:   "linux",
-							GOARCH: "amd64",
-						},
 					},
 					Effective: bootstrap.RuntimeBehavior{
 						CanHostPlugins:    true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
-						LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
-						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
-							GOOS:   "linux",
-							GOARCH: "amd64",
-						},
 					},
 					Sessions: []pluginruntime.Session{{
 						ID:    "session-1",
@@ -3249,15 +3239,11 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	if !ok {
 		t.Fatalf("runtime providers[1].profile.effective = %#v, want object", profile["effective"])
 	}
-	if advertised["canHostPlugins"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" || advertised["launchMode"] != "bundle" {
+	if advertised["canHostPlugins"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" {
 		t.Fatalf("runtime providers[1].profile.advertised = %#v", advertised)
 	}
-	if effective["canHostPlugins"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" || effective["launchMode"] != "bundle" {
+	if effective["canHostPlugins"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" {
 		t.Fatalf("runtime providers[1].profile.effective = %#v", effective)
-	}
-	executionTarget, ok := effective["executionTarget"].(map[string]any)
-	if !ok || executionTarget["goos"] != "linux" || executionTarget["goarch"] != "amd64" {
-		t.Fatalf("runtime providers[1].profile.effective.executionTarget = %#v", effective["executionTarget"])
 	}
 }
 
@@ -3384,13 +3370,11 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 					CanHostPlugins:    true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
-					LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 				},
 				Effective: bootstrap.RuntimeBehavior{
 					CanHostPlugins:    true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
-					LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 				},
 				Error: "list sessions: boom",
 			}},

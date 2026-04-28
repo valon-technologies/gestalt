@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
@@ -32,28 +31,10 @@ const (
 	RuntimeHostnameEgressDeliveryPublicProxy RuntimeHostnameEgressDelivery = "public_proxy"
 )
 
-type RuntimeLaunchMode string
-
-const (
-	RuntimeLaunchModeHostPath RuntimeLaunchMode = "host_path"
-	RuntimeLaunchModeBundle   RuntimeLaunchMode = "bundle"
-)
-
-type RuntimeExecutionTarget struct {
-	GOOS   string
-	GOARCH string
-}
-
-func (t RuntimeExecutionTarget) IsSet() bool {
-	return strings.TrimSpace(t.GOOS) != "" && strings.TrimSpace(t.GOARCH) != ""
-}
-
 type RuntimeBehavior struct {
 	CanHostPlugins    bool
 	HostServiceAccess RuntimeHostServiceAccess
 	EgressMode        RuntimeEgressMode
-	LaunchMode        RuntimeLaunchMode
-	ExecutionTarget   RuntimeExecutionTarget
 }
 
 type HostedRuntimePlan struct {
@@ -86,11 +67,6 @@ func runtimeAdvertisedBehavior(support pluginruntime.Support) RuntimeBehavior {
 		CanHostPlugins:    support.CanHostPlugins,
 		HostServiceAccess: runtimeHostServiceAccessFromSupport(support.HostServiceAccess),
 		EgressMode:        runtimeEgressModeFromSupport(support.EgressMode),
-		LaunchMode:        runtimeLaunchModeFromSupport(support.LaunchMode),
-		ExecutionTarget: RuntimeExecutionTarget{
-			GOOS:   strings.TrimSpace(support.ExecutionTarget.GOOS),
-			GOARCH: strings.TrimSpace(support.ExecutionTarget.GOARCH),
-		},
 	}
 }
 
@@ -183,9 +159,6 @@ func (p HostedRuntimePlan) Validate(label string) error {
 	if p.RequiresHostnameEgress && p.Resolved.EgressMode != RuntimeEgressModeHostname {
 		return fmt.Errorf("%s cannot preserve hostname-based egress required by this provider", label)
 	}
-	if p.Resolved.LaunchMode == RuntimeLaunchModeBundle && !p.Resolved.ExecutionTarget.IsSet() {
-		return fmt.Errorf("%s cannot stage hosted bundles because it does not declare an execution target", label)
-	}
 	return nil
 }
 
@@ -206,14 +179,5 @@ func runtimeEgressModeFromSupport(src pluginruntime.EgressMode) RuntimeEgressMod
 		return RuntimeEgressModeCIDR
 	default:
 		return RuntimeEgressModeNone
-	}
-}
-
-func runtimeLaunchModeFromSupport(src pluginruntime.LaunchMode) RuntimeLaunchMode {
-	switch src {
-	case pluginruntime.LaunchModeHostPath:
-		return RuntimeLaunchModeHostPath
-	default:
-		return RuntimeLaunchModeBundle
 	}
 }

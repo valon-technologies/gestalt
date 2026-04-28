@@ -20,23 +20,11 @@ enum PluginRuntimeEgressMode {
   PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME = 3;
 }
 
-enum PluginRuntimeLaunchMode {
-  PLUGIN_RUNTIME_LAUNCH_MODE_UNSPECIFIED = 0;
-  PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE = 1;
-  PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH = 2;
-}
-
-message PluginRuntimeExecutionTarget {
-  string goos = 1;
-  string goarch = 2;
-}
-
 message PluginRuntimeSupport {
+  reserved 4, 5, 6;
   bool can_host_plugins = 1;
   PluginRuntimeHostServiceAccess host_service_access = 2;
   PluginRuntimeEgressMode egress_mode = 3;
-  PluginRuntimeLaunchMode launch_mode = 4;
-  PluginRuntimeExecutionTarget execution_target = 5;
 }
 
 message PluginRuntimeSession {
@@ -99,12 +87,12 @@ message PluginRuntimeHostServiceBinding {
 // plugin's listener endpoint and returns a host-reachable dial target in the
 // HostedPlugin response.
 message StartHostedPluginRequest {
+  reserved 6, 10;
   string session_id = 1;
   string plugin_name = 2;
   string command = 3;
   repeated string args = 4;
   map<string, string> env = 5;
-  string bundle_dir = 6;
   repeated string allowed_hosts = 7;
   string default_action = 8;
   string host_binary = 9;

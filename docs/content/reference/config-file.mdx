@@ -253,6 +253,26 @@ means `server.baseURL` and `server.encryptionKey` must be set, and the runtime
 must report a compatible support profile. Without those prerequisites, Gestalt
 will reject Modal for plugins that need relay-backed host services,
 `egress.allowedHosts`, or a server-wide default-deny egress policy.
+
+Hosted runtime images are expected to contain the provider package at the image
+working directory. Gestalt starts the executable declared by the provider
+manifest entrypoint and passes the manifest entrypoint args:
+
+```yaml
+plugins:
+  support:
+    source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
+    execution:
+      mode: hosted
+      runtime:
+        provider: modal
+        image: ghcr.io/example/support-plugin@sha256:...
+```
+
+There is no separate launch source or runtime command override. If
+`runtime.image` is set, the image must preserve the provider package layout and
+make the manifest entrypoint executable from the image working directory.
+
 ## `providers.authentication`
 
 Platform authentication is optional. Omit the `providers.authentication` block entirely to disable it. When platform authentication is enabled, configure one or more named entries under `providers.authentication`. If more than one entry exists, set `server.providers.authentication` to pick which one the host should use.
