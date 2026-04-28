@@ -506,8 +506,8 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
 		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
-	if len(turnReq.Tools) != 0 {
-		t.Fatalf("turn tools = %#v, want no preloaded tools", turnReq.Tools)
+	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.Plugin != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("turn tools = %#v, want preloaded roadmap.sync", turnReq.Tools)
 	}
 	if turnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
 		t.Fatalf("turn tool source = %q, want native search", turnReq.ToolSource)

@@ -43,6 +43,7 @@ var (
 const (
 	agentSessionCreationWaitTimeout  = 5 * time.Second
 	agentSessionCreationPollInterval = 100 * time.Millisecond
+	agentToolSearchAllPlugin         = "*"
 )
 
 type AgentProviderNotAvailableError struct {
@@ -449,12 +450,12 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	var tools []coreagent.Tool
-	nativeToolSearch, err := agentProviderSupportsNativeToolSearch(ctx, provider)
-	if err != nil {
+	if _, err := agentProviderSupportsNativeToolSearch(ctx, provider); err != nil {
 		return nil, err
 	}
-	if !nativeToolSearch && len(toolRefs) > 0 {
-		tools, err = m.resolveExactAgentToolRefs(ctx, p, toolRefs)
+	exactToolRefs := exactAgentToolRefs(toolRefs)
+	if len(exactToolRefs) > 0 {
+		tools, err = m.resolveExactAgentToolRefs(ctx, p, exactToolRefs)
 		if err != nil {
 			return nil, err
 		}
@@ -1257,6 +1258,10 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		}
 		ref.Plugin = pluginName
 		ref.Operation = strings.TrimSpace(ref.Operation)
+		if ref.Plugin == agentToolSearchAllPlugin {
+			scope.all = true
+			continue
+		}
 		if ref.Operation == "" {
 			scope.plugins[pluginName] = ref
 			continue
@@ -1321,6 +1326,9 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 	for _, ref := range refs {
 		pluginName := strings.TrimSpace(ref.Plugin)
 		if pluginName == "" {
+			continue
+		}
+		if pluginName == agentToolSearchAllPlugin {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != "" {
@@ -1697,9 +1705,31 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		if ref.Plugin == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
 		}
+		if ref.Plugin == agentToolSearchAllPlugin {
+			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, title, or description", invocation.ErrProviderNotFound, idx)
+			}
+		}
 		out = append(out, ref)
 	}
 	return out, nil
+}
+
+func exactAgentToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ToolRef, 0, len(refs))
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) == "" {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out
 }
 
 func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {

@@ -499,6 +499,54 @@ func TestSearchToolsOmitsHiddenOperationsUnlessExplicitlyScoped(t *testing.T) {
 	}
 }
 
+func TestSearchToolsGlobalWildcardKeepsSearchOpenWithExactRefs(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	slack := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:      "events.reply",
+				Title:   "Reply to Event",
+				Visible: &hidden,
+			}}},
+		},
+	}
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:       "list_issues",
+				Title:    "List Linear Issues",
+				ReadOnly: true,
+			}}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
+
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "linear issues",
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "*"},
+			{Plugin: "slack", Operation: "events.reply"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(resp.Tools))
+	}
+	if resp.Tools[0].Target.Plugin != "linear" || resp.Tools[0].Target.Operation != "list_issues" {
+		t.Fatalf("tool target = %#v, want linear.list_issues", resp.Tools[0].Target)
+	}
+}
+
 func TestSearchToolsRejectsBlankToolRefPlugin(t *testing.T) {
 	t.Parallel()
 
