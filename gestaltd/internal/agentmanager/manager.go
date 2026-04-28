@@ -1105,6 +1105,11 @@ type agentToolSearchCandidate struct {
 	skipUnavailable bool
 }
 
+type agentToolSearchCatalog struct {
+	ref     coreagent.ToolRef
+	catalog *catalog.Catalog
+}
+
 func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, error) {
 	scope := newAgentToolSearchScope(refs)
 	providerNames := scope.providerNames()
@@ -1138,7 +1143,7 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 			continue
 		}
 		for _, searchRef := range scope.refsForProvider(pluginName) {
-			cat, err := m.catalogForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
+			searchCatalogs, err := m.catalogsForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
 			if err != nil {
 				refSkipsUnavailable := skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)
 				if refSkipsUnavailable && agentToolSearchUnavailable(err) {
@@ -1149,37 +1154,40 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				}
 				return nil, err
 			}
-			if cat == nil {
-				continue
-			}
-			for i := range cat.Operations {
-				op := cat.Operations[i]
-				operation := strings.TrimSpace(op.ID)
-				if operation == "" || !agentToolSearchRefAllows(searchRef, operation) {
+			for _, searchCatalog := range searchCatalogs {
+				cat := searchCatalog.catalog
+				if cat == nil {
 					continue
 				}
-				if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
-					continue
+				for i := range cat.Operations {
+					op := cat.Operations[i]
+					operation := strings.TrimSpace(op.ID)
+					if operation == "" || !agentToolSearchRefAllows(searchRef, operation) {
+						continue
+					}
+					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
+						continue
+					}
+					if !m.allowOperation(ctx, p, pluginName, operation) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+						continue
+					}
+					if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, op) {
+						continue
+					}
+					ref := searchCatalog.ref
+					if strings.TrimSpace(ref.Operation) == "" {
+						ref.Title = ""
+						ref.Description = ""
+					}
+					ref.Plugin = pluginName
+					ref.Operation = operation
+					candidates = append(candidates, agentToolSearchCandidate{
+						ref:             ref,
+						catalog:         cat,
+						operation:       op,
+						skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef),
+					})
 				}
-				if !m.allowOperation(ctx, p, pluginName, operation) || !principal.AllowsOperationPermission(p, pluginName, operation) {
-					continue
-				}
-				if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, op) {
-					continue
-				}
-				ref := searchRef
-				if strings.TrimSpace(ref.Operation) == "" {
-					ref.Title = ""
-					ref.Description = ""
-				}
-				ref.Plugin = pluginName
-				ref.Operation = operation
-				candidates = append(candidates, agentToolSearchCandidate{
-					ref:             ref,
-					catalog:         cat,
-					operation:       op,
-					skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef),
-				})
 			}
 		}
 	}
@@ -1201,7 +1209,7 @@ func agentToolSearchRefSkipsUnavailable(ref coreagent.ToolRef) bool {
 	return strings.TrimSpace(ref.Operation) == ""
 }
 
-func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) (*catalog.Catalog, error) {
+func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) ([]agentToolSearchCatalog, error) {
 	connection := strings.TrimSpace(ref.Connection)
 	if connection != "" && !config.SafeConnectionValue(connection) {
 		return nil, fmt.Errorf("connection name contains invalid characters")
@@ -1225,16 +1233,94 @@ func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Pr
 		resolver = tr
 	}
 	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
-	cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
-		catalogCtx,
-		prov,
-		pluginName,
-		resolver,
-		p,
-		m.catalogSelectorConfig().SessionCatalogTargets(pluginName, connection, instance),
-		core.SupportsSessionCatalog(prov) || connection != "" || instance != "",
-	)
-	return cat, err
+	targets := m.catalogSelectorConfig().SessionCatalogTargets(pluginName, connection, instance)
+	if !shouldExpandAgentToolSearchCatalogTargets(ref, credentialMode) {
+		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
+			catalogCtx,
+			prov,
+			pluginName,
+			resolver,
+			p,
+			targets,
+			core.SupportsSessionCatalog(prov) || connection != "" || instance != "",
+		)
+		if err != nil || cat == nil {
+			return nil, err
+		}
+		return []agentToolSearchCatalog{{ref: ref, catalog: cat}}, nil
+	}
+
+	expander, ok := m.invoker.(invocation.CatalogTargetExpander)
+	if !ok {
+		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
+			catalogCtx,
+			prov,
+			pluginName,
+			resolver,
+			p,
+			targets,
+			core.SupportsSessionCatalog(prov) || connection != "" || instance != "",
+		)
+		if err != nil || cat == nil {
+			return nil, err
+		}
+		return []agentToolSearchCatalog{{ref: ref, catalog: cat}}, nil
+	}
+	targets, err = expander.ExpandCatalogTargets(catalogCtx, p, pluginName, targets)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		targets = []invocation.CatalogResolutionTarget{{}}
+	}
+
+	out := make([]agentToolSearchCatalog, 0, len(targets))
+	var firstErr error
+	for _, target := range targets {
+		target.Connection = strings.TrimSpace(target.Connection)
+		target.Instance = strings.TrimSpace(target.Instance)
+		if target.Connection != "" && !config.SafeConnectionValue(target.Connection) {
+			return nil, fmt.Errorf("connection name contains invalid characters")
+		}
+		if target.Instance != "" && !config.SafeInstanceValue(target.Instance) {
+			return nil, fmt.Errorf("instance name contains invalid characters")
+		}
+		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
+			catalogCtx,
+			prov,
+			pluginName,
+			resolver,
+			p,
+			[]invocation.CatalogResolutionTarget{target},
+			core.SupportsSessionCatalog(prov) || target.Connection != "" || target.Instance != "",
+		)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if cat == nil {
+			continue
+		}
+		targetRef := ref
+		targetRef.Connection = target.Connection
+		targetRef.Instance = target.Instance
+		out = append(out, agentToolSearchCatalog{
+			ref:     targetRef,
+			catalog: cat,
+		})
+	}
+	if len(out) == 0 {
+		return nil, firstErr
+	}
+	return out, nil
+}
+
+func shouldExpandAgentToolSearchCatalogTargets(ref coreagent.ToolRef, credentialMode core.ConnectionMode) bool {
+	return strings.TrimSpace(ref.Operation) == "" &&
+		strings.TrimSpace(ref.Instance) == "" &&
+		credentialMode != core.ConnectionModeNone
 }
 
 type agentToolSearchScope struct {
