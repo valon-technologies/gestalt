@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
+use std::env;
+use std::fs;
 use std::io::{self, IsTerminal};
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
@@ -124,6 +127,7 @@ struct TuiApp {
     input_history: Vec<String>,
     history_cursor: Option<usize>,
     history_draft: String,
+    footer_context: FooterContext,
 }
 
 impl TuiApp {
@@ -147,6 +151,7 @@ impl TuiApp {
             input_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
+            footer_context: FooterContext::detect(),
         }
     }
 
@@ -309,29 +314,21 @@ impl TuiApp {
     }
 
     fn draw_footer(&self, frame: &mut Frame<'_>, area: Rect) {
-        let scroll = if self.state.scroll_offset() > 0 {
-            format!(" · ↑ {} lines", self.state.scroll_offset())
-        } else {
-            String::new()
-        };
-        let status = if self.state.busy {
-            let queued = if self.queued_messages.is_empty() {
-                String::new()
-            } else {
-                format!(" · queued {}", self.queued_messages.len())
-            };
-            format!(
-                "{} {}{}{}",
-                self.activity_indicator(),
-                self.state.status,
-                queued,
-                scroll
-            )
-        } else {
-            format!("{}{}", self.state.status, scroll)
-        };
+        let mut footer_parts = vec![
+            format!("{}/{}", self.state.provider, self.state.model),
+            self.footer_status(),
+            self.footer_context.cwd.clone(),
+        ];
+        if let Some(branch) = self.footer_context.branch.as_deref() {
+            footer_parts.push(branch.to_string());
+        }
+        footer_parts.push(format!(
+            "session {}",
+            short_session_id(&self.state.session_id)
+        ));
+        let footer = truncate_to_width(&footer_parts.join(" · "), area.width as usize);
         frame.render_widget(
-            Paragraph::new(status).style(Style::default().fg(Color::DarkGray)),
+            Paragraph::new(footer).style(Style::default().fg(Color::DarkGray)),
             area,
         );
     }
@@ -343,6 +340,36 @@ impl TuiApp {
     fn composer_height(&self) -> u16 {
         let lines = self.composer.lines().len().max(1) as u16;
         lines.saturating_add(1).clamp(2, 7)
+    }
+
+    fn footer_status(&self) -> String {
+        let scroll = if self.state.scroll_offset() > 0 {
+            format!(" · ↑ {} lines", self.state.scroll_offset())
+        } else {
+            String::new()
+        };
+        if self.state.busy {
+            let elapsed = self
+                .state
+                .turn_elapsed_label()
+                .map(|elapsed| format!(" · {elapsed}"))
+                .unwrap_or_default();
+            let queued = if self.queued_messages.is_empty() {
+                String::new()
+            } else {
+                format!(" · queued {}", self.queued_messages.len())
+            };
+            format!(
+                "{} {}{}{}{}",
+                self.activity_indicator(),
+                self.state.status,
+                elapsed,
+                queued,
+                scroll
+            )
+        } else {
+            format!("{}{}", self.state.status, scroll)
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -696,6 +723,113 @@ fn visible_lines(
     let end = lines.len().saturating_sub(scroll_offset);
     let start = end.saturating_sub(visible_height.max(1));
     lines.into_iter().skip(start).take(end - start).collect()
+}
+
+struct FooterContext {
+    cwd: String,
+    branch: Option<String>,
+}
+
+impl FooterContext {
+    fn detect() -> Self {
+        let cwd = env::current_dir().ok();
+        Self {
+            cwd: format_cwd(cwd.as_deref()),
+            branch: cwd.as_deref().and_then(detect_git_branch),
+        }
+    }
+}
+
+fn format_cwd(cwd: Option<&Path>) -> String {
+    let Some(cwd) = cwd else {
+        return "cwd unknown".to_string();
+    };
+    if let Some(home) = home_dir()
+        && let Ok(relative) = cwd.strip_prefix(home)
+    {
+        if relative.as_os_str().is_empty() {
+            return "~".to_string();
+        }
+        return format!("~/{}", relative.display());
+    }
+    cwd.display().to_string()
+}
+
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir)
+        .map(|home| fs::canonicalize(&home).unwrap_or(home))
+}
+
+fn detect_git_branch(cwd: &Path) -> Option<String> {
+    for directory in cwd.ancestors() {
+        let dot_git = directory.join(".git");
+        if dot_git.is_dir() {
+            return read_git_head(&dot_git.join("HEAD"));
+        }
+        if dot_git.is_file() {
+            let gitdir = fs::read_to_string(&dot_git).ok()?;
+            let gitdir = gitdir.trim().strip_prefix("gitdir:")?.trim();
+            let gitdir = PathBuf::from(gitdir);
+            let gitdir = if gitdir.is_absolute() {
+                gitdir
+            } else {
+                directory.join(gitdir)
+            };
+            return read_git_head(&gitdir.join("HEAD"));
+        }
+    }
+    None
+}
+
+fn read_git_head(head_path: &Path) -> Option<String> {
+    let head = fs::read_to_string(head_path).ok()?;
+    let head = head.trim();
+    if head.is_empty() {
+        return None;
+    }
+    if let Some(branch) = head.strip_prefix("ref: refs/heads/") {
+        return Some(branch.to_string());
+    }
+    if let Some(reference) = head.strip_prefix("ref: ") {
+        return reference.rsplit('/').next().map(str::to_string);
+    }
+    Some(head.chars().take(7).collect())
+}
+
+fn short_session_id(session_id: &str) -> String {
+    if UnicodeWidthStr::width(session_id) <= 12 {
+        return session_id.to_string();
+    }
+    session_id.chars().take(8).collect()
+}
+
+fn truncate_to_width(text: &str, width: usize) -> String {
+    if UnicodeWidthStr::width(text) <= width {
+        return text.to_string();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let marker = "...";
+    let marker_width = UnicodeWidthStr::width(marker);
+    if width <= marker_width {
+        return ".".repeat(width);
+    }
+    let mut truncated = String::new();
+    let mut used_width = 0usize;
+    let text_width = width - marker_width;
+    for grapheme in UnicodeSegmentation::graphemes(text, true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if used_width.saturating_add(grapheme_width) > text_width {
+            break;
+        }
+        truncated.push_str(grapheme);
+        used_width += grapheme_width;
+    }
+    truncated.push_str(marker);
+    truncated
 }
 
 fn push_transcript_item_lines(

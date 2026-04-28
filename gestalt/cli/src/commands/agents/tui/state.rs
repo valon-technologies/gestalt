@@ -524,6 +524,14 @@ impl AgentUiState {
         self.scroll_offset
     }
 
+    pub(super) fn turn_elapsed_label(&self) -> Option<String> {
+        if !self.busy {
+            return None;
+        }
+        self.turn_started_at
+            .map(|started_at| format_brewed_duration(started_at.elapsed()))
+    }
+
     pub(super) fn scroll_up(&mut self, height: usize, content_height: usize) {
         self.scroll_offset = self
             .scroll_offset

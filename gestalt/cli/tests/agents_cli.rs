@@ -779,6 +779,12 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     ]);
 
     let home = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join(".git")).unwrap();
+    std::fs::write(
+        home.path().join(".git").join("HEAD"),
+        "ref: refs/heads/footer-branch\n",
+    )
+    .unwrap();
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
@@ -787,6 +793,8 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     let mut output = String::new();
     session.wait_for(&mut output, "\x1b[?1049h");
     session.wait_for(&mut output, "Session");
+    session.wait_for(&mut output, "managed/gpt-5.4");
+    session.wait_for(&mut output, "footer-branch");
     session.write("hello tui\r");
     session.wait_for(&mut output, "hello");
     session.wait_for(&mut output, "Brewed for");
@@ -796,6 +804,13 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     assert!(
         output.contains("› hello tui") && output.contains("●"),
         "TTY transcript did not render highlighted user input and assistant bullet:\n{output}"
+    );
+    assert!(
+        output.contains("managed/gpt-5.4")
+            && output.contains("~")
+            && output.contains("footer-branch")
+            && output.contains("session session-1"),
+        "TTY footer did not render local model/session/path/branch metadata:\n{output}"
     );
     assert!(
         !output.contains("You")
