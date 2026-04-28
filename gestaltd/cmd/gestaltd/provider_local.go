@@ -1050,6 +1050,7 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 	}
 
 	cfg := map[string]any{
+		"apiVersion": config.APIVersionV3,
 		"server": map[string]any{
 			"encryptionKey": encryptionKey,
 			"providers": map[string]any{
@@ -1098,6 +1099,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 	}
 
 	cfg := map[string]any{
+		"apiVersion": config.APIVersionV3,
 		"server": map[string]any{
 			"public": map[string]any{
 				"host": providerDevHost,
@@ -1122,6 +1124,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 
 func writeProviderRemotePluginOverlayConfig(path, pluginKey, manifestPath string) error {
 	cfg := map[string]any{
+		"apiVersion": config.APIVersionV3,
 		"plugins": map[string]any{
 			pluginKey: map[string]any{
 				"source":    providerLocalSourceOverride(manifestPath),
@@ -1141,6 +1144,7 @@ func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port in
 	}
 
 	cfg := map[string]any{
+		"apiVersion": config.APIVersionV3,
 		"server": map[string]any{
 			"public": map[string]any{
 				"host": providerDevHost,

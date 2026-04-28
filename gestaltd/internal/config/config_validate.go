@@ -150,6 +150,8 @@ func validateAPIVersion(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
+	// YAML roots require apiVersion before this point; direct programmatic
+	// Config values may omit it and use v3 source normalization.
 	apiVersion := strings.TrimSpace(cfg.APIVersion)
 	switch apiVersion {
 	case "", APIVersionV3, APIVersionV4:
@@ -157,6 +159,10 @@ func validateAPIVersion(cfg *Config) error {
 	default:
 		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
 	}
+}
+
+func requiredAPIVersionError() error {
+	return fmt.Errorf("config validation: apiVersion is required; supported values are %q or %q", APIVersionV3, APIVersionV4)
 }
 
 func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
