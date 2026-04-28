@@ -1026,6 +1026,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		PluginInvokes:     agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,

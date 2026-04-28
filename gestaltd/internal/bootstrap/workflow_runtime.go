@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/workflowprincipal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -221,7 +222,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		if err != nil {
 			return nil, err
 		}
-		principalValue = workflowExecutionReferencePrincipal(resolvedRef)
+		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
 		if target.Plugin != nil {
 			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
@@ -330,7 +331,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		if err != nil {
 			return nil, err
 		}
-		principalValue = workflowExecutionReferencePrincipal(resolvedRef)
+		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
 		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
