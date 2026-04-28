@@ -54,6 +54,7 @@ pub(super) fn can_run() -> bool {
 pub(super) fn run(client: &ApiClient, args: &AgentArgs) -> Result<()> {
     let shell = AgentShell::connect(client, args)?;
     let mut app = TuiApp::new(client.clone(), shell);
+    let resume_command = resume_command(client.base_url(), &app.shell.session.id);
     let mut terminal = TerminalGuard::start()?;
 
     if !args.messages.is_empty() {
@@ -62,6 +63,9 @@ pub(super) fn run(client: &ApiClient, args: &AgentArgs) -> Result<()> {
 
     let result = app.run(terminal.inner_mut());
     terminal.restore()?;
+    if result.is_ok() {
+        println!("Resume this session:\n  {resume_command}");
+    }
     result
 }
 
@@ -73,10 +77,6 @@ struct TerminalGuard {
 impl TerminalGuard {
     fn start() -> Result<Self> {
         let terminal = ratatui::try_init().context("failed to initialize terminal UI")?;
-        if let Err(error) = execute!(io::stdout(), EnableMouseCapture) {
-            ratatui::restore();
-            return Err(error).context("failed to enable mouse capture");
-        }
         Ok(Self {
             terminal,
             restored: false,
@@ -128,6 +128,7 @@ struct TuiApp {
     history_cursor: Option<usize>,
     history_draft: String,
     footer_context: FooterContext,
+    mouse_capture_enabled: bool,
 }
 
 impl TuiApp {
@@ -152,6 +153,7 @@ impl TuiApp {
             history_cursor: None,
             history_draft: String::new(),
             footer_context: FooterContext::detect(),
+            mouse_capture_enabled: false,
         }
     }
 
@@ -488,6 +490,15 @@ impl TuiApp {
                 self.state
                     .push_system(format!("session {}", self.shell.session.id));
             }
+            "/mouse" => {
+                self.toggle_mouse_capture();
+            }
+            "/mouse on" => {
+                self.set_mouse_capture_enabled(true);
+            }
+            "/mouse off" => {
+                self.set_mouse_capture_enabled(false);
+            }
             _ => {
                 self.record_history(&message);
                 self.enqueue_or_start(vec![message]);
@@ -499,8 +510,39 @@ impl TuiApp {
 
     fn push_help(&mut self) {
         self.state.push_system(
-            "Commands\n  /help     Show commands and keys.\n  /session  Show the active session id.\n  /quit     Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn or mouse wheel scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
+            "Commands\n  /help       Show commands and keys.\n  /session    Show the active session id.\n  /mouse      Toggle mouse wheel capture; leave off for native text selection.\n  /mouse on   Enable mouse wheel transcript scrolling.\n  /mouse off  Disable mouse capture so drag selection works.\n  /quit       Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
         );
+    }
+
+    fn toggle_mouse_capture(&mut self) {
+        self.set_mouse_capture_enabled(!self.mouse_capture_enabled);
+    }
+
+    fn set_mouse_capture_enabled(&mut self, enabled: bool) {
+        let result = if enabled {
+            execute!(io::stdout(), EnableMouseCapture)
+        } else {
+            execute!(io::stdout(), DisableMouseCapture)
+        };
+        match result {
+            Ok(()) => {
+                self.mouse_capture_enabled = enabled;
+                if enabled {
+                    self.state.push_system(
+                        "mouse wheel capture enabled; drag selection may require your terminal modifier key",
+                    );
+                    self.state.status = "mouse capture enabled".to_string();
+                } else {
+                    self.state
+                        .push_system("mouse capture disabled; native drag selection is available");
+                    self.state.status = "mouse capture disabled".to_string();
+                }
+            }
+            Err(error) => {
+                self.state
+                    .push_error(format!("failed to update mouse capture: {error}"));
+            }
+        }
     }
 
     fn enqueue_or_start(&mut self, messages: Vec<String>) {
@@ -723,6 +765,25 @@ fn visible_lines(
     let end = lines.len().saturating_sub(scroll_offset);
     let start = end.saturating_sub(visible_height.max(1));
     lines.into_iter().skip(start).take(end - start).collect()
+}
+
+fn resume_command(base_url: &str, session_id: &str) -> String {
+    format!(
+        "gestalt --url {} agent --session {}",
+        shell_word(base_url),
+        shell_word(session_id)
+    )
+}
+
+fn shell_word(value: &str) -> String {
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/' | ':' | '='))
+    {
+        return value.to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 struct FooterContext {
