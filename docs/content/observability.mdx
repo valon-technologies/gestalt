@@ -102,8 +102,8 @@ collectors can still split the stream by filtering on `log.type=audit`.
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
 requests handled by `gestaltd`, broker operation execution, connection authentication
 flows, platform authentication actions, agent lifecycle operations, authorization
-provider calls, credential resolution, catalog resolution, IndexedDB operations,
-and outbound gRPC calls from `gestaltd` to provider processes.
+provider calls, credential resolution, catalog resolution, database client operations,
+and gRPC calls between `gestaltd`, provider processes, and host services.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
 Prometheus scrape endpoint translates those names to Prometheus-style metric
@@ -114,6 +114,19 @@ appear as `_bucket`, `_sum`, and `_count` series under the same family.
 For example, `gestaltd.operation.count` is exposed as
 `gestaltd_operation_count_total`, and `gestaltd.operation.duration` is exposed
 as the `gestaltd_operation_duration_seconds` histogram family.
+
+Gestalt follows OpenTelemetry semantic conventions for standard transport and
+database metrics. HTTP server metrics follow the
+[HTTP metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/http/http-metrics/),
+gRPC metrics follow the
+[RPC metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/),
+and datastore metrics follow the
+[database client metric semantic conventions](https://opentelemetry.io/docs/specs/semconv/db/database-metrics/).
+Gestalt-specific dimensions on those standard metrics use the `gestaltd.*`
+namespace so they do not collide with OpenTelemetry registry attributes.
+Custom Gestalt metric families such as `gestaltd.operation.*`,
+`gestaltd.auth.*`, and `gestaltd.discovery.*` keep their established
+`gestalt.*` attributes.
 
 ### Prometheus Exporter Metadata
 
@@ -321,49 +334,54 @@ These metrics carry low-cardinality attributes:
   whether the resolved operation came from `static`, `session`, or a
   pre-resolved `context` operation.
 
-### IndexedDB Metrics
+### Database Client Metrics
 
 These metrics are recorded around every ObjectStore and Index operation on the
-system IndexedDB instance. The instrumentation is applied once at the interface
-level in bootstrap, so both core services (tokens, users, API tokens) and
-plugin host traffic are covered.
+system IndexedDB instance. They use the OpenTelemetry
+`db.client.operation.duration` histogram instead of a Gestalt-specific metric
+family. The instrumentation is applied once at the interface level in bootstrap,
+so both core services (tokens, users, API tokens) and plugin host traffic are
+covered.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd.indexeddb.count` | Counter | IndexedDB operations |
-    | `gestaltd.indexeddb.error_count` | Counter | Failed IndexedDB operations |
-    | `gestaltd.indexeddb.duration` | Histogram | IndexedDB operation duration |
+    | `db.client.operation.duration` | Histogram | IndexedDB operation duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd_indexeddb_count_total` | Counter | IndexedDB operations |
-    | `gestaltd_indexeddb_error_count_total` | Counter | Failed IndexedDB operations |
-    | `gestaltd_indexeddb_duration_seconds` | Histogram | IndexedDB operation duration |
+    | `db_client_operation_duration_seconds` | Histogram | IndexedDB operation duration |
   </Tabs.Tab>
 </Tabs>
 
 These metrics carry low-cardinality attributes:
 
-- `gestalt.db` identifies the logical IndexedDB resource configured in
+- `db.system.name` is `gestaltd.indexeddb` for the built-in IndexedDB
+  implementation.
+- `db.namespace` identifies the logical IndexedDB resource configured in
   `gestaltd`, such as the server's primary IndexedDB binding.
-- `gestalt.object_store` identifies the IndexedDB object store being accessed,
+- `db.collection.name` identifies the IndexedDB object store being accessed,
   such as `users`, `external_credentials`, or `api_tokens`.
-- `gestalt.plugin` identifies the plugin namespace for plugin-hosted IndexedDB
-  traffic. Core services omit this attribute.
-- `gestalt.method` identifies the operation. Values correspond to the
-  methods on the ObjectStore and Index interfaces inspired by the
-  [IndexedDB API](https://www.w3.org/TR/IndexedDB/): `Get`, `GetKey`,
-  `Put`, `Add`, `Delete`, `Clear`, `GetAll`, `GetAllKeys`, `Count`,
-  `DeleteRange`, `OpenCursor`, `OpenKeyCursor`, `Index.Get`,
-  `Index.GetKey`, `Index.GetAll`, `Index.GetAllKeys`, `Index.Count`,
-  `Index.Delete`, `Index.OpenCursor`, and `Index.OpenKeyCursor`.
+- `db.operation.name` identifies the normalized ObjectStore or Index operation:
+  `get`, `get_key`, `put`, `add`, `delete`, `clear`, `get_all`,
+  `get_all_keys`, `count`, `delete_range`, `open_cursor`,
+  `open_key_cursor`, `index_get`, `index_get_key`, `index_get_all`,
+  `index_get_all_keys`, `index_count`, `index_delete`,
+  `index_open_cursor`, or `index_open_key_cursor`.
+- `gestaltd.provider.name` identifies the provider namespace for provider-hosted
+  IndexedDB traffic. Core services omit this attribute.
+- `gestaltd.indexeddb.index.name` identifies the index name for Index
+  operations.
+- `error.type` is attached only when an operation fails. Bounded values include
+  `canceled`, `deadline_exceeded`, `not_found`, `already_exists`, `keys_only`,
+  and `internal`.
 
-Expected misses that return `ErrNotFound` still increment
-`gestaltd.indexeddb.count` and `gestaltd.indexeddb.duration`, but do not
-increment `gestaltd.indexeddb.error_count`.
+Expected misses that return `ErrNotFound` are recorded as failed database
+operations with `error.type=not_found`. Use
+`count:db.client.operation.duration{error.type:*}.as_count()` or the matching
+Prometheus histogram count series to build error counts.
 
 ### Metrics And Audit Boundaries
 
@@ -383,7 +401,7 @@ need actor, target, and outcome details.
 | Agent lifecycle and provider calls | Yes: `gestaltd.agent.*` | No | Audit the user-facing invocation or workflow that created the agent work, not every provider poll or state read. |
 | Authorization provider calls | Yes: `gestaltd.authorization.*` | No | Provider interface calls are platform internals; explicit authorization-denied decisions are audited at the guarded action boundary. |
 | Credential and catalog resolution | Yes: `gestaltd.credential.*` and `gestaltd.catalog.*` | No | These are pre-invocation plumbing paths; audit the higher-level action instead. |
-| IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Audit the higher-level user action instead of low-level storage calls. |
+| IndexedDB operations | Yes: `db.client.operation.duration` | No | Audit the higher-level user action instead of low-level storage calls. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | `api_token.create`, `api_token.revoke`, and `api_token.revoke_all` are audited. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These are workflow and security events rather than aggregate telemetry series. |
@@ -424,17 +442,19 @@ API traffic, health and readiness checks, the embedded admin UI, and scrapes of
 These metrics use standard OpenTelemetry HTTP server semantic attributes such as
 request method, response status, scheme, host, protocol, and route information
 when available. Gestalt also attaches stable dimensions for request surfaces it
-can resolve, including `gestalt.provider`, `gestalt.operation`,
-`gestalt.transport`, `gestalt.connection_mode`, `gestalt.invocation_surface`,
-`gestalt.http_binding`, and `gestalt.ui`. For hosted HTTP bindings, use
-`gestalt.http_binding` with `gestaltd.operation.*` to correlate the accepted
-HTTP delivery with the provider operation it dispatched.
+can resolve, including `gestaltd.provider.name`,
+`gestaltd.operation.name`, `gestaltd.operation.transport`,
+`gestaltd.connection.mode`, `gestaltd.invocation.surface`,
+`gestaltd.http.binding.name`, and `gestaltd.ui.name`. For hosted HTTP bindings,
+use `gestaltd.http.binding.name` on `http.server.request.duration` with
+`gestalt.http_binding` on `gestaltd.operation.*` to correlate the accepted HTTP
+delivery with the provider operation it dispatched.
 
 `http.route` is the framework route template, not the concrete request path. For
 example, a request to `/api/v1/datadog/query_metrics` is grouped under the route
 template `/api/v1/{integration}/{operation}`. Use `http.route` for route-shape
-latency and traffic graphs, and use `gestalt.provider` plus
-`gestalt.operation` when you need the resolved integration and operation names.
+latency and traffic graphs, and use `gestaltd.provider.name` plus
+`gestaltd.operation.name` when you need the resolved integration and operation names.
 Unknown provider or operation paths keep the templated route label but do not get
 resolved provider or operation labels.
 
@@ -482,8 +502,9 @@ service traffic. They only apply to provider-backed components.
 
 These metrics use standard OpenTelemetry gRPC semantic attributes such as
 `rpc.system.name=grpc`, `rpc.method`, and gRPC status code labels such as
-`rpc.grpc.status_code`. Gestalt also attaches `gestalt.rpc.role`,
-`gestalt.provider`, and `gestalt.host_service` when it can resolve them.
+`rpc.grpc.status_code`. Gestalt also attaches `gestaltd.rpc.role`,
+`gestaltd.provider.name`, and `gestaltd.host_service.name` when it can resolve
+them.
 
 The built-in gRPC stats handlers emit call duration metrics. They do not emit
 request body size, response body size, request messages per RPC, or response
@@ -493,6 +514,24 @@ dimensions become operationally important.
 If the process is started with `OTEL_SEMCONV_STABILITY_OPT_IN=rpc/dup`, the
 underlying gRPC instrumentation also emits legacy RPC metric families such as
 `rpc.client.duration` alongside the current ones.
+
+## Trace Spans
+
+When OTLP tracing is enabled, `gestaltd` emits trace spans for the main request
+and provider execution boundaries.
+
+| Layer | Span name | Key attributes |
+| --- | --- | --- |
+| HTTP server | `gestaltd: {method} {route}` | Standard HTTP semantic attributes plus resolved `gestaltd.*` request-surface attributes when available |
+| Broker operation | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.subject_id`, `gestalt.connection_mode` |
+| gRPC provider client | Per-RPC client spans | Standard RPC semantic attributes plus `gestaltd.rpc.role=hosted_plugin_client` and `gestaltd.provider.name` |
+| gRPC provider server | Per-RPC server spans | Standard RPC semantic attributes plus `gestaltd.rpc.role=provider_server` and `gestaltd.provider.name` |
+| gRPC host service server | Per-RPC server spans | Standard RPC semantic attributes plus `gestaltd.rpc.role=host_service_server`, `gestaltd.provider.name`, and `gestaltd.host_service.name` |
+| Agent and catalog internals | `agent.operation`, `agent.tool.resolve`, `catalog.operation.resolve`, `agent.run_metadata.write`, `agent.provider.operation` | Low-cardinality `gestalt.agent.*`, `gestalt.catalog.*`, `gestalt.provider`, and `gestalt.operation` attributes depending on the span |
+
+HTTP and gRPC spans use the same `gestaltd.*` dimensions as their corresponding
+standard metrics. Broker, agent, credential, catalog, auth, and discovery spans
+remain Gestalt custom spans and keep their established `gestalt.*` attributes.
 
 ## Prometheus Scrape Endpoint
 
