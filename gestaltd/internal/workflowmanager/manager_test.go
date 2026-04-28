@@ -15,6 +15,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
+const canonicalManagerAgentWorkflowTargetFingerprint = "ad3621e6b034d26e8ef7b542e891eadcbca58a2d663bd998a758d2544204410e"
+
 func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing.T) {
 	t.Parallel()
 
@@ -138,15 +140,11 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 			{Plugin: "github", Operation: "bot.openPullRequest"},
 		},
 	}}
-	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		t.Fatalf("TargetFingerprint: %v", err)
-	}
 	ref := &coreworkflow.ExecutionReference{
 		ID:                "workflow_run:stale-permissions",
 		ProviderName:      "local",
 		Target:            target,
-		TargetFingerprint: targetFingerprint,
+		TargetFingerprint: canonicalManagerAgentWorkflowTargetFingerprint,
 		SubjectID:         "system:http_binding:github:event",
 		Permissions: []core.AccessPermission{{
 			Plugin:     "github",
