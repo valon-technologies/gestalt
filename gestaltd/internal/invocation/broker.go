@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -530,6 +531,92 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
+}
+
+func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
+	if len(targets) == 0 {
+		targets = []CatalogResolutionTarget{{}}
+	}
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return nil, fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+	}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return nil, err
+	}
+	ctx = withResolvedPrincipal(ctx, p)
+	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
+		return nil, fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		}
+		return nil, fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+	}
+	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeUser {
+		return targets, nil
+	}
+	if b == nil || coredata.ExternalCredentialProviderMissing(b.externalCreds) {
+		return nil, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
+	}
+	subjectID := principal.EffectiveCredentialSubjectID(p)
+	if subjectID == "" {
+		return nil, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+	}
+
+	expanded := make([]CatalogResolutionTarget, 0, len(targets))
+	seen := make(map[CatalogResolutionTarget]struct{}, len(targets))
+	for _, target := range targets {
+		target.Connection = strings.TrimSpace(target.Connection)
+		target.Instance = strings.TrimSpace(target.Instance)
+		if target.Instance != "" {
+			if _, ok := seen[target]; !ok {
+				seen[target] = struct{}{}
+				expanded = append(expanded, target)
+			}
+			continue
+		}
+
+		credentials, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, providerName, target.Connection)
+		if listErr != nil {
+			return nil, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
+		}
+		if len(credentials) == 0 {
+			if _, ok := seen[target]; !ok {
+				seen[target] = struct{}{}
+				expanded = append(expanded, target)
+			}
+			continue
+		}
+		nonNil := credentials[:0]
+		for _, credential := range credentials {
+			if credential != nil {
+				nonNil = append(nonNil, credential)
+			}
+		}
+		sort.Slice(nonNil, func(i, j int) bool {
+			if nonNil[i].Connection != nonNil[j].Connection {
+				return nonNil[i].Connection < nonNil[j].Connection
+			}
+			return nonNil[i].Instance < nonNil[j].Instance
+		})
+		for _, credential := range nonNil {
+			resolved := CatalogResolutionTarget{
+				Connection: strings.TrimSpace(credential.Connection),
+				Instance:   strings.TrimSpace(credential.Instance),
+			}
+			if resolved.Connection == "" {
+				resolved.Connection = target.Connection
+			}
+			if _, ok := seen[resolved]; ok {
+				continue
+			}
+			seen[resolved] = struct{}{}
+			expanded = append(expanded, resolved)
+		}
+	}
+	return expanded, nil
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {

@@ -709,6 +709,75 @@ func TestSearchToolsDiscoversSessionCatalogOperations(t *testing.T) {
 	}
 }
 
+func TestSearchToolsExpandsAmbiguousCredentialInstances(t *testing.T) {
+	t.Parallel()
+
+	provider := &sessionCatalogProvider{
+		catalogCountingProvider: catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "github",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+		sessionCatalog: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:       "list_pull_requests",
+			Title:    "List Pull Requests",
+			ReadOnly: true,
+		}}},
+	}
+	providers := testutil.NewProviderRegistry(t, provider)
+	services := coretesting.NewStubServices(t)
+	subjectID := principal.UserSubjectID("user-1")
+	for _, instance := range []string{"z", "sa"} {
+		if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
+			SubjectID:   subjectID,
+			Integration: "github",
+			Connection:  "default",
+			Instance:    instance,
+			AccessToken: "token-" + instance,
+		}); err != nil {
+			t.Fatalf("PutCredential(%s): %v", instance, err)
+		}
+	}
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
+	manager := New(Config{
+		Providers: providers,
+		Invoker:   broker,
+		DefaultConnection: map[string]string{
+			"github": "default",
+		},
+	})
+
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+	}, coreagent.SearchToolsRequest{
+		Query:    "github pull requests",
+		ToolRefs: []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 2 {
+		t.Fatalf("SearchTools returned %d tools, want 2: %#v", len(resp.Tools), resp.Tools)
+	}
+	instances := map[string]bool{}
+	for _, tool := range resp.Tools {
+		if tool.Target.Plugin != "github" || tool.Target.Operation != "list_pull_requests" {
+			t.Fatalf("tool target = %#v, want github.list_pull_requests", tool.Target)
+		}
+		if tool.Target.Connection != "default" {
+			t.Fatalf("tool connection = %q, want default", tool.Target.Connection)
+		}
+		instances[tool.Target.Instance] = true
+		if tool.ID == "github/list_pull_requests" {
+			t.Fatalf("tool ID %q is missing credential binding", tool.ID)
+		}
+	}
+	if !instances["z"] || !instances["sa"] {
+		t.Fatalf("tool instances = %#v, want z and sa", instances)
+	}
+}
+
 func TestSearchToolsSkipsUnavailablePluginScopedProviders(t *testing.T) {
 	t.Parallel()
 
