@@ -108,6 +108,28 @@ pub fn get_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     Ok(())
 }
 
+pub fn transcript_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
+    let turn = client
+        .get(&format!("{TURNS_PATH}/{id}"))
+        .with_context(|| format!("failed to get agent turn {id}"))?;
+    let event_values = list_turn_event_values(client, id)?;
+    match format {
+        Format::Json => output::print_json(&json!({
+            "turn": turn,
+            "events": event_values,
+        })),
+        Format::Table => {
+            let turn = decode_json::<AgentTurnInfo>(turn)?;
+            let events: Vec<AgentTurnEventInfo> = event_values
+                .into_iter()
+                .map(decode_json)
+                .collect::<Result<_>>()?;
+            render_turn_transcript(&turn, &events)?;
+        }
+    }
+    Ok(())
+}
+
 pub fn cancel_turn(
     client: &ApiClient,
     id: &str,
@@ -221,6 +243,8 @@ struct AgentSessionInfo {
 struct AgentTurnInfo {
     id: String,
     #[serde(default)]
+    messages: Vec<AgentMessageInfo>,
+    #[serde(default)]
     status: String,
     #[serde(default)]
     output_text: String,
@@ -228,6 +252,32 @@ struct AgentTurnInfo {
     structured_output: Option<Value>,
     #[serde(default)]
     status_message: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentMessageInfo {
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    parts: Vec<AgentMessagePartInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentMessagePartInfo {
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    json: Option<Value>,
+    #[serde(default)]
+    tool_call: Option<Value>,
+    #[serde(default)]
+    tool_result: Option<Value>,
+    #[serde(default)]
+    image_ref: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -515,6 +565,20 @@ impl AgentTurnRenderer {
 
     fn after_seq(&self) -> u64 {
         self.after_seq
+    }
+
+    fn render_messages(&mut self, messages: &[AgentMessageInfo]) -> Result<()> {
+        self.finish_assistant_line();
+        for message in messages {
+            let Some(label) = message_label(message) else {
+                continue;
+            };
+            let Some(text) = message_text(message) else {
+                continue;
+            };
+            println!("{} {text}", self.label(&label));
+        }
+        Ok(())
     }
 
     fn render_events(&mut self, events: &[AgentTurnEventInfo]) -> Result<()> {
@@ -1224,6 +1288,45 @@ fn resolve_interaction_info(
     )
 }
 
+fn list_turn_event_values(client: &ApiClient, turn_id: &str) -> Result<Vec<Value>> {
+    let mut events = Vec::new();
+    let mut after_seq = 0u64;
+    loop {
+        let page: Vec<Value> = decode_json(
+            client
+                .get(&turn_events_path(
+                    turn_id,
+                    false,
+                    Some(after_seq),
+                    Some(DEFAULT_EVENT_PAGE_SIZE),
+                    None,
+                ))
+                .with_context(|| format!("failed to list events for agent turn {turn_id}"))?,
+        )?;
+        if page.is_empty() {
+            return Ok(events);
+        }
+
+        let next_after_seq = page
+            .iter()
+            .filter_map(|event| event.get("seq").and_then(Value::as_u64))
+            .max()
+            .unwrap_or(after_seq);
+        events.extend(page);
+        if next_after_seq <= after_seq {
+            return Ok(events);
+        }
+        after_seq = next_after_seq;
+    }
+}
+
+fn render_turn_transcript(turn: &AgentTurnInfo, events: &[AgentTurnEventInfo]) -> Result<()> {
+    let mut renderer = AgentTurnRenderer::new();
+    renderer.render_messages(&turn.messages)?;
+    renderer.render_events(events)?;
+    renderer.finish_turn(turn)
+}
+
 fn decode_json<T>(value: Value) -> Result<T>
 where
     T: DeserializeOwned,
@@ -1293,6 +1396,55 @@ fn known_turn_event_type(event_type: &str) -> bool {
             | "interaction.requested"
             | "interaction.resolved"
     )
+}
+
+fn message_label(message: &AgentMessageInfo) -> Option<String> {
+    let role = non_empty_str(&message.role)?;
+    Some(match role {
+        "user" => "you>".to_string(),
+        "system" => "system>".to_string(),
+        "assistant" => "assistant>".to_string(),
+        "tool" => "tool>".to_string(),
+        other => format!("{other}>"),
+    })
+}
+
+fn message_text(message: &AgentMessageInfo) -> Option<String> {
+    if !message.text.is_empty() {
+        return Some(message.text.clone());
+    }
+    let text = message
+        .parts
+        .iter()
+        .filter_map(message_part_text)
+        .collect::<Vec<_>>()
+        .join("");
+    if text.is_empty() { None } else { Some(text) }
+}
+
+fn message_part_text(part: &AgentMessagePartInfo) -> Option<String> {
+    if !part.text.trim().is_empty() {
+        return Some(part.text.clone());
+    }
+    if let Some(json) = part.json.as_ref() {
+        return compact_json(json).ok();
+    }
+    if let Some(tool_call) = part.tool_call.as_ref() {
+        return compact_json(tool_call)
+            .ok()
+            .map(|value| format!("tool call {value}"));
+    }
+    if let Some(tool_result) = part.tool_result.as_ref() {
+        return compact_json(tool_result)
+            .ok()
+            .map(|value| format!("tool result {value}"));
+    }
+    if let Some(image_ref) = part.image_ref.as_ref() {
+        return compact_json(image_ref)
+            .ok()
+            .map(|value| format!("image {value}"));
+    }
+    None
 }
 
 fn display_text(display: &AgentTurnDisplayInfo) -> Option<&str> {
