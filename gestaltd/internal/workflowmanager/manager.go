@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/workflowprincipal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,6 +40,13 @@ const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 const workflowRunExecutionRefBasePrefix = "workflow_run:"
 const defaultWorkflowEventSpecVersion = "1.0"
+
+type signalTargetPrincipalSource uint8
+
+const (
+	signalTargetPrincipalCaller signalTargetPrincipalSource = iota
+	signalTargetPrincipalExecutionRef
+)
 
 type WorkflowControl interface {
 	ResolveProvider(name string) (coreworkflow.Provider, error)
@@ -83,6 +91,7 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
+	PluginInvokes     map[string][]config.PluginInvocationDependency
 	Now               func() time.Time
 }
 
@@ -95,6 +104,7 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
+	pluginInvokes     map[string][]config.PluginInvocationDependency
 	now               func() time.Time
 }
 
@@ -173,6 +183,10 @@ func New(cfg Config) *Manager {
 	if now == nil {
 		now = time.Now
 	}
+	pluginInvokes := make(map[string][]config.PluginInvocationDependency, len(cfg.PluginInvokes))
+	for pluginName, deps := range cfg.PluginInvokes {
+		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
+	}
 	return &Manager{
 		providers:         cfg.Providers,
 		workflow:          cfg.Workflow,
@@ -182,6 +196,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		pluginInvokes:     pluginInvokes,
 		now:               now,
 	}
 }
@@ -358,7 +373,7 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
-	return m.managedSignalResponse(ctx, p, value.ProviderName, existingRunProvider(value), resp, value.ExecutionRef)
+	return m.managedSignalResponse(ctx, p, value.ProviderName, existingRunProvider(value), resp, value.ExecutionRef, signalTargetPrincipalCaller)
 }
 
 func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error) {
@@ -403,7 +418,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if resp == nil || resp.Run == nil || strings.TrimSpace(resp.Run.ExecutionRef) != executionRefID {
 		m.revokeExecutionRef(ctx, ref)
 	}
-	managed, err := m.managedSignalResponse(ctx, p, providerName, provider, resp, ref)
+	managed, err := m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
 	if err != nil && resp != nil && resp.Run != nil && strings.TrimSpace(resp.Run.ExecutionRef) == executionRefID {
 		m.revokeExecutionRef(ctx, ref)
 	}
@@ -1153,8 +1168,83 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 		DisplayName:         actor.DisplayName,
 		AuthSource:          actor.AuthSource,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
+		Permissions:         m.executionRefPermissions(p, target, callerPluginName),
 	})
+}
+
+func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerPluginName string) []core.AccessPermission {
+	p = principal.Canonicalized(p)
+	if p == nil || p.TokenPermissions == nil {
+		return principal.PermissionsToAccessPermissions(nil)
+	}
+	permissions := cloneWorkflowPermissionSet(p.TokenPermissions)
+	if target.Agent != nil {
+		for _, tool := range target.Agent.ToolRefs {
+			pluginName := strings.TrimSpace(tool.Plugin)
+			operation := strings.TrimSpace(tool.Operation)
+			if pluginName == "" || pluginName == "*" || operation == "" {
+				continue
+			}
+			if m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+				addWorkflowPermission(permissions, pluginName, operation)
+			}
+		}
+	}
+	return principal.PermissionsToAccessPermissions(permissions)
+}
+
+func (m *Manager) callerPluginDeclaresInvoke(callerPluginName, pluginName, operation string) bool {
+	callerPluginName = strings.TrimSpace(callerPluginName)
+	pluginName = strings.TrimSpace(pluginName)
+	operation = strings.TrimSpace(operation)
+	if callerPluginName == "" || pluginName == "" || operation == "" || m == nil {
+		return false
+	}
+	for _, invoke := range m.pluginInvokes[callerPluginName] {
+		if strings.TrimSpace(invoke.Surface) != "" {
+			continue
+		}
+		if strings.TrimSpace(invoke.Plugin) == pluginName && strings.TrimSpace(invoke.Operation) == operation {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneWorkflowPermissionSet(src principal.PermissionSet) principal.PermissionSet {
+	if src == nil {
+		return nil
+	}
+	out := make(principal.PermissionSet, len(src))
+	for pluginName, operations := range src {
+		if operations == nil {
+			out[pluginName] = nil
+			continue
+		}
+		copied := make(map[string]struct{}, len(operations))
+		for operation := range operations {
+			copied[operation] = struct{}{}
+		}
+		out[pluginName] = copied
+	}
+	return out
+}
+
+func addWorkflowPermission(permissions principal.PermissionSet, pluginName, operation string) {
+	pluginName = strings.TrimSpace(pluginName)
+	operation = strings.TrimSpace(operation)
+	if permissions == nil || pluginName == "" || operation == "" {
+		return
+	}
+	if operations, ok := permissions[pluginName]; ok && operations == nil {
+		return
+	}
+	operations := permissions[pluginName]
+	if operations == nil {
+		operations = map[string]struct{}{}
+		permissions[pluginName] = operations
+	}
+	operations[operation] = struct{}{}
 }
 
 func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
@@ -1463,7 +1553,7 @@ func runExecutionRefID(value string) string {
 	return workflowRunExecutionRefBasePrefix + value
 }
 
-func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Principal, providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse, candidateRef *coreworkflow.ExecutionReference) (*ManagedRunSignal, error) {
+func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Principal, providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse, candidateRef *coreworkflow.ExecutionReference, targetPrincipalSource signalTargetPrincipalSource) (*ManagedRunSignal, error) {
 	if resp == nil || resp.Run == nil {
 		return nil, core.ErrNotFound
 	}
@@ -1483,7 +1573,11 @@ func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Princi
 		}
 		ref = workflowExecutionRefForProvider(ref, providerName)
 	}
-	if !executionRefOwnedBy(ref, p) || !executionRefActive(ref) || !m.allowTarget(ctx, p, ref.Target) || !runMatchesExecutionRef(providerName, resp.Run, ref) {
+	targetPrincipal := p
+	if targetPrincipalSource == signalTargetPrincipalExecutionRef {
+		targetPrincipal = workflowprincipal.FromExecutionReference(ref)
+	}
+	if !executionRefOwnedBy(ref, p) || !executionRefActive(ref) || !m.allowTarget(ctx, targetPrincipal, ref.Target) || !runMatchesExecutionRef(providerName, resp.Run, ref) {
 		return nil, core.ErrNotFound
 	}
 	workflowKey := strings.TrimSpace(resp.WorkflowKey)
