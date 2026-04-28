@@ -1267,6 +1267,19 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	if len(turnEvents) != 3 || turnEvents[0].Type != "turn.started" || turnEvents[2].Type != "turn.completed" {
 		t.Fatalf("ListTurnEvents = %#v, want started/completed event sequence", turnEvents)
 	}
+	if display := turnEvents[0].Display; display == nil || display.Kind != "status" || display.Phase != "started" || display.Text != "provider turn started" {
+		t.Fatalf("turn.started display = %#v, want provider-authored started status", display)
+	}
+	if display := turnEvents[1].Display; display == nil || display.Kind != "text" || display.Phase != "completed" || display.Text != "provider assistant completed" {
+		t.Fatalf("assistant.completed display = %#v, want provider-authored completed text", display)
+	}
+	if display := turnEvents[2].Display; display == nil || display.Kind != "status" || display.Phase != "completed" || display.Text != "provider turn completed" {
+		t.Fatalf("turn.completed display = %#v, want provider-authored completed status", display)
+	}
+	completedOutput, ok := turnEvents[2].Display.Output.(map[string]any)
+	if !ok || completedOutput["session_id"] != "session-1" {
+		t.Fatalf("turn.completed display output = %#v, want session_id=session-1", turnEvents[2].Display.Output)
+	}
 
 	postTurnSession, err := agents[0].GetSession(context.Background(), coreagent.GetSessionRequest{SessionID: "session-1"})
 	if err != nil {
@@ -1365,6 +1378,9 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 		if event.Data["provider_name"] != "simple" {
 			t.Fatalf("agent.test event data = %#v, want provider_name=simple", event.Data)
 		}
+		if display := event.Display; display == nil || display.Kind != "status" || display.Label != "provider event" || display.Text != "simple" {
+			t.Fatalf("agent.test display = %#v, want provider event display for simple", display)
+		}
 	}
 	if !foundAgentTest {
 		t.Fatalf("events = %#v, want agent.test event", events)
@@ -1419,6 +1435,24 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 	if interactions[0].Type != coreagent.InteractionTypeApproval || interactions[0].State != coreagent.InteractionStatePending {
 		t.Fatalf("interaction = %#v, want pending approval", interactions[0])
+	}
+	pausedEvents, err := agents[0].ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{
+		TurnID:   "turn-2",
+		AfterSeq: 0,
+		Limit:    10,
+	})
+	if err != nil {
+		t.Fatalf("ListTurnEvents(waiting): %v", err)
+	}
+	if len(pausedEvents) != 2 || pausedEvents[1].Type != "interaction.requested" {
+		t.Fatalf("ListTurnEvents(waiting) = %#v, want interaction.requested", pausedEvents)
+	}
+	if display := pausedEvents[1].Display; display == nil || display.Kind != "interaction" || display.Phase != "requested" || display.Ref != interactions[0].ID {
+		t.Fatalf("interaction.requested display = %#v, want provider-authored interaction ref %q", display, interactions[0].ID)
+	}
+	requestedInput, ok := pausedEvents[1].Display.Input.(map[string]any)
+	if !ok || requestedInput["interaction_id"] != interactions[0].ID || requestedInput["session_id"] != "session-1" {
+		t.Fatalf("interaction.requested display input = %#v, want interaction/session ids", pausedEvents[1].Display.Input)
 	}
 	resolvedInteraction, err := agents[0].ResolveInteraction(context.Background(), coreagent.ResolveInteractionRequest{
 		InteractionID: interactions[0].ID,

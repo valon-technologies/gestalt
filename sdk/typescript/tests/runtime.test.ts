@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { create } from "@bufbuild/protobuf";
+import { create, toJson } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
@@ -13,6 +13,7 @@ import {
   AgentInteractionType,
   AgentMessagePartType,
   AgentSessionState,
+  AgentTurnEventSchema,
   CancelAgentProviderTurnRequestSchema,
   CreateAgentProviderSessionRequestSchema,
   CreateAgentProviderTurnRequestSchema,
@@ -1644,6 +1645,31 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
     "assistant.completed",
     "turn.completed",
   ]);
+  expect(listedEvents.events[0]?.display?.kind).toBe("status");
+  expect(listedEvents.events[0]?.display?.phase).toBe("started");
+  expect(listedEvents.events[0]?.display?.text).toBe("provider turn started");
+  expect(listedEvents.events[1]?.display?.kind).toBe("interaction");
+  expect(listedEvents.events[1]?.display?.phase).toBe("requested");
+  expect(listedEvents.events[1]?.display?.ref).toBe(fetchedInteraction.id);
+  expect(listedEvents.events[1]?.display?.input?.kind.case).toBe("structValue");
+  expect(
+    (toJson(AgentTurnEventSchema, listedEvents.events[1]) as any).display.input,
+  ).toEqual({ interactionId: fetchedInteraction.id });
+  expect(listedEvents.events[2]?.display?.kind).toBe("interaction");
+  expect(listedEvents.events[2]?.display?.phase).toBe("resolved");
+  expect(listedEvents.events[2]?.display?.output?.kind.case).toBe("structValue");
+  expect(
+    (toJson(AgentTurnEventSchema, listedEvents.events[2]) as any).display.output,
+  ).toEqual({ interactionId: fetchedInteraction.id });
+  expect(listedEvents.events[3]?.display?.kind).toBe("text");
+  expect(listedEvents.events[3]?.display?.text).toBe(
+    "provider assistant completed",
+  );
+  expect(listedEvents.events[4]?.display?.kind).toBe("status");
+  expect(listedEvents.events[4]?.display?.output?.kind.case).toBe("structValue");
+  expect(
+    (toJson(AgentTurnEventSchema, listedEvents.events[4]) as any).display.output,
+  ).toEqual({ interactionId: fetchedInteraction.id });
 
   const completedTurn = await (agent.createTurn as any)(
     create(CreateAgentProviderTurnRequestSchema, {
@@ -1710,6 +1736,26 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   );
   expect(canceledTurn.status).toBe(AgentExecutionStatus.CANCELED);
   expect(canceledTurn.statusMessage).toBe("user requested cancellation");
+  const canceledEvents = await (agent.listTurnEvents as any)(
+    create(ListAgentProviderTurnEventsRequestSchema, {
+      turnId: canceledTurn.id,
+      afterSeq: 0n,
+      limit: 10,
+    }),
+  );
+  const canceledEvent = canceledEvents.events.at(-1);
+  expect(canceledEvent).toBeDefined();
+  if (!canceledEvent) {
+    throw new Error("expected turn.canceled event");
+  }
+  expect(canceledEvent?.type).toBe("turn.canceled");
+  expect(canceledEvent?.display?.kind).toBe("status");
+  expect(canceledEvent?.display?.phase).toBe("canceled");
+  expect(canceledEvent?.display?.text).toBe("user requested cancellation");
+  expect(canceledEvent?.display?.error?.kind.case).toBe("structValue");
+  expect(
+    (toJson(AgentTurnEventSchema, canceledEvent) as any).display.error,
+  ).toEqual({ reason: "user requested cancellation" });
 
   const refreshedMetadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
