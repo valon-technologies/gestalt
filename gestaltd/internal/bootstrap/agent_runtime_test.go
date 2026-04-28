@@ -6,6 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -234,6 +238,19 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	runtimeConfig.Template = "python-dev"
 	runtimeConfig.Image = "ghcr.io/valon/gestalt-python-runtime:latest"
 	runtimeConfig.Metadata = map[string]string{"tenant": "eng"}
+	imageEntrypointDir, err := os.MkdirTemp(".", "agent-image-entrypoint-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(imageEntrypointDir) })
+	imageEntrypoint := filepath.Join(imageEntrypointDir, "agent")
+	agentBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(agent bin): %v", err)
+	}
+	if err := os.WriteFile(imageEntrypoint, agentBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(image entrypoint): %v", err)
+	}
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -249,6 +266,12 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 				"simple": {
 					Command:   bin,
 					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					ResolvedManifest: &providermanifestv1.Manifest{
+						Kind: providermanifestv1.KindAgent,
+						Entrypoint: &providermanifestv1.Entrypoint{
+							ArtifactPath: filepath.ToSlash(imageEntrypoint),
+						},
+					},
 				},
 			},
 		},
@@ -1525,7 +1548,6 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessNone
-	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -1611,6 +1633,133 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Kind: providermanifestv1.KindAgent,
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: "bin/gestalt-agent-simple",
+				Args:         []string{"--serve"},
+			},
+		},
+		Execution: &config.ExecutionConfig{
+			Mode: config.ExecutionModeHosted,
+			Runtime: &config.HostedRuntimeConfig{
+				Image: "ghcr.io/example/simple-agent@sha256:abc123",
+			},
+		},
+	}
+
+	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
+		"name": "simple",
+	}), Deps{PluginRuntime: runtimeProvider})
+	if err != nil {
+		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
+	}
+	defer launch.close()
+
+	if launch.launch.command != "./bin/gestalt-agent-simple" {
+		t.Fatalf("agent command = %q, want manifest image entrypoint", launch.launch.command)
+	}
+	if !slices.Equal(launch.launch.args, []string{"--serve"}) {
+		t.Fatalf("agent args = %#v, want manifest image args", launch.launch.args)
+	}
+}
+
+func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+	}
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Kind: providermanifestv1.KindAgent,
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: "bin/gestalt-agent-simple",
+				Args:         []string{"--serve"},
+			},
+		},
+		Execution: &config.ExecutionConfig{
+			Mode: config.ExecutionModeHosted,
+			Runtime: &config.HostedRuntimeConfig{
+				Provider: "hosted",
+				Template: "python-runtime",
+			},
+		},
+	}
+
+	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
+		"name":    "simple",
+		"command": "/host/only/agent",
+		"args":    []string{"host-arg"},
+	}), Deps{PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{})})
+	if err != nil {
+		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
+	}
+	defer launch.close()
+
+	if launch.launch.command != "./bin/gestalt-agent-simple" {
+		t.Fatalf("agent command = %q, want manifest template entrypoint", launch.launch.command)
+	}
+	if !slices.Equal(launch.launch.args, []string{"--serve"}) {
+		t.Fatalf("agent args = %#v, want manifest template args", launch.launch.args)
+	}
+}
+
+func TestAgentRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T) {
+	t.Parallel()
+
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Kind: providermanifestv1.KindAgent,
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: "bin/gestalt-agent-simple",
+				Args:         []string{"--serve"},
+			},
+		},
+		Execution: &config.ExecutionConfig{
+			Mode: config.ExecutionModeHosted,
+			Runtime: &config.HostedRuntimeConfig{
+				Image: "ghcr.io/example/simple-agent@sha256:abc123",
+			},
+		},
+	}
+
+	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
+		"name":    "simple",
+		"command": "/host/only/agent",
+		"args":    []string{"host-arg"},
+	}), Deps{})
+	if err != nil {
+		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
+	}
+	defer launch.close()
+
+	if launch.launch.command != "/host/only/agent" {
+		t.Fatalf("agent command = %q, want configured command", launch.launch.command)
+	}
+	if !slices.Equal(launch.launch.args, []string{"host-arg"}) {
+		t.Fatalf("agent args = %#v, want configured args", launch.launch.args)
+	}
+}
+
 func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	t.Parallel()
 
@@ -1619,7 +1768,6 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 		inner: newCapturingPluginRuntime(),
 		support: pluginruntime.Support{
 			CanHostPlugins: true,
-			LaunchMode:     pluginruntime.LaunchModeHostPath,
 		},
 	}
 

@@ -812,7 +812,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, err
 	}
-	if command == "" && runtimePlan.Resolved.LaunchMode == RuntimeLaunchModeHostPath {
+	if command == "" && !hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
 		if entry.ResolvedManifestPath == "" {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
@@ -847,10 +847,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			maps.Copy(env, execEnv)
 		}
 	}
-	if command == "" && runtimePlan.Resolved.LaunchMode != RuntimeLaunchModeHostPath {
-		args = nil
-	}
-	launch, err := prepareHostedRuntimeLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimePlan.Resolved)
+	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimeConfig)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -939,7 +936,6 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		Command:    command,
 		Args:       args,
 		Env:        startEnv,
-		BundleDir:  launch.bundleDir,
 		Egress: pluginruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
@@ -1011,7 +1007,7 @@ type hostedAgentProviderLaunch struct {
 	runtimePlan     HostedRuntimePlan
 	cfg             componentprovider.YAMLConfig
 	allowedHosts    []string
-	launch          pluginRuntimeLaunch
+	launch          hostedProcessLaunch
 	cleanup         func()
 }
 
@@ -1072,27 +1068,30 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		}
 		return nil, err
 	}
-	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
-		Kind:                 providermanifestv1.KindAgent,
-		Subject:              "agent provider",
-		SourceMissingMessage: "no Go, Rust, Python, or TypeScript agent provider source package found",
-		Config:               cfg,
-	})
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
+	cleanup := func() {}
+	if !hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
+		prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+			Kind:                 providermanifestv1.KindAgent,
+			Subject:              "agent provider",
+			SourceMissingMessage: "no Go, Rust, Python, or TypeScript agent provider source package found",
+			Config:               cfg,
+		})
+		if err != nil {
+			if runtimeOwned {
+				_ = runtimeProvider.Close()
+			}
+			return nil, err
 		}
-		return nil, err
+		cfg = prepared.YAMLConfig
+		cleanup = prepared.Cleanup
 	}
-	cfg = prepared.YAMLConfig
-	cleanup := prepared.Cleanup
 	defer func() {
 		if cleanup != nil {
 			cleanup()
 		}
 	}()
 
-	launch, err := prepareHostedRuntimeLaunch(providermanifestv1.KindAgent, name, entry, cfg.Command, cfg.Args, cleanup, runtimePlan.Resolved)
+	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindAgent, name, entry, cfg.Command, cfg.Args, cleanup, runtimeConfig)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1227,7 +1226,6 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		Command:    launch.launch.command,
 		Args:       launch.launch.args,
 		Env:        startEnv,
-		BundleDir:  launch.launch.bundleDir,
 		Egress: pluginruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
@@ -1295,10 +1293,10 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return runtimeConfig, newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localHostedRuntimeConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return explicitRuntimeConfig, newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
+	return localHostedRuntimeConfig(explicitRuntimeConfig), newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
 }
 
 func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
@@ -1314,10 +1312,10 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return runtimeConfig, newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localHostedRuntimeConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return config.EffectiveHostedRuntime{}, newLocalPluginRuntime("", deps), true, nil
+	return localHostedRuntimeConfig(config.EffectiveHostedRuntime{}), newLocalPluginRuntime("", deps), true, nil
 }
 
 func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.EffectiveHostedRuntime {
@@ -1328,13 +1326,21 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 	if runtimeCfg == nil {
 		return config.EffectiveHostedRuntime{Enabled: entry.UsesHostedExecution()}
 	}
-	return config.EffectiveHostedRuntime{
+	effective := config.EffectiveHostedRuntime{
 		Enabled:      entry.UsesHostedExecution(),
 		ProviderName: strings.TrimSpace(runtimeCfg.Provider),
 		Template:     strings.TrimSpace(runtimeCfg.Template),
 		Image:        strings.TrimSpace(runtimeCfg.Image),
 		Metadata:     maps.Clone(runtimeCfg.Metadata),
 	}
+	return effective
+}
+
+func localHostedRuntimeConfig(runtimeConfig config.EffectiveHostedRuntime) config.EffectiveHostedRuntime {
+	if runtimeConfig.Provider == nil {
+		runtimeConfig.Provider = &config.RuntimeProviderEntry{Driver: config.RuntimeProviderDriverLocal}
+	}
+	return runtimeConfig
 }
 
 func newLocalPluginRuntime(runtimeProviderName string, deps Deps) pluginruntime.Provider {

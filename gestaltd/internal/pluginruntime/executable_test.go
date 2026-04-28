@@ -172,7 +172,6 @@ func (p *runtimeProvider) Configure(context.Context, string, map[string]any) err
 func (p *runtimeProvider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
 	return &proto.PluginRuntimeSupport{
 		CanHostPlugins: true,
-		LaunchMode:     proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH,
 	}, nil
 }
 

@@ -241,7 +241,6 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		Command:       req.Command,
 		Args:          append([]string(nil), req.Args...),
 		Env:           cloneStringMap(req.Env),
-		BundleDir:     req.BundleDir,
 		AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
 		DefaultAction: string(req.Egress.DefaultAction),
 		HostBinary:    req.HostBinary,
@@ -309,8 +308,6 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 		CanHostPlugins:    src.GetCanHostPlugins(),
 		HostServiceAccess: hostServiceAccessFromProto(src.GetHostServiceAccess()),
 		EgressMode:        egressModeFromProto(src.GetEgressMode()),
-		LaunchMode:        launchModeFromProto(src.GetLaunchMode()),
-		ExecutionTarget:   executionTargetFromProto(src.GetExecutionTarget()),
 	}
 }
 
@@ -331,25 +328,6 @@ func egressModeFromProto(src proto.PluginRuntimeEgressMode) EgressMode {
 		return EgressModeCIDR
 	default:
 		return EgressModeNone
-	}
-}
-
-func launchModeFromProto(src proto.PluginRuntimeLaunchMode) LaunchMode {
-	switch src {
-	case proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH:
-		return LaunchModeHostPath
-	default:
-		return LaunchModeBundle
-	}
-}
-
-func executionTargetFromProto(src *proto.PluginRuntimeExecutionTarget) ExecutionTarget {
-	if src == nil {
-		return ExecutionTarget{}
-	}
-	return ExecutionTarget{
-		GOOS:   strings.TrimSpace(src.GetGoos()),
-		GOARCH: strings.TrimSpace(src.GetGoarch()),
 	}
 }
 

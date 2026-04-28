@@ -244,6 +244,17 @@ plugins:
 forwarded to the selected runtime backend. Their meaning is backend-specific: a
 local runtime may ignore them, while a hosted runtime may use them to choose a
 sandbox template, container image, or labels/tags for lifecycle management.
+When `runtime.image` is set, Gestalt expects the image to contain the provider
+package at the image working directory. It starts the executable declared by
+the provider manifest entrypoint and passes the manifest entrypoint args:
+
+```yaml
+execution:
+  mode: hosted
+  runtime:
+    provider: modal
+    image: ghcr.io/example/support-plugin@sha256:...
+```
 
 The built-in `local` runtime handles same-machine execution. Installable
 `kind: runtime` providers such as Modal handle hosted execution.

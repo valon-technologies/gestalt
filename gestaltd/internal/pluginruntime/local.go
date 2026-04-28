@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -86,11 +85,6 @@ func (p *LocalProvider) Support(context.Context) (Support, error) {
 		CanHostPlugins:    true,
 		HostServiceAccess: HostServiceAccessDirect,
 		EgressMode:        EgressModeHostname,
-		LaunchMode:        LaunchModeHostPath,
-		ExecutionTarget: ExecutionTarget{
-			GOOS:   runtime.GOOS,
-			GOARCH: runtime.GOARCH,
-		},
 	}, nil
 }
 

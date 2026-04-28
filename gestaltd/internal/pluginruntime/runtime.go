@@ -4,19 +4,17 @@ import (
 	"context"
 	"time"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 type SessionState string
 
 const (
-	HostedPluginBundleRoot              = gestalt.HostedPluginBundleRoot
-	SessionStatePending    SessionState = "pending"
-	SessionStateReady      SessionState = "ready"
-	SessionStateRunning    SessionState = "running"
-	SessionStateStopped    SessionState = "stopped"
-	SessionStateFailed     SessionState = "failed"
+	SessionStatePending SessionState = "pending"
+	SessionStateReady   SessionState = "ready"
+	SessionStateRunning SessionState = "running"
+	SessionStateStopped SessionState = "stopped"
+	SessionStateFailed  SessionState = "failed"
 )
 
 // PolicyAction mirrors the host egress default for runtime-launched plugins.
@@ -44,24 +42,10 @@ const (
 	EgressModeHostname EgressMode = "hostname"
 )
 
-type LaunchMode string
-
-const (
-	LaunchModeHostPath LaunchMode = "host_path"
-	LaunchModeBundle   LaunchMode = "bundle"
-)
-
-type ExecutionTarget struct {
-	GOOS   string
-	GOARCH string
-}
-
 type Support struct {
 	CanHostPlugins    bool
 	HostServiceAccess HostServiceAccess
 	EgressMode        EgressMode
-	LaunchMode        LaunchMode
-	ExecutionTarget   ExecutionTarget
 }
 
 type Session struct {
@@ -121,7 +105,6 @@ type StartPluginRequest struct {
 	Command    string
 	Args       []string
 	Env        map[string]string
-	BundleDir  string
 	Egress     RuntimeEgressPolicy
 	HostBinary string
 }

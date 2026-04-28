@@ -78,8 +78,7 @@ a default selector for providers that already opted into hosted execution.
 Runtime backends are not interchangeable, but the compatibility check is meant
 to read in terms of behavior, not implementation details. Gestalt asks whether
 the runtime can host plugins, how hosted plugins reach Gestalt-owned services,
-whether the runtime can preserve hostname-based `egress.allowedHosts`, and
-whether the plugin should launch from a host path or from a staged bundle.
+and whether the runtime can preserve hostname-based `egress.allowedHosts`.
 
 Host-service access is reported as `none`, `relay`, or `direct`. `direct`
 means the runtime can expose guest-local service sockets inside the session.
@@ -124,18 +123,30 @@ Today there are two main runtime choices:
 | `local` | Built-in driver | Runs the plugin on the same machine as `gestaltd`. Supports host-path execution and the existing host-local runtime behavior. |
 | `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.execution.runtime.image`. When the host is configured for the public relay and proxy path, Modal can run plugins that need Gestalt-owned services and hostname-based egress. |
 
-## Bundle staging and host-path execution
+## Provider images
 
-Some runtimes can execute directly from host paths. Others cannot.
+Hosted runtime providers run prebuilt provider images. Gestalt does not upload
+provider bundles into those sessions. Instead, the configured image must contain
+the provider package at the image working directory and preserve the release
+package layout. Gestalt starts the manifest entrypoint path from that working
+directory and passes the manifest entrypoint args.
 
-When a backend advertises a `host_path` launch mode, Gestalt may launch the
-plugin directly from local paths, including synthesized source-provider
-execution. When it advertises `bundle`, Gestalt stages a runtime bundle first
-and asks the backend to start the plugin from that staged bundle instead.
+```yaml
+plugins:
+  support:
+    source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
+    execution:
+      mode: hosted
+      runtime:
+        provider: modal
+        image: ghcr.io/example/support-plugin@sha256:...
+```
 
 This is why `plugins.<name>.execution.runtime.image`, `template`, and
 `metadata` are forwarded to the runtime backend: they are runtime-specific
-launch hints, not universal plugin semantics.
+session hints, not universal plugin semantics. Keep the manifest release and
+image digest in sync; Gestalt does not inspect the image to prove that the
+manifest entrypoint exists inside it.
 
 ## What to read next
 

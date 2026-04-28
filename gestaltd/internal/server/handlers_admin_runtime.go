@@ -29,16 +29,9 @@ type adminRuntimeProfilePair struct {
 }
 
 type adminRuntimeProfile struct {
-	CanHostPlugins    bool                         `json:"canHostPlugins"`
-	HostServiceAccess string                       `json:"hostServiceAccess"`
-	EgressMode        string                       `json:"egressMode"`
-	LaunchMode        string                       `json:"launchMode"`
-	ExecutionTarget   *adminRuntimeExecutionTarget `json:"executionTarget,omitempty"`
-}
-
-type adminRuntimeExecutionTarget struct {
-	GOOS   string `json:"goos"`
-	GOARCH string `json:"goarch"`
+	CanHostPlugins    bool   `json:"canHostPlugins"`
+	HostServiceAccess string `json:"hostServiceAccess"`
+	EgressMode        string `json:"egressMode"`
 }
 
 type adminRuntimeSessionInfo struct {
@@ -191,19 +184,11 @@ func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnap
 }
 
 func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminRuntimeProfile {
-	out := adminRuntimeProfile{
+	return adminRuntimeProfile{
 		CanHostPlugins:    behavior.CanHostPlugins,
 		HostServiceAccess: strings.TrimSpace(string(behavior.HostServiceAccess)),
 		EgressMode:        strings.TrimSpace(string(behavior.EgressMode)),
-		LaunchMode:        strings.TrimSpace(string(behavior.LaunchMode)),
 	}
-	if behavior.ExecutionTarget.IsSet() {
-		out.ExecutionTarget = &adminRuntimeExecutionTarget{
-			GOOS:   strings.TrimSpace(behavior.ExecutionTarget.GOOS),
-			GOARCH: strings.TrimSpace(behavior.ExecutionTarget.GOARCH),
-		}
-	}
-	return out
 }
 
 const (
