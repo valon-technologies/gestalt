@@ -864,9 +864,9 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 | Layer | Span name | Key attributes |
 | --- | --- | --- |
-| HTTP | `gestaltd: {method} {route}` | Standard HTTP semantic conventions |
+| HTTP | `gestaltd: {method} {route}` | Standard HTTP semantic conventions plus resolved `gestaltd.*` request-surface attributes |
 | Broker | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.subject_id`, `gestalt.connection_mode` |
-| gRPC plugin | Per-RPC spans | Standard gRPC semantic conventions |
+| gRPC plugin and host service traffic | Per-RPC spans | Standard RPC semantic conventions plus `gestaltd.rpc.role`, `gestaltd.provider.name`, and, for host services, `gestaltd.host_service.name` |
 
 ## `providers.audit`
 

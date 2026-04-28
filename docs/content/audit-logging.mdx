@@ -95,7 +95,7 @@ rejects the request before invocation.
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh remains metrics-only to avoid audit noise. |
 | Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing that resolves a session catalog stays metrics-only to avoid audit spam. |
-| IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Datastore calls are internal implementation telemetry, not audit events. |
+| IndexedDB operations | Yes: `db.client.operation.duration` | No | Datastore calls are internal implementation telemetry, not audit events. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for explicit token create/revoke flows and CLI token minting. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
