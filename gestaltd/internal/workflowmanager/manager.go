@@ -1444,22 +1444,12 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 	if ref == nil {
 		return false
 	}
-	if strings.TrimSpace(ref.TargetFingerprint) != "" {
-		matches, err := coreworkflow.TargetFingerprintMatches(target, ref.TargetFingerprint)
-		return err == nil && matches
-	}
-	if ref.Target.Agent != nil || target.Agent != nil {
+	refFingerprint := strings.TrimSpace(ref.TargetFingerprint)
+	if refFingerprint == "" {
 		return false
 	}
-	if target.Plugin == nil || ref.Target.Plugin == nil {
-		return false
-	}
-	left := *target.Plugin
-	right := *ref.Target.Plugin
-	return strings.TrimSpace(left.PluginName) == strings.TrimSpace(right.PluginName) &&
-		strings.TrimSpace(left.Operation) == strings.TrimSpace(right.Operation) &&
-		strings.TrimSpace(left.Connection) == strings.TrimSpace(right.Connection) &&
-		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance)
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	return err == nil && targetFingerprint == refFingerprint
 }
 
 func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {

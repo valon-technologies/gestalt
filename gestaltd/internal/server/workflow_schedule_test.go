@@ -361,6 +361,13 @@ func (p *memoryWorkflowProvider) PutExecutionReference(_ context.Context, ref *c
 		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
 	}
 	stored := cloneWorkflowExecutionReference(ref)
+	if strings.TrimSpace(stored.TargetFingerprint) == "" {
+		fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
+		if err != nil {
+			return nil, err
+		}
+		stored.TargetFingerprint = fingerprint
+	}
 	p.executionRefs[stored.ID] = stored
 	return cloneWorkflowExecutionReference(stored), nil
 }

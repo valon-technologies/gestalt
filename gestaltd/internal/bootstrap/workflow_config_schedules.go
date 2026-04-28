@@ -486,6 +486,9 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
 		return false
 	}
+	if strings.TrimSpace(existing.TargetFingerprint) != strings.TrimSpace(desired.TargetFingerprint) {
+		return false
+	}
 	if !workflowTargetsEqual(existing.Target, desired.Target) {
 		return false
 	}
