@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -242,7 +243,7 @@ func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
 	t.Cleanup(func() { _ = u.Close() })
 
 	err := u.FilterOperations(map[string]*config.OperationOverride{
-		"run_query": {Alias: "query"},
+		"run_query": {Alias: "query", Tags: []string{"sql"}},
 	})
 	if err != nil {
 		t.Fatalf("FilterOperations: %v", err)
@@ -257,6 +258,9 @@ func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
 	}
 	if cat.Operations[0].ID != "query" {
 		t.Errorf("expected aliased ID %q, got %q", "query", cat.Operations[0].ID)
+	}
+	if got, want := cat.Operations[0].Tags, []string{"sql"}; !slices.Equal(got, want) {
+		t.Errorf("expected tags %#v, got %#v", want, got)
 	}
 }
 

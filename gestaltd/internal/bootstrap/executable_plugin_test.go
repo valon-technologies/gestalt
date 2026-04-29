@@ -2413,7 +2413,7 @@ func TestHybridExecutableProviderAppliesAllowedOperationsToStaticAndOpenAPICatal
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "hybrid",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+			{ID: "echo", Method: http.MethodPost, Tags: []string{"static-source"}, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
 		},
 	})
 	openapiDoc := `openapi: "3.1.0"
@@ -2424,6 +2424,8 @@ paths:
   /status:
     get:
       operationId: status
+      tags:
+        - openapi-source
       responses:
         "200":
           description: OK
@@ -2447,8 +2449,8 @@ paths:
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
 				AllowedOperations: map[string]*config.OperationOverride{
-					"echo":   {Alias: "renamed_echo"},
-					"status": {Alias: "renamed_status"},
+					"echo":   {Alias: "renamed_echo", Tags: []string{"static-override"}},
+					"status": {Alias: "renamed_status", Tags: []string{"status-override"}},
 				},
 			},
 		},
@@ -2480,6 +2482,21 @@ paths:
 	}
 	if hasOperation("echo") || hasOperation("status") {
 		t.Fatalf("catalog operations = %+v, want original operation ids hidden", cat.Operations)
+	}
+	operationTags := func(id string) []string {
+		for _, op := range cat.Operations {
+			if op.ID == id {
+				return op.Tags
+			}
+		}
+		t.Fatalf("operation %q not found in catalog: %+v", id, cat.Operations)
+		return nil
+	}
+	if got, want := operationTags("renamed_echo"), []string{"static-source", "static-override"}; !slices.Equal(got, want) {
+		t.Fatalf("renamed_echo tags = %#v, want %#v", got, want)
+	}
+	if got, want := operationTags("renamed_status"), []string{"openapi-source", "status-override"}; !slices.Equal(got, want) {
+		t.Fatalf("renamed_status tags = %#v, want %#v", got, want)
 	}
 }
 

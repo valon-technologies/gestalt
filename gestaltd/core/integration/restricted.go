@@ -18,6 +18,7 @@ type Restricted struct {
 	allowedInner map[string]struct{}
 	descriptions map[string]string
 	allowedRoles map[string][]string
+	tags         map[string][]string
 }
 
 // RestrictedOption configures a Restricted provider.
@@ -31,6 +32,11 @@ func WithDescriptions(descs map[string]string) RestrictedOption {
 // WithAllowedRoles sets allowedRoles overrides keyed by exposed operation name.
 func WithAllowedRoles(roles map[string][]string) RestrictedOption {
 	return func(r *Restricted) { r.allowedRoles = roles }
+}
+
+// WithTags adds provider-owned search tags keyed by exposed operation name.
+func WithTags(tags map[string][]string) RestrictedOption {
+	return func(r *Restricted) { r.tags = tags }
 }
 
 // Compile-time interface checks.
@@ -145,6 +151,9 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			}
 			if roles, ok := r.allowedRoles[op.ID]; ok {
 				op.AllowedRoles = append([]string(nil), roles...)
+			}
+			if tags, ok := r.tags[op.ID]; ok {
+				op.Tags = catalog.MergeTags(op.Tags, tags)
 			}
 			filtered.Operations = append(filtered.Operations, op)
 		}

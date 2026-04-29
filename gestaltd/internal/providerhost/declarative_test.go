@@ -43,6 +43,7 @@ func TestDeclarativeProvider_POSTUsesExplicitJSONContentType(t *testing.T) {
 						Name:   "chat.postMessage",
 						Method: http.MethodPost,
 						Path:   "/api/chat.postMessage",
+						Tags:   []string{"chat", "message"},
 						Parameters: []providermanifestv1.ProviderParameter{
 							{Name: "channel", Type: "string", In: "body", Required: true},
 							{Name: "text", Type: "string", In: "body", Required: true},
@@ -77,5 +78,8 @@ func TestDeclarativeProvider_POSTUsesExplicitJSONContentType(t *testing.T) {
 	}
 	if gotBody["text"] != "hello" {
 		t.Fatalf("body[text] = %v, want hello", gotBody["text"])
+	}
+	if got := prov.Catalog().Operations[0].Tags; len(got) != 2 || got[0] != "chat" || got[1] != "message" {
+		t.Fatalf("catalog operation tags = %#v, want chat/message", got)
 	}
 }

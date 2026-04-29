@@ -14,6 +14,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/toolschema"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
@@ -178,6 +179,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			}
 			opID := op.OperationId
 			var allowedRoles []string
+			tags := catalog.MergeTags(op.Tags)
 			if override := allowedOps[op.OperationId]; override != nil {
 				if override.Description != "" {
 					desc = override.Description
@@ -186,6 +188,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 					opID = override.Alias
 				}
 				allowedRoles = override.AllowedRoles
+				tags = catalog.MergeTags(tags, override.Tags)
 			}
 
 			var (
@@ -246,6 +249,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				Method:       strings.ToUpper(method),
 				Path:         path,
 				AllowedRoles: allowedRoles,
+				Tags:         tags,
 				Parameters:   params,
 			}
 		}
