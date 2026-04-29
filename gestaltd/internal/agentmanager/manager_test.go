@@ -749,6 +749,166 @@ func TestSearchToolsGlobalWildcardFindsProviderQualifiedCatalogOperation(t *test
 	}
 }
 
+func TestSearchToolsRanksProviderConfiguredTags(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "codehost",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+				{
+					ID:          "pulls.list",
+					Title:       "List Pull Requests",
+					Description: "List pull requests for a repository.",
+					Tags:        []string{"pr", "prs"},
+					ReadOnly:    true,
+				},
+				{
+					ID:          "pulls.merge",
+					Title:       "Merge Pull Request",
+					Description: "Merge a pull request into the base branch.",
+					Tags:        []string{"merge"},
+				},
+			}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query:      "prs",
+		MaxResults: 1,
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1: %#v", len(resp.Tools), resp.Tools)
+	}
+	if resp.Tools[0].Target.Plugin != "codehost" || resp.Tools[0].Target.Operation != "pulls.list" {
+		t.Fatalf("tool target = %#v, want codehost.pulls.list", resp.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsDoesNotInventSemanticAliases(t *testing.T) {
+	t.Parallel()
+
+	search := func(t *testing.T, tags []string) *coreagent.SearchToolsResponse {
+		t.Helper()
+
+		provider := &catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "chat",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+					ID:          "messages.send",
+					Title:       "Send Message",
+					Description: "Send a private message.",
+					Tags:        tags,
+				}}},
+			},
+		}
+		manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+		resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+			SubjectID: principal.UserSubjectID("user-1"),
+		}, coreagent.SearchToolsRequest{
+			Query:      "dm",
+			MaxResults: 1,
+		})
+		if err != nil {
+			t.Fatalf("SearchTools: %v", err)
+		}
+		return resp
+	}
+
+	withoutTags := search(t, nil)
+	if len(withoutTags.Tools) != 0 {
+		t.Fatalf("SearchTools without dm tags returned %#v, want no tools", withoutTags.Tools)
+	}
+
+	withTags := search(t, []string{"dm", "direct message"})
+	if len(withTags.Tools) != 1 {
+		t.Fatalf("SearchTools with dm tags returned %d tools, want 1: %#v", len(withTags.Tools), withTags.Tools)
+	}
+	if withTags.Tools[0].Target.Plugin != "chat" || withTags.Tools[0].Target.Operation != "messages.send" {
+		t.Fatalf("tool target = %#v, want chat.messages.send", withTags.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsDoesNotTreatPullRequestsAsMergeWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "codehost",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:          "pulls.list",
+				Title:       "List Pull Requests",
+				Description: "List open pull requests for a repository.",
+				ReadOnly:    true,
+			}}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query:      "merge",
+		MaxResults: 1,
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 0 {
+		t.Fatalf("SearchTools returned %#v, want no tools without merge metadata", resp.Tools)
+	}
+}
+
+func TestSearchToolsRanksTitleAheadOfTags(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "records",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+				{
+					ID:          "records.lookup",
+					Title:       "Lookup Records",
+					Description: "Lookup records by ID.",
+					Tags:        []string{"audit"},
+					ReadOnly:    true,
+				},
+				{
+					ID:          "logs.list",
+					Title:       "Audit Logs",
+					Description: "List log entries.",
+					ReadOnly:    true,
+				},
+			}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query:      "audit",
+		MaxResults: 1,
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1: %#v", len(resp.Tools), resp.Tools)
+	}
+	if resp.Tools[0].Target.Plugin != "records" || resp.Tools[0].Target.Operation != "logs.list" {
+		t.Fatalf("tool target = %#v, want records.logs.list", resp.Tools[0].Target)
+	}
+}
+
 func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.T) {
 	t.Parallel()
 
