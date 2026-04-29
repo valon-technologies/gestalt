@@ -70,6 +70,7 @@ export const plugin = definePlugin({
         accessPolicy: s.string(),
         accessRole: s.string(),
         invocationToken: s.string(),
+        idempotencyKey: s.string(),
       }),
       handler(input, request) {
         const region = connectionParam(request, "region") ?? "";
@@ -83,6 +84,7 @@ export const plugin = definePlugin({
           accessPolicy: request.access.policy,
           accessRole: request.access.role,
           invocationToken: request.invocationToken,
+          idempotencyKey: request.idempotencyKey,
         });
       },
     },

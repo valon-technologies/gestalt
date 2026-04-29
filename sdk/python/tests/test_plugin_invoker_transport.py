@@ -83,6 +83,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                     "params_present": request.HasField("params"),
                     "connection": request.connection,
                     "instance": request.instance,
+                    "idempotency_key": request.idempotency_key,
                 }
             ),
         )
@@ -105,6 +106,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                 "variables_present": request.HasField("variables"),
                 "connection": request.connection,
                 "instance": request.instance,
+                "idempotency_key": request.idempotency_key,
             }
         )
         return plugin_pb2.OperationResult(
@@ -118,6 +120,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                     "variables_present": request.HasField("variables"),
                     "connection": request.connection,
                     "instance": request.instance,
+                    "idempotency_key": request.idempotency_key,
                 }
             ),
         )
@@ -178,6 +181,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 {"repo": "valon-technologies/gestalt", "issue_number": 1026},
                 connection="work",
                 instance="prod",
+                idempotency_key=" issue-1026-create ",
             )
 
         self.assertEqual(child_token, "invoke-123:child")
@@ -224,6 +228,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "params_present": True,
                 "connection": "work",
                 "instance": "prod",
+                "idempotency_key": "issue-1026-create",
             },
         )
 
@@ -234,6 +239,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
                 {"team": "eng"},
                 connection="workspace",
+                idempotency_key=" graphql-call-123 ",
             )
 
         self.assertEqual(response.status, 208)
@@ -249,6 +255,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "variables_present": True,
                 "connection": "workspace",
                 "instance": "",
+                "idempotency_key": "graphql-call-123",
             },
         )
         self.assertEqual(
@@ -264,6 +271,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                     "variables_present": True,
                     "connection": "workspace",
                     "instance": "",
+                    "idempotency_key": "graphql-call-123",
                 }
             ],
         )
@@ -297,6 +305,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "params_present": True,
                 "connection": "",
                 "instance": "",
+                "idempotency_key": "",
             },
         )
 

@@ -33,11 +33,19 @@ pub enum WorkflowManagerError {
 pub struct WorkflowManager {
     client: ProtoWorkflowManagerHostClient<WorkflowManagerTransport>,
     invocation_token: String,
+    idempotency_key: String,
 }
 
 impl WorkflowManager {
     pub async fn connect(
         invocation_token: impl AsRef<str>,
+    ) -> std::result::Result<Self, WorkflowManagerError> {
+        Self::connect_with_idempotency_key(invocation_token, "").await
+    }
+
+    pub async fn connect_with_idempotency_key(
+        invocation_token: impl AsRef<str>,
+        idempotency_key: impl AsRef<str>,
     ) -> std::result::Result<Self, WorkflowManagerError> {
         let invocation_token = invocation_token.as_ref().trim().to_owned();
         if invocation_token.is_empty() {
@@ -75,6 +83,7 @@ impl WorkflowManager {
                 relay_token_interceptor(relay_token.trim())?,
             ),
             invocation_token,
+            idempotency_key: idempotency_key.as_ref().trim().to_owned(),
         })
     }
 
@@ -83,6 +92,9 @@ impl WorkflowManager {
         mut request: pb::WorkflowManagerCreateScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
         request.invocation_token = self.invocation_token.clone();
+        if request.idempotency_key.trim().is_empty() {
+            request.idempotency_key = self.idempotency_key.clone();
+        }
         Ok(self.client.create_schedule(request).await?.into_inner())
     }
 
@@ -156,6 +168,9 @@ impl WorkflowManager {
         mut request: pb::WorkflowManagerCreateEventTriggerRequest,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
         request.invocation_token = self.invocation_token.clone();
+        if request.idempotency_key.trim().is_empty() {
+            request.idempotency_key = self.idempotency_key.clone();
+        }
         Ok(self
             .client
             .create_event_trigger(request)

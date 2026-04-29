@@ -7,6 +7,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -49,5 +51,30 @@ func TestAgentHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 	}
 	if captured.Arguments["taskId"] != "task-123" {
 		t.Fatalf("arguments = %#v, want taskId", captured.Arguments)
+	}
+}
+
+func TestAgentHostServerExecuteToolRequiresReplayKey(t *testing.T) {
+	t.Parallel()
+
+	server := NewAgentHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+		t.Fatal("executeTool should not be called")
+		return nil, nil
+	})
+	conn := newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAgentHostServer(srv, server)
+	})
+	client := proto.NewAgentHostClient(conn)
+
+	_, err := client.ExecuteTool(context.Background(), &proto.ExecuteAgentToolRequest{
+		SessionId: "session-1",
+		TurnId:    "turn-1",
+		ToolId:    "roadmap.sync",
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid argument")
+	}
+	if code := status.Code(err); code != codes.InvalidArgument {
+		t.Fatalf("ExecuteTool code = %v, want %v", code, codes.InvalidArgument)
 	}
 }

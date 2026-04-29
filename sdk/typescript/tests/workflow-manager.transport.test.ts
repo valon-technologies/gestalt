@@ -42,6 +42,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
   const calls: Array<{
     method: string;
     invocationToken: string;
+    idempotencyKey?: string;
     scheduleId?: string;
     triggerId?: string;
     eventType?: string;
@@ -57,6 +58,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           calls.push({
             method: "create",
             invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
           });
           return create(ManagedWorkflowScheduleSchema, {
             providerName: input.providerName || "basic",
@@ -139,6 +141,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           calls.push({
             method: "create-trigger",
             invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
           });
           return create(ManagedWorkflowEventTriggerSchema, {
             providerName: input.providerName || "basic",
@@ -251,13 +254,23 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       timezone: "UTC",
       target: workflowPluginTarget("roadmap", "sync"),
       paused: false,
+      idempotencyKey: "workflow-schedule-key-ts",
     });
 
     expect(created.providerName).toBe("basic");
     expect(created.schedule?.id).toBe("sched-1");
 
     const fromRequest = new WorkflowManager(
-      request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
+      request(
+        "tok",
+        {},
+        {},
+        {},
+        {},
+        {},
+        "invocation-token-456",
+        "workflow-request-key-ts",
+      ),
     );
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
     const updated = await fromRequest.updateSchedule({
@@ -318,7 +331,11 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     expect(resumedTrigger.trigger?.paused).toBe(false);
     expect(publishedEvent.type).toBe("roadmap.item.updated");
     expect(calls).toEqual([
-      { method: "create", invocationToken: "invocation-token-123" },
+      {
+        method: "create",
+        invocationToken: "invocation-token-123",
+        idempotencyKey: "workflow-schedule-key-ts",
+      },
       {
         method: "get",
         invocationToken: "invocation-token-456",
@@ -344,7 +361,11 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         invocationToken: "invocation-token-456",
         scheduleId: "sched-1",
       },
-      { method: "create-trigger", invocationToken: "invocation-token-456" },
+      {
+        method: "create-trigger",
+        invocationToken: "invocation-token-456",
+        idempotencyKey: "workflow-request-key-ts",
+      },
       {
         method: "get-trigger",
         invocationToken: "invocation-token-456",

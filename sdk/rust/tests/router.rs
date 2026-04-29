@@ -132,6 +132,7 @@ struct GreetOutput {
     api_key: String,
     subject_id: String,
     credential_mode: String,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -152,6 +153,7 @@ async fn greet(
             .to_owned(),
         subject_id: request.subject.id,
         credential_mode: request.credential.mode,
+        idempotency_key: request.idempotency_key,
     }))
 }
 
@@ -286,6 +288,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                 access: None,
                 workflow: None,
             }),
+            idempotency_key: " tool-call-123 ".to_owned(),
         }))
         .await
         .expect("execute greet")
@@ -293,7 +296,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(success.status, 200);
     assert_eq!(
         success.body,
-        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"identity"}"#
+        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"identity","idempotency_key":"tool-call-123"}"#
     );
 
     let unknown = server

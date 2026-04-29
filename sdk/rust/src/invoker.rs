@@ -49,6 +49,7 @@ pub struct InvocationGrant {
 pub struct InvokeOptions {
     pub connection: String,
     pub instance: String,
+    pub idempotency_key: String,
 }
 
 pub struct PluginInvoker {
@@ -125,6 +126,10 @@ impl PluginInvoker {
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
                 invocation_token: self.invocation_token.clone(),
+                idempotency_key: options
+                    .as_ref()
+                    .map(|opts| opts.idempotency_key.trim().to_string())
+                    .unwrap_or_default(),
             })
             .await?
             .into_inner();
@@ -179,6 +184,10 @@ impl PluginInvoker {
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
                 invocation_token: self.invocation_token.clone(),
+                idempotency_key: options
+                    .as_ref()
+                    .map(|opts| opts.idempotency_key.trim().to_string())
+                    .unwrap_or_default(),
             })
             .await?
             .into_inner();

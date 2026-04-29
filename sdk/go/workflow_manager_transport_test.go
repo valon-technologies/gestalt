@@ -89,8 +89,9 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	created, err := client.CreateSchedule(context.Background(), &proto.WorkflowManagerCreateScheduleRequest{
-		ProviderName: "managed",
-		Cron:         "*/5 * * * *",
+		ProviderName:   "managed",
+		Cron:           "*/5 * * * *",
+		IdempotencyKey: "workflow-schedule-key-go",
 	})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
@@ -115,6 +116,9 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	if harness.requests[0].GetProviderName() != "managed" || harness.requests[0].GetCron() != "*/5 * * * *" {
 		t.Fatalf("create schedule request = %+v, want provider_name=managed cron=*/5 * * * *", harness.requests[0])
+	}
+	if harness.requests[0].GetIdempotencyKey() != "workflow-schedule-key-go" {
+		t.Fatalf("idempotency key = %q, want workflow-schedule-key-go", harness.requests[0].GetIdempotencyKey())
 	}
 }
 

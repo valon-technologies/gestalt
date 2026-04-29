@@ -92,6 +92,7 @@ struct Output {
     credential_mode: String,
     access_role: String,
     invocation_token: String,
+    idempotency_key: String,
     workflow_run_id: String,
     workflow_trigger_id: String,
     workflow_event_spec_version: String,
@@ -120,6 +121,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     credential_mode,
                     access_role,
                     invocation_token,
+                    idempotency_key: request.idempotency_key.clone(),
                     workflow_run_id: request
                         .workflow
                         .get("runId")
@@ -246,6 +248,7 @@ async fn serves_provider_requests_over_unix_socket() {
             connection_params: Default::default(),
             invocation_id: String::new(),
             invocation_token: "token-123".to_string(),
+            idempotency_key: " transport-tool-123 ".to_string(),
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
@@ -289,7 +292,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","invocation_token":"token-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client

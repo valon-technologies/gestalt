@@ -37,6 +37,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
 	ctx = WithInvocationToken(ctx, req.GetInvocationToken())
+	ctx = invocation.WithIdempotencyKey(ctx, req.GetIdempotencyKey())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}

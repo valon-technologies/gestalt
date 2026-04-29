@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"testing"
 
@@ -36,10 +37,11 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 		Tools: []coreagent.Tool{workflowTool},
 	})
 
-	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+	req := coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
+		ToolCallID:   "call-1",
 		ToolID:       workflowTool.ID,
 		ToolGrant:    toolGrant,
 		Arguments: map[string]any{
@@ -55,7 +57,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 				},
 			},
 		},
-	})
+	}
+	resp, err := runtime.ExecuteTool(context.Background(), req)
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
@@ -82,6 +85,34 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || body.Schedule.Target.Plugin.Name != "roadmap" || body.Schedule.Target.Plugin.Operation != "sync" {
 		t.Fatalf("schedule response = %#v", body.Schedule)
 	}
+	secondResp, err := runtime.ExecuteTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ExecuteTool replay: %v", err)
+	}
+	if secondResp == nil || secondResp.Status != http.StatusCreated {
+		t.Fatalf("replay response = %#v, want 201", secondResp)
+	}
+	var secondBody struct {
+		Schedule struct {
+			ID string `json:"id"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(secondResp.Body), &secondBody); err != nil {
+		t.Fatalf("decode replay response body: %v", err)
+	}
+	if secondBody.Schedule.ID != body.Schedule.ID {
+		t.Fatalf("replayed schedule id = %q, want %q", secondBody.Schedule.ID, body.Schedule.ID)
+	}
+	conflictingReq := req
+	conflictingReq.Arguments = maps.Clone(req.Arguments)
+	conflictingReq.Arguments["cron"] = "*/10 * * * *"
+	_, err = runtime.ExecuteTool(context.Background(), conflictingReq)
+	if err == nil {
+		t.Fatal("ExecuteTool conflicting replay succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("conflicting replay error = %v, want invalid invocation", err)
+	}
 	if len(workflowProvider.upsertedSchedules) != 1 {
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
@@ -95,6 +126,9 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	}
 	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
 		t.Fatalf("execution ref permissions = %#v", ref.Permissions)
+	}
+	if ref.CallerPluginName != "agent:managed" {
+		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerPluginName)
 	}
 }
 

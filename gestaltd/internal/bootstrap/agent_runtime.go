@@ -33,11 +33,13 @@ type agentRuntime struct {
 }
 
 type agentSystemToolExecutionRequest struct {
-	Principal *principal.Principal
-	Tool      coreagent.Tool
-	Arguments map[string]any
-	ToolRefs  []coreagent.ToolRef
-	Tools     []coreagent.Tool
+	Principal      *principal.Principal
+	ProviderName   string
+	Tool           coreagent.Tool
+	Arguments      map[string]any
+	IdempotencyKey string
+	ToolRefs       []coreagent.ToolRef
+	Tools          []coreagent.Tool
 }
 
 type agentSystemToolExecutor interface {
@@ -292,16 +294,19 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err := validateAgentToolTargetForGrant(grant, principalValue, resolvedTool.Target, resolvedTool.ID); err != nil {
 		return nil, err
 	}
+	idempotencyKey := agentToolIdempotencyKey(req)
 	if strings.TrimSpace(resolvedTool.Target.System) != "" {
 		if systemTools == nil {
 			return nil, agentmanager.ErrAgentWorkflowToolsNotConfigured
 		}
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
-			Principal: principalValue,
-			Tool:      resolvedTool,
-			Arguments: maps.Clone(req.Arguments),
-			ToolRefs:  append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-			Tools:     append([]coreagent.Tool(nil), grant.Tools...),
+			Principal:      principalValue,
+			ProviderName:   strings.TrimSpace(grant.ProviderName),
+			Tool:           resolvedTool,
+			Arguments:      maps.Clone(req.Arguments),
+			IdempotencyKey: idempotencyKey,
+			ToolRefs:       append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+			Tools:          append([]coreagent.Tool(nil), grant.Tools...),
 		})
 	}
 	if invoker == nil {
@@ -313,13 +318,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if mode := resolvedTool.Target.CredentialMode; mode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, mode)
 	}
-	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
+	if idempotencyKey != "" {
 		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
 	}
-	// TODO(agent-durable-tools): Enforce this key with a pre-side-effect
-	// invocation claim before replaying durable tool calls. Do not add a
-	// post-side-effect response cache here; it would not protect external
-	// systems from duplicate writes.
 	params := maps.Clone(req.Arguments)
 	result, err := invoker.Invoke(ctx, principalValue, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
@@ -548,6 +549,18 @@ func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.Too
 		}
 	}
 	return nil
+}
+
+func agentToolIdempotencyKey(req coreagent.ExecuteToolRequest) string {
+	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
+		return idempotencyKey
+	}
+	turnID := strings.TrimSpace(req.TurnID)
+	toolCallID := strings.TrimSpace(req.ToolCallID)
+	if turnID == "" || toolCallID == "" {
+		return ""
+	}
+	return "agent-tool:" + turnID + ":" + toolCallID
 }
 
 func validateAgentToolSearchCandidates(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, candidates []coreagent.ToolCandidate) error {

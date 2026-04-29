@@ -206,8 +206,8 @@ class RuntimeServeTransportTests(unittest.TestCase):
         plugin = Plugin("tcp-runtime")
 
         @plugin.operation
-        def ping() -> str:
-            return "pong"
+        def ping(request: Request) -> dict[str, str]:
+            return {"idempotency_key": request.idempotency_key}
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(("127.0.0.1", 0))
@@ -258,7 +258,10 @@ class RuntimeServeTransportTests(unittest.TestCase):
                 timeout=5,
             )
             result = stub.Execute(
-                plugin_pb2.ExecuteRequest(operation="ping"),
+                plugin_pb2.ExecuteRequest(
+                    operation="ping",
+                    idempotency_key=" transport-tool-123 ",
+                ),
                 timeout=5,
             )
 
@@ -274,7 +277,10 @@ class RuntimeServeTransportTests(unittest.TestCase):
                 started.protocol_version,
                 _runtime.CURRENT_PROTOCOL_VERSION,
             )
-            self.assertEqual(json.loads(result.body), "pong")
+            self.assertEqual(
+                json.loads(result.body),
+                {"idempotency_key": "transport-tool-123"},
+            )
 
             server_holder["server"].stop(grace=0).wait()
             thread.join(timeout=5)
@@ -346,6 +352,7 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.workflow, {})
+        self.assertEqual(request.idempotency_key, "")
         self.assertEqual(request.invocation_token, "")
 
 
@@ -394,6 +401,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
                 "access_role": request.access.role,
+                "idempotency_key": request.idempotency_key,
                 "invocation_token": request.invocation_token,
                 "workflow_run_id": str(request.workflow.get("runId", "")),
                 "workflow_trigger_kind": str(
@@ -488,6 +496,7 @@ class MainEntrypointTests(unittest.TestCase):
             plugin_pb2.ExecuteRequest(
                 operation="whoami",
                 token="secret-token",
+                idempotency_key=" tool-call-123 ",
                 invocation_token="opaque-invocation-token",
                 context=plugin_pb2.RequestContext(
                     subject=plugin_pb2.SubjectContext(
@@ -577,6 +586,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": "identity:__identity__",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
+                "idempotency_key": "tool-call-123",
                 "workflow_run_id": "run-123",
                 "workflow_trigger_kind": "event",
                 "workflow": {

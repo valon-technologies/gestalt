@@ -3904,6 +3904,8 @@ pub struct PluginInvokeRequest {
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 /// PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through the host-side invoker service.
@@ -3921,6 +3923,8 @@ pub struct PluginInvokeGraphQlRequest {
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 /// PostConnectCredential is the host-managed credential payload passed into
 /// post-connect hooks. Field numbers intentionally match the legacy
@@ -4081,6 +4085,8 @@ pub struct ExecuteRequest {
     pub context: ::core::option::Option<RequestContext>,
     #[prost(string, tag = "8")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 /// GetSessionCatalogRequest asks a provider for request-scoped catalog
 /// extensions.
@@ -10406,6 +10412,8 @@ pub struct WorkflowManagerCreateScheduleRequest {
     pub paused: bool,
     #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerGetScheduleRequest {
@@ -10464,6 +10472,8 @@ pub struct WorkflowManagerCreateEventTriggerRequest {
     pub paused: bool,
     #[prost(string, tag = "6")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerGetEventTriggerRequest {

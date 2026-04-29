@@ -33,6 +33,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     params: Record<string, unknown>;
     connection: string;
     instance: string;
+    idempotencyKey: string;
   }> = [];
   const graphqlCalls: Array<{
     invocationToken: string;
@@ -41,6 +42,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     variables: Record<string, unknown>;
     connection: string;
     instance: string;
+    idempotencyKey: string;
   }> = [];
   const exchanges: Array<{
     parentInvocationToken: string;
@@ -85,6 +87,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               params,
               connection: input.connection,
               instance: input.instance,
+              idempotencyKey: input.idempotencyKey,
             });
             return create(OperationResultSchema, {
               status: 207,
@@ -95,6 +98,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
                 params,
                 connection: input.connection,
                 instance: input.instance,
+                idempotencyKey: input.idempotencyKey,
               }),
             });
           },
@@ -107,6 +111,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               variables,
               connection: input.connection,
               instance: input.instance,
+              idempotencyKey: input.idempotencyKey,
             });
             return create(OperationResultSchema, {
               status: 208,
@@ -117,6 +122,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
                 variables,
                 connection: input.connection,
                 instance: input.instance,
+                idempotencyKey: input.idempotencyKey,
               }),
             });
           },
@@ -166,6 +172,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       {
         connection: "work",
         instance: "secondary",
+        idempotencyKey: " issue-42-create ",
       },
     );
 
@@ -179,6 +186,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       },
       connection: "work",
       instance: "secondary",
+      idempotencyKey: "issue-42-create",
     });
 
     const fromRequest = new PluginInvoker(
@@ -200,6 +208,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       },
       connection: "",
       instance: "",
+      idempotencyKey: "",
     });
 
     const graphql = await fromRequest.invokeGraphQL(
@@ -208,6 +217,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       {
         variables: { team: "eng" },
         connection: "workspace",
+        idempotencyKey: " graphql-call-42 ",
       },
     );
 
@@ -221,6 +231,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       },
       connection: "workspace",
       instance: "",
+      idempotencyKey: "graphql-call-42",
     });
 
     expect(exchanges).toEqual([
@@ -260,6 +271,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         },
         connection: "work",
         instance: "secondary",
+        idempotencyKey: "issue-42-create",
       },
       {
         invocationToken: "invocation-token-456",
@@ -271,6 +283,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         },
         connection: "",
         instance: "",
+        idempotencyKey: "",
       },
     ]);
 
@@ -284,6 +297,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         },
         connection: "workspace",
         instance: "",
+        idempotencyKey: "graphql-call-42",
       },
     ]);
   } finally {

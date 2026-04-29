@@ -898,6 +898,7 @@ type PluginInvokeRequest struct {
 	Connection      string                 `protobuf:"bytes,5,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance        string                 `protobuf:"bytes,6,opt,name=instance,proto3" json:"instance,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,7,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	IdempotencyKey  string                 `protobuf:"bytes,8,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -974,6 +975,13 @@ func (x *PluginInvokeRequest) GetInvocationToken() string {
 	return ""
 }
 
+func (x *PluginInvokeRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
 // PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 // through the host-side invoker service.
 type PluginInvokeGraphQLRequest struct {
@@ -984,6 +992,7 @@ type PluginInvokeGraphQLRequest struct {
 	Connection      string                 `protobuf:"bytes,4,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance        string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,6,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	IdempotencyKey  string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1056,6 +1065,13 @@ func (x *PluginInvokeGraphQLRequest) GetInstance() string {
 func (x *PluginInvokeGraphQLRequest) GetInvocationToken() string {
 	if x != nil {
 		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *PluginInvokeGraphQLRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -1773,6 +1789,7 @@ type ExecuteRequest struct {
 	InvocationId     string                 `protobuf:"bytes,5,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"`
 	Context          *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	InvocationToken  string                 `protobuf:"bytes,8,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	IdempotencyKey   string                 `protobuf:"bytes,9,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1852,6 +1869,13 @@ func (x *ExecuteRequest) GetContext() *RequestContext {
 func (x *ExecuteRequest) GetInvocationToken() string {
 	if x != nil {
 		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *ExecuteRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -2255,7 +2279,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\vttl_seconds\x18\x03 \x01(\x03R\n" +
 	"ttlSeconds\"L\n" +
 	"\x1fExchangeInvocationTokenResponse\x12)\n" +
-	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\xf9\x01\n" +
+	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\"\xa2\x02\n" +
 	"\x13PluginInvokeRequest\x12\x16\n" +
 	"\x06plugin\x18\x02 \x01(\tR\x06plugin\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12/\n" +
@@ -2264,7 +2288,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"connection\x18\x05 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x06 \x01(\tR\binstance\x12)\n" +
-	"\x10invocation_token\x18\a \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xee\x01\n" +
+	"\x10invocation_token\x18\a \x01(\tR\x0finvocationToken\x12'\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKeyJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x97\x02\n" +
 	"\x1aPluginInvokeGraphQLRequest\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +
@@ -2273,7 +2298,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"connection\x18\x04 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12)\n" +
-	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\"\xd2\x04\n" +
+	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\x12'\n" +
+	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\"\xd2\x04\n" +
 	"\x15PostConnectCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2352,7 +2378,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x1aResolveHTTPSubjectResponse\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12#\n" +
 	"\rreject_status\x18\x02 \x01(\x05R\frejectStatus\x12%\n" +
-	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xc7\x03\n" +
+	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xf0\x03\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
@@ -2360,7 +2386,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x11connection_params\x18\x04 \x03(\v29.gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
 	"\rinvocation_id\x18\x05 \x01(\tR\finvocationId\x12=\n" +
 	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12)\n" +
-	"\x10invocation_token\x18\b \x01(\tR\x0finvocationToken\x1aC\n" +
+	"\x10invocation_token\x18\b \x01(\tR\x0finvocationToken\x12'\n" +
+	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\bR\x0erequest_handle\"\xcb\x02\n" +

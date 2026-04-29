@@ -82,6 +82,7 @@ func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvok
 	if err != nil {
 		return nil, err
 	}
+	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
 	params := map[string]any{}
 	if raw := req.GetParams(); raw != nil {
 		params = raw.AsMap()
@@ -129,6 +130,7 @@ func (s *PluginInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.Plug
 	if err != nil {
 		return nil, err
 	}
+	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, req.GetIdempotencyKey())
 
 	variables := map[string]any{}
 	if raw := req.GetVariables(); raw != nil {

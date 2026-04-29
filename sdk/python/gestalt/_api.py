@@ -78,6 +78,7 @@ class Request:
     # as runId, target.plugin.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
+    idempotency_key: str = ""
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""
@@ -97,7 +98,10 @@ class Request:
     def workflow_manager(self) -> "WorkflowManager":
         from ._workflow import WorkflowManager
 
-        return WorkflowManager(self.invocation_token)
+        return WorkflowManager(
+            self.invocation_token,
+            idempotency_key=self.idempotency_key,
+        )
 
     def authorization(self) -> "AuthorizationClient":
         from ._authorization import Authorization

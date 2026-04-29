@@ -314,6 +314,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
             name: "Ada",
           },
           token: "token-123",
+          idempotencyKey: " build-tool-123 ",
           connectionParams: {
             region: "iad",
           },
@@ -344,6 +345,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         accessPolicy: "sample_policy",
         accessRole: "admin",
         invocationToken: "",
+        idempotencyKey: "build-tool-123",
       });
 
       const countResult = await provider.execute(

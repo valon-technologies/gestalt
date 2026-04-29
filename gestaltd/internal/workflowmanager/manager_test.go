@@ -12,6 +12,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -175,6 +176,63 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 	}
 }
 
+func TestCreateScheduleIdempotencyKeyIsScopedByCallerPlugin(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "user:user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+	})
+	base := ScheduleUpsert{
+		ProviderName:   "local",
+		Cron:           "*/5 * * * *",
+		Timezone:       "UTC",
+		Target:         coreworkflow.Target{Agent: &coreworkflow.AgentTarget{ProviderName: "simple", Prompt: "Sync roadmap."}},
+		IdempotencyKey: "same-operation-key",
+	}
+
+	firstReq := base
+	firstReq.CallerPluginName = "github"
+	first, err := manager.CreateSchedule(context.Background(), caller, firstReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule first caller: %v", err)
+	}
+	replayed, err := manager.CreateSchedule(context.Background(), caller, firstReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule replay: %v", err)
+	}
+	if replayed.Schedule.ID != first.Schedule.ID {
+		t.Fatalf("replayed schedule id = %q, want %q", replayed.Schedule.ID, first.Schedule.ID)
+	}
+
+	secondReq := base
+	secondReq.CallerPluginName = "linear"
+	second, err := manager.CreateSchedule(context.Background(), caller, secondReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule second caller: %v", err)
+	}
+	if second.Schedule.ID == first.Schedule.ID {
+		t.Fatalf("second caller schedule id = %q, want a distinct id", second.Schedule.ID)
+	}
+
+	conflictingReq := firstReq
+	conflictingReq.Cron = "*/10 * * * *"
+	_, err = manager.CreateSchedule(context.Background(), caller, conflictingReq)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("conflicting same-caller replay error = %v, want invalid invocation", err)
+	}
+	if len(provider.upsertedSchedules) != 2 {
+		t.Fatalf("provider upserted schedules = %d, want 2", len(provider.upsertedSchedules))
+	}
+}
+
 type testWorkflowControl struct {
 	provider coreworkflow.Provider
 }
@@ -211,14 +269,17 @@ type testAgentManager struct {
 
 type testWorkflowProvider struct {
 	coreworkflow.Provider
-	refs map[string]*coreworkflow.ExecutionReference
-	runs map[string]*coreworkflow.Run
+	refs              map[string]*coreworkflow.ExecutionReference
+	runs              map[string]*coreworkflow.Run
+	schedules         map[string]*coreworkflow.Schedule
+	upsertedSchedules []coreworkflow.UpsertScheduleRequest
 }
 
 func newTestWorkflowProvider() *testWorkflowProvider {
 	return &testWorkflowProvider{
-		refs: map[string]*coreworkflow.ExecutionReference{},
-		runs: map[string]*coreworkflow.Run{},
+		refs:      map[string]*coreworkflow.ExecutionReference{},
+		runs:      map[string]*coreworkflow.Run{},
+		schedules: map[string]*coreworkflow.Schedule{},
 	}
 }
 
@@ -268,6 +329,31 @@ func (p *testWorkflowProvider) SignalRun(_ context.Context, req coreworkflow.Sig
 		Signal:      signal,
 		WorkflowKey: copiedRun.WorkflowKey,
 	}, nil
+}
+
+func (p *testWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+	p.upsertedSchedules = append(p.upsertedSchedules, req)
+	schedule := &coreworkflow.Schedule{
+		ID:           strings.TrimSpace(req.ScheduleID),
+		Cron:         strings.TrimSpace(req.Cron),
+		Timezone:     strings.TrimSpace(req.Timezone),
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
+		CreatedBy:    req.RequestedBy,
+	}
+	p.schedules[schedule.ID] = schedule
+	copied := *schedule
+	return &copied, nil
+}
+
+func (p *testWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	schedule := p.schedules[strings.TrimSpace(req.ScheduleID)]
+	if schedule == nil {
+		return nil, core.ErrNotFound
+	}
+	copied := *schedule
+	return &copied, nil
 }
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {

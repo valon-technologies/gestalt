@@ -179,6 +179,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
 		InvocationToken:  requestToken,
+		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
 		Context:          reqCtx,
 	})
 	if err != nil {

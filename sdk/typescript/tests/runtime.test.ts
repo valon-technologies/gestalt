@@ -564,6 +564,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
         }),
       }),
       invocationToken: "invocation-token-123",
+      idempotencyKey: " tool-call-123 ",
     }),
   );
   expect(JSON.parse(result.body)).toEqual({
@@ -576,6 +577,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     accessPolicy: "sample_policy",
     accessRole: "admin",
     invocationToken: "invocation-token-123",
+    idempotencyKey: "tool-call-123",
   });
 
   const sessionCatalog = await (service.getSessionCatalog as any)(

@@ -344,6 +344,7 @@ message WorkflowManagerCreateScheduleRequest {
   BoundWorkflowTarget target = 5;
   bool paused = 6;
   string invocation_token = 7;
+  string idempotency_key = 8;
 }
 
 message WorkflowManagerGetScheduleRequest {
@@ -394,6 +395,7 @@ message WorkflowManagerCreateEventTriggerRequest {
   BoundWorkflowTarget target = 4;
   bool paused = 5;
   string invocation_token = 6;
+  string idempotency_key = 7;
 }
 
 message WorkflowManagerGetEventTriggerRequest {
