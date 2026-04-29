@@ -28,6 +28,15 @@ const schedules = new Map<string, ReturnType<typeof createSchedule>>();
 const triggers = new Map<string, ReturnType<typeof createTrigger>>();
 let publishCount = 0;
 
+function pluginTarget(pluginName: string, operation: string) {
+  return {
+    kind: {
+      case: "plugin" as const,
+      value: { pluginName, operation },
+    },
+  };
+}
+
 export const provider = defineWorkflowProvider({
   displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
@@ -38,7 +47,10 @@ export const provider = defineWorkflowProvider({
     publishCount = 0;
   },
   async startRun(request) {
-    const plugin = request.target?.plugin;
+    const plugin =
+      request.target?.kind.case === "plugin"
+        ? request.target.kind.value
+        : undefined;
     const run = createRun(
       `${plugin?.pluginName ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
       request,
@@ -123,12 +135,7 @@ export const provider = defineWorkflowProvider({
     const trigger = create(BoundWorkflowEventTriggerSchema, {
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
-      target: existing?.target ?? {
-        plugin: {
-          pluginName: request.pluginName,
-          operation: "published",
-        },
-      },
+      target: existing?.target ?? pluginTarget(request.pluginName, "published"),
       paused: false,
     });
     triggers.set(triggerId, trigger);

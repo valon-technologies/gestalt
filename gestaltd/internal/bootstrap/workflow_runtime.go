@@ -293,7 +293,7 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 }
 
 func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
-	return target.Agent != nil && target.Plugin != nil && coreworkflow.PluginTargetSet(*target.Plugin)
+	return target.Agent != nil && target.Plugin != nil
 }
 
 func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service) (*coreworkflow.InvokeOperationResponse, error) {

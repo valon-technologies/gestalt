@@ -83,9 +83,12 @@ func (WorkflowRunStatus) EnumDescriptor() ([]byte, []int) {
 }
 
 type BoundWorkflowTarget struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Plugin        *BoundWorkflowPluginTarget `protobuf:"bytes,6,opt,name=plugin,proto3" json:"plugin,omitempty"`
-	Agent         *BoundWorkflowAgentTarget  `protobuf:"bytes,7,opt,name=agent,proto3" json:"agent,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*BoundWorkflowTarget_Plugin
+	//	*BoundWorkflowTarget_Agent
+	Kind          isBoundWorkflowTarget_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -120,19 +123,46 @@ func (*BoundWorkflowTarget) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{0}
 }
 
+func (x *BoundWorkflowTarget) GetKind() isBoundWorkflowTarget_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
 func (x *BoundWorkflowTarget) GetPlugin() *BoundWorkflowPluginTarget {
 	if x != nil {
-		return x.Plugin
+		if x, ok := x.Kind.(*BoundWorkflowTarget_Plugin); ok {
+			return x.Plugin
+		}
 	}
 	return nil
 }
 
 func (x *BoundWorkflowTarget) GetAgent() *BoundWorkflowAgentTarget {
 	if x != nil {
-		return x.Agent
+		if x, ok := x.Kind.(*BoundWorkflowTarget_Agent); ok {
+			return x.Agent
+		}
 	}
 	return nil
 }
+
+type isBoundWorkflowTarget_Kind interface {
+	isBoundWorkflowTarget_Kind()
+}
+
+type BoundWorkflowTarget_Plugin struct {
+	Plugin *BoundWorkflowPluginTarget `protobuf:"bytes,6,opt,name=plugin,proto3,oneof"`
+}
+
+type BoundWorkflowTarget_Agent struct {
+	Agent *BoundWorkflowAgentTarget `protobuf:"bytes,7,opt,name=agent,proto3,oneof"`
+}
+
+func (*BoundWorkflowTarget_Plugin) isBoundWorkflowTarget_Kind() {}
+
+func (*BoundWorkflowTarget_Agent) isBoundWorkflowTarget_Kind() {}
 
 type BoundWorkflowPluginTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4216,10 +4246,11 @@ var File_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\"\xdd\x01\n" +
-	"\x13BoundWorkflowTarget\x12F\n" +
-	"\x06plugin\x18\x06 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetR\x06plugin\x12C\n" +
-	"\x05agent\x18\a \x01(\v2-.gestalt.provider.v1.BoundWorkflowAgentTargetR\x05agentJ\x04\b\x01\x10\x06R\vplugin_nameR\toperationR\x05inputR\n" +
+	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\"\xe9\x01\n" +
+	"\x13BoundWorkflowTarget\x12H\n" +
+	"\x06plugin\x18\x06 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetH\x00R\x06plugin\x12E\n" +
+	"\x05agent\x18\a \x01(\v2-.gestalt.provider.v1.BoundWorkflowAgentTargetH\x00R\x05agentB\x06\n" +
+	"\x04kindJ\x04\b\x01\x10\x06R\vplugin_nameR\toperationR\x05inputR\n" +
 	"connectionR\binstance\"\xc5\x01\n" +
 	"\x19BoundWorkflowPluginTarget\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
@@ -4883,6 +4914,10 @@ func file_v1_workflow_proto_init() {
 		return
 	}
 	file_v1_agent_proto_init()
+	file_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{
+		(*BoundWorkflowTarget_Plugin)(nil),
+		(*BoundWorkflowTarget_Agent)(nil),
+	}
 	file_v1_workflow_proto_msgTypes[9].OneofWrappers = []any{
 		(*WorkflowRunTrigger_Manual)(nil),
 		(*WorkflowRunTrigger_Schedule)(nil),

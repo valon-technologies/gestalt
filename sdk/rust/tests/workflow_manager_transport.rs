@@ -19,6 +19,7 @@ use gestalt::proto::v1::{
     WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
     WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
     WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, WorkflowSignal,
+    bound_workflow_target,
 };
 use gestalt::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowManager,
@@ -46,12 +47,13 @@ struct TestWorkflowManagerServer {
 
 fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
     BoundWorkflowTarget {
-        plugin: Some(BoundWorkflowPluginTarget {
-            plugin_name: plugin_name.to_string(),
-            operation: operation.to_string(),
-            ..Default::default()
-        }),
-        agent: None,
+        kind: Some(bound_workflow_target::Kind::Plugin(
+            BoundWorkflowPluginTarget {
+                plugin_name: plugin_name.to_string(),
+                operation: operation.to_string(),
+                ..Default::default()
+            },
+        )),
     }
 }
 

@@ -12,8 +12,10 @@ import "v1/agent.proto";
 message BoundWorkflowTarget {
   reserved 1 to 5;
   reserved "plugin_name", "operation", "input", "connection", "instance";
-  BoundWorkflowPluginTarget plugin = 6;
-  BoundWorkflowAgentTarget agent = 7;
+  oneof kind {
+    BoundWorkflowPluginTarget plugin = 6;
+    BoundWorkflowAgentTarget agent = 7;
+  }
 }
 
 message BoundWorkflowPluginTarget {

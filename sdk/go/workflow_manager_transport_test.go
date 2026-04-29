@@ -147,10 +147,12 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &proto.BoundWorkflowTarget{
-			Agent: &proto.BoundWorkflowAgentTarget{
-				ProviderName: "simple",
-				Model:        "gpt-5.5",
-				Prompt:       "Respond in thread.",
+			Kind: &proto.BoundWorkflowTarget_Agent{
+				Agent: &proto.BoundWorkflowAgentTarget{
+					ProviderName: "simple",
+					Model:        "gpt-5.5",
+					Prompt:       "Respond in thread.",
+				},
 			},
 		},
 		IdempotencyKey: "slack-event-123",

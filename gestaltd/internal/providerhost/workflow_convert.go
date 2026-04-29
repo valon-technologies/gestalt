@@ -33,24 +33,25 @@ func workflowRunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.Ru
 }
 
 func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
-	var pluginTarget coreworkflow.PluginTarget
-	if target.Plugin != nil {
-		pluginTarget = *target.Plugin
-	}
-	plugin, err := workflowPluginTargetToProto(pluginTarget)
-	if err != nil {
-		return nil, err
-	}
-	if target.Agent != nil && plugin != nil {
+	if target.Agent != nil && target.Plugin != nil {
 		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
 	}
-	agent, err := workflowAgentTargetToProto(target.Agent)
-	if err != nil {
-		return nil, err
+
+	value := &proto.BoundWorkflowTarget{}
+	if target.Agent != nil {
+		agent, err := workflowAgentTargetToProto(target.Agent)
+		if err != nil {
+			return nil, err
+		}
+		value.Kind = &proto.BoundWorkflowTarget_Agent{Agent: agent}
+		return value, nil
 	}
-	value := &proto.BoundWorkflowTarget{
-		Plugin: plugin,
-		Agent:  agent,
+	if target.Plugin != nil {
+		plugin, err := workflowPluginTargetToProto(target.Plugin)
+		if err != nil {
+			return nil, err
+		}
+		value.Kind = &proto.BoundWorkflowTarget_Plugin{Plugin: plugin}
 	}
 	return value, nil
 }
@@ -59,30 +60,18 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 	if target == nil {
 		return coreworkflow.Target{}
 	}
-	plugin := workflowPluginTargetFromProto(target.GetPlugin())
-	out := coreworkflow.Target{Agent: workflowAgentTargetFromProto(target.GetAgent())}
-	if coreworkflow.PluginTargetSet(plugin) {
-		out.Plugin = &plugin
+	if agent := workflowAgentTargetFromProto(target.GetAgent()); agent != nil {
+		return coreworkflow.Target{Agent: agent}
 	}
-	return out
+	if target.GetPlugin() != nil {
+		plugin := workflowPluginTargetFromProto(target.GetPlugin())
+		return coreworkflow.Target{Plugin: &plugin}
+	}
+	return coreworkflow.Target{}
 }
 
-func workflowTargetFromProtoStrict(target *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
-	if err := validateWorkflowTargetProtoKinds(target); err != nil {
-		return coreworkflow.Target{}, err
-	}
-	return workflowTargetFromProto(target), nil
-}
-
-func validateWorkflowTargetProtoKinds(target *proto.BoundWorkflowTarget) error {
-	if target == nil || target.GetAgent() == nil || target.GetPlugin() == nil {
-		return nil
-	}
-	return fmt.Errorf("target cannot include both agent and plugin fields")
-}
-
-func workflowPluginTargetToProto(target coreworkflow.PluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
-	if coreworkflow.PluginTargetEmpty(target) {
+func workflowPluginTargetToProto(target *coreworkflow.PluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
+	if target == nil {
 		return nil, nil
 	}
 	input, err := structFromMap(target.Input)
@@ -213,10 +202,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 	if ref == nil {
 		return nil, nil
 	}
-	target, err := workflowTargetFromProtoStrict(ref.GetTarget())
-	if err != nil {
-		return nil, err
-	}
+	target := workflowTargetFromProto(ref.GetTarget())
 	return &coreworkflow.ExecutionReference{
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
@@ -558,10 +544,7 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 	if req == nil {
 		return coreworkflow.InvokeOperationRequest{}, nil
 	}
-	target, err := workflowTargetFromProtoStrict(req.GetTarget())
-	if err != nil {
-		return coreworkflow.InvokeOperationRequest{}, err
-	}
+	target := workflowTargetFromProto(req.GetTarget())
 	trigger, err := workflowRunTriggerFromProto(req.GetTrigger())
 	if err != nil {
 		return coreworkflow.InvokeOperationRequest{}, err
