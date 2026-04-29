@@ -182,12 +182,11 @@ func TestCreateProviderRemoteSessionUsesBrowserApprovalWithoutAttachToken(t *tes
 				t.Fatalf("browser authorization should not send bearer token, got %q", r.Header.Get("Authorization"))
 			}
 			writeJSONForProviderRemoteTest(t, w, http.StatusCreated, providerdev.CreateAttachAuthorizationResponse{
-				AuthorizationID:    authID,
-				ClientSecret:       clientSecret,
-				VerificationCode:   "123-456",
-				ApprovalURL:        tsURL(t, r) + "/approve",
-				ExpiresAt:          time.Now().Add(time.Minute),
-				PollIntervalMillis: 1,
+				AuthorizationID:  authID,
+				ClientSecret:     clientSecret,
+				VerificationCode: "123-456",
+				ApprovalURL:      tsURL(t, r) + "/approve",
+				ExpiresAt:        time.Now().Add(time.Minute),
 			})
 		case r.Method == http.MethodGet && r.URL.Path == providerdev.PathAttachAuthorizations+"/"+authID+"/poll":
 			if r.Header.Get(providerdev.HeaderAuthorizationSecret) != clientSecret {

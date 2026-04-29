@@ -97,12 +97,11 @@ type CreateSessionProvider struct {
 }
 
 type CreateAttachAuthorizationResponse struct {
-	AuthorizationID    string    `json:"authorizationId"`
-	ClientSecret       string    `json:"clientSecret"`
-	VerificationCode   string    `json:"verificationCode"`
-	ApprovalURL        string    `json:"approvalUrl"`
-	ExpiresAt          time.Time `json:"expiresAt"`
-	PollIntervalMillis int       `json:"pollIntervalMillis"`
+	AuthorizationID  string    `json:"authorizationId"`
+	ClientSecret     string    `json:"clientSecret"`
+	VerificationCode string    `json:"verificationCode"`
+	ApprovalURL      string    `json:"approvalUrl"`
+	ExpiresAt        time.Time `json:"expiresAt"`
 }
 
 type AttachAuthorizationInfo struct {

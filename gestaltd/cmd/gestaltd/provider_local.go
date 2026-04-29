@@ -337,10 +337,6 @@ func createProviderRemoteSessionWithBrowser(ctx context.Context, client *provide
 		fmt.Fprintf(os.Stderr, "Could not open browser automatically: %v\nOpen the URL above to continue.\n\n", err)
 	}
 
-	pollInterval := time.Duration(authorization.PollIntervalMillis) * time.Millisecond
-	if pollInterval <= 0 {
-		pollInterval = time.Second
-	}
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
@@ -359,7 +355,7 @@ func createProviderRemoteSessionWithBrowser(ctx context.Context, client *provide
 		if !authorization.ExpiresAt.IsZero() && time.Now().After(authorization.ExpiresAt) {
 			return nil, errors.New("provider dev browser approval expired")
 		}
-		timer.Reset(pollInterval)
+		timer.Reset(time.Second)
 	}
 }
 
