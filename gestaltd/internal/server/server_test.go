@@ -1312,48 +1312,6 @@ func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.
 	p.relsByModel[modelID][memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneMemoryAuthorizationRelationship(rel)
 }
 
-type putFailingIndexedDB struct {
-	indexeddb.IndexedDB
-	failStorePuts map[string]*atomic.Bool
-}
-
-func (d *putFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
-	store := d.IndexedDB.ObjectStore(name)
-	failPut := d.failStorePuts[name]
-	if failPut == nil {
-		return store
-	}
-	return &putFailingObjectStore{ObjectStore: store, failPut: failPut}
-}
-
-type putFailingObjectStore struct {
-	indexeddb.ObjectStore
-	failPut *atomic.Bool
-}
-
-func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
-	if s.failPut != nil && s.failPut.Load() {
-		return fmt.Errorf("forced users put failure")
-	}
-	return s.ObjectStore.Put(ctx, record)
-}
-
-func newTestServicesWithUsersPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
-	t.Helper()
-	failPut := &atomic.Bool{}
-	svc, err := coredata.New(&putFailingIndexedDB{
-		IndexedDB: &coretesting.StubIndexedDB{},
-		failStorePuts: map[string]*atomic.Bool{
-			coredata.StoreUsers: failPut,
-		},
-	})
-	if err != nil {
-		t.Fatalf("newTestServicesWithUsersPutFailure: %v", err)
-	}
-	coretesting.AttachStubExternalCredentials(svc)
-	return svc, failPut
-}
-
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
@@ -1558,7 +1516,7 @@ func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role st
 	}
 }
 
-func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
+func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()
 	rec := indexeddb.Record{
@@ -1570,7 +1528,7 @@ func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string
 		"updated_at":       createdAt,
 	}
 	if err := svc.DB.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
-		t.Fatalf("seedLegacyUserRecord: %v", err)
+		t.Fatalf("seedUserRecord: %v", err)
 	}
 	return &core.User{
 		ID:          id,
@@ -8940,7 +8898,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	u := seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+	u := seedUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 		Connection: "default", Instance: "default", AccessToken: "test-token",
@@ -8998,59 +8956,6 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_ShowsConnectedStatus_PrefersCanonicalLowercaseEmailOverExactRawDuplicate(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-	userB := seedLegacyUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
-	seedToken(t, svc, &core.ExternalCredential{
-		ID: "tok1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "slack",
-		Connection: "default", Instance: "default", AccessToken: "test-token",
-	})
-
-	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "USER@example.com"}, nil
-			},
-		}
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var integrations []struct {
-		Name      string `json:"name"`
-		Connected bool   `json:"connected"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if len(integrations) != 1 {
-		t.Fatalf("expected 1 integration, got %d", len(integrations))
-	}
-	if integrations[0].Connected {
-		t.Fatal("expected canonical lowercase user to win over the exact raw-email duplicate")
-	}
-}
-
 func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailClosed(t *testing.T) {
 	t.Parallel()
 
@@ -9060,8 +8965,8 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 			t.Parallel()
 
 			svc := coretesting.NewStubServices(t)
-			seedLegacyUserRecord(t, svc, "user-a", "User@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-			seedLegacyUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
+			seedUserRecord(t, svc, "user-a", "User@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+			seedUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
 
 			stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 			ts := newTestServer(t, func(cfg *server.Config) {
@@ -9091,79 +8996,6 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 				t.Fatalf("expected 500, got %d", resp.StatusCode)
 			}
 		})
-	}
-}
-
-func TestLoginCallback_LegacyMixedCaseRepairFailureStillSucceeds(t *testing.T) {
-	t.Parallel()
-
-	svc, failPut := newTestServicesWithUsersPutFailure(t)
-	existing := seedLegacyUserRecord(t, svc, "legacy-user", "User@Example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-	failPut.Store(true)
-
-	var auditBuf bytes.Buffer
-	auditSink := invocation.NewSlogAuditSink(&auditBuf)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{
-				N: "test",
-				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-					if code == "good-code" {
-						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
-					}
-					return nil, fmt.Errorf("bad code")
-				},
-			},
-		}
-		cfg.Services = svc
-		cfg.AuditSink = auditSink
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-
-	body := bytes.NewBufferString(`{"state":"test-state"}`)
-	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
-	if err != nil {
-		t.Fatalf("start login: %v", err)
-	}
-	_ = loginResp.Body.Close()
-
-	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	stored, err := svc.Users.GetUser(context.Background(), existing.ID)
-	if err != nil {
-		t.Fatalf("get user: %v", err)
-	}
-	if stored.Email != "User@Example.com" {
-		t.Fatalf("expected user email to remain unrepaired after forced put failure, got %q", stored.Email)
-	}
-
-	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) == 0 {
-		t.Fatal("expected login audit record")
-	}
-	var auditRecord map[string]any
-	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
-		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if auditRecord["operation"] != "auth.login.complete" {
-		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
-	}
-	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
-		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
-	}
-	if _, ok := auditRecord["user_id"]; ok {
-		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 }
 
@@ -12922,7 +12754,7 @@ func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	existing := seedLegacyUserRecord(t, svc, "legacy-user", "User@Example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+	existing := seedUserRecord(t, svc, "user-existing", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -12974,7 +12806,7 @@ func TestLoginCallback(t *testing.T) {
 		t.Fatalf("get user: %v", err)
 	}
 	if stored.Email != "user@example.com" {
-		t.Fatalf("expected repaired user email %q, got %q", "user@example.com", stored.Email)
+		t.Fatalf("expected user email %q, got %q", "user@example.com", stored.Email)
 	}
 
 	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))

@@ -35,9 +35,6 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	runtimeSessionLogs := runtimelogs.NewMemoryStore()
 
 	users := NewUserService(ds)
-	if err := users.BackfillNormalizedEmails(ctx); err != nil {
-		return nil, fmt.Errorf("backfill users store: %w", err)
-	}
 	apiTokens := NewAPITokenService(ds)
 	return &Services{
 		ExternalCredentials: nil,
