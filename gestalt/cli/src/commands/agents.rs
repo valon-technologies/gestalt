@@ -22,6 +22,7 @@ use crate::interactive::{
 use crate::output::{self, Format};
 use crate::params;
 
+mod display_markdown;
 mod tui;
 
 const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
@@ -933,11 +934,16 @@ impl AgentTurnRenderer {
     }
 
     fn render_display_text(&mut self, display: &AgentTurnDisplayInfo, label: &str) -> Result<bool> {
-        let text = display_text(display);
+        let raw_text = display_text(display);
+        let rendered_text = if label == "assistant>" {
+            rendered_display_text(display)
+        } else {
+            raw_text.map(ToString::to_string)
+        };
         if label == "assistant>" {
             match display.phase.trim() {
                 "delta" => {
-                    if let Some(text) = text {
+                    if let Some(text) = raw_text {
                         self.start_assistant_line()?;
                         print!("{text}");
                         io::stdout().flush().context("failed to flush stdout")?;
@@ -948,7 +954,7 @@ impl AgentTurnRenderer {
                 }
                 "completed" => {
                     if self.assistant_line_open {
-                        let Some(text) = text else {
+                        let Some(text) = raw_text else {
                             return Ok(false);
                         };
                         if self.delta_buffer.is_empty() {
@@ -960,16 +966,16 @@ impl AgentTurnRenderer {
                         self.assistant_line_open = false;
                         self.delta_buffer.clear();
                         return Ok(true);
-                    } else if let Some(text) = text {
+                    } else if let Some(text) = rendered_text.as_deref() {
                         println!("{} {text}", self.label(label));
                         self.saw_assistant_output = true;
                         self.delta_buffer.clear();
                         return Ok(true);
                     }
                 }
-                _ if text.is_some() => {
+                _ if rendered_text.is_some() => {
                     self.finish_assistant_line();
-                    let text = text.expect("checked is_some");
+                    let text = rendered_text.as_deref().expect("checked is_some");
                     println!("{} {text}", self.label(label));
                     self.saw_assistant_output = true;
                     return Ok(true);
@@ -980,7 +986,7 @@ impl AgentTurnRenderer {
         }
 
         self.finish_assistant_line();
-        if let Some(text) = text {
+        if let Some(text) = rendered_text.as_deref() {
             println!("{} {text}", self.label(label));
             return Ok(true);
         }
@@ -1642,6 +1648,15 @@ fn display_text(display: &AgentTurnDisplayInfo) -> Option<&str> {
     } else {
         Some(&display.text)
     }
+}
+
+fn rendered_display_text(display: &AgentTurnDisplayInfo) -> Option<String> {
+    let text = display_text(display)?;
+    Some(display_markdown::plain_text_for_format(
+        text,
+        display_format(display),
+        display_language(display),
+    ))
 }
 
 fn display_label(display: &AgentTurnDisplayInfo) -> Option<&str> {
