@@ -286,15 +286,7 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 	if strings.TrimSpace(ref.ProviderName) != strings.TrimSpace(req.ProviderName) {
 		return nil, fmt.Errorf("%w: workflow execution ref %q is not valid for provider %q", invocation.ErrAuthorizationDenied, refID, req.ProviderName)
 	}
-	refFingerprint := strings.TrimSpace(ref.TargetFingerprint)
-	if refFingerprint == "" {
-		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint is required", invocation.ErrAuthorizationDenied, refID)
-	}
-	targetFingerprint, err := coreworkflow.TargetFingerprint(req.Target)
-	if err != nil {
-		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint failed: %v", invocation.ErrInternal, refID, err)
-	}
-	if targetFingerprint != refFingerprint {
+	if !coreworkflow.TargetsEqual(req.Target, ref.Target) {
 		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
 	}
 	return ref, nil

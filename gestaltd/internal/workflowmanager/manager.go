@@ -1155,16 +1155,11 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		return nil, fmt.Errorf("workflow target fingerprint: %w", err)
-	}
 	actor := workflowActorFromPrincipal(p)
 	return store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
-		TargetFingerprint:   targetFingerprint,
 		CallerPluginName:    strings.TrimSpace(callerPluginName),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
@@ -1505,12 +1500,7 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 	if ref == nil {
 		return false
 	}
-	refFingerprint := strings.TrimSpace(ref.TargetFingerprint)
-	if refFingerprint == "" {
-		return false
-	}
-	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
-	return err == nil && targetFingerprint == refFingerprint
+	return coreworkflow.TargetsEqual(target, ref.Target)
 }
 
 func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {

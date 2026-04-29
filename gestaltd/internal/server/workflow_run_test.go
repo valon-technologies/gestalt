@@ -47,15 +47,6 @@ func workflowPluginTargetWithRouting(pluginName, operation, connection, instance
 	}
 }
 
-func workflowTargetFingerprint(t *testing.T, target coreworkflow.Target) string {
-	t.Helper()
-	fingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		t.Fatalf("workflow target fingerprint: %v", err)
-	}
-	return fingerprint
-}
-
 func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) {
 	t.Parallel()
 
@@ -96,26 +87,23 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:                "workflow_schedule:sched-new:ref-active",
-			ProviderName:      "basic",
-			Target:            provider.runs["run-new"].Target,
-			TargetFingerprint: workflowTargetFingerprint(t, provider.runs["run-new"].Target),
-			SubjectID:         principal.UserSubjectID(user.ID),
+			ID:           "workflow_schedule:sched-new:ref-active",
+			ProviderName: "basic",
+			Target:       provider.runs["run-new"].Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 		{
-			ID:                "workflow_schedule:sched-old:ref-revoked",
-			ProviderName:      "basic",
-			Target:            provider.runs["run-old"].Target,
-			TargetFingerprint: workflowTargetFingerprint(t, provider.runs["run-old"].Target),
-			SubjectID:         principal.UserSubjectID(user.ID),
-			RevokedAt:         &revokedAt,
+			ID:           "workflow_schedule:sched-old:ref-revoked",
+			ProviderName: "basic",
+			Target:       provider.runs["run-old"].Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
+			RevokedAt:    &revokedAt,
 		},
 		{
-			ID:                "workflow_schedule:sched-other:ref-other",
-			ProviderName:      "basic",
-			Target:            provider.runs["run-other"].Target,
-			TargetFingerprint: workflowTargetFingerprint(t, provider.runs["run-other"].Target),
-			SubjectID:         principal.UserSubjectID(other.ID),
+			ID:           "workflow_schedule:sched-other:ref-other",
+			ProviderName: "basic",
+			Target:       provider.runs["run-other"].Target,
+			SubjectID:    principal.UserSubjectID(other.ID),
 		},
 	} {
 		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
@@ -235,18 +223,16 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:                "workflow_schedule:sched-sync:ref-sync",
-			ProviderName:      "basic",
-			Target:            provider.runs["run-sync"].Target,
-			TargetFingerprint: workflowTargetFingerprint(t, provider.runs["run-sync"].Target),
-			SubjectID:         principal.UserSubjectID(user.ID),
+			ID:           "workflow_schedule:sched-sync:ref-sync",
+			ProviderName: "basic",
+			Target:       provider.runs["run-sync"].Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 		{
-			ID:                "workflow_schedule:sched-export:ref-export",
-			ProviderName:      "basic",
-			Target:            provider.runs["run-export"].Target,
-			TargetFingerprint: workflowTargetFingerprint(t, provider.runs["run-export"].Target),
-			SubjectID:         principal.UserSubjectID(user.ID),
+			ID:           "workflow_schedule:sched-export:ref-export",
+			ProviderName: "basic",
+			Target:       provider.runs["run-export"].Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 	} {
 		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
@@ -328,11 +314,10 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	}
 	provider.runs[run.ID] = run
 	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:                run.ExecutionRef,
-		ProviderName:      "basic",
-		Target:            run.Target,
-		TargetFingerprint: workflowTargetFingerprint(t, run.Target),
-		SubjectID:         principal.UserSubjectID(user.ID),
+		ID:           run.ExecutionRef,
+		ProviderName: "basic",
+		Target:       run.Target,
+		SubjectID:    principal.UserSubjectID(user.ID),
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
