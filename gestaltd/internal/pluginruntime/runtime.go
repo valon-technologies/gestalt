@@ -64,10 +64,16 @@ type SessionLifecycle struct {
 }
 
 type StartSessionRequest struct {
-	PluginName string
-	Template   string
-	Image      string
-	Metadata   map[string]string
+	PluginName           string
+	Template             string
+	Image                string
+	ImagePullCredentials *ImagePullCredentials
+	Metadata             map[string]string
+}
+
+type ImagePullCredentials struct {
+	Username string
+	Password string
 }
 
 type GetSessionRequest struct {

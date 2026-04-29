@@ -751,6 +751,15 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
 	runtimeCfg.Template = strings.TrimSpace(runtimeCfg.Template)
 	runtimeCfg.Image = strings.TrimSpace(runtimeCfg.Image)
+	if runtimeCfg.ImagePullCredentials != nil {
+		runtimeCfg.ImagePullCredentials.Username = strings.TrimSpace(runtimeCfg.ImagePullCredentials.Username)
+		if runtimeCfg.Image == "" {
+			return fmt.Errorf("config validation: %s.runtime.imagePullCredentials requires %s.runtime.image", subject, subject)
+		}
+		if runtimeCfg.ImagePullCredentials.Username == "" || strings.TrimSpace(runtimeCfg.ImagePullCredentials.Password) == "" {
+			return fmt.Errorf("config validation: %s.runtime.imagePullCredentials.username and password are required when imagePullCredentials is set", subject)
+		}
+	}
 	trimmed := make(map[string]string, len(runtimeCfg.Metadata))
 	for key, value := range runtimeCfg.Metadata {
 		trimmedKey := strings.TrimSpace(key)
