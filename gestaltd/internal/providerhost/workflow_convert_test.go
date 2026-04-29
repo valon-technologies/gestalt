@@ -76,7 +76,7 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 	}
 }
 
-func TestWorkflowAgentTargetProtoUsesNativeToolSource(t *testing.T) {
+func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	t.Parallel()
 
 	target, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
@@ -86,8 +86,8 @@ func TestWorkflowAgentTargetProtoUsesNativeToolSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if got := target.GetAgent().GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH {
-		t.Fatalf("agent tool_source = %v, want native search", got)
+	if target.GetAgent() == nil {
+		t.Fatal("nested agent target is nil")
 	}
 	roundTrip := workflowTargetFromProto(target)
 	if roundTrip.Agent == nil || roundTrip.Agent.ProviderName != "managed" {
