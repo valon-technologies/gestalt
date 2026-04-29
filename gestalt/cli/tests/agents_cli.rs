@@ -1008,35 +1008,47 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     session.wait_for(&mut output, "suffix");
     session.wait_for(&mut output, "done");
     session.wait_for(&mut output, "fallback");
+    let compact_output = output.clone();
+    let mut full_output = String::new();
+    session.write("\x0f");
+    session.write("\x1b[5~\x1b[5~");
+    session.wait_for(&mut full_output, "\"blue\"");
     session.write("\x03");
     session.wait_for_exit();
 
     assert!(
-        !output.contains("hidden secret"),
-        "unknown private display event was rendered:\n{output}"
+        !compact_output.contains("hidden secret") && !full_output.contains("hidden secret"),
+        "unknown private display event was rendered:\n{compact_output}\n{full_output}"
     );
     assert!(
-        !output.contains("RAW_TUI_INPUT") && !output.contains("RAW_TUI_OUTPUT"),
-        "display tool rendering leaked raw tool payload data:\n{output}"
+        !compact_output.contains("RAW_TUI_INPUT")
+            && !compact_output.contains("RAW_TUI_OUTPUT")
+            && !full_output.contains("RAW_TUI_INPUT")
+            && !full_output.contains("RAW_TUI_OUTPUT"),
+        "display tool rendering leaked raw tool payload data:\n{compact_output}\n{full_output}"
     );
     assert!(
-        output.contains("●")
-            && output.contains("Ran")
-            && output.contains("lookup")
-            && output.contains("input")
-            && output.contains("output")
-            && output.contains("filters")
-            && output.contains("REC-1")
-            && output.contains("... +5 lines")
-            && output.contains("... +4 lines")
-            && output.contains("└─")
-            && !output.contains("Tool")
-            && !output.contains("tool>"),
-        "TTY tool transcript did not render inline activity rows:\n{output}"
+        compact_output.contains("●")
+            && compact_output.contains("Ran")
+            && compact_output.contains("lookup")
+            && compact_output.contains("input")
+            && compact_output.contains("output")
+            && compact_output.contains("filters")
+            && compact_output.contains("REC-1")
+            && compact_output.contains("... +5 lines")
+            && compact_output.contains("... +4 lines")
+            && compact_output.contains("└─")
+            && !compact_output.contains("Tool")
+            && !compact_output.contains("tool>"),
+        "TTY tool transcript did not render inline activity rows:\n{compact_output}"
     );
     assert!(
-        !output.contains("ended"),
-        "tool progress events left duplicate running tool rows:\n{output}"
+        full_output.contains("\"blue\""),
+        "Ctrl-O did not expand full tool detail rows:\n{full_output}"
+    );
+    assert!(
+        !compact_output.contains("ended"),
+        "tool progress events left duplicate running tool rows:\n{compact_output}"
     );
     server.assert_finished();
 }
@@ -1432,6 +1444,10 @@ fn test_cli_tty_resize_expands_selectable_inline_viewport() {
     let mut help_output = String::new();
     session.write("/help\r");
     session.wait_for(&mut help_output, "Ctrl-C cancels, clears input, or exits.");
+    assert!(
+        help_output.contains("Ctrl-O toggles compact/full tool details."),
+        "TTY help did not include tool detail toggle:\n{help_output}"
+    );
     assert!(
         !help_output.contains("\x1b[?1049h"),
         "TTY entered the alternate screen after resize:\n{help_output}"
@@ -2107,6 +2123,7 @@ fn test_cli_agent_help_describes_resume_command() {
         .assert()
         .success()
         .stdout(predicate::str::contains("resume"))
+        .stdout(predicate::str::contains("Ctrl-O").not())
         .stdout(predicate::str::contains("--resume").not())
         .stdout(predicate::str::contains("--continue").not())
         .stdout(predicate::str::contains("--ui").not());

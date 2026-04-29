@@ -16,6 +16,8 @@ use super::super::{
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
 const TOOL_PREVIEW_MAX_WIDTH: usize = 120;
 const TOOL_PREVIEW_MAX_LINES: usize = 6;
+const TOOL_DETAIL_FULL_MAX_WIDTH: usize = 240;
+const TOOL_DETAIL_FULL_MAX_LINES: usize = 200;
 const LEGACY_ASSISTANT_FORMAT: &str = "markdown";
 
 pub(super) struct AgentUiState {
@@ -33,6 +35,12 @@ pub(super) struct AgentUiState {
     scroll_offset: usize,
     turn_started_at: Option<Instant>,
     turn_elapsed_reported: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ToolDetailMode {
+    Compact,
+    Full,
 }
 
 impl AgentUiState {
@@ -732,9 +740,9 @@ pub(super) struct ToolActivity {
     status: ToolActivityStatus,
     started_at: Option<Instant>,
     elapsed: Option<Duration>,
-    args: Option<String>,
-    output: Option<String>,
-    error: Option<String>,
+    args: Option<ToolDetailValue>,
+    output: Option<ToolDetailValue>,
+    error: Option<ToolDetailValue>,
 }
 
 impl ToolActivity {
@@ -746,7 +754,7 @@ impl ToolActivity {
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: preview_value(&event.data, &["arguments", "input", "request"]),
+            args: detail_value(&event.data, &["arguments", "input", "request"]),
             output: None,
             error: None,
         }
@@ -760,7 +768,7 @@ impl ToolActivity {
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: preview_display_value(display_tool_input(event, display)),
+            args: display_detail_value(display_tool_input(event, display)),
             output: None,
             error: None,
         }
@@ -857,16 +865,16 @@ impl ToolActivity {
         self.elapsed.map(format_duration)
     }
 
-    pub(super) fn args(&self) -> Option<&str> {
-        self.args.as_deref()
+    pub(super) fn args(&self, mode: ToolDetailMode) -> Option<&str> {
+        self.args.as_ref().map(|value| value.as_str(mode))
     }
 
-    pub(super) fn output(&self) -> Option<&str> {
-        self.output.as_deref()
+    pub(super) fn output(&self, mode: ToolDetailMode) -> Option<&str> {
+        self.output.as_ref().map(|value| value.as_str(mode))
     }
 
-    pub(super) fn error(&self) -> Option<&str> {
-        self.error.as_deref()
+    pub(super) fn error(&self, mode: ToolDetailMode) -> Option<&str> {
+        self.error.as_ref().map(|value| value.as_str(mode))
     }
 
     pub(super) fn is_running(&self) -> bool {
@@ -893,16 +901,42 @@ impl ToolActivity {
         if !meta.is_empty() {
             text.push_str(&format!(" ({})", meta.join(", ")));
         }
-        if let Some(args) = self.args.as_deref() {
+        if let Some(args) = self.args(ToolDetailMode::Compact) {
             text.push_str(&format!("\n  args {args}"));
         }
-        if let Some(output) = self.output.as_deref() {
+        if let Some(output) = self.output(ToolDetailMode::Compact) {
             text.push_str(&format!("\n  output {output}"));
         }
-        if let Some(error) = self.error.as_deref() {
+        if let Some(error) = self.error(ToolDetailMode::Compact) {
             text.push_str(&format!("\n  error {error}"));
         }
         text
+    }
+}
+
+#[derive(Clone)]
+enum ToolDetailValue {
+    Single(String),
+    Truncated { compact: String, full: String },
+}
+
+impl ToolDetailValue {
+    fn from_full(full: String) -> Self {
+        let compact = truncate_multiline_preview(&full);
+        let full = truncate_full_detail(&full);
+        if compact == full {
+            Self::Single(full)
+        } else {
+            Self::Truncated { compact, full }
+        }
+    }
+
+    fn as_str(&self, mode: ToolDetailMode) -> &str {
+        match (self, mode) {
+            (Self::Single(value), _) => value,
+            (Self::Truncated { compact, .. }, ToolDetailMode::Compact) => compact,
+            (Self::Truncated { full, .. }, ToolDetailMode::Full) => full,
+        }
     }
 }
 
@@ -911,14 +945,14 @@ struct ToolTerminalEvent {
     name: String,
     action: Option<String>,
     status: ToolActivityStatus,
-    args: Option<String>,
-    output: Option<String>,
-    error: Option<String>,
+    args: Option<ToolDetailValue>,
+    output: Option<ToolDetailValue>,
+    error: Option<ToolDetailValue>,
 }
 
 impl ToolTerminalEvent {
     fn from_completed(event: &AgentTurnEventInfo) -> Self {
-        let error = string_field(&event.data, "error").map(|value| truncate_preview(&value));
+        let error = string_field(&event.data, "error").map(ToolDetailValue::from_full);
         let status = if error.is_some() {
             ToolActivityStatus::Failed(tool_status(&event.data))
         } else {
@@ -929,8 +963,8 @@ impl ToolTerminalEvent {
             name: event_tool_name(event),
             action: None,
             status,
-            args: preview_value(&event.data, &["arguments", "input", "request"]),
-            output: preview_value(&event.data, &["output", "result", "body"]),
+            args: detail_value(&event.data, &["arguments", "input", "request"]),
+            output: detail_value(&event.data, &["output", "result", "body"]),
             error,
         }
     }
@@ -941,10 +975,10 @@ impl ToolTerminalEvent {
             name: event_tool_name(event),
             action: None,
             status: ToolActivityStatus::Failed(tool_status(&event.data)),
-            args: preview_value(&event.data, &["arguments", "input", "request"]),
-            output: preview_value(&event.data, &["output", "result", "body"]),
+            args: detail_value(&event.data, &["arguments", "input", "request"]),
+            output: detail_value(&event.data, &["output", "result", "body"]),
             error: string_any_field(&event.data, &["error", "message"])
-                .map(|value| truncate_preview(&value)),
+                .map(ToolDetailValue::from_full),
         }
     }
 
@@ -960,8 +994,8 @@ impl ToolTerminalEvent {
             name: display_tool_label(event, display),
             action: display_action(display).map(ToString::to_string),
             status,
-            args: preview_display_value(display_tool_input(event, display)),
-            output: preview_display_value(display_tool_output(event, display)),
+            args: display_detail_value(display_tool_input(event, display)),
+            output: display_detail_value(display_tool_output(event, display)),
             error,
         }
     }
@@ -972,9 +1006,10 @@ impl ToolTerminalEvent {
             name: display_tool_label(event, display),
             action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
-            args: preview_display_value(display_tool_input(event, display)),
-            output: preview_display_value(display_tool_output(event, display))
-                .or_else(|| display_text(display).map(truncate_preview)),
+            args: display_detail_value(display_tool_input(event, display)),
+            output: display_detail_value(display_tool_output(event, display)).or_else(|| {
+                display_text(display).map(|value| ToolDetailValue::from_full(value.to_string()))
+            }),
             error: preview_display_error(display_tool_error(event, display)),
         }
     }
@@ -1053,56 +1088,68 @@ fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
     })
 }
 
-fn preview_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
-    value_any_field(data, keys).and_then(|value| format_tool_preview(value).ok())
+fn detail_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<ToolDetailValue> {
+    value_any_field(data, keys).and_then(|value| format_tool_detail(value).ok())
 }
 
-fn preview_display_value(value: Option<&Value>) -> Option<String> {
-    value.and_then(|value| format_tool_preview(value).ok())
+fn display_detail_value(value: Option<&Value>) -> Option<ToolDetailValue> {
+    value.and_then(|value| format_tool_detail(value).ok())
 }
 
-fn preview_display_error(value: Option<&Value>) -> Option<String> {
+fn preview_display_error(value: Option<&Value>) -> Option<ToolDetailValue> {
     value
         .and_then(|value| display_value_text(value).ok())
-        .map(|value| truncate_multiline_preview(&value))
+        .map(ToolDetailValue::from_full)
 }
 
-fn format_tool_preview(value: &Value) -> anyhow::Result<String> {
-    let preview = match value {
+fn format_tool_detail(value: &Value) -> anyhow::Result<ToolDetailValue> {
+    let full = match value {
         Value::Array(_) | Value::Object(_) => pretty_json(value)?,
         _ => compact_json(value)?,
     };
-    Ok(truncate_multiline_preview(&preview))
+    Ok(ToolDetailValue::from_full(full))
 }
 
 fn truncate_multiline_preview(value: &str) -> String {
+    truncate_multiline(value, TOOL_PREVIEW_MAX_LINES, TOOL_PREVIEW_MAX_WIDTH)
+}
+
+fn truncate_full_detail(value: &str) -> String {
+    truncate_multiline(
+        value,
+        TOOL_DETAIL_FULL_MAX_LINES,
+        TOOL_DETAIL_FULL_MAX_WIDTH,
+    )
+}
+
+fn truncate_multiline(value: &str, max_lines: usize, max_width: usize) -> String {
     let total_lines = value.lines().count();
-    let preview_lines = if total_lines > TOOL_PREVIEW_MAX_LINES {
-        TOOL_PREVIEW_MAX_LINES.saturating_sub(1)
+    let preview_lines = if total_lines > max_lines {
+        max_lines.saturating_sub(1)
     } else {
-        TOOL_PREVIEW_MAX_LINES
+        max_lines
     };
     let mut lines = value
         .lines()
         .take(preview_lines)
-        .map(truncate_preview)
+        .map(|line| truncate_to_width_with_marker(line, max_width))
         .collect::<Vec<_>>();
-    if total_lines > TOOL_PREVIEW_MAX_LINES {
+    if total_lines > max_lines {
         lines.push(format!("... +{} lines", total_lines - preview_lines));
     }
     if lines.is_empty() && !value.is_empty() {
-        truncate_preview(value)
+        truncate_to_width_with_marker(value, max_width)
     } else {
         lines.join("\n")
     }
 }
 
-fn truncate_preview(value: &str) -> String {
+fn truncate_to_width_with_marker(value: &str, max_width: usize) -> String {
     let mut preview = String::new();
     let mut width = 0usize;
     for grapheme in UnicodeSegmentation::graphemes(value, true) {
         let grapheme_width = UnicodeWidthStr::width(grapheme);
-        if width > 0 && width.saturating_add(grapheme_width) > TOOL_PREVIEW_MAX_WIDTH {
+        if width > 0 && width.saturating_add(grapheme_width) > max_width {
             preview.push_str("...");
             return preview;
         }

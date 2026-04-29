@@ -23,12 +23,12 @@ use crate::cli::AgentTurnCreateArgs;
 mod state;
 mod worker;
 
-use state::{AgentUiState, TranscriptItem, turn_status_label};
+use state::{AgentUiState, ToolDetailMode, TranscriptItem, turn_status_label};
 use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 
 use super::{
-    AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_help_lines, agent_model_lines,
-    agent_session_lines, cancel_turn_silent, compact_json, display_markdown,
+    AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_model_lines,
+    agent_session_lines, agent_tui_help_lines, cancel_turn_silent, compact_json, display_markdown,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -151,6 +151,7 @@ struct TuiApp {
     history_cursor: Option<usize>,
     history_draft: String,
     footer_context: FooterContext,
+    tool_detail_mode: ToolDetailMode,
 }
 
 impl TuiApp {
@@ -176,6 +177,7 @@ impl TuiApp {
             history_cursor: None,
             history_draft: String::new(),
             footer_context: FooterContext::detect(),
+            tool_detail_mode: ToolDetailMode::Compact,
         }
     }
 
@@ -265,7 +267,7 @@ impl TuiApp {
             if index > 0 && item.kind != state::TranscriptKind::Meta {
                 lines.push(Line::from(""));
             }
-            push_transcript_item_lines(&mut lines, item, content_width);
+            push_transcript_item_lines(&mut lines, item, content_width, self.tool_detail_mode);
         }
         lines
     }
@@ -337,6 +339,9 @@ impl TuiApp {
         ];
         if let Some(branch) = self.footer_context.branch.as_deref() {
             footer_parts.push(branch.to_string());
+        }
+        if self.tool_detail_mode == ToolDetailMode::Full {
+            footer_parts.push("tool details full".to_string());
         }
         footer_parts.push(format!(
             "session {}",
@@ -411,6 +416,9 @@ impl TuiApp {
             }
             (KeyCode::End, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.state.scroll_to_bottom();
+            }
+            (KeyCode::Char('o'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.toggle_tool_detail_mode();
             }
             (KeyCode::Up, modifiers) if modifiers.is_empty() && self.can_step_history_back() => {
                 self.history_previous();
@@ -522,7 +530,14 @@ impl TuiApp {
     }
 
     fn push_help(&mut self) {
-        self.state.push_system(agent_help_lines().join("\n"));
+        self.state.push_system(agent_tui_help_lines().join("\n"));
+    }
+
+    fn toggle_tool_detail_mode(&mut self) {
+        self.tool_detail_mode = match self.tool_detail_mode {
+            ToolDetailMode::Compact => ToolDetailMode::Full,
+            ToolDetailMode::Full => ToolDetailMode::Compact,
+        };
     }
 
     fn enqueue_or_start(&mut self, messages: Vec<String>) {
@@ -854,6 +869,7 @@ fn push_transcript_item_lines(
     lines: &mut Vec<Line<'static>>,
     item: &TranscriptItem,
     content_width: usize,
+    tool_detail_mode: ToolDetailMode,
 ) {
     match item.kind {
         state::TranscriptKind::User => {
@@ -863,7 +879,7 @@ fn push_transcript_item_lines(
             push_assistant_item_lines(lines, item, content_width);
         }
         state::TranscriptKind::Tool => {
-            push_tool_item_lines(lines, item, content_width);
+            push_tool_item_lines(lines, item, content_width, tool_detail_mode);
         }
         state::TranscriptKind::Meta => {
             push_meta_item_lines(lines, item, content_width);
@@ -878,6 +894,7 @@ fn push_tool_item_lines(
     lines: &mut Vec<Line<'static>>,
     item: &TranscriptItem,
     content_width: usize,
+    detail_mode: ToolDetailMode,
 ) {
     let Some(activity) = item.tool_activity_ref() else {
         push_status_item_lines(lines, item, content_width);
@@ -923,13 +940,13 @@ fn push_tool_item_lines(
     );
 
     let mut detail_rows = Vec::new();
-    if let Some(args) = activity.args() {
+    if let Some(args) = activity.args(detail_mode) {
         detail_rows.push(("input", args, body_style));
     }
-    if let Some(output) = activity.output() {
+    if let Some(output) = activity.output(detail_mode) {
         detail_rows.push(("output", output, body_style));
     }
-    if let Some(error) = activity.error() {
+    if let Some(error) = activity.error(detail_mode) {
         detail_rows.push(("error", error, Style::default().fg(Color::LightRed)));
     }
     let total_rows = detail_rows.len();
