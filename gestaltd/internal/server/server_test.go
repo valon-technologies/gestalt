@@ -7815,6 +7815,181 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	seedSubjectToken(t, svc, subjectID, "manual-connected", testDefaultConnection, "default", "connected-token")
+	seedSubjectToken(t, svc, subjectID, "manual-multi", testDefaultConnection, "team-a", "team-a-token")
+	seedSubjectToken(t, svc, subjectID, "manual-multi", testDefaultConnection, "team-b", "team-b-token")
+
+	providers := testutil.NewProviderRegistry(t,
+		&coretesting.StubIntegration{N: "no-auth", DN: "No Auth", ConnMode: core.ConnectionModeNone},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "manual-disconnected", DN: "Manual Disconnected"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "manual-connected", DN: "Manual Connected"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "manual-multi", DN: "Manual Multi"}},
+		&coretesting.StubIntegration{N: "platform-bearer", DN: "Platform Bearer", ConnMode: core.ConnectionModePlatform},
+		&coretesting.StubIntegration{N: "platform-manual", DN: "Platform Manual", ConnMode: core.ConnectionModePlatform},
+		&coretesting.StubIntegration{N: "platform-missing", DN: "Platform Missing", ConnMode: core.ConnectionModePlatform},
+	)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"platform-bearer": {
+			ConnectionMode: providermanifestv1.ConnectionModePlatform,
+			Auth: &config.ConnectionAuthDef{
+				Type:  providermanifestv1.AuthTypeBearer,
+				Token: "deployment-token",
+			},
+		},
+		"platform-manual": {
+			ConnectionMode: providermanifestv1.ConnectionModePlatform,
+			Auth: &config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeManual,
+				AuthMapping: &config.AuthMappingDef{
+					Headers: map[string]providermanifestv1.AuthValue{
+						"X-API-Key": {Value: "deployment-api-key"},
+					},
+				},
+			},
+		},
+		"platform-missing": {
+			ConnectionMode: providermanifestv1.ConnectionModePlatform,
+			Auth: &config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeBearer,
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.PluginDefs = pluginDefs
+		cfg.Services = svc
+		cfg.DefaultConnection = map[string]string{
+			"manual-connected": testDefaultConnection,
+			"manual-multi":     testDefaultConnection,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	type statusConnection struct {
+		Name             string           `json:"name"`
+		Mode             string           `json:"mode"`
+		Connected        bool             `json:"connected"`
+		Connectable      bool             `json:"connectable"`
+		Status           string           `json:"status"`
+		CredentialState  string           `json:"credentialState"`
+		HealthState      string           `json:"healthState"`
+		Actions          []string         `json:"actions"`
+		CredentialMode   string           `json:"credentialMode"`
+		OwnerKind        string           `json:"ownerKind"`
+		Disconnectable   bool             `json:"disconnectable"`
+		Instances        []map[string]any `json:"instances"`
+		StatusCode       string           `json:"statusCode"`
+		StatusReason     string           `json:"statusReason"`
+		AuthTypes        []string         `json:"authTypes"`
+		CredentialFields []map[string]any `json:"credentialFields"`
+	}
+	type statusIntegration struct {
+		Name             string                    `json:"name"`
+		Connected        bool                      `json:"connected"`
+		Instances        []map[string]any          `json:"instances"`
+		AuthTypes        []string                  `json:"authTypes"`
+		ConnectionParams map[string]map[string]any `json:"connectionParams"`
+		Connections      []statusConnection        `json:"connections"`
+		CredentialFields []map[string]any          `json:"credentialFields"`
+		Status           string                    `json:"status"`
+		CredentialState  string                    `json:"credentialState"`
+		HealthState      string                    `json:"healthState"`
+		Actions          []string                  `json:"actions"`
+	}
+	var integrations []statusIntegration
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decode integrations: %v (body: %s)", err, body)
+	}
+	got := make(map[string]statusIntegration, len(integrations))
+	for _, integration := range integrations {
+		got[integration.Name] = integration
+		credentialPresent := integration.CredentialState == "not_required" || integration.CredentialState == "connected" || integration.CredentialState == "configured"
+		if integration.Connected != credentialPresent {
+			t.Fatalf("%s legacy connected=%v status=%q violates compatibility invariant", integration.Name, integration.Connected, integration.Status)
+		}
+		if integration.Instances == nil || integration.AuthTypes == nil || integration.ConnectionParams == nil || integration.Connections == nil || integration.CredentialFields == nil {
+			t.Fatalf("%s legacy collections must stay non-nil: %+v", integration.Name, integration)
+		}
+	}
+
+	assertIntegrationStatus := func(name, status, credentialState, healthState string, connected bool, actions []string) statusIntegration {
+		t.Helper()
+		integration, ok := got[name]
+		if !ok {
+			t.Fatalf("integration %q missing from response: %s", name, body)
+		}
+		if integration.Status != status || integration.CredentialState != credentialState || integration.HealthState != healthState || integration.Connected != connected || !reflect.DeepEqual(integration.Actions, actions) {
+			t.Fatalf("%s status = {status:%q credential:%q health:%q connected:%v actions:%v}, want {%q %q %q %v %v}",
+				name, integration.Status, integration.CredentialState, integration.HealthState, integration.Connected, integration.Actions,
+				status, credentialState, healthState, connected, actions)
+		}
+		return integration
+	}
+
+	assertIntegrationStatus("no-auth", "ready", "not_required", "not_applicable", true, []string{})
+	assertIntegrationStatus("manual-disconnected", "needs_user_connection", "missing", "not_applicable", false, []string{"connect"})
+	assertIntegrationStatus("manual-connected", "ready", "connected", "not_checked", true, []string{"disconnect", "add_instance"})
+	assertIntegrationStatus("manual-multi", "needs_instance_selection", "connected", "not_checked", true, []string{"select_instance", "disconnect", "add_instance"})
+
+	platformBearer := assertIntegrationStatus("platform-bearer", "ready", "configured", "not_checked", true, []string{})
+	platformManual := assertIntegrationStatus("platform-manual", "ready", "configured", "not_checked", true, []string{})
+	platformMissing := assertIntegrationStatus("platform-missing", "needs_admin_configuration", "missing", "unknown", false, []string{"admin_configure"})
+
+	for _, tc := range []struct {
+		name        string
+		integration statusIntegration
+		wantStatus  string
+		wantCode    string
+	}{
+		{name: "platform-bearer", integration: platformBearer, wantStatus: "ready"},
+		{name: "platform-manual", integration: platformManual, wantStatus: "ready"},
+		{name: "platform-missing", integration: platformMissing, wantStatus: "needs_admin_configuration", wantCode: "admin_configuration_required"},
+	} {
+		tc := tc
+		t.Run(tc.name+" connection", func(t *testing.T) {
+			t.Parallel()
+			if len(tc.integration.Connections) != 1 {
+				t.Fatalf("connections = %+v, want one platform connection", tc.integration.Connections)
+			}
+			conn := tc.integration.Connections[0]
+			if conn.Mode != string(core.ConnectionModePlatform) || conn.CredentialMode != "platform" || conn.OwnerKind != "platform" || conn.Connectable || conn.Disconnectable {
+				t.Fatalf("platform connection fields = %+v", conn)
+			}
+			if conn.Status != tc.wantStatus {
+				t.Fatalf("connection status = %q, want %q", conn.Status, tc.wantStatus)
+			}
+			if conn.StatusCode != tc.wantCode {
+				t.Fatalf("connection statusCode = %q, want %q", conn.StatusCode, tc.wantCode)
+			}
+			if len(conn.Instances) != 0 {
+				t.Fatalf("platform instances = %+v, want empty", conn.Instances)
+			}
+		})
+	}
+}
+
 func TestListIntegrations_AuthTypes(t *testing.T) {
 	t.Parallel()
 
@@ -10469,6 +10644,9 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		if !strings.Contains(result["error"], `"_instance"`) {
 			t.Fatalf("expected error to mention _instance, got %q", result["error"])
 		}
+		if result["code"] != "instance_selection_required" {
+			t.Fatalf("expected instance_selection_required code, got %q", result["code"])
+		}
 	})
 
 	t.Run("static_catalog_does_not_fail_open", func(t *testing.T) {
@@ -10871,6 +11049,52 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	}
 	if body["token"] != "plugin-token" {
 		t.Fatalf("token = %q, want plugin-token", body["token"])
+	}
+}
+
+func TestExecuteOperation_PlatformMissingRuntimeMaterialUsesAdminConfigurationError(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "platform-svc",
+			ConnMode: core.ConnectionModePlatform,
+		},
+		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/platform-svc/do", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+	}
+	var errResp struct {
+		Error       string `json:"error"`
+		Code        string `json:"code"`
+		Integration string `json:"integration"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if errResp.Code != "admin_configuration_required" {
+		t.Fatalf("code = %q, want admin_configuration_required", errResp.Code)
+	}
+	if !strings.Contains(errResp.Error, "deployment/admin configuration") {
+		t.Fatalf("error = %q, want deployment/admin copy", errResp.Error)
+	}
+	if errResp.Integration != "platform-svc" {
+		t.Fatalf("integration = %q, want platform-svc", errResp.Integration)
 	}
 }
 

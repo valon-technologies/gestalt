@@ -90,6 +90,105 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
 }
 
 #[test]
+fn test_invoke_admin_configuration_error_uses_admin_copy() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/platform_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("run"))
+    .create();
+
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/platform_svc/run",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"deployment/admin configuration is required for integration \"platform_svc\"","code":"admin_configuration_required","integration":"platform_svc"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "platform_svc", "run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "plugin \"platform_svc\" requires deployment/admin configuration before it can be invoked",
+        ))
+        .stderr(predicate::str::contains("gestalt plugin connect").not());
+}
+
+#[test]
+fn test_invoke_instance_selection_error_suggests_instance_flag() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/slack/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("channels"))
+    .create();
+
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/slack/channels",
+        StatusCode::CONFLICT
+    )
+    .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","code":"instance_selection_required","integration":"slack"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "slack", "channels"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "plugin \"slack\" has multiple connected instances. Pass --instance to choose one",
+        ))
+        .stderr(predicate::str::contains("gestalt plugin connect").not());
+}
+
+#[test]
+fn test_invoke_error_with_instance_action_name_keeps_original_error() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/slack/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("status"))
+    .create();
+
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/slack/status",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"action select_instance is unavailable for this connection"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "slack", "status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "action select_instance is unavailable for this connection",
+        ))
+        .stderr(predicate::str::contains("multiple connected instances").not());
+}
+
+#[test]
 fn test_catalog_reconnect_error_suggests_reconnect_command() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();

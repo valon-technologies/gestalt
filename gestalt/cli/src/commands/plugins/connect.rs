@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::api::ApiClient;
+use crate::api::{ApiClient, ApiError};
 use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output;
 
@@ -25,6 +25,8 @@ struct IntegrationInfo {
     connections: Vec<ConnectionDefInfo>,
     #[serde(default)]
     credential_fields: Vec<CredentialFieldInfo>,
+    #[serde(default)]
+    status: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -37,6 +39,10 @@ struct ConnectionDefInfo {
     auth_types: Vec<String>,
     #[serde(default)]
     credential_fields: Vec<CredentialFieldInfo>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    credential_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -168,6 +174,7 @@ impl<'a> ResolvedConnectFlow<'a> {
             .filter(|connection| !connection.credential_fields.is_empty())
             .map(|connection| connection.credential_fields.as_slice())
             .unwrap_or(integration.credential_fields.as_slice());
+        validate_user_connectable(integration, connection.as_ref())?;
 
         Ok(Self {
             integration,
@@ -296,6 +303,7 @@ where
                 connection_params: connection_params.as_ref(),
             },
         )
+        .map_err(rewrite_connect_api_error)
         .context("failed to start OAuth flow")?;
     let url = resp["url"]
         .as_str()
@@ -341,6 +349,7 @@ fn connect_manual(
                     connection_params: connection_params.as_ref(),
                 },
             )
+            .map_err(rewrite_connect_api_error)
             .context("failed to connect plugin")?,
     )
     .context("failed to parse manual connect response")?;
@@ -497,6 +506,61 @@ fn resolve_connect_mode(integration: &str, auth_types: &[String]) -> Result<Conn
         "plugin '{}' does not expose a supported connection flow in the CLI",
         integration
     );
+}
+
+fn validate_user_connectable(
+    integration: &IntegrationInfo,
+    connection: Option<&ResolvedConnection<'_>>,
+) -> Result<()> {
+    if let Some(definition) = connection.and_then(|selected| selected.definition) {
+        match definition.credential_mode.as_deref() {
+            Some("none") => bail!(
+                "plugin '{}' connection '{}' does not require a user connection",
+                integration.name,
+                definition.display_name()
+            ),
+            Some("platform")
+                if definition.status.as_deref() == Some("needs_admin_configuration") =>
+            {
+                bail!(
+                    "plugin '{}' connection '{}' requires deployment/admin configuration",
+                    integration.name,
+                    definition.display_name()
+                )
+            }
+            Some("platform") => bail!(
+                "plugin '{}' connection '{}' is managed by deployment/admin configuration and cannot be connected by a user",
+                integration.name,
+                definition.display_name()
+            ),
+            _ => {}
+        }
+    } else if integration.status.as_deref() == Some("needs_admin_configuration") {
+        bail!(
+            "plugin '{}' requires deployment/admin configuration before users can connect it",
+            integration.name
+        );
+    }
+    Ok(())
+}
+
+fn rewrite_connect_api_error(err: anyhow::Error) -> anyhow::Error {
+    for cause in err.chain() {
+        if let Some(api_error) = cause.downcast_ref::<ApiError>() {
+            match api_error.code() {
+                Some("admin_configuration_required") => {
+                    return anyhow::anyhow!("deployment/admin configuration is required");
+                }
+                Some("instance_selection_required") => {
+                    return anyhow::anyhow!(
+                        "multiple connected instances exist; pass --instance to choose one"
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+    err
 }
 
 fn prompt_connection_params(
