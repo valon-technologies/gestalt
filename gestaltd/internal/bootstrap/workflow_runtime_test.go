@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"slices"
@@ -30,6 +31,17 @@ import (
 
 type funcInvoker struct {
 	invoke func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
+}
+
+type workflowRuntimeRecordedInvoke struct {
+	providerName   string
+	instance       string
+	operation      string
+	connection     string
+	credentialMode core.ConnectionMode
+	params         map[string]any
+	ctxErr         error
+	hasDeadline    bool
 }
 
 func testWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
@@ -452,6 +464,8 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		t.Fatalf("Register roadmap: %v", err)
 	}
 	agentProvider := newStubAgentTurnManagerProvider()
+	agentProvider.createTurnStatus = coreagent.ExecutionStatusRunning
+	agentProvider.completeRunningOnGet = true
 	agentRuntime := &agentRuntime{
 		defaultProviderName: "managed",
 		providers:           map[string]coreagent.Provider{"managed": agentProvider},
@@ -522,6 +536,373 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)
 	}
+	if len(agentProvider.listTurnEventsRequests) != 0 {
+		t.Fatalf("list turn events requests = %#v, want none for agent target without progress metadata", agentProvider.listTurnEventsRequests)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetUpdatesConfiguredProgressFromTurnEvents(t *testing.T) {
+	t.Parallel()
+
+	agentProvider := newStubAgentTurnManagerProvider()
+	agentProvider.createTurnStatus = coreagent.ExecutionStatusRunning
+	agentProvider.completeRunningOnGet = true
+	agentProvider.turnEventsOnCreate = []*coreagent.TurnEvent{
+		{
+			Type: "tool.started",
+			Data: map[string]any{
+				"operation": "messages.reply",
+				"arguments": map[string]any{"secret": "not for status"},
+			},
+		},
+		{
+			Type: "tool.started",
+			Data: map[string]any{
+				"tool_id": "notifier/activity.update?credentialMode=none",
+			},
+		},
+	}
+	runtime, refProvider, invokes := newProgressWorkflowRuntimeHarness(t, agentProvider)
+	target := testProgressAgentTarget(5)
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "progress-agent-ref",
+		ProviderName:        "temporal",
+		Target:              target,
+		TargetFingerprint:   testWorkflowRuntimeTargetFingerprint(t, target),
+		CallerPluginName:    "notifier",
+		SubjectID:           "service_account:notifier-agent",
+		CredentialSubjectID: "service_account:notifier-agent",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "notifier",
+			Operations: []string{"activity.update", "activity.clear"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "progress-agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:      "sig-1",
+			Name:    "message.event",
+			Payload: map[string]any{"message": "hello"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(*invokes) != 2 {
+		t.Fatalf("invocations = %#v, want update and clear", *invokes)
+	}
+	updateCall := (*invokes)[0]
+	if updateCall.providerName != "notifier" || updateCall.operation != "activity.update" {
+		t.Fatalf("update invocation = %#v", updateCall)
+	}
+	if updateCall.instance != "tenant-a" || updateCall.connection != "service" || updateCall.credentialMode != core.ConnectionModeNone {
+		t.Fatalf("update target selectors = %#v", updateCall)
+	}
+	if got := updateCall.params["text"]; got != "is sending a reply..." {
+		t.Fatalf("update status = %#v, want configured reply status", got)
+	}
+	if got := updateCall.params["handle"]; got != "opaque-progress-handle" {
+		t.Fatalf("progress handle = %#v, want configured handle", got)
+	}
+	if !updateCall.hasDeadline {
+		t.Fatalf("update invocation missing bounded context: %#v", updateCall)
+	}
+	if strings.Contains(fmt.Sprint(updateCall.params), "not for status") {
+		t.Fatalf("update params leaked tool arguments: %#v", updateCall.params)
+	}
+	clearCall := (*invokes)[1]
+	if clearCall.providerName != "notifier" || clearCall.operation != "activity.clear" {
+		t.Fatalf("clear invocation = %#v", clearCall)
+	}
+	if clearCall.instance != "tenant-a" || clearCall.connection != "service" || clearCall.credentialMode != core.ConnectionModeNone {
+		t.Fatalf("clear target selectors = %#v", clearCall)
+	}
+	if got := clearCall.params["handle"]; got != "opaque-progress-handle" {
+		t.Fatalf("clear progress handle = %#v, want configured handle", got)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetUsesDefaultProgressForUnmatchedDottedOperation(t *testing.T) {
+	t.Parallel()
+
+	agentProvider := newStubAgentTurnManagerProvider()
+	agentProvider.createTurnStatus = coreagent.ExecutionStatusRunning
+	agentProvider.completeRunningOnGet = true
+	agentProvider.turnEventsOnCreate = []*coreagent.TurnEvent{{
+		Type: "tool.started",
+		Data: map[string]any{
+			"operation": "other.reply",
+		},
+	}}
+	runtime, refProvider, invokes := newProgressWorkflowRuntimeHarness(t, agentProvider)
+	target := testProgressAgentTarget(5)
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "progress-agent-ref",
+		ProviderName:        "temporal",
+		Target:              target,
+		TargetFingerprint:   testWorkflowRuntimeTargetFingerprint(t, target),
+		CallerPluginName:    "notifier",
+		SubjectID:           "service_account:notifier-agent",
+		CredentialSubjectID: "service_account:notifier-agent",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "notifier",
+			Operations: []string{"activity.update", "activity.clear"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "progress-agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:      "sig-1",
+			Name:    "message.event",
+			Payload: map[string]any{"message": "hello"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(*invokes) != 2 {
+		t.Fatalf("invocations = %#v, want update and clear", *invokes)
+	}
+	if got := (*invokes)[0].params["text"]; got != "is using a tool..." {
+		t.Fatalf("update status = %#v, want default tool status", got)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetClearsConfiguredProgressAfterSetupFailure(t *testing.T) {
+	t.Parallel()
+
+	agentProvider := newStubAgentTurnManagerProvider()
+	agentProvider.createTurnErr = errors.New("create turn failed")
+	runtime, refProvider, invokes := newProgressWorkflowRuntimeHarness(t, agentProvider)
+	target := testProgressAgentTarget(5)
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "progress-agent-ref",
+		ProviderName:        "temporal",
+		Target:              target,
+		TargetFingerprint:   testWorkflowRuntimeTargetFingerprint(t, target),
+		CallerPluginName:    "notifier",
+		SubjectID:           "service_account:notifier-agent",
+		CredentialSubjectID: "service_account:notifier-agent",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "notifier",
+			Operations: []string{"activity.update", "activity.clear"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "progress-agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:      "sig-1",
+			Name:    "message.event",
+			Payload: map[string]any{"message": "hello"},
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "create turn failed") {
+		t.Fatalf("Invoke error = %v, want create turn failure", err)
+	}
+	if len(*invokes) != 1 {
+		t.Fatalf("invocations = %#v, want clear only", *invokes)
+	}
+	if (*invokes)[0].operation != "activity.clear" {
+		t.Fatalf("invocation = %#v, want clear", (*invokes)[0])
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetClearsConfiguredProgressAfterTimeout(t *testing.T) {
+	t.Parallel()
+
+	agentProvider := newStubAgentTurnManagerProvider()
+	agentProvider.createTurnStatus = coreagent.ExecutionStatusRunning
+	runtime, refProvider, invokes := newProgressWorkflowRuntimeHarness(t, agentProvider)
+	target := testProgressAgentTarget(1)
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "progress-agent-ref",
+		ProviderName:        "temporal",
+		Target:              target,
+		TargetFingerprint:   testWorkflowRuntimeTargetFingerprint(t, target),
+		CallerPluginName:    "notifier",
+		SubjectID:           "service_account:notifier-agent",
+		CredentialSubjectID: "service_account:notifier-agent",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "notifier",
+			Operations: []string{"activity.update", "activity.clear"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "progress-agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:      "sig-1",
+			Name:    "message.event",
+			Payload: map[string]any{"message": "hello"},
+		}},
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Invoke error = %v, want deadline exceeded", err)
+	}
+	clearCall, ok := lastWorkflowRuntimeInvocationForOperation(*invokes, "activity.clear")
+	if !ok {
+		t.Fatalf("invocations = %#v, want clear", *invokes)
+	}
+	if clearCall.ctxErr != nil {
+		t.Fatalf("clear context err = %v, want detached clear context", clearCall.ctxErr)
+	}
+}
+
+func newProgressWorkflowRuntimeHarness(t *testing.T, agentProvider *stubAgentTurnManagerProvider) (*workflowRuntime, *workflowRuntimeExecutionRefProvider, *[]workflowRuntimeRecordedInvoke) {
+	t.Helper()
+	services := coretesting.NewStubServices(t)
+	reg := registry.New()
+	if err := reg.Providers.Register("notifier", &coretesting.StubIntegration{
+		N:        "notifier",
+		ConnMode: core.ConnectionModeUser,
+		CatalogVal: &catalog.Catalog{
+			Name: "notifier",
+			Operations: []catalog.CatalogOperation{
+				{ID: "activity.update", Method: http.MethodPost},
+				{ID: "activity.clear", Method: http.MethodPost},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Register notifier: %v", err)
+	}
+	agentRuntime := &agentRuntime{
+		defaultProviderName: "managed",
+		providers:           map[string]coreagent.Provider{"managed": agentProvider},
+	}
+	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	invokes := []workflowRuntimeRecordedInvoke{}
+	invoker := funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			_, hasDeadline := ctx.Deadline()
+			invokes = append(invokes, workflowRuntimeRecordedInvoke{
+				providerName:   providerName,
+				instance:       instance,
+				operation:      operation,
+				connection:     invocation.ConnectionFromContext(ctx),
+				credentialMode: invocation.CredentialModeOverrideFromContext(ctx),
+				params:         cloneMapAny(params),
+				ctxErr:         ctx.Err(),
+				hasDeadline:    hasDeadline,
+			})
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       &reg.Providers,
+		Agent:           agentRuntime,
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+		Invoker:         invoker,
+		PluginInvokes: map[string][]config.PluginInvocationDependency{
+			"notifier": {
+				{Plugin: "notifier", Operation: "activity.update", CredentialMode: "none"},
+				{Plugin: "notifier", Operation: "activity.clear", CredentialMode: "none"},
+			},
+		},
+	})
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetAgentManager(manager)
+	runtime.SetInvoker(invoker)
+	return runtime, refProvider, &invokes
+}
+
+func testProgressAgentTarget(timeoutSeconds int) coreworkflow.Target {
+	return coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		ProviderName: "managed",
+		Model:        "deep",
+		Prompt:       "Handle the message request",
+		ToolSource:   coreagent.ToolSourceModeNativeSearch,
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "notifier", Operation: "activity.update", Connection: "other", Instance: "tenant-b", CredentialMode: core.ConnectionModeNone},
+			{Plugin: "notifier", Operation: "activity.clear", Connection: "other", Instance: "tenant-b", CredentialMode: core.ConnectionModeNone},
+			{Plugin: "notifier", Operation: "activity.update", Connection: "service", Instance: "tenant-a", CredentialMode: core.ConnectionModeNone},
+			{Plugin: "notifier", Operation: "activity.clear", Connection: "service", Instance: "tenant-a", CredentialMode: core.ConnectionModeNone},
+		},
+		Metadata:       testProgressAgentMetadata(),
+		TimeoutSeconds: timeoutSeconds,
+	}}
+}
+
+func testProgressAgentMetadata() map[string]any {
+	return map[string]any{
+		workflowAgentProgressMetadataKey: map[string]any{
+			"update": map[string]any{
+				"plugin":         "notifier",
+				"operation":      "activity.update",
+				"connection":     "service",
+				"instance":       "tenant-a",
+				"credentialMode": "none",
+			},
+			"clear": map[string]any{
+				"plugin":         "notifier",
+				"operation":      "activity.clear",
+				"connection":     "service",
+				"instance":       "tenant-a",
+				"credentialMode": "none",
+			},
+			"params": map[string]any{
+				"handle": "opaque-progress-handle",
+			},
+			"statusParam":       "text",
+			"defaultToolStatus": "is using a tool...",
+			"rules": []any{
+				map[string]any{"event": "turn.started", "status": "is getting started..."},
+				map[string]any{"event": "tool.started", "operation": "messages.reply", "status": "is sending a reply..."},
+				map[string]any{"event": "tool.started", "identifier": "notifier/activity.update", "ignore": true},
+				map[string]any{"event": "assistant.completed", "status": "is drafting a response..."},
+			},
+		},
+	}
+}
+
+func testWorkflowRuntimeTargetFingerprint(t *testing.T, target coreworkflow.Target) string {
+	t.Helper()
+	fingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	return fingerprint
+}
+
+func lastWorkflowRuntimeInvocationForOperation(invokes []workflowRuntimeRecordedInvoke, operation string) (workflowRuntimeRecordedInvoke, bool) {
+	for i := len(invokes) - 1; i >= 0; i-- {
+		if invokes[i].operation == operation {
+			return invokes[i], true
+		}
+	}
+	return workflowRuntimeRecordedInvoke{}, false
 }
 
 func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalFingerprint(t *testing.T) {

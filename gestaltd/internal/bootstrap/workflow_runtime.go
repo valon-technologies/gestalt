@@ -205,7 +205,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
 	}
 	if req.Target.Agent != nil {
-		return r.invokeAgent(ctx, req, agentManager)
+		return r.invokeAgent(ctx, req, agentManager, invoker)
 	}
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
@@ -303,7 +303,7 @@ func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
 	return target.Agent != nil && target.Plugin != nil && coreworkflow.PluginTargetSet(*target.Plugin)
 }
 
-func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service) (*coreworkflow.InvokeOperationResponse, error) {
+func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker) (*coreworkflow.InvokeOperationResponse, error) {
 	if agentManager == nil {
 		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
 	}
@@ -328,6 +328,13 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		return nil, fmt.Errorf("workflow agent target is required")
 	}
 	agentTarget := *target.Agent
+	progressBridge, progressBridgeErr := newWorkflowAgentProgressBridge(ctx, agentTarget, principalValue, agentManager, invoker, callerPluginName)
+	if progressBridgeErr != nil {
+		progressBridge = nil
+	}
+	if progressBridge != nil {
+		defer progressBridge.ClearWithDetachedTimeout(ctx)
+	}
 	timeout := workflowAgentTimeout(agentTarget.TimeoutSeconds)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -369,7 +376,11 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	if err != nil {
 		return nil, err
 	}
-	turn, err = waitForWorkflowAgentTurn(runCtx, agentManager, principalValue, turn)
+	var observer workflowAgentTurnObserver
+	if progressBridge != nil {
+		observer = progressBridge
+	}
+	turn, err = waitForWorkflowAgentTurn(runCtx, agentManager, principalValue, turn, observer)
 	if err != nil {
 		if turn != nil && strings.TrimSpace(turn.ID) != "" {
 			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
@@ -387,6 +398,11 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	default:
 		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
 	}
+}
+
+type workflowAgentTurnObserver interface {
+	ObserveTurnEvents(ctx context.Context, events []*coreagent.TurnEvent)
+	CompleteTurn(ctx context.Context, turn *coreagent.Turn)
 }
 
 func workflowAgentTimeout(seconds int) time.Duration {
@@ -459,11 +475,22 @@ func workflowSignalMessage(signals []coreworkflow.Signal) *coreagent.Message {
 	}
 }
 
-func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Service, p *principal.Principal, turn *coreagent.Turn) (*coreagent.Turn, error) {
+func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Service, p *principal.Principal, turn *coreagent.Turn, observer workflowAgentTurnObserver) (*coreagent.Turn, error) {
 	if turn == nil || strings.TrimSpace(turn.ID) == "" {
 		return nil, fmt.Errorf("workflow agent turn is missing")
 	}
 	current := turn
+	if observer != nil {
+		defer func() {
+			if current == nil || strings.TrimSpace(current.ID) == "" {
+				return
+			}
+			completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			observer.CompleteTurn(completeCtx, current)
+		}()
+	}
+	var lastEventSeq int64
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -475,6 +502,17 @@ func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Ser
 		case <-ctx.Done():
 			return current, ctx.Err()
 		case <-ticker.C:
+			if observer != nil {
+				events, err := agentManager.ListTurnEvents(ctx, p, current.ID, lastEventSeq, 50)
+				if err == nil {
+					for _, event := range events {
+						if event != nil && event.Seq > lastEventSeq {
+							lastEventSeq = event.Seq
+						}
+					}
+					observer.ObserveTurnEvents(ctx, events)
+				}
+			}
 			next, err := agentManager.GetTurn(ctx, p, current.ID)
 			if err != nil {
 				return current, err

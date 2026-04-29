@@ -1723,13 +1723,18 @@ func (m *stubWorkflowManager) Subjects() []string {
 
 type stubAgentTurnManagerProvider struct {
 	coreagent.UnimplementedProvider
-	mu                    sync.Mutex
-	createSessionRequests []coreagent.CreateSessionRequest
-	createTurnRequests    []coreagent.CreateTurnRequest
-	sessions              map[string]*coreagent.Session
-	turns                 map[string]*coreagent.Turn
-	turnEvents            map[string][]*coreagent.TurnEvent
-	interactions          map[string]*coreagent.Interaction
+	mu                     sync.Mutex
+	createSessionRequests  []coreagent.CreateSessionRequest
+	createTurnRequests     []coreagent.CreateTurnRequest
+	createTurnErr          error
+	createTurnStatus       coreagent.ExecutionStatus
+	completeRunningOnGet   bool
+	turnEventsOnCreate     []*coreagent.TurnEvent
+	listTurnEventsRequests []coreagent.ListTurnEventsRequest
+	sessions               map[string]*coreagent.Session
+	turns                  map[string]*coreagent.Turn
+	turnEvents             map[string][]*coreagent.TurnEvent
+	interactions           map[string]*coreagent.Interaction
 }
 
 func newStubAgentTurnManagerProvider() *stubAgentTurnManagerProvider {
@@ -1805,26 +1810,41 @@ func (p *stubAgentTurnManagerProvider) UpdateSession(_ context.Context, req core
 func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.createTurnErr != nil {
+		return nil, p.createTurnErr
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createTurnRequests = append(p.createTurnRequests, req)
+	status := p.createTurnStatus
+	if status == "" {
+		status = coreagent.ExecutionStatusSucceeded
+	}
 
 	turn := &coreagent.Turn{
 		ID:           req.TurnID,
 		SessionID:    req.SessionID,
 		ProviderName: "managed",
 		Model:        req.Model,
-		Status:       coreagent.ExecutionStatusSucceeded,
+		Status:       status,
 		Messages:     append([]coreagent.Message(nil), req.Messages...),
 		OutputText:   "turn completed",
 		CreatedBy:    req.CreatedBy,
 		CreatedAt:    &now,
 		StartedAt:    &now,
-		CompletedAt:  &now,
 		ExecutionRef: req.ExecutionRef,
+	}
+	if status == coreagent.ExecutionStatusSucceeded || status == coreagent.ExecutionStatusFailed || status == coreagent.ExecutionStatusCanceled || status == coreagent.ExecutionStatusWaitingForInput {
+		turn.CompletedAt = &now
 	}
 	p.turns[turn.ID] = turn
 	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
+	for _, event := range p.turnEventsOnCreate {
+		if event == nil {
+			continue
+		}
+		p.appendTurnEventLocked(turn.ID, event.Type, event.Data)
+	}
 
 	if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
 		turn.Status = coreagent.ExecutionStatusWaitingForInput
@@ -1843,7 +1863,7 @@ func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreage
 			CreatedAt: &now,
 		}
 		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
-	} else {
+	} else if turn.Status == coreagent.ExecutionStatusSucceeded {
 		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
 		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
@@ -1861,6 +1881,13 @@ func (p *stubAgentTurnManagerProvider) GetTurn(_ context.Context, req coreagent.
 	turn, ok := p.turns[req.TurnID]
 	if !ok {
 		return nil, core.ErrNotFound
+	}
+	if p.completeRunningOnGet && turn.Status == coreagent.ExecutionStatusRunning {
+		now := time.Now().UTC().Truncate(time.Second)
+		turn.Status = coreagent.ExecutionStatusSucceeded
+		turn.CompletedAt = &now
+		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
 	return cloneAgentTurn(turn), nil
 }
@@ -1895,6 +1922,7 @@ func (p *stubAgentTurnManagerProvider) CancelTurn(_ context.Context, req coreage
 func (p *stubAgentTurnManagerProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.listTurnEventsRequests = append(p.listTurnEventsRequests, req)
 	events := p.turnEvents[req.TurnID]
 	out := make([]*coreagent.TurnEvent, 0, len(events))
 	for _, event := range events {
