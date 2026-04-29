@@ -1665,6 +1665,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(listedEvents.events[3]?.display?.text).toBe(
     "provider assistant completed",
   );
+  expect(listedEvents.events[3]?.display?.format).toBe("markdown");
   expect(listedEvents.events[4]?.display?.kind).toBe("status");
   expect(listedEvents.events[4]?.display?.output?.kind.case).toBe("structValue");
   expect(

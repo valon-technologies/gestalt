@@ -1912,6 +1912,9 @@ type AgentTurnDisplay struct {
 	Input         *structpb.Value        `protobuf:"bytes,7,opt,name=input,proto3" json:"input,omitempty"`
 	Output        *structpb.Value        `protobuf:"bytes,8,opt,name=output,proto3" json:"output,omitempty"`
 	Error         *structpb.Value        `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	Action        string                 `protobuf:"bytes,10,opt,name=action,proto3" json:"action,omitempty"`
+	Format        string                 `protobuf:"bytes,11,opt,name=format,proto3" json:"format,omitempty"`
+	Language      string                 `protobuf:"bytes,12,opt,name=language,proto3" json:"language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2007,6 +2010,27 @@ func (x *AgentTurnDisplay) GetError() *structpb.Value {
 		return x.Error
 	}
 	return nil
+}
+
+func (x *AgentTurnDisplay) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AgentTurnDisplay) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *AgentTurnDisplay) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
 }
 
 type CreateAgentProviderTurnRequest struct {
@@ -4170,7 +4194,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12=\n" +
 	"\fcompleted_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vcompletedAt\x12#\n" +
-	"\rexecution_ref\x18\x0e \x01(\tR\fexecutionRef\"\xa3\x02\n" +
+	"\rexecution_ref\x18\x0e \x01(\tR\fexecutionRef\"\xef\x02\n" +
 	"\x10AgentTurnDisplay\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05phase\x18\x02 \x01(\tR\x05phase\x12\x12\n" +
@@ -4181,7 +4205,11 @@ const file_v1_agent_proto_rawDesc = "" +
 	"parent_ref\x18\x06 \x01(\tR\tparentRef\x12,\n" +
 	"\x05input\x18\a \x01(\v2\x16.google.protobuf.ValueR\x05input\x12.\n" +
 	"\x06output\x18\b \x01(\v2\x16.google.protobuf.ValueR\x06output\x12,\n" +
-	"\x05error\x18\t \x01(\v2\x16.google.protobuf.ValueR\x05error\"\xa2\x06\n" +
+	"\x05error\x18\t \x01(\v2\x16.google.protobuf.ValueR\x05error\x12\x16\n" +
+	"\x06action\x18\n" +
+	" \x01(\tR\x06action\x12\x16\n" +
+	"\x06format\x18\v \x01(\tR\x06format\x12\x1a\n" +
+	"\blanguage\x18\f \x01(\tR\blanguage\"\xa2\x06\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +

@@ -858,11 +858,19 @@ fn push_tool_item_lines(
         .add_modifier(Modifier::BOLD);
     let status_style = tool_status_style(activity);
     let meta_style = Style::default().fg(Color::DarkGray);
-    let mut header_segments = vec![
-        StyledSegment::new(activity.name().to_string(), name_style),
-        StyledSegment::new(" ".to_string(), body_style),
-        StyledSegment::new(activity.status_summary().to_string(), status_style),
-    ];
+    let mut header_segments = if let Some(action) = activity.action() {
+        vec![
+            StyledSegment::new(action.to_string(), status_style),
+            StyledSegment::new(" ".to_string(), body_style),
+            StyledSegment::new(activity.name().to_string(), name_style),
+        ]
+    } else {
+        vec![
+            StyledSegment::new(activity.name().to_string(), name_style),
+            StyledSegment::new(" ".to_string(), body_style),
+            StyledSegment::new(activity.status_summary().to_string(), status_style),
+        ]
+    };
     if let Some(detail) = activity.status_detail()
         && !detail.trim().is_empty()
     {
@@ -1051,27 +1059,75 @@ fn push_assistant_item_lines(
     let bullet_style = Style::default()
         .fg(Color::Green)
         .add_modifier(Modifier::BOLD);
-    for (line_index, text_line) in item.text.split('\n').enumerate() {
-        let prefix = if line_index == 0 {
+    let format = item
+        .format
+        .as_deref()
+        .unwrap_or(if item.language.is_some() {
+            "code"
+        } else {
+            "plain"
+        });
+    let mut in_markdown_code_block = false;
+    let mut visible_line_index = 0usize;
+    for text_line in item.text.split('\n') {
+        if is_markdown_format(format) && markdown_code_fence_language(text_line).is_some() {
+            in_markdown_code_block = !in_markdown_code_block;
+            continue;
+        }
+
+        let prefix = if visible_line_index == 0 {
             ASSISTANT_BULLET
         } else {
             "  "
         };
-        let prefix_style = if line_index == 0 {
+        let prefix_style = if visible_line_index == 0 {
             bullet_style
         } else {
             body_style
         };
+        let segments =
+            assistant_segments_for_format(text_line, format, body_style, in_markdown_code_block);
         push_wrapped_segments(
             lines,
-            markdown_segments(text_line, body_style),
+            segments,
             prefix,
             "  ",
             prefix_style,
             body_style,
             content_width,
         );
+        visible_line_index += 1;
     }
+}
+
+fn assistant_segments_for_format(
+    text: &str,
+    format: &str,
+    body_style: Style,
+    in_markdown_code_block: bool,
+) -> Vec<StyledSegment> {
+    if in_markdown_code_block || is_code_like_format(format) {
+        return vec![StyledSegment::new(
+            text.to_string(),
+            body_style.fg(Color::Cyan),
+        )];
+    }
+    if is_markdown_format(format) {
+        return markdown_segments(text, body_style);
+    }
+    vec![StyledSegment::new(text.to_string(), body_style)]
+}
+
+fn is_markdown_format(format: &str) -> bool {
+    matches!(format.trim(), "markdown" | "md")
+}
+
+fn is_code_like_format(format: &str) -> bool {
+    matches!(format.trim(), "code" | "json" | "diff")
+}
+
+fn markdown_code_fence_language(text: &str) -> Option<&str> {
+    text.trim_start().strip_prefix("```").map(str::trim)
 }
 
 fn push_meta_item_lines(

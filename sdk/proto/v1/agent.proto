@@ -231,6 +231,9 @@ message AgentTurnDisplay {
   google.protobuf.Value input = 7;
   google.protobuf.Value output = 8;
   google.protobuf.Value error = 9;
+  string action = 10;
+  string format = 11;
+  string language = 12;
 }
 
 message CreateAgentProviderTurnRequest {

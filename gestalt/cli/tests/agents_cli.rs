@@ -59,22 +59,21 @@ const TURN_EVENTS_JSON: &str = r#"[
         "id":"evt-3",
         "turnId":"turn-1",
         "seq":3,
-        "type":"tool.completed",
+        "type":"tool.progress",
         "source":"managed",
         "visibility":"public",
-        "data":{"output":{"secret":"RAW_OUTPUT_SENTINEL"}},
-        "display":{"kind":"tool","phase":"completed","label":"lookup","ref":"call-lookup","text":"200","output":{"ok":true}},
+        "display":{"kind":"tool","phase":"progress","action":"Indexing","label":"lookup","ref":"call-lookup"},
         "createdAt":"2026-04-22T00:00:03Z"
     },
     {
         "id":"evt-4",
         "turnId":"turn-1",
         "seq":4,
-        "type":"turn.failed",
+        "type":"tool.completed",
         "source":"managed",
         "visibility":"public",
-        "data":{"error":"fallback failure"},
-        "display":{"kind":"error","phase":"failed","label":"turn","error":"display failure"},
+        "data":{"output":{"secret":"RAW_OUTPUT_SENTINEL"}},
+        "display":{"kind":"tool","phase":"completed","label":"lookup","ref":"call-lookup","text":"200","output":{"ok":true}},
         "createdAt":"2026-04-22T00:00:04Z"
     },
     {
@@ -84,31 +83,42 @@ const TURN_EVENTS_JSON: &str = r#"[
         "type":"turn.failed",
         "source":"managed",
         "visibility":"public",
-        "data":{"debug":"RAW_FAILED_SENTINEL"},
-        "display":{"kind":123,"text":"bad failure display"},
+        "data":{"error":"fallback failure"},
+        "display":{"kind":"error","phase":"failed","label":"turn","error":"display failure"},
         "createdAt":"2026-04-22T00:00:05Z"
     },
     {
         "id":"evt-6",
         "turnId":"turn-1",
         "seq":6,
-        "type":"provider.secret",
+        "type":"turn.failed",
         "source":"managed",
-        "visibility":"private",
-        "data":{"secret":"RAW_PRIVATE_SENTINEL"},
-        "display":{"kind":123,"text":"hidden"},
+        "visibility":"public",
+        "data":{"debug":"RAW_FAILED_SENTINEL"},
+        "display":{"kind":123,"text":"bad failure display"},
         "createdAt":"2026-04-22T00:00:06Z"
     },
     {
         "id":"evt-7",
         "turnId":"turn-1",
         "seq":7,
+        "type":"provider.secret",
+        "source":"managed",
+        "visibility":"private",
+        "data":{"secret":"RAW_PRIVATE_SENTINEL"},
+        "display":{"kind":123,"text":"hidden"},
+        "createdAt":"2026-04-22T00:00:07Z"
+    },
+    {
+        "id":"evt-8",
+        "turnId":"turn-1",
+        "seq":8,
         "type":"assistant.completed",
         "source":"managed",
         "visibility":"private",
         "data":{"text":"private known fallback"},
         "display":{"kind":123,"text":"bad display"},
-        "createdAt":"2026-04-22T00:00:07Z"
+        "createdAt":"2026-04-22T00:00:08Z"
     }
 ]"#;
 
@@ -448,6 +458,7 @@ fn test_cli_lists_agent_turn_events_table_uses_display_summary() {
         .stdout(predicate::str::contains("running"))
         .stdout(predicate::str::contains("assistant"))
         .stdout(predicate::str::contains("dependency"))
+        .stdout(predicate::str::contains("Indexing"))
         .stdout(predicate::str::contains("lookup"))
         .stdout(predicate::str::contains("completed"))
         .stdout(predicate::str::contains(r#"{"ok"#))
@@ -674,17 +685,18 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
         .with_header(header::CONTENT_TYPE.as_str(), "text/event-stream")
         .with_body(
             "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"input\":{\"ticket\":\"INC-42\"}}}\n\n\
-             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"ok\":true}}}\n\n\
-             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_INPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"redacted\",\"ref\":\"call-redacted\"}}\n\n\
-             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_OUTPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"redacted\",\"ref\":\"call-redacted\",\"text\":\"done\"}}\n\n\
-             data: {\"seq\":5,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"hello\"}}\n\n\
-             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"\\n  display\"}}\n\n\
-             data: {\"seq\":7,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"hello\\n  display\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
-             data: {\"seq\":8,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"raw fallback\"},\"display\":{\"kind\":123,\"text\":42}}\n\n\
-             data: {\"seq\":9,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"missing display text fallback\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
-             data: {\"seq\":10,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"tools synced\"}}\n\n\
-             data: {\"seq\":11,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"error\",\"phase\":\"failed\",\"text\":\"hidden secret\"}}\n\n\
-             data: {\"seq\":12,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"action\":\"Searching\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"halfway\"}}\n\n\
+             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"ok\":true}}}\n\n\
+             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_INPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"redacted\",\"ref\":\"call-redacted\"}}\n\n\
+             data: {\"seq\":5,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_OUTPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"redacted\",\"ref\":\"call-redacted\",\"text\":\"done\"}}\n\n\
+             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"hello\"}}\n\n\
+             data: {\"seq\":7,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"\\n  display\"}}\n\n\
+             data: {\"seq\":8,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"hello\\n  display\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":9,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"raw fallback\"},\"display\":{\"kind\":123,\"text\":42}}\n\n\
+             data: {\"seq\":10,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"missing display text fallback\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":11,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"tools synced\"}}\n\n\
+             data: {\"seq\":12,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"error\",\"phase\":\"failed\",\"text\":\"hidden secret\"}}\n\n\
+             data: {\"seq\":13,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         )
         .create();
     let _get_turn = authed_json_mock!(
@@ -714,6 +726,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
         .stdout(predicate::str::contains(
             r#"tool> lookup started {"ticket":"INC-42"}"#,
         ))
+        .stdout(predicate::str::contains("tool> Searching lookup: halfway"))
         .stdout(predicate::str::contains(
             r#"tool> lookup completed (200) {"ok":true}"#,
         ))
@@ -761,7 +774,7 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
             "/api/v1/agent/turns/turn-tty/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"agent.message.delta\",\"data\":{\"text\":\"hello\"}}\n\n\
+            "data: {\"seq\":1,\"type\":\"agent.message.delta\",\"data\":{\"text\":\"**hello**\"}}\n\n\
              data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
@@ -807,6 +820,10 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     assert!(
         output.contains("› hello tui") && output.contains("●"),
         "TTY transcript did not render highlighted user input and assistant bullet:\n{output}"
+    );
+    assert!(
+        !output.contains("**hello**"),
+        "TTY legacy assistant fallback did not preserve markdown rendering:\n{output}"
     );
     assert!(
         output.contains("managed/gpt-5.4")
@@ -928,10 +945,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
             "/api/v1/agent/turns/turn-display-tools/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_TUI_INPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"search\",\"ref\":\"call-search\",\"input\":{\"query\":\"roadmap\"}}}\n\n\
-             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"halfway\"}}\n\n\
-             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"almost done\"}}\n\n\
-             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_TUI_OUTPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"search\",\"ref\":\"call-search\",\"text\":\"200\",\"output\":{\"matches\":1}}}\n\n\
+            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_TUI_INPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"action\":\"Running\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"input\":{\"query\":\"sample\"}}}\n\n\
+             data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"halfway\"}}\n\n\
+             data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"almost done\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_TUI_OUTPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"action\":\"Ran\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"count\":1}}}\n\n\
              data: {\"seq\":5,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"sync complete\"}}\n\n\
              data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"tui\"}}\n\n\
              data: {\"seq\":7,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"tui suffix\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
@@ -965,10 +982,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("display tools\r");
-    session.wait_for(&mut output, "search");
-    session.wait_for(&mut output, "completed");
+    session.wait_for(&mut output, "lookup");
+    session.wait_for(&mut output, "Ran");
     session.wait_for(&mut output, "200");
-    session.wait_for(&mut output, "matches");
+    session.wait_for(&mut output, "count");
     session.wait_for(&mut output, "suffix");
     session.wait_for(&mut output, "done");
     session.wait_for(&mut output, "fallback");
@@ -985,7 +1002,8 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     );
     assert!(
         output.contains("●")
-            && output.contains("search")
+            && output.contains("Ran")
+            && output.contains("lookup")
             && output.contains("input")
             && output.contains("output")
             && output.contains("└─")
@@ -1392,7 +1410,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
             "/api/v1/agent/turns/turn-markdown/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"**Data Platform**\\nUse `searchIssues` with _active_ filters and [Linear](https://linear.app).\\nKeep user_profile_id and __init__ literal.\"}}\n\n\
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"RAW_MARKDOWN_FALLBACK\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\",\"format\":\"markdown\",\"text\":\"**Fixture Heading**\\nUse `lookupItems` with _active_ filters and [Reference](https://example.test).\\n```json\\n{\\\"ok\\\":true}\\n```\\nKeep record_id and __init__ literal.\"}}\n\n\
              data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
@@ -1406,7 +1424,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
                 "provider":"managed",
                 "model":"gpt-5.4",
                 "status":"succeeded",
-                "outputText":"**Data Platform**\nUse `searchIssues` with _active_ filters and [Linear](https://linear.app).\nKeep user_profile_id and __init__ literal."
+                "outputText":"**Fixture Heading**\nUse `lookupItems` with _active_ filters and [Reference](https://example.test).\n```json\n{\"ok\":true}\n```\nKeep record_id and __init__ literal."
             }"#,
         ),
     ]);
@@ -1420,22 +1438,25 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("render markdown\r");
-    session.wait_for(&mut output, "Data Platform");
-    session.wait_for(&mut output, "searchIssues");
+    session.wait_for(&mut output, "Fixture Heading");
+    session.wait_for(&mut output, "lookupItems");
     session.wait_for(&mut output, "active");
-    session.wait_for(&mut output, "Linear");
-    session.wait_for(&mut output, "https://linear.app");
-    session.wait_for(&mut output, "user_profile_id");
+    session.wait_for(&mut output, "Reference");
+    session.wait_for(&mut output, "https://example.test");
+    session.wait_for(&mut output, "ok");
+    session.wait_for(&mut output, "record_id");
     session.wait_for(&mut output, "__init__");
     session.wait_for(&mut output, "Brewed for");
     session.write("\x03");
     session.wait_for_exit();
 
     assert!(
-        !output.contains("**Data Platform**")
-            && !output.contains("`searchIssues`")
+        !output.contains("**Fixture Heading**")
+            && !output.contains("`lookupItems`")
             && !output.contains("_active_")
-            && !output.contains("[Linear]"),
+            && !output.contains("[Reference]")
+            && !output.contains("```")
+            && !output.contains("RAW_MARKDOWN_FALLBACK"),
         "TTY assistant markdown syntax was not rendered away:\n{output}"
     );
     server.assert_finished();

@@ -510,9 +510,10 @@ func turnEventDisplay(eventType string, data map[string]any) *proto.AgentTurnDis
 		}
 	case "assistant.completed":
 		return &proto.AgentTurnDisplay{
-			Kind:  "text",
-			Phase: "completed",
-			Text:  "provider assistant completed",
+			Kind:   "text",
+			Phase:  "completed",
+			Text:   "provider assistant completed",
+			Format: "markdown",
 		}
 	case "turn.completed":
 		return &proto.AgentTurnDisplay{

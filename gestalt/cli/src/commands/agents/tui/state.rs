@@ -7,14 +7,15 @@ use unicode_width::UnicodeWidthStr;
 
 use super::super::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo,
-    AgentTurnInfo, compact_json, display_status, display_text, display_tool_error,
-    display_tool_input, display_tool_label, display_tool_output, display_tool_ref,
-    display_value_text, number_any_field, pretty_json, string_any_field, string_field,
-    turn_event_display, value_any_field,
+    AgentTurnInfo, compact_json, display_action, display_format, display_language, display_status,
+    display_text, display_tool_error, display_tool_input, display_tool_label, display_tool_output,
+    display_tool_ref, display_value_text, number_any_field, pretty_json, string_any_field,
+    string_field, turn_event_display, value_any_field,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
 const TOOL_PREVIEW_MAX_WIDTH: usize = 120;
+const LEGACY_ASSISTANT_FORMAT: &str = "markdown";
 
 pub(super) struct AgentUiState {
     pub(super) session_id: String,
@@ -156,21 +157,21 @@ impl AgentUiState {
                 match display.phase.trim() {
                     "delta" => {
                         if let Some(text) = display_text(display) {
-                            self.push_assistant_delta(text);
+                            self.push_assistant_delta_display(text, display);
                         } else {
                             return false;
                         }
                     }
                     "completed" => {
                         if let Some(text) = display_text(display) {
-                            self.complete_assistant(text);
+                            self.complete_assistant_display(text, display);
                         } else {
                             return false;
                         }
                     }
                     _ => {
                         if let Some(text) = display_text(display) {
-                            self.push_assistant(text.to_string());
+                            self.push_assistant_display(text.to_string(), display);
                         } else {
                             return false;
                         }
@@ -321,10 +322,42 @@ impl AgentUiState {
 
     fn push_assistant(&mut self, text: String) {
         self.saw_assistant_output = true;
-        self.push(TranscriptKind::Assistant, text);
+        self.push_formatted(
+            TranscriptKind::Assistant,
+            text,
+            fallback_assistant_format(),
+            None,
+        );
+    }
+
+    fn push_assistant_display(&mut self, text: String, display: &AgentTurnDisplayInfo) {
+        self.saw_assistant_output = true;
+        self.push_formatted(
+            TranscriptKind::Assistant,
+            text,
+            display_format(display).map(ToString::to_string),
+            display_language(display).map(ToString::to_string),
+        );
     }
 
     fn push_assistant_delta(&mut self, text: &str) {
+        self.push_assistant_delta_formatted(text, fallback_assistant_format(), None);
+    }
+
+    fn push_assistant_delta_display(&mut self, text: &str, display: &AgentTurnDisplayInfo) {
+        self.push_assistant_delta_formatted(
+            text,
+            display_format(display).map(ToString::to_string),
+            display_language(display).map(ToString::to_string),
+        );
+    }
+
+    fn push_assistant_delta_formatted(
+        &mut self,
+        text: &str,
+        format: Option<String>,
+        language: Option<String>,
+    ) {
         self.saw_assistant_output = true;
         self.assistant_buffer.push_str(text);
         if let Some(last) = self.transcript.last_mut()
@@ -332,12 +365,40 @@ impl AgentUiState {
             && last.streaming
         {
             last.text.push_str(text);
+            if format.is_some() {
+                last.format = format;
+            }
+            if language.is_some() {
+                last.language = language;
+            }
             return;
         }
-        self.push_streaming(TranscriptKind::Assistant, text.to_string());
+        self.push_streaming_formatted(
+            TranscriptKind::Assistant,
+            text.to_string(),
+            format,
+            language,
+        );
     }
 
     fn complete_assistant(&mut self, text: &str) {
+        self.complete_assistant_formatted(text, fallback_assistant_format(), None);
+    }
+
+    fn complete_assistant_display(&mut self, text: &str, display: &AgentTurnDisplayInfo) {
+        self.complete_assistant_formatted(
+            text,
+            display_format(display).map(ToString::to_string),
+            display_language(display).map(ToString::to_string),
+        );
+    }
+
+    fn complete_assistant_formatted(
+        &mut self,
+        text: &str,
+        format: Option<String>,
+        language: Option<String>,
+    ) {
         self.saw_assistant_output = true;
         if let Some(last) = self.transcript.last_mut()
             && last.kind == TranscriptKind::Assistant
@@ -348,11 +409,22 @@ impl AgentUiState {
             } else if let Some(suffix) = text.strip_prefix(&self.assistant_buffer) {
                 last.text.push_str(suffix);
             }
+            if format.is_some() {
+                last.format = format;
+            }
+            if language.is_some() {
+                last.language = language;
+            }
             last.streaming = false;
             self.assistant_buffer.clear();
             return;
         }
-        self.push_assistant(text.to_string());
+        self.push_formatted(
+            TranscriptKind::Assistant,
+            text.to_string(),
+            format,
+            language,
+        );
         self.assistant_buffer.clear();
     }
 
@@ -477,21 +549,41 @@ impl AgentUiState {
     }
 
     fn push(&mut self, kind: TranscriptKind, text: String) {
+        self.push_formatted(kind, text, None, None);
+    }
+
+    fn push_formatted(
+        &mut self,
+        kind: TranscriptKind,
+        text: String,
+        format: Option<String>,
+        language: Option<String>,
+    ) {
         self.transcript.push(TranscriptItem {
             kind,
             text,
             streaming: false,
             tool_activity: None,
+            format,
+            language,
         });
         self.trim_transcript();
     }
 
-    fn push_streaming(&mut self, kind: TranscriptKind, text: String) {
+    fn push_streaming_formatted(
+        &mut self,
+        kind: TranscriptKind,
+        text: String,
+        format: Option<String>,
+        language: Option<String>,
+    ) {
         self.transcript.push(TranscriptItem {
             kind,
             text,
             streaming: true,
             tool_activity: None,
+            format,
+            language,
         });
         self.trim_transcript();
     }
@@ -602,6 +694,8 @@ impl TranscriptKind {
 pub(super) struct TranscriptItem {
     pub(super) kind: TranscriptKind,
     pub(super) text: String,
+    pub(super) format: Option<String>,
+    pub(super) language: Option<String>,
     streaming: bool,
     tool_activity: Option<ToolActivity>,
 }
@@ -612,6 +706,8 @@ impl TranscriptItem {
         Self {
             kind: TranscriptKind::Tool,
             text,
+            format: None,
+            language: None,
             streaming: false,
             tool_activity: Some(activity),
         }
@@ -631,6 +727,7 @@ impl TranscriptItem {
 pub(super) struct ToolActivity {
     key: Option<String>,
     name: String,
+    action: Option<String>,
     status: ToolActivityStatus,
     started_at: Option<Instant>,
     elapsed: Option<Duration>,
@@ -644,6 +741,7 @@ impl ToolActivity {
         Self {
             key: event_tool_key(event),
             name: event_tool_name(event),
+            action: None,
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
@@ -657,6 +755,7 @@ impl ToolActivity {
         Self {
             key: display_tool_ref(event, display),
             name: display_tool_label(event, display),
+            action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
@@ -670,6 +769,7 @@ impl ToolActivity {
         Self {
             key: progress.key.clone(),
             name: progress.name.clone(),
+            action: progress.action.clone(),
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
@@ -683,6 +783,7 @@ impl ToolActivity {
         let mut activity = Self {
             key: terminal.key.clone(),
             name: terminal.name.clone(),
+            action: terminal.action.clone(),
             status: ToolActivityStatus::Running,
             started_at: None,
             elapsed: None,
@@ -696,6 +797,9 @@ impl ToolActivity {
 
     fn finish(&mut self, terminal: ToolTerminalEvent) {
         self.status = terminal.status;
+        if terminal.action.is_some() {
+            self.action = terminal.action;
+        }
         if self.args.is_none() {
             self.args = terminal.args;
         }
@@ -707,6 +811,9 @@ impl ToolActivity {
     fn update_progress(&mut self, progress: ToolTerminalEvent) {
         if self.args.is_none() {
             self.args = progress.args;
+        }
+        if progress.action.is_some() {
+            self.action = progress.action;
         }
         if progress.output.is_some() {
             self.output = progress.output;
@@ -731,6 +838,10 @@ impl ToolActivity {
 
     pub(super) fn name(&self) -> &str {
         &self.name
+    }
+
+    pub(super) fn action(&self) -> Option<&str> {
+        self.action.as_deref()
     }
 
     pub(super) fn status_summary(&self) -> &'static str {
@@ -797,6 +908,7 @@ impl ToolActivity {
 struct ToolTerminalEvent {
     key: Option<String>,
     name: String,
+    action: Option<String>,
     status: ToolActivityStatus,
     args: Option<String>,
     output: Option<String>,
@@ -814,6 +926,7 @@ impl ToolTerminalEvent {
         Self {
             key: event_tool_key(event),
             name: event_tool_name(event),
+            action: None,
             status,
             args: preview_value(&event.data, &["arguments", "input", "request"]),
             output: preview_value(&event.data, &["output", "result", "body"]),
@@ -825,6 +938,7 @@ impl ToolTerminalEvent {
         Self {
             key: event_tool_key(event),
             name: event_tool_name(event),
+            action: None,
             status: ToolActivityStatus::Failed(tool_status(&event.data)),
             args: preview_value(&event.data, &["arguments", "input", "request"]),
             output: preview_value(&event.data, &["output", "result", "body"]),
@@ -843,6 +957,7 @@ impl ToolTerminalEvent {
         Self {
             key: display_tool_ref(event, display),
             name: display_tool_label(event, display),
+            action: display_action(display).map(ToString::to_string),
             status,
             args: preview_display_value(display_tool_input(event, display)),
             output: preview_display_value(display_tool_output(event, display)),
@@ -854,6 +969,7 @@ impl ToolTerminalEvent {
         Self {
             key: display_tool_ref(event, display),
             name: display_tool_label(event, display),
+            action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
             args: preview_display_value(display_tool_input(event, display)),
             output: preview_display_value(display_tool_output(event, display))
@@ -1025,4 +1141,8 @@ pub(super) fn turn_status_label(turn: &AgentTurnInfo) -> String {
     } else {
         turn.status.clone()
     }
+}
+
+fn fallback_assistant_format() -> Option<String> {
+    Some(LEGACY_ASSISTANT_FORMAT.to_string())
 }

@@ -97,7 +97,7 @@ func TestRemoteAgentPingRequiresAgentProviderSurface(t *testing.T) {
 func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
 	t.Parallel()
 
-	input, err := structpb.NewValue(map[string]any{"query": "docs"})
+	input, err := structpb.NewValue(map[string]any{"query": "fixture"})
 	if err != nil {
 		t.Fatalf("NewValue input: %v", err)
 	}
@@ -112,11 +112,14 @@ func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
 						Type:       "provider.tool",
 						Visibility: "public",
 						Display: &proto.AgentTurnDisplay{
-							Kind:  "tool",
-							Phase: "started",
-							Label: "Search docs",
-							Ref:   "call-1",
-							Input: input,
+							Kind:     "tool",
+							Phase:    "started",
+							Label:    "Lookup fixture",
+							Ref:      "call-1",
+							Action:   "Running",
+							Format:   "json",
+							Language: "json",
+							Input:    input,
 						},
 					}},
 				}, nil
@@ -132,12 +135,12 @@ func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
 		t.Fatalf("events len = %d, want 1", len(events))
 	}
 	display := events[0].Display
-	if display == nil || display.Kind != "tool" || display.Phase != "started" || display.Label != "Search docs" || display.Ref != "call-1" {
+	if display == nil || display.Kind != "tool" || display.Phase != "started" || display.Label != "Lookup fixture" || display.Ref != "call-1" || display.Action != "Running" || display.Format != "json" || display.Language != "json" {
 		t.Fatalf("display = %#v", display)
 	}
 	inputMap, ok := display.Input.(map[string]any)
-	if !ok || inputMap["query"] != "docs" {
-		t.Fatalf("display input = %#v, want query docs", display.Input)
+	if !ok || inputMap["query"] != "fixture" {
+		t.Fatalf("display input = %#v, want query fixture", display.Input)
 	}
 }
 
@@ -154,12 +157,15 @@ func TestTurnEventsToProtoPreservesEnvelopeWhenDataInvalid(t *testing.T) {
 			"bad": map[int]string{1: "not a protobuf struct"},
 		},
 		Display: &coreagent.TurnDisplay{
-			Kind:  "tool",
-			Phase: "started",
-			Label: "Search docs",
-			Ref:   "call-1",
+			Kind:     "tool",
+			Phase:    "started",
+			Label:    "Lookup fixture",
+			Ref:      "call-1",
+			Action:   "Running",
+			Format:   "json",
+			Language: "json",
 			Input: map[string]any{
-				"query": "docs",
+				"query": "fixture",
 			},
 		},
 	}})
@@ -171,11 +177,11 @@ func TestTurnEventsToProtoPreservesEnvelopeWhenDataInvalid(t *testing.T) {
 		t.Fatalf("event data = %#v, want omitted invalid data", events[0].GetData())
 	}
 	display := events[0].GetDisplay()
-	if display == nil || display.GetKind() != "tool" || display.GetPhase() != "started" || display.GetRef() != "call-1" {
+	if display == nil || display.GetKind() != "tool" || display.GetPhase() != "started" || display.GetRef() != "call-1" || display.GetAction() != "Running" || display.GetFormat() != "json" || display.GetLanguage() != "json" {
 		t.Fatalf("display = %#v", display)
 	}
 	inputMap := display.GetInput().GetStructValue().AsMap()
-	if inputMap["query"] != "docs" {
-		t.Fatalf("display input = %#v, want query docs", inputMap)
+	if inputMap["query"] != "fixture" {
+		t.Fatalf("display input = %#v, want query fixture", inputMap)
 	}
 }

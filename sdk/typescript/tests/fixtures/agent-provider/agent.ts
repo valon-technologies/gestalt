@@ -353,6 +353,7 @@ function turnEventDisplay(
         kind: "text",
         phase: "completed",
         text: "provider assistant completed",
+        format: "markdown",
       };
     case "turn.completed":
       return {

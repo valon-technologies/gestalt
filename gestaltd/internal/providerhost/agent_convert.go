@@ -375,6 +375,9 @@ func agentTurnDisplayFromProto(display *proto.AgentTurnDisplay) *coreagent.TurnD
 		Input:     protoValueToAny(display.GetInput()),
 		Output:    protoValueToAny(display.GetOutput()),
 		Error:     protoValueToAny(display.GetError()),
+		Action:    display.GetAction(),
+		Format:    display.GetFormat(),
+		Language:  display.GetLanguage(),
 	}
 }
 
@@ -404,6 +407,9 @@ func agentTurnDisplayToProto(display *coreagent.TurnDisplay) (*proto.AgentTurnDi
 		Input:     input,
 		Output:    output,
 		Error:     displayErr,
+		Action:    display.Action,
+		Format:    display.Format,
+		Language:  display.Language,
 	}, nil
 }
 

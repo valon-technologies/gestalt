@@ -445,6 +445,12 @@ struct AgentTurnDisplayInfo {
     output: Option<Value>,
     #[serde(default)]
     error: Option<Value>,
+    #[serde(default)]
+    action: String,
+    #[serde(default)]
+    format: String,
+    #[serde(default)]
+    language: String,
 }
 
 impl AgentTurnDisplayInfo {
@@ -462,6 +468,9 @@ impl AgentTurnDisplayInfo {
             input: data.remove("input"),
             output: data.remove("output"),
             error: data.remove("error"),
+            action: take_string_field(&mut data, "action"),
+            format: take_string_field(&mut data, "format"),
+            language: take_string_field(&mut data, "language"),
         })
     }
 }
@@ -985,16 +994,29 @@ impl AgentTurnRenderer {
     ) -> Result<bool> {
         self.finish_assistant_line();
         let tool = display_tool_label(event, display);
+        let action = display_action(display);
         match display.phase.trim() {
             "started" => {
-                print!("{} {tool} started", self.label("tool>"));
+                print!(
+                    "{} {}",
+                    self.label("tool>"),
+                    action
+                        .map(|action| format!("{action} {tool}"))
+                        .unwrap_or_else(|| format!("{tool} started"))
+                );
                 if let Some(input) = display_tool_input(event, display) {
                     print!(" {}", compact_json(input)?);
                 }
                 println!();
             }
             "completed" => {
-                print!("{} {tool} completed", self.label("tool>"));
+                print!(
+                    "{} {}",
+                    self.label("tool>"),
+                    action
+                        .map(|action| format!("{action} {tool}"))
+                        .unwrap_or_else(|| format!("{tool} completed"))
+                );
                 if let Some(status) = display_status(event, display) {
                     print!(" ({status})");
                 }
@@ -1006,7 +1028,13 @@ impl AgentTurnRenderer {
                 println!();
             }
             "failed" => {
-                print!("{} {tool} failed", self.label("tool>"));
+                print!(
+                    "{} {}",
+                    self.label("tool>"),
+                    action
+                        .map(|action| format!("{action} {tool}"))
+                        .unwrap_or_else(|| format!("{tool} failed"))
+                );
                 if let Some(status) = display_status(event, display) {
                     print!(" ({status})");
                 }
@@ -1015,13 +1043,20 @@ impl AgentTurnRenderer {
                 }
                 println!();
             }
-            "progress" => {
-                if let Some(text) = display_text(display) {
+            "progress" => match (action, display_text(display)) {
+                (Some(action), Some(text)) => {
+                    println!("{} {action} {tool}: {text}", self.label("tool>"));
+                }
+                (Some(action), None) => {
+                    println!("{} {action} {tool}", self.label("tool>"));
+                }
+                (None, Some(text)) => {
                     println!("{} {tool} {text}", self.label("tool>"));
-                } else {
+                }
+                (None, None) => {
                     println!("{} {tool} progress", self.label("tool>"));
                 }
-            }
+            },
             _ => return Ok(false),
         }
         Ok(true)
@@ -1617,6 +1652,18 @@ fn display_ref(display: &AgentTurnDisplayInfo) -> Option<&str> {
     non_empty_str(&display.display_ref)
 }
 
+fn display_action(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    non_empty_str(&display.action)
+}
+
+fn display_format(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    non_empty_str(&display.format)
+}
+
+fn display_language(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    non_empty_str(&display.language)
+}
+
 fn display_tool_label(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> String {
     display_label(display)
         .or_else(|| display_ref(display))
@@ -2107,12 +2154,21 @@ fn tool_display_summary(
 ) -> Option<String> {
     let tool = display_tool_label(event, display);
     let mut summary = match display.phase.trim() {
-        "started" => format!("{tool} started"),
-        "completed" => format!("{tool} completed"),
-        "failed" => format!("{tool} failed"),
-        "progress" => display_text(display)
-            .map(|text| format!("{tool} {text}"))
-            .unwrap_or_else(|| format!("{tool} progress")),
+        "started" => display_action(display)
+            .map(|action| format!("{action} {tool}"))
+            .unwrap_or_else(|| format!("{tool} started")),
+        "completed" => display_action(display)
+            .map(|action| format!("{action} {tool}"))
+            .unwrap_or_else(|| format!("{tool} completed")),
+        "failed" => display_action(display)
+            .map(|action| format!("{action} {tool}"))
+            .unwrap_or_else(|| format!("{tool} failed")),
+        "progress" => match (display_action(display), display_text(display)) {
+            (Some(action), Some(text)) => format!("{action} {tool}: {text}"),
+            (Some(action), None) => format!("{action} {tool}"),
+            (None, Some(text)) => format!("{tool} {text}"),
+            (None, None) => format!("{tool} progress"),
+        },
         phase if !phase.is_empty() => format!("{tool} {phase}"),
         _ => tool,
     };

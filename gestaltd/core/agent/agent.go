@@ -261,6 +261,9 @@ type TurnDisplay struct {
 	Input     any
 	Output    any
 	Error     any
+	Action    string
+	Format    string
+	Language  string
 }
 
 type ListTurnEventsRequest struct {
