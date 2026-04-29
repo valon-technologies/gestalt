@@ -96,12 +96,11 @@ that page with your normal browser session creates an owner-scoped attachment
 only when your resolved role is allowed by the plugin's provider-dev attach
 configuration. The terminal prints a verification code, and the browser approval
 page requires that code before approval succeeds. `--remote-token` and
-`GESTALT_API_KEY` are the non-interactive path; those API tokens must include
-`permissions[].actions:
-["provider_dev.attach"]` for every attached plugin. If a stored CLI token exists
-for the same server, the CLI first tries it for direct attach and falls back to
-browser approval when it is not attach-scoped. Stored CLI tokens are not sent to
-a different remote URL, including a different path prefix on the same host.
+`GESTALT_API_KEY` are the non-interactive direct-attach path; those API tokens
+must include `permissions[].actions: ["provider_dev.attach"]` for every attached
+plugin. Stored CLI credentials from `gestaltd auth login` are not used for
+direct attach; when no explicit token is provided, `provider dev --remote` uses
+browser approval.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
 the configured plugin with the same manifest `source` and preserves that

@@ -894,15 +894,13 @@ acknowledgement. On a load-balanced remote, enable it only when the deployment
 is single-replica or sticky-routes attach creation, CLI poll/complete traffic,
 provider invocations, and provider-owned UI requests for the same authenticated
 owner to the same `gestaltd` process.
-Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY`, then a
-stored CLI token when the stored credential's server base URL matches
-`--remote`. An API token used for direct attach must include
-`permissions[].actions: ["provider_dev.attach"]` for every attached plugin. A
-stored CLI token without that action is not enough for direct attach, so the CLI
-falls back to browser approval when available. A stored credential for a
-different server URL, including a different path prefix on the same host, is not
-sent; the browser approval flow is used instead. Use `--remote-token` or
-`GESTALT_API_KEY` for non-interactive automation.
+Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY` for
+non-interactive direct attach. Stored CLI credentials are intentionally not used
+for direct attach; without an explicit token, the CLI uses browser approval. An
+API token used for direct attach must include
+`permissions[].actions: ["provider_dev.attach"]` for every attached plugin.
+Stored CLI credentials are not sent on the direct attach path. Use
+`--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
 
 Remote attach creates an owner-scoped attachment. The server returns an
 `attachId` and a one-time dispatcher secret; the CLI uses both for local
