@@ -36,7 +36,7 @@ const (
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/external_credentials/default"
 	DefaultExternalCredentialsVersion  = "0.0.1-alpha.1"
 	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
-	DefaultUIVersion                   = "0.0.1-alpha.17"
+	DefaultUIVersion                   = "0.0.1-alpha.18"
 	DefaultProviderInstance            = "default"
 )
 
