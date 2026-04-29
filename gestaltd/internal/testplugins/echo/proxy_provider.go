@@ -791,12 +791,14 @@ func workflowTargetInputToProto(target workflowScheduleTargetInput) (*proto.Boun
 		return nil, err
 	}
 	return &proto.BoundWorkflowTarget{
-		Plugin: &proto.BoundWorkflowPluginTarget{
-			PluginName: target.Plugin,
-			Operation:  target.Operation,
-			Connection: target.Connection,
-			Instance:   target.Instance,
-			Input:      input,
+		Kind: &proto.BoundWorkflowTarget_Plugin{
+			Plugin: &proto.BoundWorkflowPluginTarget{
+				PluginName: target.Plugin,
+				Operation:  target.Operation,
+				Connection: target.Connection,
+				Instance:   target.Instance,
+				Input:      input,
+			},
 		},
 	}, nil
 }

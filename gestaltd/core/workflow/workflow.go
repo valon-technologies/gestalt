@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -307,7 +306,7 @@ type Host interface {
 }
 
 func TargetsEqual(left, right Target) bool {
-	if targetHasMixedKinds(left) || targetHasMixedKinds(right) {
+	if (left.Agent != nil && left.Plugin != nil) || (right.Agent != nil && right.Plugin != nil) {
 		return false
 	}
 	leftJSON, leftErr := json.Marshal(normalizedTargetComparisonPayload(left))
@@ -316,13 +315,6 @@ func TargetsEqual(left, right Target) bool {
 	}
 	rightJSON, rightErr := json.Marshal(normalizedTargetComparisonPayload(right))
 	return rightErr == nil && bytes.Equal(leftJSON, rightJSON)
-}
-
-func targetHasMixedKinds(target Target) bool {
-	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
-		return true
-	}
-	return false
 }
 
 type targetComparisonPayload struct {
@@ -352,7 +344,7 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		out.Agent = &agentTarget
 		return out
 	}
-	if target.Plugin != nil && PluginTargetSet(*target.Plugin) {
+	if target.Plugin != nil {
 		pluginTarget := *target.Plugin
 		if len(pluginTarget.Input) == 0 {
 			pluginTarget.Input = nil
@@ -360,18 +352,4 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		out.Plugin = &pluginTarget
 	}
 	return out
-}
-
-// PluginTargetSet reports whether a workflow target contains any plugin target field.
-func PluginTargetSet(target PluginTarget) bool {
-	return !PluginTargetEmpty(target)
-}
-
-// PluginTargetEmpty reports whether a workflow target has no plugin target fields.
-func PluginTargetEmpty(target PluginTarget) bool {
-	return strings.TrimSpace(target.PluginName) == "" &&
-		strings.TrimSpace(target.Operation) == "" &&
-		strings.TrimSpace(target.Connection) == "" &&
-		strings.TrimSpace(target.Instance) == "" &&
-		len(target.Input) == 0
 }

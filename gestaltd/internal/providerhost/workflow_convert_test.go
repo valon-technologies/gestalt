@@ -48,12 +48,14 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Plugin: &proto.BoundWorkflowPluginTarget{
-			PluginName: " demo ",
-			Operation:  " refresh ",
-			Connection: " workspace ",
-			Instance:   " primary ",
-			Input:      input,
+		Kind: &proto.BoundWorkflowTarget_Plugin{
+			Plugin: &proto.BoundWorkflowPluginTarget{
+				PluginName: " demo ",
+				Operation:  " refresh ",
+				Connection: " workspace ",
+				Instance:   " primary ",
+				Input:      input,
+			},
 		},
 	})
 	if target.Plugin == nil {
@@ -95,19 +97,14 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 }
 
-func TestWorkflowTargetFromProtoRejectsNestedPluginAndAgent(t *testing.T) {
+func TestWorkflowTargetFromProtoPreservesEmptyPluginKind(t *testing.T) {
 	t.Parallel()
 
-	_, err := workflowTargetFromProtoStrict(&proto.BoundWorkflowTarget{
-		Plugin: &proto.BoundWorkflowPluginTarget{
-			PluginName: "demo",
-		},
-		Agent: &proto.BoundWorkflowAgentTarget{
-			ProviderName: "openai",
-		},
+	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
+		Kind: &proto.BoundWorkflowTarget_Plugin{Plugin: &proto.BoundWorkflowPluginTarget{}},
 	})
-	if err == nil {
-		t.Fatal("workflowTargetFromProtoStrict succeeded, want error")
+	if target.Plugin == nil {
+		t.Fatal("plugin target is nil")
 	}
 }
 

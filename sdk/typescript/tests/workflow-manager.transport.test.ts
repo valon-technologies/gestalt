@@ -26,6 +26,15 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
+function workflowPluginTarget(pluginName: string, operation: string) {
+  return {
+    kind: {
+      case: "plugin" as const,
+      value: { pluginName, operation },
+    },
+  };
+}
+
 test("WorkflowManager forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-manager-"));
   const socketPath = join(tempDir, "workflow-manager.sock");
@@ -240,12 +249,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "basic",
       cron: "*/5 * * * *",
       timezone: "UTC",
-      target: {
-        plugin: {
-          pluginName: "roadmap",
-          operation: "sync",
-        },
-      },
+      target: workflowPluginTarget("roadmap", "sync"),
       paused: false,
     });
 
@@ -261,12 +265,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "secondary",
       cron: "0 * * * *",
       timezone: "America/New_York",
-      target: {
-        plugin: {
-          pluginName: "roadmap",
-          operation: "status",
-        },
-      },
+      target: workflowPluginTarget("roadmap", "status"),
       paused: true,
     });
     const paused = await fromRequest.pauseSchedule({ scheduleId: "sched-1" });
@@ -278,12 +277,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         type: "roadmap.item.updated",
         source: "roadmap",
       },
-      target: {
-        plugin: {
-          pluginName: "slack",
-          operation: "chat.postMessage",
-        },
-      },
+      target: workflowPluginTarget("slack", "chat.postMessage"),
       paused: false,
     });
     const fetchedTrigger = await fromRequest.getTrigger({ triggerId: "trg-1" });
@@ -293,12 +287,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       match: {
         type: "roadmap.item.synced",
       },
-      target: {
-        plugin: {
-          pluginName: "slack",
-          operation: "chat.postMessage",
-        },
-      },
+      target: workflowPluginTarget("slack", "chat.postMessage"),
       paused: true,
     });
     const pausedTrigger = await fromRequest.pauseTrigger({

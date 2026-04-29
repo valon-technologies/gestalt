@@ -523,6 +523,7 @@ describe("IndexedDB transport", () => {
     expect(cursor!.value).toEqual({ id: "u1", status: "inactive" });
     const got = await os.get("u1");
     expect(got).toEqual({ id: "u1", status: "inactive" });
+    cursor!.close();
   });
 
   test("error mapping: get missing throws NotFoundError", async () => {

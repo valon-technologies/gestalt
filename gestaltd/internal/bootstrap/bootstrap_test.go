@@ -1855,6 +1855,17 @@ func coreWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target 
 	}
 }
 
+func protoWorkflowPluginTarget(pluginName, operation string) *proto.BoundWorkflowTarget {
+	return &proto.BoundWorkflowTarget{
+		Kind: &proto.BoundWorkflowTarget_Plugin{
+			Plugin: &proto.BoundWorkflowPluginTarget{
+				PluginName: pluginName,
+				Operation:  operation,
+			},
+		},
+	}
+}
+
 func workflowFixtureTargetPlugin(target *config.WorkflowTargetConfig) string {
 	if target == nil || target.Plugin == nil {
 		return ""
@@ -5738,12 +5749,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}
 		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "roadmap",
-					Operation:  "sync",
-				},
-			},
+			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -5796,12 +5802,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}
 		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "roadmap",
-					Operation:  "sync",
-				},
-			},
+			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -5859,12 +5860,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "roadmap",
-					Operation:  "sync",
-				},
-			},
+			Target: protoWorkflowPluginTarget("roadmap", "sync"),
 		})
 		if err == nil {
 			return nil, fmt.Errorf("expected startup callback execution_ref failure")
@@ -6378,12 +6374,7 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 		t.Fatal("execution ref is empty")
 	}
 	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-		Target: &proto.BoundWorkflowTarget{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
-			},
-		},
+		Target:       protoWorkflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: executionRef,
 	})
 	if err != nil {
@@ -6462,12 +6453,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}
 				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target: &proto.BoundWorkflowTarget{
-						Plugin: &proto.BoundWorkflowPluginTarget{
-							PluginName: "roadmap",
-							Operation:  "sync",
-						},
-					},
+					Target:       protoWorkflowPluginTarget("roadmap", "sync"),
 					ExecutionRef: executionRef,
 				})
 				if err != nil {

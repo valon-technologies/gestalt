@@ -9908,10 +9908,18 @@ pub mod s3_object_access_server {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
-    #[prost(message, optional, tag = "6")]
-    pub plugin: ::core::option::Option<BoundWorkflowPluginTarget>,
-    #[prost(message, optional, tag = "7")]
-    pub agent: ::core::option::Option<BoundWorkflowAgentTarget>,
+    #[prost(oneof = "bound_workflow_target::Kind", tags = "6, 7")]
+    pub kind: ::core::option::Option<bound_workflow_target::Kind>,
+}
+/// Nested message and enum types in `BoundWorkflowTarget`.
+pub mod bound_workflow_target {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "6")]
+        Plugin(super::BoundWorkflowPluginTarget),
+        #[prost(message, tag = "7")]
+        Agent(super::BoundWorkflowAgentTarget),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowPluginTarget {

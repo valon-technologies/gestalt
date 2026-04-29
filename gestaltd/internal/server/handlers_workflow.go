@@ -291,21 +291,9 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 }
 
 func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
-	hasPlugin := workflowScheduleTargetRequestHasPluginFields(target)
+	hasPlugin := target.Plugin != nil
 	hasAgent := target.Agent != nil
 	return hasPlugin != hasAgent
-}
-
-func workflowScheduleTargetRequestHasPluginFields(target workflowScheduleTargetRequest) bool {
-	return workflowPluginTargetRequestHasFields(workflowPluginTargetFromRequest(target.Plugin))
-}
-
-func workflowPluginTargetRequestHasFields(target workflowPluginTargetRequest) bool {
-	return strings.TrimSpace(target.Name) != "" ||
-		strings.TrimSpace(target.Operation) != "" ||
-		strings.TrimSpace(target.Connection) != "" ||
-		strings.TrimSpace(target.Instance) != "" ||
-		len(target.Input) > 0
 }
 
 func workflowScheduleTargetErrorPlugin(target workflowScheduleTargetRequest) string {

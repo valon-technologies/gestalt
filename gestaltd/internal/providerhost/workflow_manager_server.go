@@ -468,10 +468,7 @@ func workflowManagerScheduleUpsert(
 }
 
 func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
-	target, err := workflowTargetFromProtoStrict(targetProto)
-	if err != nil {
-		return coreworkflow.Target{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
-	}
+	target := workflowTargetFromProto(targetProto)
 	if target.Agent == nil {
 		if target.Plugin == nil {
 			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")

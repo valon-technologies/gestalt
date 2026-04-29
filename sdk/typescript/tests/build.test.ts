@@ -90,6 +90,15 @@ async function waitForSocket(
   }
 }
 
+function workflowPluginTarget(pluginName: string, operation: string) {
+  return {
+    kind: {
+      case: "plugin" as const,
+      value: { pluginName, operation },
+    },
+  };
+}
+
 test("build arg parsing validates required arguments", () => {
   expect(
     parseBuildArgs([
@@ -901,15 +910,13 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
-        target: {
-          plugin: {
-            pluginName: "roadmap",
-            operation: "sync",
-          },
-        },
+        target: workflowPluginTarget("roadmap", "sync"),
       }),
     );
-    expect(run.target?.plugin?.pluginName).toBe("roadmap");
+    if (run.target?.kind.case !== "plugin") {
+      throw new Error("workflow run target is not a plugin target");
+    }
+    expect(run.target.kind.value.pluginName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

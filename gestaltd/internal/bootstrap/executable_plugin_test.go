@@ -1002,9 +1002,11 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		Cron:            "*/5 * * * *",
 		Timezone:        "UTC",
 		Target: &proto.BoundWorkflowTarget{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+			Kind: &proto.BoundWorkflowTarget_Plugin{
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "sync",
+				},
 			},
 		},
 	})
