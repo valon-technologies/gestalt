@@ -166,7 +166,7 @@ plugins:
   example:
     source:
       path: %s
-`, config.APIVersionV3, tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
+`, config.ConfigAPIVersion, tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("write config: %v", err)
 			}
@@ -190,7 +190,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: canonical-config-shapes-key
   providers:
@@ -322,7 +322,7 @@ server:
 		},
 		{
 			name: "unknown field",
-			cfg: `apiVersion: gestaltd.config/v3
+			cfg: `apiVersion: gestaltd.config/v4
 server:
   encryptionKey: test-key
   bogus: true
@@ -331,7 +331,7 @@ server:
 		},
 		{
 			name: "ui object requires path",
-			cfg: `apiVersion: gestaltd.config/v3
+			cfg: `apiVersion: gestaltd.config/v4
 plugins:
   roadmap:
     source:
@@ -419,7 +419,7 @@ func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	pluginDir := setupPluginDir(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v3
+	cfg := `apiVersion: gestaltd.config/v4
 plugins:
   provider_go:
     source: https://example.test/provider-release.yaml
@@ -478,7 +478,7 @@ func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
 	}
 
 	baseCfgPath := filepath.Join(dir, "support.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 providers:
   ui:
     roadmap:
@@ -498,7 +498,7 @@ plugins:
 	}
 
 	overrideCfgPath := filepath.Join(dir, "support-override.yaml")
-	overrideCfg := `apiVersion: gestaltd.config/v3
+	overrideCfg := `apiVersion: gestaltd.config/v4
 providers:
   ui:
     roadmap: null
@@ -661,7 +661,7 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	setupPluginDir(t, overrideDir)
 
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
-	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: test-key
   providers:
@@ -683,7 +683,7 @@ plugins:
 	}
 
 	overrideConfigPath := filepath.Join(overrideDir, "local.yaml")
-	overrideConfig := `apiVersion: gestaltd.config/v3
+	overrideConfig := `apiVersion: gestaltd.config/v4
 plugins:
   example:
     source:
@@ -709,23 +709,6 @@ plugins:
 		t.Fatalf("expected layered config output to mention success, got: %s", out)
 	}
 
-	mixedOverrideConfigPath := filepath.Join(overrideDir, "v4.yaml")
-	mixedOverrideConfig := `apiVersion: gestaltd.config/v4
-plugins:
-  example:
-    source: ./plugin-src/provider-release.yaml
-`
-	if err := os.WriteFile(mixedOverrideConfigPath, []byte(mixedOverrideConfig), 0o644); err != nil {
-		t.Fatalf("WriteFile mixed override config: %v", err)
-	}
-
-	out, err = exec.Command(gestaltdBin, "validate", "--config", baseConfigPath, "--config", mixedOverrideConfigPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected mixed apiVersion validate to fail, output: %s", out)
-	}
-	if !strings.Contains(string(out), "mixed apiVersion values") {
-		t.Fatalf("expected mixed apiVersion error, got: %s", out)
-	}
 }
 
 func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.T) {
@@ -736,7 +719,7 @@ func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: test-key
   providers:
@@ -798,7 +781,7 @@ func TestE2EValidateRejectsInvalidPluginInvokesDependency(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: test-key
   providers:
@@ -871,7 +854,7 @@ paths:
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: test-key
   providers:
@@ -1659,7 +1642,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d
@@ -1704,7 +1687,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d
@@ -2295,7 +2278,7 @@ func TestE2EServePluginOwnedUIWiring(t *testing.T) {
 	publicPort, publicHolder := reservePort(t)
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
 	cfgPath := filepath.Join(dir, "config-owned-ui.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d
@@ -2385,7 +2368,7 @@ func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 	cfgPath := filepath.Join(dir, "config-cache.yaml")
 
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: 0
@@ -2483,7 +2466,7 @@ func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cfgPath := filepath.Join(dir, "config-subject-resolution.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d
@@ -2793,7 +2776,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: valid-config-e2e-key
   providers:
@@ -2825,7 +2808,7 @@ func writeInvalidValidateConfig(t *testing.T, path string) {
 	dir := filepath.Dir(path)
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   encryptionKey: invalid-config-e2e-key
   providers:
@@ -2879,7 +2862,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 
 	basePath := filepath.Join(deployDir, "base.yaml")
 	overridePath := filepath.Join(overrideDir, "local.yaml")
-	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d
@@ -2901,7 +2884,7 @@ plugins:
     source:
       path: %s
 `, port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
-	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: local
@@ -2935,7 +2918,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: %d

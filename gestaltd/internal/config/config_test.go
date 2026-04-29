@@ -41,7 +41,7 @@ func withDefaultConfigAPIVersion(content string) string {
 	if strings.HasPrefix(trimmed, "apiVersion:") {
 		return content
 	}
-	return "\napiVersion: " + APIVersionV3 + "\n" + strings.TrimLeft(content, "\r\n")
+	return "\napiVersion: " + ConfigAPIVersion + "\n" + strings.TrimLeft(content, "\r\n")
 }
 
 func mustSelectedProvider(t *testing.T, cfg *Config, kind HostProviderKind) (string, *ProviderEntry) {
@@ -66,7 +66,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: google
@@ -408,7 +408,7 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   encryptionKey: server-key
   providers:
@@ -477,7 +477,7 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: local
@@ -536,7 +536,7 @@ func TestLoadConfigAcceptsAuthenticationConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: local
@@ -835,7 +835,7 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 			t.Parallel()
 
 			cfg := &Config{
-				APIVersion: APIVersionV3,
+				APIVersion: ConfigAPIVersion,
 				Authorization: AuthorizationConfig{
 					Policies: map[string]SubjectPolicyDef{
 						"roadmap": {
@@ -1202,7 +1202,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
@@ -1213,8 +1213,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.APIVersion != APIVersionV3 {
-			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, APIVersionV3)
+		if cfg.APIVersion != ConfigAPIVersion {
+			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, ConfigAPIVersion)
 		}
 		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
 			t.Fatalf("unexpected plugin source path: %q", got)
@@ -1225,7 +1225,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
@@ -1256,8 +1256,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.APIVersion != APIVersionV4 {
-			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, APIVersionV4)
+		if cfg.APIVersion != ConfigAPIVersion {
+			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, ConfigAPIVersion)
 		}
 		if got := cfg.Plugins["custom_tool"].SourceReleasePath(); got != filepath.Join(filepath.Dir(path), "dist", "provider-release.yaml") {
 			t.Fatalf("unexpected plugin release metadata path: %q", got)
@@ -1271,7 +1271,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   workflow:
     demo:
@@ -1292,7 +1292,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   ui:
     dashboard:
@@ -1314,7 +1314,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
@@ -1397,7 +1397,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: corporate
@@ -1476,7 +1476,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: corporate
@@ -1537,7 +1537,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
@@ -1642,7 +1642,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   secrets:
     default:
@@ -2123,7 +2123,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   externalCredentials:
     default:
@@ -3766,7 +3766,7 @@ func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   encryptionKey: server-key
 plugins:
@@ -3789,7 +3789,7 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 plugins:
   service:
     execution:
@@ -3879,7 +3879,7 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   authentication:
     primary:
@@ -3889,7 +3889,7 @@ providers:
 		{
 			name: "apiVersion scalar local source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -3899,7 +3899,7 @@ plugins:
 		{
 			name: "apiVersion metadata url with plugin route auth",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: corporate
@@ -3917,7 +3917,7 @@ plugins:
 		{
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -3930,7 +3930,7 @@ plugins:
 		{
 			name: "provider metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   authentication:
     primary:
@@ -4007,7 +4007,7 @@ plugins:
 		{
 			name: "provider auth override is rejected outside plugins",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   cache:
     shared:
@@ -4086,7 +4086,7 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
   external:
@@ -4187,7 +4187,7 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "metadata source plugin only",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
@@ -4268,12 +4268,12 @@ plugins:
     external:
       {}
 `,
-			wantErr: "source.path or metadata URL is required",
+			wantErr: "source.path or provider-release metadata URL is required",
 		},
 		{
 			name: "apiVersion route auth override is valid",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: corporate
@@ -4291,7 +4291,7 @@ plugins:
 		{
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4307,7 +4307,7 @@ plugins:
 		{
 			name: "apiVersion github release source requires repo",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4321,7 +4321,7 @@ plugins:
 		{
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4336,7 +4336,7 @@ plugins:
 		{
 			name: "apiVersion nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4349,7 +4349,7 @@ plugins:
 		{
 			name: "plugin auth override is valid alongside nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   providers:
     authentication: corporate
@@ -4370,7 +4370,7 @@ plugins:
 		{
 			name: "plugin auth override rejects source auth token mix",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4384,7 +4384,7 @@ plugins:
 		{
 			name: "plugin auth override rejects unknown auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4397,7 +4397,7 @@ plugins:
 		{
 			name: "plugin auth override rejects server alias without configured auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4410,7 +4410,7 @@ plugins:
 		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4454,7 +4454,7 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion v4 rejects local source manifests",
+			name: "apiVersion accepts local source manifests",
 			yaml: `
 apiVersion: gestaltd.config/v4
 providers:
@@ -4462,12 +4462,11 @@ plugins:
     external:
       source: ./plugins/dummy/manifest.yaml
 `,
-			wantErr: "source.path must reference provider-release.yaml metadata",
 		},
 		{
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4477,18 +4476,18 @@ plugins:
 		{
 			name: "apiVersion rejects git scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
       source: git+ssh://git@github.com/example/external.git
 `,
-			wantErr: "git+ sources are not supported in apiVersion v3 configs",
+			wantErr: "git+ sources are not supported",
 		},
 		{
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4499,7 +4498,7 @@ plugins:
 		{
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4510,7 +4509,7 @@ plugins:
 		{
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
@@ -4521,7 +4520,7 @@ plugins:
 		{
 			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   telemetry:
     default:
@@ -4647,7 +4646,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					"sample": {},
 				},
 			},
-			wantErr: "source.path or metadata URL is required",
+			wantErr: "source.path or provider-release metadata URL is required",
 		},
 		{
 			name: "authentication provider valid",
@@ -4668,7 +4667,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					Authentication: singletonProviderEntry(&ProviderEntry{}),
 				},
 			},
-			wantErr: `source.path or metadata URL is required`,
+			wantErr: `source.path or provider-release metadata URL is required`,
 		},
 		{
 			name: "authentication config requires source",
@@ -4677,7 +4676,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					Authentication: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
 				},
 			},
-			wantErr: `source.path or metadata URL is required`,
+			wantErr: `source.path or provider-release metadata URL is required`,
 		},
 		{
 			name: "plugin auth rejects mcp oauth early",
@@ -4711,7 +4710,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			if tc.cfg != nil && strings.TrimSpace(tc.cfg.APIVersion) == "" {
-				tc.cfg.APIVersion = APIVersionV3
+				tc.cfg.APIVersion = ConfigAPIVersion
 			}
 			err := ValidateStructure(tc.cfg)
 			if tc.wantErr == "" {
@@ -4748,7 +4747,7 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   authentication:
     authentication:
@@ -4799,7 +4798,7 @@ func TestLoadPaths_ResolvesRelativeScalarSourcePathsPerFile(t *testing.T) {
 		t.Fatalf("MkdirAll base: %v", err)
 	}
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     sample:
@@ -4813,7 +4812,7 @@ plugins:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
 plugins:
     sample:
@@ -4837,7 +4836,7 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 providers:
   authentication:
     authentication:
@@ -4942,7 +4941,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v3
+	cfg := `apiVersion: gestaltd.config/v4
 providers:
 plugins:
     sample:

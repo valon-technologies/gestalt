@@ -1,4 +1,4 @@
-apiVersion: gestaltd.config/v3
+apiVersion: gestaltd.config/v4
 server:
   encryptionKey: dev-key-for-example-only
   providers:
