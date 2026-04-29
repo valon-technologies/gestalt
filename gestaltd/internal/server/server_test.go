@@ -6099,7 +6099,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 			}
 		},
 	}
-	createBody := []byte(`{"providers":[{"name":"roadmap","ui":{}}]}`)
+	createBody := []byte(`{"providers":[{"name":"roadmap","ui":true}]}`)
 
 	disabledTS := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = auth

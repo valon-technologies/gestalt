@@ -239,7 +239,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 			return fmt.Errorf("prepare provider dev remote ui for plugins.%s: %w", target.Name, err)
 		}
 		if hasUI {
-			requested.UI = &providerdev.AttachUI{}
+			requested.UI = true
 			localUIHandlersByTarget[i] = uiHandler
 		}
 		requestedProviders = append(requestedProviders, requested)
