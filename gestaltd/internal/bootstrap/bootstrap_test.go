@@ -68,11 +68,16 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 	if !ok {
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("workflow target fingerprint: %v", err)
+	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
+		ID:                fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName:      providerName,
+		Target:            target,
+		TargetFingerprint: targetFingerprint,
+		SubjectID:         "system:config",
 		Permissions: []core.AccessPermission{{
 			Plugin:     pluginTarget.PluginName,
 			Operations: []string{pluginTarget.Operation},
@@ -4921,67 +4926,6 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	}
 	if ref.RevokedAt != nil {
 		t.Fatalf("revokedAt = %#v, want nil", ref.RevokedAt)
-	}
-}
-
-func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenFingerprintMissing(t *testing.T) {
-	t.Parallel()
-
-	db := &coretesting.StubIndexedDB{}
-	provider := &recordingWorkflowProvider{}
-	factories := validFactories()
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	_ = result.Close(context.Background())
-	provider.executionRefs[initialExecutionRef].TargetFingerprint = ""
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap replay: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	refreshedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
-	if refreshedExecutionRef == initialExecutionRef {
-		t.Fatalf("execution ref = %q, want refreshed ref after missing target fingerprint", refreshedExecutionRef)
-	}
-	oldRef, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get old execution ref: %v", err)
-	}
-	if oldRef.RevokedAt == nil {
-		t.Fatal("old execution ref revokedAt = nil, want revoked")
-	}
-	newRef, err := provider.GetExecutionReference(context.Background(), refreshedExecutionRef)
-	if err != nil {
-		t.Fatalf("Get refreshed execution ref: %v", err)
-	}
-	if strings.TrimSpace(newRef.TargetFingerprint) == "" {
-		t.Fatal("refreshed execution ref target fingerprint is empty")
 	}
 }
 

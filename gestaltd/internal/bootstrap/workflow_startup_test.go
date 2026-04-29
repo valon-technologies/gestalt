@@ -246,12 +246,17 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 	if !ok {
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("workflow target fingerprint: %v", err)
+	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
-		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+		ID:                fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName:      providerName,
+		Target:            target,
+		TargetFingerprint: targetFingerprint,
+		SubjectID:         "system:config",
+		Permissions:       workflowExecutionRefPermissionsForTarget(target),
 	})
 	if err != nil {
 		t.Fatalf("store workflow execution ref: %v", err)
