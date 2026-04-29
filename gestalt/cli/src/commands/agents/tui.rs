@@ -8,13 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use ratatui::crossterm::{
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-        KeyModifiers, MouseEventKind,
-    },
-    execute,
-};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui_textarea::{CursorMove, TextArea};
@@ -23,7 +17,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::api::ApiClient;
-use crate::cli::{AgentArgs, AgentTurnCreateArgs};
+use crate::cli::AgentTurnCreateArgs;
 
 mod state;
 mod worker;
@@ -32,7 +26,8 @@ use state::{AgentUiState, TranscriptItem, turn_status_label};
 use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 
 use super::{
-    AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, cancel_turn_silent, compact_json,
+    AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_help_lines, agent_model_lines,
+    agent_session_lines, cancel_turn_silent, compact_json,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -51,13 +46,16 @@ pub(super) fn can_run() -> bool {
     io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal()
 }
 
-pub(super) fn run(client: &ApiClient, args: &AgentArgs) -> Result<()> {
-    let shell = AgentShell::connect(client, args)?;
+pub(super) fn run_shell(
+    client: &ApiClient,
+    shell: AgentShell,
+    initial_messages: Vec<String>,
+) -> Result<()> {
     let mut app = TuiApp::new(client.clone(), shell);
     let mut terminal = TerminalGuard::start()?;
 
-    if !args.messages.is_empty() {
-        app.enqueue_or_start(args.messages.clone());
+    if !initial_messages.is_empty() {
+        app.enqueue_or_start(initial_messages);
     }
 
     let result = app.run(terminal.inner_mut());
@@ -73,10 +71,6 @@ struct TerminalGuard {
 impl TerminalGuard {
     fn start() -> Result<Self> {
         let terminal = ratatui::try_init().context("failed to initialize terminal UI")?;
-        if let Err(error) = execute!(io::stdout(), EnableMouseCapture) {
-            ratatui::restore();
-            return Err(error).context("failed to enable mouse capture");
-        }
         Ok(Self {
             terminal,
             restored: false,
@@ -89,9 +83,7 @@ impl TerminalGuard {
 
     fn restore(&mut self) -> Result<()> {
         if !self.restored {
-            let mouse_result = execute!(io::stdout(), DisableMouseCapture);
             let restore_result = ratatui::try_restore();
-            mouse_result.context("failed to disable mouse capture")?;
             restore_result.context("failed to restore terminal UI")?;
             self.restored = true;
         }
@@ -102,7 +94,6 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if !self.restored {
-            let _ = execute!(io::stdout(), DisableMouseCapture);
             ratatui::restore();
             self.restored = true;
         }
@@ -120,7 +111,6 @@ struct TuiApp {
     worker_tx: Sender<WorkerEvent>,
     queued_messages: VecDeque<Vec<String>>,
     should_quit: bool,
-    quit_after_turn: bool,
     transcript_visible_height: usize,
     transcript_content_height: usize,
     tick: usize,
@@ -133,8 +123,10 @@ struct TuiApp {
 impl TuiApp {
     fn new(client: ApiClient, shell: AgentShell) -> Self {
         let (worker_tx, worker_rx) = mpsc::channel();
+        let mut state = AgentUiState::new(&shell.session);
+        state.model = shell.effective_model_label().to_string();
         Self {
-            state: AgentUiState::new(&shell.session),
+            state,
             client,
             shell,
             composer: styled_textarea("Message"),
@@ -144,7 +136,6 @@ impl TuiApp {
             worker_tx,
             queued_messages: VecDeque::new(),
             should_quit: false,
-            quit_after_turn: false,
             transcript_visible_height: 1,
             transcript_content_height: 0,
             tick: 0,
@@ -169,14 +160,6 @@ impl TuiApp {
             if event::poll(TICK_RATE).context("failed to poll terminal events")? {
                 match event::read().context("failed to read terminal event")? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key),
-                    Event::Mouse(mouse) => match mouse.kind {
-                        MouseEventKind::ScrollUp => self.state.scroll_up(
-                            self.transcript_visible_height,
-                            self.transcript_content_height,
-                        ),
-                        MouseEventKind::ScrollDown => self.state.scroll_down(),
-                        _ => {}
-                    },
                     Event::Resize(_, _) => {}
                     _ => {}
                 }
@@ -471,22 +454,30 @@ impl TuiApp {
             return;
         }
 
-        match trimmed {
-            "/quit" | "/exit" => {
-                if self.state.busy {
-                    self.quit_after_turn = true;
-                    self.state
-                        .push_system("Will exit after the current turn finishes.");
-                } else {
-                    self.should_quit = true;
-                }
-            }
-            "/help" => {
+        let (command, args) = trimmed
+            .strip_prefix('/')
+            .map(|command| {
+                let mut parts = command.splitn(2, char::is_whitespace);
+                let command = parts.next().unwrap_or("");
+                let args = parts.next().unwrap_or("");
+                (command, args.trim())
+            })
+            .unwrap_or(("", ""));
+
+        match command {
+            "help" => {
                 self.push_help();
             }
-            "/session" => {
+            "session" => {
                 self.state
-                    .push_system(format!("session {}", self.shell.session.id));
+                    .push_system(agent_session_lines(&self.shell).join("\n"));
+            }
+            "model" => {
+                let lines = agent_model_lines(&self.client, &mut self.shell, args);
+                if !args.is_empty() {
+                    self.state.model = self.shell.effective_model_label().to_string();
+                }
+                self.state.push_system(lines.join("\n"));
             }
             _ => {
                 self.record_history(&message);
@@ -498,9 +489,7 @@ impl TuiApp {
     }
 
     fn push_help(&mut self) {
-        self.state.push_system(
-            "Commands\n  /help     Show commands and keys.\n  /session  Show the active session id.\n  /quit     Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn or mouse wheel scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
-        );
+        self.state.push_system(agent_help_lines().join("\n"));
     }
 
     fn enqueue_or_start(&mut self, messages: Vec<String>) {
@@ -515,10 +504,6 @@ impl TuiApp {
 
     fn start_next_queued_turn(&mut self) {
         if self.state.busy {
-            return;
-        }
-        if self.quit_after_turn {
-            self.should_quit = true;
             return;
         }
         if let Some(messages) = self.queued_messages.pop_front() {

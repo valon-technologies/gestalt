@@ -621,7 +621,7 @@ fn test_cli_runs_interactive_agent_session() {
     cli_command_for_server(home.path(), &server)
         .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
         .args(["--tool", "linear:searchIssues"])
-        .write_stdin("hello\\\nthere\n/quit\n")
+        .write_stdin("hello\\\nthere\n")
         .assert()
         .success()
         .stdout(predicate::str::contains("tool> lookup started"))
@@ -632,7 +632,9 @@ fn test_cli_runs_interactive_agent_session() {
         .stderr(predicate::str::contains(
             "Session session-1 [managed / gpt-5.4]",
         ))
-        .stderr(predicate::str::contains("Type /quit to exit."));
+        .stderr(predicate::str::contains(
+            "Press Ctrl-C or send EOF to exit.",
+        ));
 }
 
 #[test]
@@ -706,7 +708,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
-        .write_stdin("display events\n/quit\n")
+        .write_stdin("display events\n")
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -798,7 +800,8 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     session.write("hello tui\r");
     session.wait_for(&mut output, "hello");
     session.wait_for(&mut output, "Brewed for");
-    session.write("/quit\r");
+    session.write("\x03");
+    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
     session.wait_for_exit();
 
     assert!(
@@ -818,6 +821,78 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
             && !output.contains("you>")
             && !output.contains("assistant>"),
         "TTY transcript still rendered legacy prompt labels:\n{output}"
+    );
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/sessions/session-1",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"override model"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-override-model",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.5",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-override-model/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"override acknowledged\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-override-model",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-override-model",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.5",
+                "status":"succeeded",
+                "outputText":"override acknowledged"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "resume", "session-1", "--model", "gpt-5.5"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.wait_for(&mut output, "managed/gpt-5.5");
+    session.write("override model\r");
+    session.wait_for(&mut output, "override acknowledged");
+    session.wait_for(&mut output, "Brewed for");
+    session.write("\x03");
+    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for_exit();
+
+    assert!(
+        output.contains("managed/gpt-5.5"),
+        "TTY did not render resumed model override:\n{output}"
     );
     server.assert_finished();
 }
@@ -897,7 +972,7 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     session.wait_for(&mut output, "suffix");
     session.wait_for(&mut output, "done");
     session.wait_for(&mut output, "fallback");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1001,7 +1076,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
     session.wait_for(&mut output, "denied");
     session.wait_for(&mut output, "contact admin");
     session.wait_for(&mut output, "done");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1090,7 +1165,7 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
     session.wait_for(&mut output, "lookup");
     session.wait_for(&mut output, "ended");
     session.wait_for(&mut output, "audit");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1231,7 +1306,7 @@ fn test_cli_tty_help_and_prompt_history() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("/help\r");
-    session.wait_for(&mut output, "recalls");
+    session.wait_for(&mut output, "Show commands");
     session.write("remember this\r");
     session.wait_for(&mut output, "first");
     output.clear();
@@ -1244,7 +1319,7 @@ fn test_cli_tty_help_and_prompt_history() {
     session.wait_for(&mut output, "working");
     output.clear();
     session.wait_for(&mut output, "ready");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     server.assert_finished();
@@ -1273,21 +1348,14 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("/help\r");
-    session.wait_for(&mut output, "mouse wheel");
-    session.wait_for(&mut output, "cancels");
+    session.wait_for(&mut output, "PgUp/PgDn");
     output.clear();
     session.write("\x1b[5~\x1b[5~");
     session.wait_for(&mut output, "Commands");
     output.clear();
     session.write("\x1b[6~\x1b[6~");
-    session.wait_for(&mut output, "cancels");
-    output.clear();
-    session.write("\x1b[<64;1;1M\x1b[<64;1;1M");
-    session.wait_for(&mut output, "Commands");
-    output.clear();
-    session.write("\x1b[<65;1;1M\x1b[<65;1;1M");
-    session.wait_for(&mut output, "cancels");
-    session.write("/quit\r");
+    session.wait_for(&mut output, "Ctrl-C");
+    session.write("\x03");
     session.wait_for_exit();
 
     server.assert_finished();
@@ -1360,7 +1428,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
     session.wait_for(&mut output, "user_profile_id");
     session.wait_for(&mut output, "__init__");
     session.wait_for(&mut output, "Brewed for");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1435,7 +1503,7 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
     session.wait_for(&mut output, "Session");
     session.write("wide text\r");
     session.wait_for(&mut output, "👨‍💻");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     server.assert_finished();
@@ -1546,7 +1614,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
     session.wait_for(&mut output, "› pending turn");
     session.wait_for(&mut output, "done-two");
     session.wait_for(&mut output, "Brewed for");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     let done_one = output
@@ -1678,7 +1746,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
     session.wait_for(&mut output, "alpha");
     session.write("second turn\r");
     session.wait_for(&mut output, "beta");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1807,7 +1875,7 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
     session.write("supersecret\r");
     session.wait_for(&mut output, "accepted");
     session.wait_for(&mut output, "Brewed for");
-    session.write("/quit\r");
+    session.write("\x03");
     session.wait_for_exit();
 
     assert!(
@@ -1891,16 +1959,18 @@ fn test_cli_resumes_latest_active_agent_session() {
         .arg(server.url())
         .args([
             "agent",
-            "--continue",
+            "resume",
             "--provider",
             "managed",
             "--message",
             "continue plan",
         ])
-        .write_stdin("/quit\n")
         .assert()
         .success()
         .stdout(predicate::str::contains("assistant> continued"))
+        .stdout(predicate::str::contains(
+            "Resume with: gestalt agent resume session-new",
+        ))
         .stderr(predicate::str::contains(
             "Session session-new [managed / gpt-5.4]",
         ));
@@ -1923,11 +1993,11 @@ fn test_cli_resume_fails_without_active_agent_session() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "--resume"])
+        .args(["agent", "resume"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "no active agent sessions found; omit --resume to create one",
+            "no active agent sessions found; use `gestalt agent` to create one",
         ));
 
     server.assert_finished();
@@ -1937,25 +2007,143 @@ fn test_cli_resume_fails_without_active_agent_session() {
 fn test_cli_rejects_interactive_agent_flags_with_subcommands() {
     let home = tempfile::tempdir().unwrap();
     cli_command(home.path())
-        .args(["agent", "--resume", "sessions", "list"])
+        .args(["agent", "--model", "gpt-5.5", "sessions", "list"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "--resume can only be used with interactive `gestalt agent`",
+            "--model must be passed before a prompt or after `agent resume`",
         ));
 }
 
 #[test]
-fn test_cli_agent_help_describes_resume_provider_filter() {
+fn test_cli_agent_help_describes_resume_command() {
     let home = tempfile::tempdir().unwrap();
     cli_command(home.path())
         .args(["agent", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("--resume"))
-        .stdout(predicate::str::contains("--continue"))
-        .stdout(predicate::str::contains("provider filter when resuming"))
+        .stdout(predicate::str::contains("resume"))
+        .stdout(predicate::str::contains("--resume").not())
+        .stdout(predicate::str::contains("--continue").not())
         .stdout(predicate::str::contains("--ui").not());
+
+    cli_command(home.path())
+        .args(["agent", "resume", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[SESSION_ID]"))
+        .stdout(predicate::str::contains("Provider filter when resuming"));
+}
+
+#[test]
+fn test_cli_agent_model_slash_lists_configured_providers() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/providers",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "providers":[
+                    {"name":"managed","default":true},
+                    {"name":"anthropic"}
+                ]
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .write_stdin("/model\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Resume with: gestalt agent resume session-1",
+        ))
+        .stderr(predicate::str::contains("current provider: managed"))
+        .stderr(predicate::str::contains("current model: gpt-5.4"))
+        .stderr(predicate::str::contains("managed (default)"))
+        .stderr(predicate::str::contains("anthropic"));
+
+    server.assert_finished();
+}
+
+#[test]
+fn test_cli_agent_model_slash_sets_future_turn_model() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"hello"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-model",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.5",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-model/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"hello from 5.5\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-model",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-model",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.5",
+                "status":"succeeded",
+                "outputText":"hello from 5.5"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .write_stdin("/model gpt-5.5\nhello\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("assistant> hello from 5.5"))
+        .stderr(predicate::str::contains(
+            "model gpt-5.5 selected for future turns",
+        ));
+
+    server.assert_finished();
 }
 
 #[test]
@@ -2070,8 +2258,8 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "--session", "session-2"])
-        .write_stdin("need incident context\n\n/quit\n")
+        .args(["agent", "resume", "session-2"])
+        .write_stdin("need incident context\n\n")
         .assert()
         .success()
         .stdout(predicate::str::contains(
@@ -2204,7 +2392,7 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         .arg("--url")
         .arg(server.url())
         .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
-        .write_stdin("approve deployment\nY\n/quit\n")
+        .write_stdin("approve deployment\nY\n")
         .assert()
         .success()
         .stdout(predicate::str::contains(

@@ -130,6 +130,9 @@ fn run() -> anyhow::Result<()> {
             }
             let client = ApiClient::from_env(url)?;
             match args.command {
+                Some(AgentCommands::Resume(resume)) => {
+                    commands::agents::resume_interactive(&client, &resume)
+                }
                 Some(command) => dispatch_agent_command(&client, command, format),
                 None => commands::agents::run_interactive(&client, &args),
             }
@@ -138,28 +141,20 @@ fn run() -> anyhow::Result<()> {
 }
 
 fn reject_agent_interactive_options(args: &AgentArgs) -> anyhow::Result<()> {
-    if args.resume {
-        anyhow::bail!("--resume can only be used with interactive `gestalt agent`");
-    }
-    if args.session.is_some() {
-        anyhow::bail!("--session can only be used with interactive `gestalt agent`");
-    }
     if args.model.is_some() {
-        anyhow::bail!("--model can only be used with interactive `gestalt agent`");
+        anyhow::bail!("--model must be passed before a prompt or after `agent resume`");
     }
     if !args.system.is_empty() {
-        anyhow::bail!("--system can only be used with interactive `gestalt agent`");
+        anyhow::bail!("--system must be passed before a prompt or after `agent resume`");
     }
     if !args.messages.is_empty() {
-        anyhow::bail!("--message can only be used with interactive `gestalt agent`");
+        anyhow::bail!("--message must be passed before a prompt or after `agent resume`");
     }
     if !args.tools.is_empty() {
-        anyhow::bail!("--tool can only be used with interactive `gestalt agent`");
+        anyhow::bail!("--tool must be passed before a prompt or after `agent resume`");
     }
     if args.provider.is_some() {
-        anyhow::bail!(
-            "--provider before an agent subcommand is ignored; pass it after the subcommand if supported"
-        );
+        anyhow::bail!("--provider must be passed before a prompt or after `agent resume`");
     }
     Ok(())
 }
@@ -170,6 +165,7 @@ fn dispatch_agent_command(
     format: gestalt::output::Format,
 ) -> anyhow::Result<()> {
     match command {
+        AgentCommands::Resume(_) => anyhow::bail!("agent resume is interactive"),
         AgentCommands::Sessions { command } => match command {
             AgentSessionCommands::Create(args) => {
                 commands::agents::create_session(client, &args, format)

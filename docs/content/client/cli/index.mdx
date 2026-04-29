@@ -206,7 +206,8 @@ gestalt workflow runs cancel <run-id> --reason "operator requested"
 
 ```sh
 gestalt agent --provider simple --model fast
-gestalt agent --session <session-id>
+gestalt agent resume <session-id>
+gestalt agent resume --provider simple
 
 gestalt agent sessions create --provider simple --model fast
 gestalt agent sessions list --provider simple --state active
@@ -246,16 +247,18 @@ JSON
 ```
 
 `gestalt agent` is the interactive path. It creates a session when you pass
-`--provider` or resumes an existing one with `--session`. The first turn in a
-CLI session can include repeated `--system` messages, repeated `--message`
-prompts, and repeated `--tool plugin:operation` additions. During execution,
-the CLI parses the event stream, renders assistant/tool/interaction events,
-cancels the active turn on Ctrl-C, and resolves pending interactions inline.
-TTY sessions use a full-screen terminal UI with a persistent transcript,
-streaming assistant output, a multiline composer, queued prompts while a turn
-is running, Ctrl-C cancellation, and inline interaction panels. Press Enter to
-send, Alt-Enter to insert a newline, PageUp/PageDown to scroll, `/session` to
-show the active session, and `/quit` to exit. Non-TTY sessions keep the
+`--provider`; `gestalt agent resume [session-id]` resumes either a specific
+session or the most recently updated active session. The first turn in a CLI
+session can include repeated `--system` messages, repeated `--message` prompts,
+and repeated `--tool plugin:operation` additions. During execution, the CLI
+parses the event stream, renders assistant/tool/interaction events, cancels the
+active turn on Ctrl-C, and resolves pending interactions inline. TTY sessions
+use a full-screen terminal UI with a persistent transcript, streaming assistant
+output, a multiline composer, queued prompts while a turn is running, Ctrl-C
+cancellation, and inline interaction panels. Press Enter to send, Alt-Enter to
+insert a newline, PageUp/PageDown to scroll, `/session` to show the active
+session and resume command, and `/model` to show or set the model for future
+turns. Non-TTY sessions keep the
 prompt-and-print fallback used by scripts and tests; there, end an input line
 with `\` to continue the same user message on the next prompt.
 

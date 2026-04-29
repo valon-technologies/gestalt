@@ -120,6 +120,27 @@ type agentSessionInfo struct {
 	LastTurnAt *time.Time         `json:"lastTurnAt,omitempty"`
 }
 
+type agentProviderListInfo struct {
+	Providers []agentProviderInfo `json:"providers"`
+}
+
+type agentProviderInfo struct {
+	Name         string                         `json:"name"`
+	Default      bool                           `json:"default,omitempty"`
+	Capabilities *agentProviderCapabilitiesInfo `json:"capabilities,omitempty"`
+}
+
+type agentProviderCapabilitiesInfo struct {
+	StreamingText      bool `json:"streamingText,omitempty"`
+	ToolCalls          bool `json:"toolCalls,omitempty"`
+	ParallelToolCalls  bool `json:"parallelToolCalls,omitempty"`
+	StructuredOutput   bool `json:"structuredOutput,omitempty"`
+	Interactions       bool `json:"interactions,omitempty"`
+	ResumableTurns     bool `json:"resumableTurns,omitempty"`
+	ReasoningSummaries bool `json:"reasoningSummaries,omitempty"`
+	NativeToolSearch   bool `json:"nativeToolSearch,omitempty"`
+}
+
 type agentTurnInfo struct {
 	ID               string                `json:"id"`
 	SessionID        string                `json:"sessionId"`
@@ -227,6 +248,44 @@ func (s *Server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		out = append(out, agentSessionInfoFromCore(session))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) listAgentProviders(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.resolveAgentActor(w, r); !ok {
+		return
+	}
+	if s == nil || s.agent == nil {
+		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
+		return
+	}
+
+	defaultProvider := ""
+	if name, _, err := s.agent.ResolveProviderSelection(""); err == nil {
+		defaultProvider = strings.TrimSpace(name)
+	}
+
+	names := s.agent.ProviderNames()
+	out := agentProviderListInfo{Providers: make([]agentProviderInfo, 0, len(names))}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		info := agentProviderInfo{
+			Name:    name,
+			Default: name == defaultProvider,
+		}
+		provider, err := s.agent.ResolveProvider(name)
+		if err == nil && provider != nil {
+			if caps, err := provider.GetCapabilities(r.Context(), coreagent.GetCapabilitiesRequest{}); err == nil {
+				info.Capabilities = agentProviderCapabilitiesInfoFromCore(caps)
+			} else {
+				slog.WarnContext(r.Context(), "agent provider capabilities unavailable", "provider", name, "error", err)
+			}
+		}
+		out.Providers = append(out.Providers, info)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -756,6 +815,22 @@ func agentSessionInfoFromCore(session *coreagent.Session) agentSessionInfo {
 	info.UpdatedAt = session.UpdatedAt
 	info.LastTurnAt = session.LastTurnAt
 	return info
+}
+
+func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities) *agentProviderCapabilitiesInfo {
+	if caps == nil {
+		return nil
+	}
+	return &agentProviderCapabilitiesInfo{
+		StreamingText:      caps.StreamingText,
+		ToolCalls:          caps.ToolCalls,
+		ParallelToolCalls:  caps.ParallelToolCalls,
+		StructuredOutput:   caps.StructuredOutput,
+		Interactions:       caps.Interactions,
+		ResumableTurns:     caps.ResumableTurns,
+		ReasoningSummaries: caps.ReasoningSummaries,
+		NativeToolSearch:   caps.NativeToolSearch,
+	}
 }
 
 func agentTurnInfoFromCore(turn *coreagent.Turn) agentTurnInfo {

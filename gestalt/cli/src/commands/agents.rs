@@ -13,8 +13,8 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::api::ApiClient;
 use crate::cli::{
-    AgentArgs, AgentSessionCreateArgs, AgentSessionUpdateArgs, AgentToolArg, AgentTurnCreateArgs,
-    AgentTurnEventListArgs, AgentTurnEventStreamArgs,
+    AgentArgs, AgentResumeArgs, AgentSessionCreateArgs, AgentSessionUpdateArgs, AgentToolArg,
+    AgentTurnCreateArgs, AgentTurnEventListArgs, AgentTurnEventStreamArgs,
 };
 use crate::interactive::{
     InputPrompt, InteractiveLineReader, PromptLine, prompt_confirm, prompt_input,
@@ -25,6 +25,7 @@ use crate::params;
 mod tui;
 
 const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
+const PROVIDERS_PATH: &str = "/api/v1/agent/providers";
 const TURNS_PATH: &str = "/api/v1/agent/turns";
 const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
@@ -184,41 +185,147 @@ pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -
 }
 
 pub fn run_interactive(client: &ApiClient, args: &AgentArgs) -> Result<()> {
+    let shell = AgentShell::connect(client, args)?;
+    run_shell_interactive(client, shell, args.messages.clone())
+}
+
+pub fn resume_interactive(client: &ApiClient, args: &AgentResumeArgs) -> Result<()> {
+    let shell = AgentShell::resume(client, args)?;
+    run_shell_interactive(client, shell, args.messages.clone())
+}
+
+fn run_shell_interactive(
+    client: &ApiClient,
+    mut shell: AgentShell,
+    initial_messages: Vec<String>,
+) -> Result<()> {
+    let session_id = shell.session.id.clone();
     if tui::can_run() {
-        return tui::run(client, args);
+        let result = tui::run_shell(client, shell, initial_messages);
+        if result.is_ok() {
+            print_resume_command(&session_id)?;
+        }
+        return result;
     }
 
-    let mut shell = AgentShell::connect(client, args)?;
     shell.print_banner()?;
     let interrupts = InterruptState::install();
     let mut input = InteractiveLineReader::with_history_namespace("agent")?;
 
-    if !args.messages.is_empty() {
-        shell.submit_turn(client, args.messages.clone(), &interrupts)?;
+    if !initial_messages.is_empty() {
+        shell.submit_turn(client, initial_messages, &interrupts)?;
     }
 
     loop {
         let Some(line) = prompt_agent_message(&mut input)? else {
+            print_resume_command(&session_id)?;
             return Ok(());
         };
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        match trimmed {
-            "/quit" | "/exit" => return Ok(()),
-            "/help" => {
-                eprintln!("Commands: /help, /session, /quit");
-                continue;
-            }
-            "/session" => {
-                eprintln!("session {}", shell.session.id);
-                continue;
-            }
-            _ => {}
+        if handle_agent_slash_command(client, &mut shell, trimmed)? {
+            continue;
         }
         shell.submit_turn(client, vec![line], &interrupts)?;
     }
+}
+
+fn print_resume_command(session_id: &str) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "Resume with: gestalt agent resume {session_id}")?;
+    Ok(())
+}
+
+fn handle_agent_slash_command(
+    client: &ApiClient,
+    shell: &mut AgentShell,
+    trimmed: &str,
+) -> Result<bool> {
+    let Some((command, args)) = parse_agent_slash_command(trimmed) else {
+        return Ok(false);
+    };
+    match command {
+        "help" => {
+            for line in agent_help_lines() {
+                eprintln!("{line}");
+            }
+        }
+        "session" => {
+            for line in agent_session_lines(shell) {
+                eprintln!("{line}");
+            }
+        }
+        "model" => {
+            for line in agent_model_lines(client, shell, args) {
+                eprintln!("{line}");
+            }
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn parse_agent_slash_command(input: &str) -> Option<(&str, &str)> {
+    let trimmed = input.trim();
+    let command = trimmed.strip_prefix('/')?;
+    let mut parts = command.splitn(2, char::is_whitespace);
+    let command = parts.next().unwrap_or("");
+    let args = parts.next().unwrap_or("");
+    Some((command, args.trim()))
+}
+
+fn agent_help_lines() -> Vec<String> {
+    vec![
+        "Commands:".to_string(),
+        "  /help     Show commands and keys.".to_string(),
+        "  /session  Show the active session id and resume command.".to_string(),
+        "  /model    Show current model and configured providers.".to_string(),
+        "  /model X  Use model X for future turns in this session.".to_string(),
+        "Keys:".to_string(),
+        "  Enter sends; busy turns queue the prompt.".to_string(),
+        "  Alt-Enter inserts a newline.".to_string(),
+        "  Up/Down recalls prompt history.".to_string(),
+        "  PgUp/PgDn scrolls the transcript.".to_string(),
+        "  Ctrl-C cancels, clears input, or exits.".to_string(),
+    ]
+}
+
+fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
+    vec![
+        format!("session {}", shell.session.id),
+        format!("resume command: gestalt agent resume {}", shell.session.id),
+    ]
+}
+
+fn agent_model_lines(client: &ApiClient, shell: &mut AgentShell, args: &str) -> Vec<String> {
+    let requested = args.trim();
+    if !requested.is_empty() {
+        shell.set_model_override(requested);
+        return vec![format!("model {requested} selected for future turns")];
+    }
+
+    let mut lines = vec![
+        format!("current provider: {}", shell.session.provider),
+        format!("current model: {}", shell.effective_model_label()),
+    ];
+    match list_agent_providers(client) {
+        Ok(providers) if providers.is_empty() => {
+            lines.push("configured providers: none".to_string());
+        }
+        Ok(providers) => {
+            lines.push("configured providers:".to_string());
+            for provider in providers {
+                let suffix = if provider.default { " (default)" } else { "" };
+                lines.push(format!("  {}{}", provider.name, suffix));
+            }
+        }
+        Err(err) => {
+            lines.push(format!("configured providers unavailable: {err}"));
+        }
+    }
+    lines
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -236,6 +343,21 @@ struct AgentSessionInfo {
     created_at: String,
     #[serde(default)]
     updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentProviderListInfo {
+    #[serde(default)]
+    providers: Vec<AgentProviderInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentProviderInfo {
+    name: String,
+    #[serde(default)]
+    default: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -370,19 +492,28 @@ struct AgentShell {
 
 impl AgentShell {
     fn connect(client: &ApiClient, args: &AgentArgs) -> Result<Self> {
-        let session = match args.session.as_deref() {
+        let session_args = AgentSessionCreateArgs {
+            provider: args.provider.clone(),
+            model: args.model.clone(),
+            client_ref: None,
+            idempotency_key: None,
+            input: None,
+        };
+        let session = create_session_info(client, &session_args)?;
+
+        Ok(Self {
+            session,
+            model_override: args.model.clone(),
+            system_messages: args.system.clone(),
+            tools: args.tools.clone(),
+            applied_system_messages: false,
+        })
+    }
+
+    fn resume(client: &ApiClient, args: &AgentResumeArgs) -> Result<Self> {
+        let session = match args.session_id.as_deref() {
             Some(session_id) => get_session_info(client, session_id)?,
-            None if args.resume => resume_latest_session_info(client, args.provider.as_deref())?,
-            None => {
-                let session_args = AgentSessionCreateArgs {
-                    provider: args.provider.clone(),
-                    model: args.model.clone(),
-                    client_ref: None,
-                    idempotency_key: None,
-                    input: None,
-                };
-                create_session_info(client, &session_args)?
-            }
+            None => resume_latest_session_info(client, args.provider.as_deref())?,
         };
 
         Ok(Self {
@@ -396,18 +527,32 @@ impl AgentShell {
 
     fn print_banner(&self) -> Result<()> {
         let mut stderr = io::stderr().lock();
-        let model = if self.session.model.is_empty() {
-            "<unspecified>"
-        } else {
-            self.session.model.as_str()
-        };
         writeln!(
             stderr,
             "Session {} [{} / {}]",
-            self.session.id, self.session.provider, model
+            self.session.id,
+            self.session.provider,
+            self.effective_model_label()
         )?;
-        writeln!(stderr, "Type /quit to exit.")?;
+        writeln!(stderr, "Press Ctrl-C or send EOF to exit.")?;
         Ok(())
+    }
+
+    fn effective_model_label(&self) -> &str {
+        if let Some(model) = self.model_override.as_deref()
+            && !model.trim().is_empty()
+        {
+            return model;
+        }
+        if self.session.model.trim().is_empty() {
+            "<unspecified>"
+        } else {
+            self.session.model.as_str()
+        }
+    }
+
+    fn set_model_override(&mut self, model: &str) {
+        self.model_override = Some(model.trim().to_string());
     }
 
     fn submit_turn(
@@ -1013,7 +1158,7 @@ fn prompt_agent_message(input: &mut InteractiveLineReader) -> Result<Option<Stri
             }
             PromptLine::Interrupted => {
                 eprintln!("^C");
-                return Ok(Some(String::new()));
+                return Ok(None);
             }
             PromptLine::Eof => return Ok(None),
         }
@@ -1202,6 +1347,15 @@ fn get_session_info(client: &ApiClient, id: &str) -> Result<AgentSessionInfo> {
     )
 }
 
+fn list_agent_providers(client: &ApiClient) -> Result<Vec<AgentProviderInfo>> {
+    let resp: AgentProviderListInfo = decode_json(
+        client
+            .get(PROVIDERS_PATH)
+            .context("failed to list agent providers")?,
+    )?;
+    Ok(resp.providers)
+}
+
 fn resume_latest_session_info(
     client: &ApiClient,
     provider: Option<&str>,
@@ -1217,10 +1371,10 @@ fn resume_latest_session_info(
         .max_by(compare_sessions_for_resume)
         .ok_or_else(|| match provider {
             Some(provider) => anyhow::anyhow!(
-                "no active agent sessions found for provider {provider}; omit --resume to create one"
+                "no active agent sessions found for provider {provider}; use `gestalt agent` to create one"
             ),
             None => anyhow::anyhow!(
-                "no active agent sessions found; omit --resume to create one"
+                "no active agent sessions found; use `gestalt agent` to create one"
             ),
         })
 }
