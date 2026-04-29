@@ -37,7 +37,7 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := validateAPIVersion(cfg); err != nil {
 		return err
 	}
-	if err := NormalizeCompatibility(cfg); err != nil {
+	if err := normalizeConfigShape(cfg); err != nil {
 		return err
 	}
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
