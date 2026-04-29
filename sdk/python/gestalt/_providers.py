@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from ._cache import CacheEntry
@@ -74,6 +74,16 @@ class HealthChecker:
         """Raise if the provider is unhealthy."""
 
         raise NotImplementedError
+
+
+@runtime_checkable
+class Starter(Protocol):
+    """Optional mixin for providers with an explicit post-configure start phase."""
+
+    def start(self) -> None:
+        """Start provider-owned background work after host readiness."""
+
+        ...
 
 
 class WarningsProvider:
@@ -198,7 +208,9 @@ class CacheProvider(PluginProvider):
 
         raise NotImplementedError
 
-    def set_many(self, entries: list[CacheEntry], ttl: dt.timedelta | None = None) -> None:
+    def set_many(
+        self, entries: list[CacheEntry], ttl: dt.timedelta | None = None
+    ) -> None:
         """Store multiple cache entries using repeated :meth:`set` calls."""
 
         for entry in entries:

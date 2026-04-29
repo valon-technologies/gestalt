@@ -64,6 +64,13 @@ type HealthChecker interface {
 	HealthCheck(ctx context.Context) error
 }
 
+// Starter is implemented by providers that need an explicit post-configuration
+// start phase. The context only bounds synchronous startup work; long-running
+// background work must own its own cancellation and stop from Close.
+type Starter interface {
+	Start(ctx context.Context) error
+}
+
 // Closer is implemented by providers that need explicit shutdown handling.
 type Closer interface {
 	Close() error

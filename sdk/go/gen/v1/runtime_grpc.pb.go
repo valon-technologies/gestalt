@@ -23,6 +23,7 @@ const (
 	ProviderLifecycle_GetProviderIdentity_FullMethodName = "/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity"
 	ProviderLifecycle_ConfigureProvider_FullMethodName   = "/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider"
 	ProviderLifecycle_HealthCheck_FullMethodName         = "/gestalt.provider.v1.ProviderLifecycle/HealthCheck"
+	ProviderLifecycle_StartProvider_FullMethodName       = "/gestalt.provider.v1.ProviderLifecycle/StartProvider"
 )
 
 // ProviderLifecycleClient is the client API for ProviderLifecycle service.
@@ -35,6 +36,7 @@ type ProviderLifecycleClient interface {
 	GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderIdentity, error)
 	ConfigureProvider(ctx context.Context, in *ConfigureProviderRequest, opts ...grpc.CallOption) (*ConfigureProviderResponse, error)
 	HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+	StartProvider(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StartRuntimeProviderResponse, error)
 }
 
 type providerLifecycleClient struct {
@@ -75,6 +77,16 @@ func (c *providerLifecycleClient) HealthCheck(ctx context.Context, in *emptypb.E
 	return out, nil
 }
 
+func (c *providerLifecycleClient) StartProvider(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StartRuntimeProviderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartRuntimeProviderResponse)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_StartProvider_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderLifecycleServer is the server API for ProviderLifecycle service.
 // All implementations must embed UnimplementedProviderLifecycleServer
 // for forward compatibility.
@@ -85,6 +97,7 @@ type ProviderLifecycleServer interface {
 	GetProviderIdentity(context.Context, *emptypb.Empty) (*ProviderIdentity, error)
 	ConfigureProvider(context.Context, *ConfigureProviderRequest) (*ConfigureProviderResponse, error)
 	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
+	StartProvider(context.Context, *emptypb.Empty) (*StartRuntimeProviderResponse, error)
 	mustEmbedUnimplementedProviderLifecycleServer()
 }
 
@@ -103,6 +116,9 @@ func (UnimplementedProviderLifecycleServer) ConfigureProvider(context.Context, *
 }
 func (UnimplementedProviderLifecycleServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedProviderLifecycleServer) StartProvider(context.Context, *emptypb.Empty) (*StartRuntimeProviderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartProvider not implemented")
 }
 func (UnimplementedProviderLifecycleServer) mustEmbedUnimplementedProviderLifecycleServer() {}
 func (UnimplementedProviderLifecycleServer) testEmbeddedByValue()                           {}
@@ -179,6 +195,24 @@ func _ProviderLifecycle_HealthCheck_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProviderLifecycle_StartProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProviderLifecycleServer).StartProvider(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProviderLifecycle_StartProvider_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProviderLifecycleServer).StartProvider(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProviderLifecycle_ServiceDesc is the grpc.ServiceDesc for ProviderLifecycle service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -197,6 +231,10 @@ var ProviderLifecycle_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HealthCheck",
 			Handler:    _ProviderLifecycle_HealthCheck_Handler,
+		},
+		{
+			MethodName: "StartProvider",
+			Handler:    _ProviderLifecycle_StartProvider_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

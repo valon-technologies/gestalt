@@ -6,6 +6,8 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -13,6 +15,7 @@ type fakeProviderLifecycleClient struct {
 	getProviderIdentity func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ProviderIdentity, error)
 	configureProvider   func(context.Context, *proto.ConfigureProviderRequest, ...grpc.CallOption) (*proto.ConfigureProviderResponse, error)
 	healthCheck         func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.HealthCheckResponse, error)
+	startProvider       func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error)
 }
 
 func (c *fakeProviderLifecycleClient) GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.ProviderIdentity, error) {
@@ -28,6 +31,13 @@ func (c *fakeProviderLifecycleClient) HealthCheck(ctx context.Context, in *empty
 		return c.healthCheck(ctx, in, opts...)
 	}
 	return &proto.HealthCheckResponse{Ready: true}, nil
+}
+
+func (c *fakeProviderLifecycleClient) StartProvider(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error) {
+	if c.startProvider != nil {
+		return c.startProvider(ctx, in, opts...)
+	}
+	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }
 
 func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
@@ -98,5 +108,31 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 	}
 	if len(meta.Warnings) != 1 || meta.Warnings[0] != "configured" {
 		t.Fatalf("Warnings = %#v, want %#v", meta.Warnings, []string{"configured"})
+	}
+}
+
+func TestStartRuntimeProviderTreatsUnimplementedAsNoop(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeProviderLifecycleClient{
+		startProvider: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error) {
+			return nil, status.Error(codes.Unimplemented, "old provider")
+		},
+	}
+	if err := StartRuntimeProvider(context.Background(), client); err != nil {
+		t.Fatalf("StartRuntimeProvider: %v", err)
+	}
+}
+
+func TestStartRuntimeProviderValidatesProtocolVersion(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeProviderLifecycleClient{
+		startProvider: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error) {
+			return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion + 1}, nil
+		},
+	}
+	if err := StartRuntimeProvider(context.Background(), client); err == nil {
+		t.Fatal("StartRuntimeProvider should reject protocol mismatch")
 	}
 }

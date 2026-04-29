@@ -83,6 +83,10 @@ pub trait WorkflowProvider:
         Ok(())
     }
 
+    async fn start(&self) -> ProviderResult<()> {
+        Ok(())
+    }
+
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }

@@ -773,7 +773,7 @@ func TestSearchToolsRanksProviderConfiguredTags(t *testing.T) {
 			}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
@@ -810,7 +810,7 @@ func TestSearchToolsDoesNotInventSemanticAliases(t *testing.T) {
 				}}},
 			},
 		}
-		manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+		manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 		resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 			SubjectID: principal.UserSubjectID("user-1"),
 		}, coreagent.SearchToolsRequest{
@@ -852,7 +852,7 @@ func TestSearchToolsDoesNotTreatPullRequestsAsMergeWithoutMetadata(t *testing.T)
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -891,7 +891,7 @@ func TestSearchToolsRanksTitleAheadOfTags(t *testing.T) {
 			}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{

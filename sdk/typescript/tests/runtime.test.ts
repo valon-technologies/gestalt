@@ -1135,6 +1135,66 @@ test("runtime lifecycle labels provider identity failures", async () => {
   }
 });
 
+test("runtime lifecycle start is separate from configure", async () => {
+  const calls: string[] = [];
+  const provider = defineCacheProvider({
+    name: "lifecycle-cache",
+    configure(name, config) {
+      calls.push(`configure:${name}:${config.prefix ?? ""}`);
+    },
+    start() {
+      calls.push("start");
+    },
+    async get() {
+      return undefined;
+    },
+    async set() {},
+    async delete() {
+      return false;
+    },
+    async touch() {
+      return false;
+    },
+  });
+  const runtime = createRuntimeService(provider);
+
+  const configured = await (runtime.configureProvider as any)(
+    create(ConfigureProviderRequestSchema, {
+      name: "fixture-cache",
+      config: {
+        prefix: "runtime",
+      },
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
+    }),
+  );
+  expect(configured.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(calls).toEqual(["configure:fixture-cache:runtime"]);
+
+  const started = await (runtime.startProvider as any)(create(EmptySchema, {}));
+  expect(started.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(calls).toEqual(["configure:fixture-cache:runtime", "start"]);
+});
+
+test("runtime lifecycle start is no-op when provider has no start hook", async () => {
+  const provider = defineCacheProvider({
+    name: "no-start-cache",
+    async get() {
+      return undefined;
+    },
+    async set() {},
+    async delete() {
+      return false;
+    },
+    async touch() {
+      return false;
+    },
+  });
+  const runtime = createRuntimeService(provider);
+
+  const started = await (runtime.startProvider as any)(create(EmptySchema, {}));
+  expect(started.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+});
+
 test("cache provider supports runtime metadata and cache operations", async () => {
   const provider = await loadProviderFromTarget(fixturePath("cache-provider"));
   const runtime = createRuntimeService(provider);

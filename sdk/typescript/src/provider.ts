@@ -43,6 +43,12 @@ export type HealthCheckHandler = () => MaybePromise<void>;
 export type WarningsHandler = () => MaybePromise<string[]>;
 
 /**
+ * Optional hook invoked after configuration when the host is ready for
+ * provider-owned background work to begin.
+ */
+export type StartHandler = () => MaybePromise<void>;
+
+/**
  * Optional shutdown hook invoked when the provider process exits.
  */
 export type CloseHandler = () => MaybePromise<void>;
@@ -58,6 +64,7 @@ export interface RuntimeProviderOptions {
   configure?: ConfigureHandler;
   healthCheck?: HealthCheckHandler;
   warnings?: string[] | WarningsHandler;
+  start?: StartHandler;
   close?: CloseHandler;
 }
 
@@ -75,6 +82,7 @@ export abstract class RuntimeProvider {
   private readonly configureHandler: ConfigureHandler | undefined;
   private readonly healthCheckHandler: HealthCheckHandler | undefined;
   private readonly warningsSource: string[] | WarningsHandler | undefined;
+  private readonly startHandler: StartHandler | undefined;
   private readonly closeHandler: CloseHandler | undefined;
 
   protected constructor(options: RuntimeProviderOptions) {
@@ -87,6 +95,7 @@ export abstract class RuntimeProvider {
     this.warningsSource = Array.isArray(options.warnings)
       ? [...options.warnings]
       : options.warnings;
+    this.startHandler = options.start;
     this.closeHandler = options.close;
   }
 
@@ -127,6 +136,10 @@ export abstract class RuntimeProvider {
     await this.healthCheckHandler?.();
   }
 
+  async startProvider(): Promise<void> {
+    await this.startHandler?.();
+  }
+
   async warnings(): Promise<string[]> {
     if (!this.warningsSource) {
       return [];
@@ -159,6 +172,8 @@ export function isRuntimeProvider(value: unknown): value is RuntimeProvider {
       typeof (value as { supportsHealthCheck?: unknown }).supportsHealthCheck === "function" &&
       "healthCheck" in value &&
       typeof (value as { healthCheck?: unknown }).healthCheck === "function" &&
+      "startProvider" in value &&
+      typeof (value as { startProvider?: unknown }).startProvider === "function" &&
       "warnings" in value &&
       typeof (value as { warnings?: unknown }).warnings === "function" &&
       "closeProvider" in value &&

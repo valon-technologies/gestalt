@@ -256,6 +256,33 @@ func (r *Result) Start(ctx context.Context) error {
 	return nil
 }
 
+func (r *Result) StartWorkflowProviders(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("bootstrap result already closed")
+	}
+	providers := append([]coreworkflow.Provider(nil), r.ExtraWorkflows...)
+	r.mu.Unlock()
+
+	var errs []error
+	for _, provider := range providers {
+		if starter, ok := provider.(startableWorkflowProvider); ok {
+			started := time.Now()
+			if err := starter.Start(ctx); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			slog.InfoContext(ctx, "workflow provider started", "duration", time.Since(started).String())
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func (r *Result) Close(ctx context.Context) error {
 	if r == nil {
 		return nil
@@ -360,6 +387,10 @@ func closeAgents(providers ...coreagent.Provider) error {
 	return errors.Join(errs...)
 }
 
+type startableWorkflowProvider interface {
+	Start(context.Context) error
+}
+
 type workflowProviderWithCleanup struct {
 	coreworkflow.Provider
 	cleanup func()
@@ -384,6 +415,16 @@ func (p *workflowProviderWithCleanup) Close() error {
 	return errors.Join(errs...)
 }
 
+func (p *workflowProviderWithCleanup) Start(ctx context.Context) error {
+	if p == nil || p.Provider == nil {
+		return nil
+	}
+	if starter, ok := p.Provider.(startableWorkflowProvider); ok {
+		return starter.Start(ctx)
+	}
+	return nil
+}
+
 func (p *workflowProviderWithExecutionReferencesAndCleanup) Close() error {
 	var errs []error
 	if p != nil && p.Provider != nil {
@@ -395,6 +436,16 @@ func (p *workflowProviderWithExecutionReferencesAndCleanup) Close() error {
 		p.cleanup()
 	}
 	return errors.Join(errs...)
+}
+
+func (p *workflowProviderWithExecutionReferencesAndCleanup) Start(ctx context.Context) error {
+	if p == nil || p.Provider == nil {
+		return nil
+	}
+	if starter, ok := p.Provider.(startableWorkflowProvider); ok {
+		return starter.Start(ctx)
+	}
+	return nil
 }
 
 type agentProviderWithCleanup struct {

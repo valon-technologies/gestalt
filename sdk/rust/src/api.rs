@@ -150,6 +150,11 @@ pub trait Provider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
+    async fn start(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// Reports whether this provider can derive additional operations from the
     /// current request context.
     fn supports_session_catalog(&self) -> bool {

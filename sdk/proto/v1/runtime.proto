@@ -64,10 +64,17 @@ message HealthCheckResponse {
   string message = 2;
 }
 
+// StartRuntimeProviderResponse confirms the protocol version the provider is
+// serving after the optional runtime start phase.
+message StartRuntimeProviderResponse {
+  int32 protocol_version = 1;
+}
+
 // ProviderLifecycle is the common lifecycle protocol shared by every provider
 // kind.
 service ProviderLifecycle {
   rpc GetProviderIdentity(google.protobuf.Empty) returns (ProviderIdentity);
   rpc ConfigureProvider(ConfigureProviderRequest) returns (ConfigureProviderResponse);
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+  rpc StartProvider(google.protobuf.Empty) returns (StartRuntimeProviderResponse);
 }

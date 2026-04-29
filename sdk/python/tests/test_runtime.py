@@ -684,7 +684,9 @@ class MainEntrypointTests(unittest.TestCase):
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = AbortContext()
 
-        with self.assertRaisesRegex(AbortCalled, "provider metadata: metadata exploded"):
+        with self.assertRaisesRegex(
+            AbortCalled, "provider metadata: metadata exploded"
+        ):
             servicer.GetMetadata(mock.Mock(), context)
 
         self.assertEqual(context.code(), grpc.StatusCode.UNKNOWN)
@@ -740,6 +742,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         def session_ttl(self) -> dt.timedelta:
             return dt.timedelta(minutes=45)
+
+    class StartableAuthenticationProvider(StubAuthenticationProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = 0
+
+        def start(self) -> None:
+            self.started += 1
 
     def test_runtime_metadata_and_authentication_servicer(self) -> None:
         provider = self.StubAuthenticationProvider()
@@ -837,6 +847,46 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         session_settings = auth_servicer.GetSessionSettings(mock.Mock(), mock.Mock())
         self.assertEqual(session_settings.session_ttl_seconds, 45 * 60)
+
+    def test_runtime_start_provider_is_separate_from_configure(self) -> None:
+        provider = self.StartableAuthenticationProvider()
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.AUTHENTICATION,
+        )
+
+        configured = runtime_servicer.ConfigureProvider(
+            runtime_pb2.ConfigureProviderRequest(
+                name="fixture-auth",
+                protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(
+            configured.protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(provider.started, 0)
+
+        started = runtime_servicer.StartProvider(empty_pb2.Empty(), mock.Mock())
+        self.assertEqual(
+            started.protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(provider.started, 1)
+
+    def test_runtime_start_provider_noops_without_start_hook(self) -> None:
+        provider = self.StubAuthenticationProvider()
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.AUTHENTICATION,
+        )
+
+        started = runtime_servicer.StartProvider(empty_pb2.Empty(), mock.Mock())
+        self.assertEqual(
+            started.protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
         class NoValidator(AuthenticationProvider):
@@ -1090,7 +1140,9 @@ class CacheRuntimeTests(unittest.TestCase):
         )
         context = AbortContext()
 
-        with self.assertRaisesRegex(AbortCalled, "provider identity: identity exploded"):
+        with self.assertRaisesRegex(
+            AbortCalled, "provider identity: identity exploded"
+        ):
             runtime_servicer.GetProviderIdentity(mock.Mock(), context)
 
         self.assertEqual(context.code(), grpc.StatusCode.UNKNOWN)
@@ -1125,7 +1177,9 @@ class S3RuntimeTests(unittest.TestCase):
     def test_runtime_metadata_and_s3_registration(self) -> None:
         provider = self.StubS3Provider()
 
-        runtime_servicer = _runtime._runtime_servicer(provider=provider, kind=ProviderKind.S3)
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider, kind=ProviderKind.S3
+        )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
         self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_S3)
         self.assertEqual(meta.name, "stub-s3")
