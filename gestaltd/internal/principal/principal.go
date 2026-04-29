@@ -34,9 +34,11 @@ type Principal struct {
 	AuthSourceOverride  string
 	Scopes              []string
 	TokenPermissions    PermissionSet
+	ActionPermissions   ActionPermissionSet
 }
 
 type PermissionSet map[string]map[string]struct{}
+type ActionPermissionSet map[string]map[string]struct{}
 
 func (s Source) String() string {
 	switch s {
@@ -71,7 +73,7 @@ func (p *Principal) AuthSource() string {
 	if authSource := strings.TrimSpace(p.AuthSourceOverride); authSource != "" {
 		return authSource
 	}
-	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
+	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil && p.ActionPermissions == nil {
 		return ""
 	}
 	return p.Source.String()
@@ -152,6 +154,9 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 			continue
 		}
 		if len(perm.Operations) == 0 {
+			if len(perm.Actions) > 0 {
+				continue
+			}
 			set[plugin] = nil
 			continue
 		}
@@ -172,7 +177,36 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 		}
 	}
 	if len(set) == 0 {
+		return PermissionSet{}
+	}
+	return set
+}
+
+func CompileActionPermissions(perms []core.AccessPermission) ActionPermissionSet {
+	if len(perms) == 0 {
 		return nil
+	}
+	set := make(ActionPermissionSet, len(perms))
+	for _, perm := range perms {
+		plugin := strings.TrimSpace(perm.Plugin)
+		if plugin == "" {
+			continue
+		}
+		for _, action := range perm.Actions {
+			action = strings.TrimSpace(action)
+			if action == "" {
+				continue
+			}
+			actions := set[plugin]
+			if actions == nil {
+				actions = map[string]struct{}{}
+				set[plugin] = actions
+			}
+			actions[action] = struct{}{}
+		}
+	}
+	if len(set) == 0 {
+		return ActionPermissionSet{}
 	}
 	return set
 }
@@ -300,6 +334,21 @@ func AllowsOperationPermission(p *Principal, provider, operation string) bool {
 		return ok
 	}
 	return AllowsProviderPermission(p, provider)
+}
+
+func AllowsActionPermission(p *Principal, provider, action string) bool {
+	if p == nil {
+		return false
+	}
+	if p.ActionPermissions != nil {
+		actions, ok := p.ActionPermissions[provider]
+		if !ok {
+			return false
+		}
+		_, ok = actions[action]
+		return ok
+	}
+	return p.Source != SourceAPIToken
 }
 
 func clonePermissionOps(src map[string]struct{}) map[string]struct{} {

@@ -8,11 +8,14 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+var errProviderDevAttachAccess = errors.New("provider dev attach access denied")
 
 func (s *Server) createProviderDevSession(w http.ResponseWriter, r *http.Request) {
 	if !s.providerDevAvailable(w) {
@@ -73,9 +76,9 @@ func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *ht
 		if name == "" {
 			continue
 		}
-		if !principal.AllowsProviderPermission(p, name) || !s.allowProviderContext(r.Context(), p, name) {
-			writeError(w, http.StatusForbidden, errOperationAccess.Error())
-			return errOperationAccess
+		if !principal.AllowsActionPermission(p, name, core.ProviderActionDevAttach) || !s.allowProviderActionContext(r.Context(), p, name, core.ProviderActionDevAttach) {
+			writeError(w, http.StatusForbidden, errProviderDevAttachAccess.Error())
+			return errProviderDevAttachAccess
 		}
 	}
 	return nil

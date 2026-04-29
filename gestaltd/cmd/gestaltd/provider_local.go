@@ -242,7 +242,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	}
 	session, err := client.CreateSession(ctx, providerdev.CreateSessionRequest{Providers: requestedProviders})
 	if err != nil {
-		return err
+		return providerRemoteCreateSessionError(err)
 	}
 	attachID := strings.TrimSpace(session.AttachID)
 	if attachID == "" {
@@ -336,7 +336,7 @@ func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error
 	if token := strings.TrimSpace(credential.APIToken); token != "" {
 		return token, nil
 	}
-	return "", fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; run 'gestalt auth login --url %s' or pass --remote-token", credentialPath, remoteBaseURL)
+	return "", fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; pass --remote-token with a user API token that grants provider_dev.attach for the target plugin", credentialPath)
 }
 
 func loadStoredGestaltCLICredential() (storedGestaltCLICredential, string, bool, error) {
@@ -410,13 +410,11 @@ Remote server:
 
 No --remote-token or %s was provided, and no stored Gestalt CLI credential for this server was found.
 
-Log in for this server:
+Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
 
-  gestalt auth login --url %s
+  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
 
-or pass an explicit token:
-
-  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, gestaltAPIKeyEnv, remoteOrigin, remoteOrigin)
+You can also set %s for this command`, remoteOrigin, gestaltAPIKeyEnv, remoteOrigin, gestaltAPIKeyEnv)
 }
 
 func providerRemoteStoredCredentialUnscopedError(remoteOrigin, credentialPath string) error {
@@ -431,13 +429,9 @@ Stored credential:
 
 The stored credential does not record which Gestalt server it belongs to, so it was not sent.
 
-Log in for this server:
+Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
 
-  gestalt auth login --url %s
-
-or pass an explicit token:
-
-  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, credentialPath, remoteOrigin, remoteOrigin)
+  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, credentialPath, remoteOrigin)
 }
 
 func providerRemoteStoredCredentialMismatchError(remoteOrigin, storedOrigin, credentialPath string) error {
@@ -452,15 +446,25 @@ Stored credential:
 
 The stored credential is scoped to a different Gestalt server, so it was not sent.
 
-To use this remote server, log in for that server:
-
-  gestalt auth login --url %s
-
-or pass an explicit token:
+Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
 
   gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
 
-You can also set %s for this command`, remoteOrigin, storedOrigin, credentialPath, remoteOrigin, remoteOrigin, gestaltAPIKeyEnv)
+You can also set %s for this command`, remoteOrigin, storedOrigin, credentialPath, remoteOrigin, gestaltAPIKeyEnv)
+}
+
+func providerRemoteCreateSessionError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(err.Error(), "provider dev attach access denied") {
+		return err
+	}
+	return fmt.Errorf(`%w
+
+remote provider-dev attach was denied. The remote plugin must grant providerDev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
+
+provider scopes, operation permissions, subject-owned API tokens, and plain gestalt auth login credentials do not grant remote attach`, err)
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
@@ -1626,5 +1630,5 @@ func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
 	writeUsageLine(w, "  --remote   Remote gestaltd base URL to attach local source plugins to")
-	writeUsageLine(w, "  --remote-token  Bearer token for --remote (default: GESTALT_API_KEY or matching gestalt auth login credentials)")
+	writeUsageLine(w, "  --remote-token  Bearer token for --remote (default: GESTALT_API_KEY or matching stored CLI credential; must grant provider_dev.attach)")
 }

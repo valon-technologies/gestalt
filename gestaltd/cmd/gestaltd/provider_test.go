@@ -180,7 +180,7 @@ func TestResolveProviderRemoteTokenErrors(t *testing.T) {
 					"Stored credential:\n  server: https://valon.tools",
 					filepath.Join(configHome, "gestalt", "credentials.json"),
 					"The stored credential is scoped to a different Gestalt server, so it was not sent.",
-					"gestalt auth login --url https://staging.valon.tools",
+					"permissions[].actions including provider_dev.attach",
 					"gestaltd provider dev --remote https://staging.valon.tools --remote-token <token> --path ./plugin",
 					"You can also set GESTALT_API_KEY for this command",
 				}
@@ -194,7 +194,7 @@ func TestResolveProviderRemoteTokenErrors(t *testing.T) {
 				return []string{
 					"Stored credential:\n  server: <missing>",
 					"The stored credential does not record which Gestalt server it belongs to, so it was not sent.",
-					"gestalt auth login --url https://valon.tools",
+					"permissions[].actions including provider_dev.attach",
 				}
 			},
 		},
@@ -206,7 +206,7 @@ func TestResolveProviderRemoteTokenErrors(t *testing.T) {
 					"provider dev --remote requires authentication.",
 					"Remote server:\n  https://valon.tools",
 					"No --remote-token or GESTALT_API_KEY was provided, and no stored Gestalt CLI credential for this server was found.",
-					"gestalt auth login --url https://valon.tools",
+					"permissions[].actions including provider_dev.attach",
 					"gestaltd provider dev --remote https://valon.tools --remote-token <token> --path ./plugin",
 				}
 			},
@@ -233,6 +233,30 @@ func TestResolveProviderRemoteTokenErrors(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing.T) {
+	t.Parallel()
+
+	err := providerRemoteCreateSessionError(errors.New("provider dev remote POST /api/v1/provider-dev/attachments: 403 Forbidden: provider dev attach access denied"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	for _, want := range []string{
+		"remote provider-dev attach was denied",
+		"providerDev.attach.allowedRoles",
+		"permissions[].actions including provider_dev.attach",
+		"plain gestalt auth login credentials do not grant remote attach",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error missing %q:\n%s", want, err)
+		}
+	}
+
+	other := errors.New("network unavailable")
+	if got := providerRemoteCreateSessionError(other); got != other {
+		t.Fatalf("unrelated error was wrapped: %v", got)
 	}
 }
 

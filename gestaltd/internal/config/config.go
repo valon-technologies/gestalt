@@ -381,7 +381,8 @@ type ProviderEntry struct {
 	SecuritySchemes map[string]*HTTPSecurityScheme `yaml:"securitySchemes,omitempty"`
 	HTTP            map[string]*HTTPBinding        `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
-	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
+	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
+	ProviderDev         *ProviderEntryDevConfig `yaml:"providerDev,omitempty"`
 
 	// Plugin-specific runtime fields populated from the canonical ui object.
 	MountPath         string                        `yaml:"-"`
@@ -413,6 +414,14 @@ type ProviderEntry struct {
 }
 
 type providerEntryFields ProviderEntry
+
+type ProviderEntryDevConfig struct {
+	Attach ProviderEntryDevAttachConfig `yaml:"attach,omitempty"`
+}
+
+type ProviderEntryDevAttachConfig struct {
+	AllowedRoles []string `yaml:"allowedRoles,omitempty"`
+}
 
 type providerEntryYAML struct {
 	providerEntryFields `yaml:",inline"`
@@ -826,8 +835,18 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
 	e.Execution = cloneExecutionConfig(e.Execution)
+	e.ProviderDev = cloneProviderEntryDevConfig(e.ProviderDev)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
+}
+
+func cloneProviderEntryDevConfig(src *ProviderEntryDevConfig) *ProviderEntryDevConfig {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Attach.AllowedRoles = slices.Clone(src.Attach.AllowedRoles)
+	return &dst
 }
 
 func normalizeProviderEntryAliases(entry *ProviderEntry) {
@@ -839,6 +858,9 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	}
 	if entry.Execution != nil {
 		entry.Execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
+	}
+	if entry.ProviderDev != nil {
+		entry.ProviderDev.Attach.AllowedRoles = trimStringSlice(entry.ProviderDev.Attach.AllowedRoles)
 	}
 }
 

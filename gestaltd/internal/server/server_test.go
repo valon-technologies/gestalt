@@ -1480,6 +1480,11 @@ func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Conte
 
 func seedAPIToken(t *testing.T, svc *coredata.Services, plaintext, hashed, userID string) {
 	t.Helper()
+	seedAPITokenWithPermissions(t, svc, plaintext, hashed, userID, nil)
+}
+
+func seedAPITokenWithPermissions(t *testing.T, svc *coredata.Services, plaintext, hashed, userID string, permissions []core.AccessPermission) *core.User {
+	t.Helper()
 	ctx := context.Background()
 	user, err := svc.Users.FindOrCreateUser(ctx, userID+"@test.local")
 	if err != nil {
@@ -1494,12 +1499,19 @@ func seedAPIToken(t *testing.T, svc *coredata.Services, plaintext, hashed, userI
 		Name:                "test-token",
 		HashedToken:         hashed,
 		ExpiresAt:           &exp,
+		Permissions:         cloneAccessPermissionsForTest(permissions),
 	}); err != nil {
 		t.Fatalf("seedAPIToken: StoreAPIToken: %v", err)
 	}
+	return user
 }
 
 func seedSubjectAPIToken(t *testing.T, svc *coredata.Services, hashed, subjectID, name string) {
+	t.Helper()
+	seedSubjectAPITokenWithPermissions(t, svc, hashed, subjectID, name, nil)
+}
+
+func seedSubjectAPITokenWithPermissions(t *testing.T, svc *coredata.Services, hashed, subjectID, name string, permissions []core.AccessPermission) {
 	t.Helper()
 	exp := time.Now().Add(24 * time.Hour)
 	if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
@@ -1510,9 +1522,22 @@ func seedSubjectAPIToken(t *testing.T, svc *coredata.Services, hashed, subjectID
 		Name:                name,
 		HashedToken:         hashed,
 		ExpiresAt:           &exp,
+		Permissions:         cloneAccessPermissionsForTest(permissions),
 	}); err != nil {
 		t.Fatalf("seedSubjectAPIToken: StoreAPIToken: %v", err)
 	}
+}
+
+func cloneAccessPermissionsForTest(src []core.AccessPermission) []core.AccessPermission {
+	if len(src) == 0 {
+		return nil
+	}
+	out := append([]core.AccessPermission(nil), src...)
+	for i := range out {
+		out[i].Operations = append([]string(nil), out[i].Operations...)
+		out[i].Actions = append([]string(nil), out[i].Actions...)
+	}
+	return out
 }
 
 func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
@@ -6156,6 +6181,19 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 		cfg.Auth = auth
 		cfg.ProviderDevAttach = true
 		cfg.ProviderDevSessions = newManager(t)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap": {
+				AuthorizationPolicy: "provider_devs",
+				ProviderDev: &config.ProviderEntryDevConfig{
+					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.SubjectPolicyDef{
+				"provider_devs": {Default: "allow"},
+			},
+		}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, enabledTS)
 	req, err = http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
@@ -6331,6 +6369,110 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("delete status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T) {
+	t.Parallel()
+
+	newManager := func(t *testing.T) *providerdev.Manager {
+		t.Helper()
+		manager, err := providerdev.NewManager([]providerdev.Target{{
+			Name:   "roadmap",
+			Source: "github.com/acme/plugins/roadmap",
+		}})
+		if err != nil {
+			t.Fatalf("NewManager: %v", err)
+		}
+		return manager
+	}
+	newToken := func(t *testing.T) (string, string) {
+		t.Helper()
+		plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		return plaintext, hashed
+	}
+	svc := coretesting.NewStubServices(t)
+	broadToken, broadHash := newToken(t)
+	seedAPIToken(t, svc, broadToken, broadHash, "broad-user")
+	invokeToken, invokeHash := newToken(t)
+	seedAPITokenWithPermissions(t, svc, invokeToken, invokeHash, "invoke-user", []core.AccessPermission{{Plugin: "roadmap"}})
+	attachToken, attachHash := newToken(t)
+	seedAPITokenWithPermissions(t, svc, attachToken, attachHash, "attach-user", []core.AccessPermission{{
+		Plugin:  "roadmap",
+		Actions: []string{core.ProviderActionDevAttach},
+	}})
+	subjectToken, subjectHash := newToken(t)
+	seedSubjectAPITokenWithPermissions(t, svc, subjectHash, "service_account:roadmap-dev", "roadmap-dev", []core.AccessPermission{{
+		Plugin:  "roadmap",
+		Actions: []string{core.ProviderActionDevAttach},
+	}})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Services = svc
+		cfg.ProviderDevAttach = true
+		cfg.ProviderDevSessions = newManager(t)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap": {
+				AuthorizationPolicy: "provider_devs",
+				ProviderDev: &config.ProviderEntryDevConfig{
+					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.SubjectPolicyDef{
+				"provider_devs": {Default: "allow"},
+			},
+		}, cfg.PluginDefs)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	create := func(t *testing.T, token string) (int, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachments, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
+		if err != nil {
+			t.Fatalf("new create request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("read create response: %v", err)
+		}
+		return resp.StatusCode, string(body)
+	}
+
+	for name, token := range map[string]string{
+		"legacy broad token": broadToken,
+		"invoke permission":  invokeToken,
+		"subject token":      subjectToken,
+	} {
+		status, body := create(t, token)
+		if status != http.StatusForbidden {
+			t.Fatalf("%s create status = %d, want 403; body = %s", name, status, body)
+		}
+	}
+
+	status, body := create(t, attachToken)
+	if status != http.StatusCreated {
+		t.Fatalf("attach action create status = %d, want 201; body = %s", status, body)
+	}
+	if !strings.Contains(body, `"attachId"`) || !strings.Contains(body, `"dispatcherSecret"`) {
+		t.Fatalf("attach action create response missing attachId/dispatcherSecret: %s", body)
 	}
 }
 
@@ -13837,6 +13979,68 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 	if result["name"] != "my-token" {
 		t.Fatalf("expected name my-token, got %q", result["name"])
+	}
+}
+
+func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"attach-token","permissions":[{"plugin":"roadmap","actions":["provider_dev.attach"]}]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create status = %d, want 201: %s", resp.StatusCode, respBody)
+	}
+	var created struct {
+		ID          string                  `json:"id"`
+		Token       string                  `json:"token"`
+		Permissions []core.AccessPermission `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.ID == "" || created.Token == "" {
+		t.Fatalf("create response missing id/token: %+v", created)
+	}
+	if len(created.Permissions) != 1 || created.Permissions[0].Plugin != "roadmap" || len(created.Permissions[0].Actions) != 1 || created.Permissions[0].Actions[0] != core.ProviderActionDevAttach || len(created.Permissions[0].Operations) != 0 {
+		t.Fatalf("created permissions = %#v", created.Permissions)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var listed []struct {
+		ID          string                  `json:"id"`
+		Permissions []core.AccessPermission `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != created.ID || len(listed[0].Permissions) != 1 || len(listed[0].Permissions[0].Actions) != 1 || listed[0].Permissions[0].Actions[0] != core.ProviderActionDevAttach {
+		t.Fatalf("listed tokens = %#v", listed)
 	}
 }
 

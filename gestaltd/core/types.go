@@ -33,7 +33,10 @@ type ExternalCredential struct {
 type AccessPermission struct {
 	Plugin     string   `json:"plugin"`
 	Operations []string `json:"operations,omitempty"`
+	Actions    []string `json:"actions,omitempty"`
 }
+
+const ProviderActionDevAttach = "provider_dev.attach"
 
 type APIToken struct {
 	ID                  string

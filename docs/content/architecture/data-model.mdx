@@ -58,7 +58,7 @@ Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way 
 | `name` | string | Display name (e.g., `automation`, `cli-token`). |
 | `hashed_token` | string, unique | **SHA-256 hash.** Plaintext returned once at creation. |
 | `scopes` | string | Plaintext. Space-separated provider names. |
-| `permissions_json` | string | JSON-encoded provider access permissions. |
+| `permissions_json` | string | JSON-encoded provider operation permissions and provider-scoped action permissions such as `provider_dev.attach`. |
 | `expires_at` | time | Null for non-expiring tokens. |
 | `created_at` | time | |
 | `updated_at` | time | |
