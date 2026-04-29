@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -358,6 +359,104 @@ func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *
 	}
 }
 
+func TestResolveProviderAttachTokenUsesMatchingStoredCLICredential(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+	writeStoredGestaltCLICredentialForTest(t, configHome, "https://Valon.Tools/team-a/", "stored-token")
+
+	token, err := resolveProviderAttachToken(providerAttachCommandOptions{
+		Remote: "https://valon.tools/team-a",
+	})
+	if err != nil {
+		t.Fatalf("resolveProviderAttachToken: %v", err)
+	}
+	if token != "stored-token" {
+		t.Fatalf("token = %q, want stored-token", token)
+	}
+}
+
+func TestProviderAttachCommandsUseOwnerAttachmentRoutes(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	var sawDelete atomic.Bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer owner-token" {
+			http.Error(w, "missing owner token", http.StatusUnauthorized)
+			return
+		}
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/team-a"+providerdev.PathAttachments:
+			writeJSONForProviderRemoteTest(t, w, http.StatusOK, providerdev.ListAttachmentsResponse{
+				Attachments: []providerdev.AttachmentInfo{{
+					AttachID:           "attach-1",
+					CreatedAt:          now.Add(-time.Minute),
+					LastSeenAt:         now,
+					IdleTimeoutSeconds: 120,
+					Providers: []providerdev.AttachmentProviderInfo{{
+						Name:   "roadmap",
+						Source: "github.com/test/plugins/roadmap",
+						UI:     true,
+						UIPath: "/roadmap",
+					}},
+				}},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/team-a"+providerdev.PathAttachments+"/attach-1":
+			writeJSONForProviderRemoteTest(t, w, http.StatusOK, providerdev.AttachmentInfo{
+				AttachID:           "attach-1",
+				CreatedAt:          now.Add(-time.Minute),
+				LastSeenAt:         now,
+				IdleTimeoutSeconds: 120,
+				Providers: []providerdev.AttachmentProviderInfo{{
+					Name:   "roadmap",
+					Source: "github.com/test/plugins/roadmap",
+					UI:     true,
+					UIPath: "/roadmap",
+				}},
+			})
+		case r.Method == http.MethodDelete && r.URL.Path == "/team-a"+providerdev.PathAttachments+"/attach-1":
+			sawDelete.Store(true)
+			writeJSONForProviderRemoteTest(t, w, http.StatusOK, map[string]string{"status": "closed"})
+		default:
+			http.Error(w, "unexpected request "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+	remote := ts.URL + "/team-a"
+
+	listOut, err := runProviderCommandResult("", "attach", "list", "--remote", remote, "--remote-token", "owner-token")
+	if err != nil {
+		t.Fatalf("provider attach list: %v\n%s", err, listOut)
+	}
+	for _, want := range []string{"ATTACH ID", "attach-1", "roadmap", "roadmap:/roadmap", "120s"} {
+		if !strings.Contains(string(listOut), want) {
+			t.Fatalf("list output missing %q:\n%s", want, listOut)
+		}
+	}
+
+	showOut, err := runProviderCommandResult("", "attach", "show", "--remote", remote, "--remote-token", "owner-token", "attach-1")
+	if err != nil {
+		t.Fatalf("provider attach show: %v\n%s", err, showOut)
+	}
+	for _, want := range []string{"Attach ID: attach-1", "Providers:", "roadmap", "source=github.com/test/plugins/roadmap", "ui=/roadmap"} {
+		if !strings.Contains(string(showOut), want) {
+			t.Fatalf("show output missing %q:\n%s", want, showOut)
+		}
+	}
+
+	detachOut, err := runProviderCommandResult("", "attach", "detach", "--remote", remote, "--remote-token", "owner-token", "attach-1")
+	if err != nil {
+		t.Fatalf("provider attach detach: %v\n%s", err, detachOut)
+	}
+	if !strings.Contains(string(detachOut), "Detached provider-dev attachment attach-1") {
+		t.Fatalf("unexpected detach output: %s", detachOut)
+	}
+	if !sawDelete.Load() {
+		t.Fatal("expected owner detach request")
+	}
+}
+
 func writeJSONForProviderRemoteTest(t *testing.T, w http.ResponseWriter, status int, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
@@ -412,8 +511,13 @@ func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 		{
 			name:      "root help",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "release"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "attach", "release"},
 			notWant:   []string{"\n  install", "\n  inspect", "\n  list", "\n  init", "\n  package"},
+		},
+		{
+			name:      "attach help",
+			args:      []string{"attach", "--help"},
+			wantParts: []string{"gestaltd provider attach <command> [flags]", "detach"},
 		},
 		{
 			name:      "release help",

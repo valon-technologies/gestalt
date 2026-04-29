@@ -907,9 +907,20 @@ sent; the browser approval flow is used instead. Use `--remote-token` or
 Remote attach creates an owner-scoped attachment. The server returns an
 `attachId` and a one-time dispatcher secret; the CLI uses both for local
 poll/complete traffic. Other users keep seeing the deployed provider and UI.
-Owner cleanup can detach a stuck attachment by `attachId`, but diagnostic
-list/get responses never expose dispatcher secrets, host-service env, plugin
-config, access tokens, or browser binding URLs.
+Owner cleanup can detach a stuck attachment by `attachId`:
+
+```sh
+gestaltd provider attach list --remote "$GESTALT_URL"
+gestaltd provider attach show --remote "$GESTALT_URL" att_123
+gestaltd provider attach detach --remote "$GESTALT_URL" att_123
+```
+
+These diagnostic commands use `--remote-token`, `GESTALT_API_KEY`, or a matching
+stored Gestalt CLI credential for the same remote URL. They do not require
+`provider_dev.attach` because they only list, inspect, or detach attachments
+owned by the authenticated principal. Diagnostic list/get responses never expose
+dispatcher secrets, host-service env, plugin config, access tokens, or browser
+binding URLs.
 
 For `--remote --path` without `--config`, Gestalt matches the local manifest
 `source` to a configured plugin on the remote server. The remote plugin's

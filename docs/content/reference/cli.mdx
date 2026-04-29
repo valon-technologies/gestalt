@@ -35,6 +35,9 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
 | `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, plugin config, and host services. |
 | `gestaltd provider dev --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files when you need explicit local config overrides or multiple local plugins. |
+| `gestaltd provider attach list --remote URL` | List your active remote provider-dev attachments on that server. |
+| `gestaltd provider attach show --remote URL ATTACH_ID` | Inspect one active remote provider-dev attachment. |
+| `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `provider dev`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
@@ -62,6 +65,9 @@ gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/supp
 gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
 gestaltd provider dev --remote https://gestalt.example.com --remote-token <token-with-provider_dev.attach> --path ./plugins/support
 gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
+gestaltd provider attach list --remote https://gestalt.example.com
+gestaltd provider attach show --remote https://gestalt.example.com att_123
+gestaltd provider attach detach --remote https://gestalt.example.com att_123
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
 gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
@@ -107,8 +113,16 @@ remote instance.
 After browser approval or attach-token authentication, the remote creates an
 attachment and the CLI uses the returned `attachId` plus a one-time dispatcher
 secret for poll/complete traffic. The dispatcher secret is not shown by list/get
-diagnostics and is not needed for owner cleanup detach. API-token attach
-requires an explicit token action permission:
+diagnostics and is not needed for owner cleanup detach. Use
+`gestaltd provider attach list --remote URL`,
+`gestaltd provider attach show --remote URL ATTACH_ID`, and
+`gestaltd provider attach detach --remote URL ATTACH_ID` to inspect or clean up
+attachments owned by your authenticated principal. These diagnostic commands use
+`--remote-token`, `GESTALT_API_KEY`, or a matching stored Gestalt CLI
+credential, and they do not require `provider_dev.attach` because they cannot
+create a new attachment.
+
+API-token attach creation requires an explicit token action permission:
 
 ```json
 {
