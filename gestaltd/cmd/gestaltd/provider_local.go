@@ -615,7 +615,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 	}
 	switch {
 	case shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest):
-		autoMountPath = "/" + resolvedKey
+		autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
 		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
 			return nil, err
 		}
@@ -632,7 +632,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 			uiName = resolvedKey
 		}
 		if autoMountPath == "" {
-			autoMountPath = "/" + resolvedKey
+			autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
 			if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
 				return nil, err
 			}
@@ -674,7 +674,7 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 		return nil, err
 	}
 
-	autoMountPath := "/" + resolvedKey
+	autoMountPath := defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
 	if configuredUIs, err := loadConfiguredUIs(opts.ConfigPaths); err == nil {
 		if entry := configuredUIs[resolvedKey]; entry != nil && strings.TrimSpace(entry.Path) != "" {
 			autoMountPath = strings.TrimSpace(entry.Path)
@@ -1450,6 +1450,56 @@ func sanitizeDerivedPluginKey(value string) string {
 		}
 	}
 	return strings.Trim(b.String(), "_")
+}
+
+func defaultProviderLocalMountPath(manifest *providermanifestv1.Manifest, manifestPath, fallbackKey string) string {
+	if slug := derivedProviderLocalMountSlug(manifest, manifestPath); slug != "" {
+		return "/" + slug
+	}
+	if slug := sanitizeProviderLocalMountSlug(fallbackKey); slug != "" {
+		return "/" + slug
+	}
+	return "/" + fallbackKey
+}
+
+func derivedProviderLocalMountSlug(manifest *providermanifestv1.Manifest, manifestPath string) string {
+	if manifest != nil {
+		if src, err := pluginsource.Parse(manifest.Source); err == nil {
+			if slug := strings.TrimSpace(src.PluginName()); slug != "" {
+				return slug
+			}
+		}
+	}
+	return sanitizeProviderLocalMountSlug(filepath.Base(filepath.Dir(manifestPath)))
+}
+
+func sanitizeProviderLocalMountSlug(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	var b strings.Builder
+	previousSeparator := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			previousSeparator = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			previousSeparator = false
+		case r == '-' || r == '_' || r == '.':
+			if previousSeparator || b.Len() == 0 {
+				continue
+			}
+			b.WriteRune(r)
+			previousSeparator = true
+		default:
+			if previousSeparator || b.Len() == 0 {
+				continue
+			}
+			b.WriteByte('-')
+			previousSeparator = true
+		}
+	}
+	return strings.Trim(b.String(), "-_.")
 }
 
 func isValidExplicitPluginKey(value string) bool {

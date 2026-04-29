@@ -22,6 +22,14 @@ When the UI is part of a `plugin/` + sibling `ui/` package layout, running
 `gestaltd provider dev` from the plugin side also picks up that sibling UI
 automatically for the local session.
 
+Without an explicit config mount, the local UI path is derived from the
+manifest `source` slug. A UI source ending in `vm-style-guide` is served at
+`/vm-style-guide`, which lets bundles that contain absolute asset URLs work in
+the config-free local loop. When developing a UI bundle directly, configured
+`providers.ui.<name>.path` values still take precedence. When developing from a
+plugin with owned or sibling UI, configure `plugins.<name>.ui.path` to override
+the inferred mount.
+
 A UI bundle is not a plugin in the executable sense. It contains no server-side
 code. Gestalt simply serves the static files from the asset root directory. The
 bundle talks to Gestalt through the same HTTP API and MCP endpoints that any

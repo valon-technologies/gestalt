@@ -793,6 +793,12 @@ that owned UI automatically. For the common `plugin/` + sibling `ui/` layout,
 the local commands also detect `../ui/manifest.yaml` and wire it in
 automatically during local development.
 
+When no config file supplies an explicit `plugins.<name>.ui.path`, the inferred
+local UI path comes from the manifest `source` slug. For example,
+`github.com/acme/tools/plugins/vm-style-guide` mounts at `/vm-style-guide`.
+The plugin key remains API-safe, so the same plugin may still be addressed as
+`vm_style_guide` in local integration APIs.
+
 Validate the plugin in isolation:
 
 ```sh

@@ -394,6 +394,7 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	mountedUI := setupMountedUIDir(t, dir)
+	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
 
 	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", mountedUI.ManifestPath)
 	cmd.Env = append(os.Environ(),
@@ -409,6 +410,9 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "ui=roadmap_review") {
 		t.Fatalf("expected ui validation summary, got: %s", out)
+	}
+	if !strings.Contains(string(out), "mounted_ui_paths=[/roadmap.review]") {
+		t.Fatalf("expected source-slug ui mount path in output, got: %s", out)
 	}
 }
 
@@ -1033,6 +1037,29 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
+}
+
+func setPluginManifestSource(t *testing.T, pluginDir, source string) {
+	t.Helper()
+
+	manifestPath := componentProviderManifestPath(t, pluginDir)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
+	}
+	manifest.Source = source
+	writeManifestFile(t, pluginDir, manifest)
+}
+
+func setUIManifestSource(t *testing.T, manifestPath, source string) {
+	t.Helper()
+
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
+	}
+	manifest.Source = source
+	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
 }
 
 func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
@@ -2086,6 +2113,7 @@ func TestE2EProviderDevServesSourceUI(t *testing.T) {
 	dir := t.TempDir()
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	mountedUI := setupMountedUIDir(t, dir)
+	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	_ = holder.Close()
@@ -2098,7 +2126,7 @@ func TestE2EProviderDevServesSourceUI(t *testing.T) {
 	startCommandAndWaitReady(t, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/roadmap_review/sync", "Roadmap Review UI")
+	_ = waitForHTTPBody(t, client, baseURL+"/roadmap.review/sync", "Roadmap Review UI")
 }
 
 func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
@@ -2112,6 +2140,7 @@ func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
 	providersDir := setupDefaultLocalProvidersDir(t, dir)
 	rootDir := filepath.Join(dir, "package")
 	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "plugin"))
+	setPluginManifestSource(t, pluginDir, "github.com/test/plugins/vm-style-guide")
 	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -2125,7 +2154,8 @@ func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
 	startCommandAndWaitReady(t, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
+	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/sync", "Roadmap Review UI")
+	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/assets/app.js", "ready")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
