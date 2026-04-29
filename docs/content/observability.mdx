@@ -338,7 +338,7 @@ These metrics are recorded around every ObjectStore and Index operation on the
 system IndexedDB instance. They use the OpenTelemetry
 `db.client.operation.duration` histogram instead of a Gestalt-specific metric
 family. The instrumentation is applied once at the interface level in bootstrap,
-so both core services (tokens, users, API tokens) and plugin host traffic are
+so both core services (users and API tokens) and provider-hosted traffic are
 covered.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>

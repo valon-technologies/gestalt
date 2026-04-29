@@ -1,10 +1,20 @@
 # Data Model
 
-Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, agent metadata/idempotency, runtime sessions, and runtime session logs. Provider-owned state, such as upstream credentials, is provisioned by that provider instead of by gestaltd core.
+Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users and API tokens. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
 
 MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
 
 For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/configuration).
+
+## Ownership summary
+
+| Owner | Persistent state |
+| --- | --- |
+| `gestaltd` core | `users`, `api_tokens` |
+| External credentials provider | `external_credentials` |
+| Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
+| Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
+| MCP OAuth support | `oauth_registrations` raw SQL table |
 
 ## Object stores
 
