@@ -224,11 +224,15 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 	if err != nil {
 		return nil, err
 	}
+	targetFingerprint := strings.TrimSpace(ref.GetTargetFingerprint())
+	if targetFingerprint == "" {
+		return nil, fmt.Errorf("workflow execution reference target_fingerprint is required")
+	}
 	return &coreworkflow.ExecutionReference{
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
-		TargetFingerprint:   strings.TrimSpace(ref.GetTargetFingerprint()),
+		TargetFingerprint:   targetFingerprint,
 		CallerPluginName:    strings.TrimSpace(ref.GetCallerPluginName()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
