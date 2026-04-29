@@ -790,8 +790,9 @@ Use the provider-local commands when you are iterating on a source plugin.
 Gestalt config around the target plugin instead of requiring a hand-written
 temp config. If the plugin manifest declares `spec.ui.path`, Gestalt mounts
 that owned UI automatically. For the common `plugin/` + sibling `ui/` layout,
-the local commands also detect `../ui/manifest.yaml` and wire it in
-automatically during local development.
+the local commands detect `../ui/manifest.yaml` and wire it in automatically
+during local development when the plugin is not already bound to an explicit UI
+entry.
 
 Validate the plugin in isolation:
 

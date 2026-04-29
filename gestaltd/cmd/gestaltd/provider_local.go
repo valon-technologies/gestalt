@@ -622,7 +622,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, "", ""); err != nil {
 			return nil, err
 		}
-	case siblingUIManifestPath != "":
+	case siblingUIManifestPath != "" && shouldAutoWireSiblingUI(loadedCfg, resolvedKey):
 		var uiName string
 		if entry := loadedCfg.Plugins[resolvedKey]; entry != nil {
 			uiName = strings.TrimSpace(entry.UI)
@@ -1240,6 +1240,26 @@ func ensureNoPublicUIPathCollision(cfg *config.Config, pluginKey, mountPath stri
 	return nil
 }
 
+func shouldAutoWireSiblingUI(cfg *config.Config, pluginKey string) bool {
+	if cfg == nil {
+		return true
+	}
+	if entry := cfg.Plugins[pluginKey]; entry != nil && strings.TrimSpace(entry.UI) != "" {
+		return false
+	}
+	if entry := cfg.Providers.UI[pluginKey]; entry != nil && providerEntryHasConfiguredSource(&entry.ProviderEntry) {
+		return false
+	}
+	return true
+}
+
+func providerEntryHasConfiguredSource(entry *config.ProviderEntry) bool {
+	if entry == nil {
+		return false
+	}
+	return entry.SourcePath() != "" || entry.SourceReleaseLocation() != "" || entry.Source.IsBuiltin()
+}
+
 func findSiblingUIManifestPath(pluginManifestPath string, manifest *providermanifestv1.Manifest) (string, error) {
 	if manifest == nil || manifest.Spec == nil || manifest.Spec.UI != nil {
 		return "", nil
@@ -1267,6 +1287,9 @@ func findSiblingUIManifestPath(pluginManifestPath string, manifest *providermani
 
 	uiManifestPath, err := providerpkg.FindManifestFile(uiDir)
 	if err != nil {
+		if isNoManifestFileErr(err) {
+			return "", nil
+		}
 		return "", fmt.Errorf("find sibling ui manifest: %w", err)
 	}
 	uiManifestPath, err = canonicalPath(uiManifestPath)
@@ -1286,6 +1309,10 @@ func findSiblingUIManifestPath(pluginManifestPath string, manifest *providermani
 		return "", fmt.Errorf("sibling ui manifest %q must have kind %q (got %q)", uiManifestPath, providermanifestv1.KindUI, kind)
 	}
 	return uiManifestPath, nil
+}
+
+func isNoManifestFileErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no manifest file found in ")
 }
 
 func providerLocalIndexedDBSourceConfig() any {
