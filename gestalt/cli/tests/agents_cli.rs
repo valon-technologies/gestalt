@@ -757,7 +757,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
 
 #[cfg(unix)]
 #[test]
-fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
+fn test_cli_runs_tty_agent_session_with_selectable_inline_ui() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::json(
             Method::POST,
@@ -818,7 +818,6 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
         &["agent", "--provider", "managed", "--model", "gpt-5.4"],
     );
     let mut output = String::new();
-    session.wait_for(&mut output, "\x1b[?1049h");
     session.wait_for(&mut output, "Session");
     session.wait_for(&mut output, "managed/gpt-5.4");
     session.wait_for(&mut output, "footer-branch");
@@ -832,6 +831,10 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     assert!(
         output.contains("› hello tui") && output.contains("●"),
         "TTY transcript did not render highlighted user input and assistant bullet:\n{output}"
+    );
+    assert!(
+        !output.contains("\x1b[?1049h"),
+        "TTY entered the alternate screen, which prevents normal terminal scrollback selection:\n{output}"
     );
     assert!(
         !output.contains("**hello**"),
@@ -1396,6 +1399,46 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     session.write("\x03");
     session.wait_for_exit();
 
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_resize_expands_selectable_inline_viewport() {
+    let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
+        Method::POST,
+        "/api/v1/agent/sessions",
+        r#"{"provider":"managed","model":"gpt-5.4"}"#,
+        StatusCode::CREATED,
+        http::APPLICATION_JSON,
+        SESSION_JSON,
+    )]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli_with_size(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        8,
+        100,
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+
+    session.resize(24, 100);
+    let mut resized_output = String::new();
+    session.wait_for(&mut resized_output, "session session-1");
+
+    let mut help_output = String::new();
+    session.write("/help\r");
+    session.wait_for(&mut help_output, "Ctrl-C cancels, clears input, or exits.");
+    assert!(
+        !help_output.contains("\x1b[?1049h"),
+        "TTY entered the alternate screen after resize:\n{help_output}"
+    );
+
+    session.write("\x03");
+    session.wait_for_exit();
     server.assert_finished();
 }
 
@@ -2586,10 +2629,14 @@ struct ScriptedHttpRequest {
 
 #[cfg(unix)]
 struct TtyCliSession {
+    master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     reader: Option<std::thread::JoinHandle<()>>,
     rx: mpsc::Receiver<String>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    rows: u16,
+    cols: u16,
+    cursor_query_buffer: Vec<u8>,
 }
 
 #[cfg(unix)]
@@ -2611,7 +2658,10 @@ impl TtyCliSession {
                 .saturating_duration_since(now)
                 .min(Duration::from_millis(100));
             match self.rx.recv_timeout(timeout) {
-                Ok(chunk) => output.push_str(&chunk),
+                Ok(chunk) => {
+                    self.respond_to_cursor_position_requests(&chunk);
+                    output.push_str(&chunk);
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     panic!("PTY reader closed before seeing {needle:?}; output was:\n{output}")
@@ -2637,6 +2687,44 @@ impl TtyCliSession {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
+
+    fn resize(&mut self, rows: u16, cols: u16) {
+        self.rows = rows.max(1);
+        self.cols = cols.max(1);
+        self.master
+            .resize(portable_pty::PtySize {
+                rows: self.rows,
+                cols: self.cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .unwrap();
+    }
+
+    fn respond_to_cursor_position_requests(&mut self, chunk: &str) {
+        self.cursor_query_buffer.extend_from_slice(chunk.as_bytes());
+        let query = b"\x1b[6n";
+        while let Some(position) = find_subslice(&self.cursor_query_buffer, query) {
+            let row = self.rows.max(1);
+            let col = self.cols.max(1);
+            self.write(&format!("\x1b[{row};{col}R"));
+            self.cursor_query_buffer
+                .drain(..position.saturating_add(query.len()));
+        }
+
+        let retained = query.len().saturating_sub(1);
+        if self.cursor_query_buffer.len() > retained {
+            let dropped = self.cursor_query_buffer.len() - retained;
+            self.cursor_query_buffer.drain(..dropped);
+        }
+    }
+}
+
+#[cfg(unix)]
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 #[cfg(unix)]
@@ -2696,10 +2784,14 @@ fn spawn_tty_cli_with_size(
     });
 
     TtyCliSession {
+        master: pair.master,
         writer,
         reader: Some(reader),
         rx,
         child,
+        rows,
+        cols,
+        cursor_query_buffer: Vec::new(),
     }
 }
 
