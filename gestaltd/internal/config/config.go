@@ -1576,8 +1576,12 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 	if src.TokenMetadata != nil {
 		dst.TokenMetadata = src.TokenMetadata
 	}
-	if len(src.Credentials) > 0 {
-		dst.Credentials = mergeCredentialFields(dst.Credentials, src.Credentials)
+	if src.Credentials != nil {
+		if len(src.Credentials) == 0 {
+			dst.Credentials = nil
+		} else {
+			dst.Credentials = mergeCredentialFields(dst.Credentials, src.Credentials)
+		}
 	}
 	if src.AuthMapping != nil {
 		dst.AuthMapping = src.AuthMapping
