@@ -86,12 +86,11 @@ func (s *Server) createProviderDevAttachAuthorization(w http.ResponseWriter, r *
 		return
 	}
 	writeJSON(w, http.StatusCreated, providerdev.CreateAttachAuthorizationResponse{
-		AuthorizationID:    info.AuthorizationID,
-		ClientSecret:       clientSecret,
-		VerificationCode:   verificationCode,
-		ApprovalURL:        approvalURL,
-		ExpiresAt:          info.ExpiresAt,
-		PollIntervalMillis: 1000,
+		AuthorizationID:  info.AuthorizationID,
+		ClientSecret:     clientSecret,
+		VerificationCode: verificationCode,
+		ApprovalURL:      approvalURL,
+		ExpiresAt:        info.ExpiresAt,
 	})
 }
 
