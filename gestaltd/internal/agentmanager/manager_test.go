@@ -5,14 +5,13 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -54,335 +53,402 @@ func (i tokenErrorInvoker) ResolveToken(ctx context.Context, _ *principal.Princi
 	return ctx, "", i.err
 }
 
-type singleAgentControl struct {
-	name     string
-	provider coreagent.Provider
+func newAgentManagerTestToolGrants(t testing.TB) *agentgrant.Manager {
+	t.Helper()
+	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("agentgrant.NewManager: %v", err)
+	}
+	return grants
 }
 
-func (c singleAgentControl) ResolveProvider(name string) (coreagent.Provider, error) {
-	if name != "" && name != c.name {
+func newTestManager(t testing.TB, cfg Config) *Manager {
+	t.Helper()
+	if cfg.ToolGrants == nil {
+		cfg.ToolGrants = newAgentManagerTestToolGrants(t)
+	}
+	return New(cfg)
+}
+
+type routeCountingAgentControl struct {
+	defaultName string
+	names       []string
+	providers   map[string]*routeCountingAgentProvider
+}
+
+func (c *routeCountingAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = strings.TrimSpace(c.defaultName)
+	}
+	provider, err := c.ResolveProvider(name)
+	if err != nil {
+		return "", nil, err
+	}
+	return name, provider, nil
+}
+
+func (c *routeCountingAgentControl) ResolveProvider(name string) (coreagent.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, ErrAgentProviderRequired
+	}
+	provider := c.providers[name]
+	if provider == nil {
 		return nil, NewAgentProviderNotAvailableError(name)
 	}
-	return c.provider, nil
+	return provider, nil
 }
 
-func (c singleAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
-	if name != "" && name != c.name {
-		return "", nil, NewAgentProviderNotAvailableError(name)
-	}
-	return c.name, c.provider, nil
+func (c *routeCountingAgentControl) ProviderNames() []string {
+	return append([]string(nil), c.names...)
 }
 
-func (c singleAgentControl) ProviderNames() []string {
-	return []string{c.name}
-}
-
-type idempotentSessionProvider struct {
+type routeCountingAgentProvider struct {
 	coreagent.UnimplementedProvider
-	session        *coreagent.Session
-	createRequests []coreagent.CreateSessionRequest
+	name            string
+	sessions        map[string]*coreagent.Session
+	turns           map[string]*coreagent.Turn
+	turnIDOverride  string
+	cancelStatus    coreagent.ExecutionStatus
+	getSessionCalls int
+	getTurnCalls    int
 }
 
-func (p *idempotentSessionProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
-	p.createRequests = append(p.createRequests, req)
-	return cloneAgentManagerSession(p.session), nil
+func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
+	return &routeCountingAgentProvider{
+		name:     name,
+		sessions: map[string]*coreagent.Session{},
+		turns:    map[string]*coreagent.Turn{},
+	}
 }
 
-func (p *idempotentSessionProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
-	if p.session == nil || req.SessionID != p.session.ID {
+func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	session := &coreagent.Session{
+		ID:           req.SessionID,
+		ProviderName: p.name,
+		Model:        req.Model,
+		ClientRef:    req.ClientRef,
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.sessions[session.ID] = session
+	return cloneRouteSession(session), nil
+}
+
+func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	p.getSessionCalls++
+	session := p.sessions[strings.TrimSpace(req.SessionID)]
+	if session == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneAgentManagerSession(p.session), nil
+	return cloneRouteSession(session), nil
 }
 
-func cloneAgentManagerSession(src *coreagent.Session) *coreagent.Session {
-	if src == nil {
+func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	turnID := req.TurnID
+	if strings.TrimSpace(p.turnIDOverride) != "" {
+		turnID = p.turnIDOverride
+	}
+	turn := &coreagent.Turn{
+		ID:           turnID,
+		SessionID:    req.SessionID,
+		ProviderName: p.name,
+		Model:        req.Model,
+		Status:       coreagent.ExecutionStatusRunning,
+		Messages:     append([]coreagent.Message(nil), req.Messages...),
+		CreatedBy:    req.CreatedBy,
+		ExecutionRef: req.ExecutionRef,
+	}
+	p.turns[turn.ID] = turn
+	return cloneRouteTurn(turn), nil
+}
+
+func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	p.getTurnCalls++
+	turn := p.turns[strings.TrimSpace(req.TurnID)]
+	if turn == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneRouteTurn(turn), nil
+}
+
+func (p *routeCountingAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+	turn := p.turns[strings.TrimSpace(req.TurnID)]
+	if turn == nil {
+		return nil, core.ErrNotFound
+	}
+	status := p.cancelStatus
+	if status == "" {
+		status = coreagent.ExecutionStatusCanceled
+	}
+	turn.Status = status
+	return cloneRouteTurn(turn), nil
+}
+
+func (p *routeCountingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{NativeToolSearch: true}, nil
+}
+
+func cloneRouteSession(session *coreagent.Session) *coreagent.Session {
+	if session == nil {
 		return nil
 	}
-	dst := *src
-	return &dst
+	cloned := *session
+	return &cloned
 }
 
-func TestCreateSessionReconcilesIdempotentProviderSessionID(t *testing.T) {
+func cloneRouteTurn(turn *coreagent.Turn) *coreagent.Turn {
+	if turn == nil {
+		return nil
+	}
+	cloned := *turn
+	cloned.Messages = append([]coreagent.Message(nil), turn.Messages...)
+	return &cloned
+}
+
+func TestAgentRouteCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	t.Parallel()
 
-	services, err := coredata.New(&coretesting.StubIndexedDB{})
-	if err != nil {
-		t.Fatalf("coredata.New: %v", err)
+	var cache agentRouteCache
+	cache.remember("old", "alpha")
+	cache.remember("warm", "alpha")
+	if got := cache.get("old"); got != "alpha" {
+		t.Fatalf("cache.get(old) = %q, want alpha", got)
 	}
-	provider := &idempotentSessionProvider{
-		session: &coreagent.Session{
-			ID:        "provider-session-1",
-			State:     coreagent.SessionStateActive,
-			CreatedBy: coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+	cache.remember("new", "alpha")
+	cache.trim(2)
+
+	if got := cache.get("warm"); got != "" {
+		t.Fatalf("cache.get(warm) = %q, want evicted", got)
+	}
+	if got := cache.get("old"); got != "alpha" {
+		t.Fatalf("cache.get(old) = %q, want retained alpha", got)
+	}
+	if got := cache.get("new"); got != "alpha" {
+		t.Fatalf("cache.get(new) = %q, want retained alpha", got)
+	}
+}
+
+func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"beta", "alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+				"beta":  beta,
+			},
 		},
-	}
-	manager := New(Config{
-		Agent:           singleAgentControl{name: "simple", provider: provider},
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
+		ToolGrants: newAgentManagerTestToolGrants(t),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName:    "simple",
-		IdempotencyKey:  "workflow:github:run-1:session",
-		ProviderOptions: map[string]any{"temperature": 0},
+		ProviderName: "alpha",
+		Model:        "test-model",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if session.ID != "provider-session-1" {
-		t.Fatalf("CreateSession session ID = %q, want provider-session-1", session.ID)
+
+	alpha.getSessionCalls = 0
+	beta.getSessionCalls = 0
+	if _, err := manager.GetSession(context.Background(), p, session.ID); err != nil {
+		t.Fatalf("GetSession: %v", err)
 	}
-	if len(provider.createRequests) != 1 {
-		t.Fatalf("CreateSession calls = %d, want 1", len(provider.createRequests))
-	}
-	if provider.createRequests[0].SessionID == session.ID {
-		t.Fatalf("provider request session ID = returned session ID %q, want generated requested ID", session.ID)
+	if alpha.getSessionCalls != 1 || beta.getSessionCalls != 0 {
+		t.Fatalf("GetSession calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getSessionCalls, beta.getSessionCalls)
 	}
 
-	ref, err := services.AgentSessions.Get(context.Background(), "provider-session-1")
-	if err != nil {
-		t.Fatalf("AgentSessions.Get: %v", err)
-	}
-	if ref.IdempotencyKey != "workflow:github:run-1:session" {
-		t.Fatalf("metadata idempotency key = %q, want workflow key", ref.IdempotencyKey)
-	}
-
-	replayed, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: "workflow:github:run-1:session",
+	alpha.getSessionCalls = 0
+	beta.getSessionCalls = 0
+	turn, err := manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
 	})
 	if err != nil {
-		t.Fatalf("CreateSession replay: %v", err)
+		t.Fatalf("CreateTurn: %v", err)
 	}
-	if replayed.ID != "provider-session-1" {
-		t.Fatalf("CreateSession replay ID = %q, want provider-session-1", replayed.ID)
+	if alpha.getSessionCalls != 1 || beta.getSessionCalls != 0 {
+		t.Fatalf("CreateTurn session lookup calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getSessionCalls, beta.getSessionCalls)
 	}
-	if len(provider.createRequests) != 1 {
-		t.Fatalf("CreateSession calls after replay = %d, want 1", len(provider.createRequests))
+
+	alpha.getTurnCalls = 0
+	beta.getTurnCalls = 0
+	if _, err := manager.GetTurn(context.Background(), p, turn.ID); err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	if alpha.getTurnCalls != 1 || beta.getTurnCalls != 0 {
+		t.Fatalf("GetTurn calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getTurnCalls, beta.getTurnCalls)
 	}
 }
 
-func TestCreateSessionPreservesExistingMetadataWhenReconcilingProviderSession(t *testing.T) {
+func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T) {
 	t.Parallel()
 
-	services, err := coredata.New(&coretesting.StubIndexedDB{})
-	if err != nil {
-		t.Fatalf("coredata.New: %v", err)
-	}
-	archivedAt := time.Date(2026, time.April, 27, 12, 0, 0, 0, time.UTC)
-	if _, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
-		ID:                  "provider-session-1",
-		ProviderName:        "simple",
-		SubjectID:           principal.UserSubjectID("user-1"),
-		CredentialSubjectID: "credential:old",
-		ArchivedAt:          &archivedAt,
-	}); err != nil {
-		t.Fatalf("AgentSessions.Put: %v", err)
-	}
-	provider := &idempotentSessionProvider{
-		session: &coreagent.Session{
-			ID:    "provider-session-1",
-			State: coreagent.SessionStateArchived,
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.turnIDOverride = "provider-turn-1"
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
 		},
-	}
-	manager := New(Config{
-		Agent:           singleAgentControl{name: "simple", provider: provider},
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
+		ToolGrants: newAgentManagerTestToolGrants(t),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: "workflow:github:run-1:session",
+		ProviderName: "alpha",
+		Model:        "test-model",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if session.ID != "provider-session-1" {
-		t.Fatalf("CreateSession session ID = %q, want provider-session-1", session.ID)
+	turn, err := manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "turn-replay",
+		Model:          "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn.ID != "provider-turn-1" {
+		t.Fatalf("CreateTurn ID = %q, want provider-turn-1", turn.ID)
 	}
 
-	ref, err := services.AgentSessions.Get(context.Background(), "provider-session-1")
-	if err != nil {
-		t.Fatalf("AgentSessions.Get: %v", err)
+	alpha.getTurnCalls = 0
+	if _, err := manager.GetTurn(context.Background(), p, "provider-turn-1"); err != nil {
+		t.Fatalf("GetTurn: %v", err)
 	}
-	if ref.ArchivedAt == nil || !ref.ArchivedAt.Equal(archivedAt) {
-		t.Fatalf("metadata archived_at = %v, want %v", ref.ArchivedAt, archivedAt)
-	}
-	if ref.CredentialSubjectID != "credential:old" {
-		t.Fatalf("metadata credential_subject_id = %q, want credential:old", ref.CredentialSubjectID)
-	}
-	if ref.IdempotencyKey != "workflow:github:run-1:session" {
-		t.Fatalf("metadata idempotency key = %q, want workflow key", ref.IdempotencyKey)
+	if alpha.getTurnCalls != 1 {
+		t.Fatalf("GetTurn calls = %d, want 1 cached provider lookup", alpha.getTurnCalls)
 	}
 }
 
-func TestCreateSessionWaitsForClaimedIdempotentSessionMetadata(t *testing.T) {
+func TestManagerCancelTurnRevokesToolGrantWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
-	services, err := coredata.New(&coretesting.StubIndexedDB{})
-	if err != nil {
-		t.Fatalf("coredata.New: %v", err)
-	}
-	subjectID := principal.UserSubjectID("user-1")
-	provider := &idempotentSessionProvider{
-		session: &coreagent.Session{
-			ID:        "provider-session-1",
-			State:     coreagent.SessionStateActive,
-			CreatedBy: coreagent.Actor{SubjectID: subjectID},
+	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestToolGrants(t)
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
 		},
-	}
-	manager := New(Config{
-		Agent:           singleAgentControl{name: "simple", provider: provider},
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
-	})
-	const idempotencyKey = "workflow:github:run-1:session"
-	claimedSessionID, claimed, err := services.AgentSessions.ClaimIdempotency(context.Background(), subjectID, "simple", idempotencyKey, "provider-session-1", time.Now())
-	if err != nil {
-		t.Fatalf("ClaimIdempotency: %v", err)
-	}
-	if !claimed || claimedSessionID != "provider-session-1" {
-		t.Fatalf("ClaimIdempotency = (%q, %t), want (provider-session-1, true)", claimedSessionID, claimed)
-	}
-	putErr := make(chan error, 1)
-	go func() {
-		time.Sleep(150 * time.Millisecond)
-		_, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
-			ID:             "provider-session-1",
-			ProviderName:   "simple",
-			SubjectID:      subjectID,
-			IdempotencyKey: idempotencyKey,
-		})
-		putErr <- err
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	session, err := manager.CreateSession(ctx, &principal.Principal{SubjectID: subjectID}, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: idempotencyKey,
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if err := <-putErr; err != nil {
-		t.Fatalf("AgentSessions.Put: %v", err)
-	}
-	if session.ID != "provider-session-1" {
-		t.Fatalf("CreateSession ID = %q, want provider-session-1", session.ID)
-	}
-	if len(provider.createRequests) != 0 {
-		t.Fatalf("provider CreateSession calls = %d, want 0", len(provider.createRequests))
-	}
-}
-
-func TestCreateSessionWaitsForReconciledIdempotentSessionMetadata(t *testing.T) {
-	t.Parallel()
-
-	services, err := coredata.New(&coretesting.StubIndexedDB{})
-	if err != nil {
-		t.Fatalf("coredata.New: %v", err)
-	}
-	subjectID := principal.UserSubjectID("user-1")
-	provider := &idempotentSessionProvider{
-		session: &coreagent.Session{
-			ID:        "provider-session-1",
-			State:     coreagent.SessionStateActive,
-			CreatedBy: coreagent.Actor{SubjectID: subjectID},
-		},
-	}
-	manager := New(Config{
-		Agent:           singleAgentControl{name: "simple", provider: provider},
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
-	})
-	const idempotencyKey = "workflow:github:run-1:session"
-	claimedSessionID, claimed, err := services.AgentSessions.ClaimIdempotency(context.Background(), subjectID, "simple", idempotencyKey, "generated-session-1", time.Now())
-	if err != nil {
-		t.Fatalf("ClaimIdempotency: %v", err)
-	}
-	if !claimed || claimedSessionID != "generated-session-1" {
-		t.Fatalf("ClaimIdempotency = (%q, %t), want (generated-session-1, true)", claimedSessionID, claimed)
-	}
-	putErr := make(chan error, 1)
-	go func() {
-		time.Sleep(150 * time.Millisecond)
-		_, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
-			ID:             "provider-session-1",
-			ProviderName:   "simple",
-			SubjectID:      subjectID,
-			IdempotencyKey: idempotencyKey,
-		})
-		putErr <- err
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	session, err := manager.CreateSession(ctx, &principal.Principal{SubjectID: subjectID}, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: idempotencyKey,
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if err := <-putErr; err != nil {
-		t.Fatalf("AgentSessions.Put: %v", err)
-	}
-	if session.ID != "provider-session-1" {
-		t.Fatalf("CreateSession ID = %q, want provider-session-1", session.ID)
-	}
-	if len(provider.createRequests) != 0 {
-		t.Fatalf("provider CreateSession calls = %d, want 0", len(provider.createRequests))
-	}
-}
-
-func TestCreateSessionRejectsIdempotentProviderSessionForDifferentSubject(t *testing.T) {
-	t.Parallel()
-
-	services, err := coredata.New(&coretesting.StubIndexedDB{})
-	if err != nil {
-		t.Fatalf("coredata.New: %v", err)
-	}
-	provider := &idempotentSessionProvider{
-		session: &coreagent.Session{
-			ID:        "provider-session-1",
-			State:     coreagent.SessionStateActive,
-			CreatedBy: coreagent.Actor{SubjectID: principal.UserSubjectID("user-2")},
-		},
-	}
-	manager := New(Config{
-		Agent:           singleAgentControl{name: "simple", provider: provider},
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
+		ToolGrants: grants,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
-	_, err = manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: "workflow:github:run-1:session",
-	})
-	if !errors.Is(err, core.ErrNotFound) {
-		t.Fatalf("CreateSession error = %v, want not found", err)
-	}
-	if _, err := services.AgentSessions.Get(context.Background(), "provider-session-1"); err == nil {
-		t.Fatal("AgentSessions.Get error = nil, want not found")
-	}
-
-	provider.session.CreatedBy = coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")}
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   "simple",
-		IdempotencyKey: "workflow:github:run-1:session",
+		ProviderName: "alpha",
+		Model:        "test-model",
 	})
 	if err != nil {
-		t.Fatalf("CreateSession after rejected replay: %v", err)
+		t.Fatalf("CreateSession: %v", err)
 	}
-	if session.ID != "provider-session-1" {
-		t.Fatalf("CreateSession after rejected replay ID = %q, want provider-session-1", session.ID)
+	turn, err := manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	grant, err := grants.Mint(agentgrant.Grant{
+		ProviderName: "alpha",
+		SessionID:    session.ID,
+		TurnID:       turn.ID,
+		SubjectID:    principal.UserSubjectID("user-1"),
+		SubjectKind:  string(principal.KindUser),
+	})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	if _, err := grants.Resolve(grant); err != nil {
+		t.Fatalf("Resolve before cancel: %v", err)
+	}
+
+	if _, err := manager.CancelTurn(context.Background(), p, turn.ID, "done"); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
+	}
+	if _, err := grants.Resolve(grant); err == nil {
+		t.Fatal("Resolve after cancel error = nil, want revoked grant")
+	} else if !strings.Contains(err.Error(), "revoked") {
+		t.Fatalf("Resolve after cancel error = %v, want revoked grant", err)
+	}
+}
+
+func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.turnIDOverride = "provider-turn-1"
+	grants := newAgentManagerTestToolGrants(t)
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		ToolGrants: grants,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "provider-owned-turn",
+		Model:          "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn.ID != "provider-turn-1" {
+		t.Fatalf("CreateTurn ID = %q, want provider-turn-1", turn.ID)
+	}
+	if strings.TrimSpace(turn.ExecutionRef) == "" || turn.ExecutionRef == turn.ID {
+		t.Fatalf("CreateTurn ExecutionRef = %q, want generated requested ID distinct from provider turn ID %q", turn.ExecutionRef, turn.ID)
+	}
+	grant, err := grants.Mint(agentgrant.Grant{
+		ProviderName: "alpha",
+		SessionID:    session.ID,
+		TurnID:       turn.ExecutionRef,
+		SubjectID:    principal.UserSubjectID("user-1"),
+		SubjectKind:  string(principal.KindUser),
+	})
+	if err != nil {
+		t.Fatalf("Mint: %v", err)
+	}
+	if _, err := grants.Resolve(grant); err != nil {
+		t.Fatalf("Resolve before cancel: %v", err)
+	}
+
+	if _, err := manager.CancelTurn(context.Background(), p, turn.ID, "done"); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
+	}
+	if _, err := grants.Resolve(grant); err == nil {
+		t.Fatal("Resolve after cancel error = nil, want revoked grant")
+	} else if !strings.Contains(err.Error(), "revoked") {
+		t.Fatalf("Resolve after cancel error = %v, want revoked grant", err)
 	}
 }
 
@@ -400,7 +466,7 @@ func TestSearchToolsSearchesAuthorizedCatalogWhenNoRefsDefined(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -431,7 +497,7 @@ func TestSearchToolsRestrictsToDefinedRefs(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -473,7 +539,7 @@ func TestSearchToolsCompactsOversizedInputSchemaFromParameters(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -518,7 +584,7 @@ func TestSearchToolsUsesOpenObjectSchemaForOversizedInputSchemaWithoutParameters
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -558,7 +624,7 @@ func TestSearchToolsOmitsHiddenOperationsUnlessExplicitlyScoped(t *testing.T) {
 			}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -610,7 +676,7 @@ func TestSearchToolsGlobalWildcardKeepsSearchOpenWithExactRefs(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
 
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
@@ -661,7 +727,7 @@ func TestSearchToolsGlobalWildcardFindsProviderQualifiedCatalogOperation(t *test
 			},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
 
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
@@ -741,7 +807,7 @@ func TestSearchToolsRejectsBlankToolRefPlugin(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	_, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -777,7 +843,7 @@ func TestSearchToolsDiscoversSessionCatalogOperations(t *testing.T) {
 			ReadOnly:    true,
 		}}},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.SearchToolsRequest{
@@ -825,7 +891,7 @@ func TestSearchToolsExpandsAmbiguousCredentialInstances(t *testing.T) {
 		}
 	}
 	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: providers,
 		Invoker:   broker,
 		DefaultConnection: map[string]string{
@@ -948,7 +1014,7 @@ func TestSearchToolsSkipsUnavailablePluginScopedProviders(t *testing.T) {
 			},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, ashby, linear),
 		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
 	})
@@ -984,7 +1050,7 @@ func TestSearchToolsReturnsUnavailableWhenScopedSearchHasNoCandidates(t *testing
 			},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, ashby),
 		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
 	})
@@ -1011,7 +1077,7 @@ func TestSearchToolsKeepsExactOperationRefsStrict(t *testing.T) {
 			},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, ashby),
 		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
 	})
@@ -1055,7 +1121,7 @@ func TestSearchToolsKeepsMixedExactOperationRefsStrict(t *testing.T) {
 			},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, ashby, linear),
 		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
 	})
@@ -1088,7 +1154,7 @@ func TestResolveToolsReturnsEmptyWhenNoRefsDefined(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{})
@@ -1121,7 +1187,7 @@ func TestResolveToolsExpandsPluginOnlyRefs(t *testing.T) {
 			}},
 		},
 	}
-	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
@@ -1153,7 +1219,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
 		PluginInvokes: map[string][]config.PluginInvocationDependency{
 			"slackbot": {{
@@ -1200,7 +1266,7 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 			}}},
 		},
 	}
-	manager := New(Config{
+	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
 		PluginInvokes: map[string][]config.PluginInvocationDependency{
 			"slackbot": {{

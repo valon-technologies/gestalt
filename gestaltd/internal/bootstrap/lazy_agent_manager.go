@@ -33,6 +33,14 @@ func (l *lazyAgentManager) Available() bool {
 	return target.Available()
 }
 
+func (l *lazyAgentManager) ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	target, err := l.current()
+	if err != nil {
+		return coreagent.Tool{}, err
+	}
+	return target.ResolveTool(ctx, p, ref)
+}
+
 func (l *lazyAgentManager) ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error) {
 	target, err := l.current()
 	if err != nil {

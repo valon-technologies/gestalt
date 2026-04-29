@@ -53,7 +53,6 @@ var (
 	agentRuntimeHealthCheckMetrics       metricutil.MeterCache[metricSet]
 	agentRuntimeReplacementMetrics       metricutil.MeterCache[countMetricSet]
 	agentToolResolveMetrics              metricutil.MeterCache[metricSet]
-	agentRunMetadataWriteMetrics         metricutil.MeterCache[metricSet]
 	authorizationProviderOperationMetric metricutil.MeterCache[metricSet]
 	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
 	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
@@ -142,10 +141,6 @@ func RecordAgentRuntimeReplacement(ctx context.Context, failed bool, attrs ...at
 
 func RecordAgentToolResolve(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &agentToolResolveMetrics, "gestaltd.agent.tool.resolve", "gestaltd agent tool resolution", startedAt, failed, attrs...)
-}
-
-func RecordAgentRunMetadataWrite(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &agentRunMetadataWriteMetrics, "gestaltd.agent.run_metadata.write", "gestaltd agent run metadata writes", startedAt, failed, attrs...)
 }
 
 func RecordAuthorizationProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

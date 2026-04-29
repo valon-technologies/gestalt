@@ -64,7 +64,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             model: input.model,
             clientRef: input.clientRef,
             state: AgentSessionState.ACTIVE,
-            metadata: input.metadata,
+            metadata: input.metadata ?? {},
           });
         },
         async getSession(input) {
@@ -114,7 +114,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             model: "gpt-test",
             clientRef: input.clientRef,
             state: input.state,
-            metadata: input.metadata,
+            metadata: input.metadata ?? {},
           });
         },
         async createTurn(input) {
@@ -239,7 +239,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             type: AgentInteractionType.APPROVAL,
             state: AgentInteractionState.RESOLVED,
             title: "Approve command",
-            resolution: input.resolution,
+            resolution: input.resolution ?? {},
           });
         },
       } satisfies Partial<ServiceImpl<typeof AgentManagerHostService>>);

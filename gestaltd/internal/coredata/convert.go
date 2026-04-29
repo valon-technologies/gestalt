@@ -74,10 +74,3 @@ func recTimePtr(rec indexeddb.Record, key string) *time.Time {
 		return nil
 	}
 }
-
-func timeOrNil(value *time.Time) any {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-	return *value
-}

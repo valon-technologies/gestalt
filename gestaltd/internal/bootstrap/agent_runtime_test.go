@@ -16,8 +16,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -362,7 +365,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	}
 	services := coretesting.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
 		Services:              services,
 		AgentRuntime:          agentRuntime,
@@ -500,7 +503,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	}
 	services := coretesting.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
 		Services:              services,
 		AgentRuntime:          agentRuntime,
@@ -1157,7 +1160,23 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	invoker := &recordingAgentRuntimeInvoker{}
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetInvoker(invoker)
-	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	toolGrants := newTestAgentToolGrants(t)
+	agentRuntime.SetToolGrants(toolGrants)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:          "sync",
+			Method:      http.MethodPost,
+			Title:       "Sync roadmap",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+		}}},
+	})
+	agentRuntime.SetToolSearcher(agentmanager.New(agentmanager.Config{
+		Providers:  providers,
+		ToolGrants: toolGrants,
+		Invoker:    invoker,
+	}))
 	capturingRuntime := newCapturingPluginRuntime()
 
 	factories := NewFactoryRegistry()
@@ -1321,6 +1340,26 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 		t.Fatalf("GetSession(after CreateTurn) = %#v, want preserved client_ref cli-session-2", postTurnSession)
 	}
 
+	toolGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:         "roadmap",
+			Operation:      "sync",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint tool grant: %v", err)
+	}
 	toolTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
 		TurnID:       "turn-1",
 		SessionID:    "session-1",
@@ -1328,8 +1367,19 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 		CreatedBy:    coreagent.Actor{SubjectID: "user:user-123"},
 		ExecutionRef: "exec-turn-1",
 		Messages:     []coreagent.Message{{Role: "user", Text: "Plan it"}},
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:         "roadmap",
+			Operation:      "sync",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolGrant:  toolGrant,
 		Tools: []coreagent.Tool{{
-			ID:   "lookup",
+			ID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+				Plugin:         "roadmap",
+				Operation:      "sync",
+				CredentialMode: core.ConnectionModeNone,
+			}),
 			Name: "Lookup roadmap task",
 			Target: coreagent.ToolTarget{
 				Plugin:         "roadmap",
@@ -1507,6 +1557,401 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	invoker := &recordingAgentRuntimeInvoker{}
+	toolGrants := newTestAgentToolGrants(t)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{
+				ID:    "chat.postMessage",
+				Title: "Post Message",
+			},
+			{
+				ID:      "events.reply",
+				Title:   "Reply to Event",
+				Visible: &hidden,
+			},
+		}},
+	})
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:  providers,
+		ToolGrants: toolGrants,
+		Invoker:    invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"simple": &routingAgentProvider{
+				getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        "turn-1",
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetToolGrants(toolGrants)
+	runtime.SetToolSearcher(manager)
+
+	broadGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"events.reply"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "slack"}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint broad grant: %v", err)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}),
+		ToolGrant: broadGrant,
+		Arguments: map[string]any{"eventId": "evt-1"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ExecuteTool broad hidden error = %v, want ErrAuthorizationDenied", err)
+	}
+	if calls := invoker.Calls(); len(calls) != 0 {
+		t.Fatalf("invoker calls after rejected hidden tool = %#v, want none", calls)
+	}
+
+	modeGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"chat.postMessage"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "slack", Operation: "chat.postMessage"}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint credential mode grant: %v", err)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+			Plugin:         "slack",
+			Operation:      "chat.postMessage",
+			CredentialMode: core.ConnectionModeNone,
+		}),
+		ToolGrant: modeGrant,
+		Arguments: map[string]any{"text": "hello"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ExecuteTool forged credential mode error = %v, want ErrAuthorizationDenied", err)
+	}
+	if calls := invoker.Calls(); len(calls) != 0 {
+		t.Fatalf("invoker calls after rejected credential mode = %#v, want none", calls)
+	}
+
+	exactTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-123"),
+	}, coreagent.ResolveToolsRequest{
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools exact hidden: %v", err)
+	}
+	if len(exactTools) != 1 || !exactTools[0].Hidden {
+		t.Fatalf("ResolveTools exact hidden = %#v, want one hidden tool", exactTools)
+	}
+	exactGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"events.reply"},
+		}},
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}},
+		Tools:      exactTools,
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint exact grant: %v", err)
+	}
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       exactTools[0].ID,
+		ToolGrant:    exactGrant,
+		Arguments:    map[string]any{"eventId": "evt-1"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool exact hidden: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"eventId":"evt-1"}` {
+		t.Fatalf("ExecuteTool exact hidden response = %#v", resp)
+	}
+	calls := invoker.Calls()
+	if len(calls) != 1 || calls[0].providerName != "slack" || calls[0].operation != "events.reply" {
+		t.Fatalf("invoker calls = %#v, want slack events.reply once", calls)
+	}
+
+	mixedGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"chat.postMessage", "events.reply"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "*"},
+			{Plugin: "slack", Operation: "events.reply"},
+		},
+		Tools:      exactTools,
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint mixed grant: %v", err)
+	}
+	resp, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+			Plugin:    "slack",
+			Operation: "chat.postMessage",
+		}),
+		ToolGrant: mixedGrant,
+		Arguments: map[string]any{"text": "hello"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool visible wildcard with hidden exact grant: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"text":"hello"}` {
+		t.Fatalf("ExecuteTool visible wildcard response = %#v", resp)
+	}
+	calls = invoker.Calls()
+	if len(calls) != 2 || calls[1].providerName != "slack" || calls[1].operation != "chat.postMessage" {
+		t.Fatalf("invoker calls = %#v, want slack events.reply then chat.postMessage", calls)
+	}
+}
+
+func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAgentRuntimeInvoker{}
+	toolGrants := newTestAgentToolGrants(t)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:    "sync",
+			Title: "Sync roadmap",
+		}}},
+	})
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:  providers,
+		ToolGrants: toolGrants,
+		Invoker:    invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"simple": &routingAgentProvider{
+				getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        "turn-1",
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusSucceeded,
+						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetToolGrants(toolGrants)
+	runtime.SetToolSearcher(manager)
+
+	grant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint grant: %v", err)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+			Plugin:    "roadmap",
+			Operation: "sync",
+		}),
+		ToolGrant: grant,
+		Arguments: map[string]any{"taskId": "task-123"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ExecuteTool terminal turn error = %v, want ErrAuthorizationDenied", err)
+	}
+	if calls := invoker.Calls(); len(calls) != 0 {
+		t.Fatalf("invoker calls after terminal turn = %#v, want none", calls)
+	}
+}
+
+func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAgentRuntimeInvoker{}
+	toolGrants := newTestAgentToolGrants(t)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:    "sync",
+			Title: "Sync roadmap",
+		}}},
+	})
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:  providers,
+		ToolGrants: toolGrants,
+		Invoker:    invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"simple": &routingAgentProvider{
+				getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					if req.TurnID != "provider-turn-1" {
+						t.Fatalf("GetTurn TurnID = %q, want provider-turn-1", req.TurnID)
+					}
+					return &coreagent.Turn{
+						ID:           "provider-turn-1",
+						SessionID:    "session-1",
+						Status:       coreagent.ExecutionStatusRunning,
+						ExecutionRef: "requested-turn-1",
+						CreatedBy:    coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetToolGrants(toolGrants)
+	runtime.SetToolSearcher(manager)
+
+	grant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "requested-turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint grant: %v", err)
+	}
+	searchResp, err := runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "provider-turn-1",
+		Query:        "sync",
+		MaxResults:   5,
+		ToolGrant:    grant,
+	})
+	if err != nil {
+		t.Fatalf("SearchTools with provider-owned turn ID: %v", err)
+	}
+	if len(searchResp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(searchResp.Tools))
+	}
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "provider-turn-1",
+		ToolID:       searchResp.Tools[0].ID,
+		ToolGrant:    grant,
+		Arguments:    map[string]any{"taskId": "task-123"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool with provider-owned turn ID: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"taskId":"task-123"}` {
+		t.Fatalf("ExecuteTool response = %#v, want accepted task body", resp)
+	}
+
+	wrongGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "other-requested-turn",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err != nil {
+		t.Fatalf("Mint wrong grant: %v", err)
+	}
+	_, err = runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "provider-turn-1",
+		Query:        "sync",
+		MaxResults:   5,
+		ToolGrant:    wrongGrant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("SearchTools wrong execution ref error = %v, want ErrAuthorizationDenied", err)
+	}
+}
+
 func waitForAgentRuntimeCondition(t *testing.T, timeout time.Duration, fn func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -1582,9 +2027,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		},
 	}
 
-	services := coretesting.NewStubServices(t)
 	runtimeState := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	runtimeState.SetRunMetadata(services.AgentRunMetadata)
+	runtimeState.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,

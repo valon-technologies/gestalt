@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
@@ -109,17 +108,16 @@ func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
 	}
 }
 
-func agentToolTargetToProto(target coreagent.ToolTarget) *proto.BoundAgentToolTarget {
-	if target == (coreagent.ToolTarget{}) {
+func agentSubjectContextToProto(subject coreagent.SubjectContext) *proto.AgentSubjectContext {
+	if subject == (coreagent.SubjectContext{}) {
 		return nil
 	}
-	return &proto.BoundAgentToolTarget{
-		System:         target.System,
-		Plugin:         target.Plugin,
-		Operation:      target.Operation,
-		Connection:     target.Connection,
-		Instance:       target.Instance,
-		CredentialMode: string(target.CredentialMode),
+	return &proto.AgentSubjectContext{
+		SubjectId:           subject.SubjectID,
+		SubjectKind:         subject.SubjectKind,
+		CredentialSubjectId: subject.CredentialSubjectID,
+		DisplayName:         subject.DisplayName,
+		AuthSource:          subject.AuthSource,
 	}
 }
 
@@ -132,7 +130,6 @@ func agentToolToProto(tool coreagent.Tool) (*proto.ResolvedAgentTool, error) {
 		Id:               tool.ID,
 		Name:             tool.Name,
 		Description:      tool.Description,
-		Target:           agentToolTargetToProto(tool.Target),
 		ParametersSchema: schema,
 	}, nil
 }
@@ -179,27 +176,25 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		return coreagent.ToolRef{}
 	}
 	return coreagent.ToolRef{
-		System:         ref.GetSystem(),
-		Plugin:         ref.GetPlugin(),
-		Operation:      ref.GetOperation(),
-		Connection:     ref.GetConnection(),
-		Instance:       ref.GetInstance(),
-		Title:          ref.GetTitle(),
-		Description:    ref.GetDescription(),
-		CredentialMode: core.ConnectionMode(ref.GetCredentialMode()),
+		System:      ref.GetSystem(),
+		Plugin:      ref.GetPlugin(),
+		Operation:   ref.GetOperation(),
+		Connection:  ref.GetConnection(),
+		Instance:    ref.GetInstance(),
+		Title:       ref.GetTitle(),
+		Description: ref.GetDescription(),
 	}
 }
 
 func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		System:         ref.System,
-		Plugin:         ref.Plugin,
-		Operation:      ref.Operation,
-		Connection:     ref.Connection,
-		Instance:       ref.Instance,
-		Title:          ref.Title,
-		Description:    ref.Description,
-		CredentialMode: string(ref.CredentialMode),
+		System:      ref.System,
+		Plugin:      ref.Plugin,
+		Operation:   ref.Operation,
+		Connection:  ref.Connection,
+		Instance:    ref.Instance,
+		Title:       ref.Title,
+		Description: ref.Description,
 	}
 }
 

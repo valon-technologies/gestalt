@@ -3838,14 +3838,14 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
-	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	toolGrants := newTestAgentToolGrants(t)
+	agentRuntime.SetToolGrants(toolGrants)
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:       &pluginProviders.Providers,
-		Agent:           agentRuntime,
-		SessionMetadata: services.AgentSessions,
-		RunMetadata:     services.AgentRunMetadata,
-		Invoker:         broker,
+		Providers:  &pluginProviders.Providers,
+		Agent:      agentRuntime,
+		ToolGrants: toolGrants,
+		Invoker:    broker,
 		PluginInvokes: map[string][]config.PluginInvocationDependency{
 			"echoext": {{
 				Plugin:    "roadmap",

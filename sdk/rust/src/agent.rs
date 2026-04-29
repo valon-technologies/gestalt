@@ -3,6 +3,9 @@ use std::sync::Arc;
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
 use tonic::codegen::async_trait;
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
@@ -13,7 +16,11 @@ use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
 };
 
+type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
+
 pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_AGENT_HOST_SOCKET";
+pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
+const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AgentHostError {
@@ -26,16 +33,32 @@ pub enum AgentHostError {
 }
 
 pub struct AgentHost {
-    client: ProtoAgentHostClient<Channel>,
+    client: ProtoAgentHostClient<AgentHostTransport>,
 }
 
 impl AgentHost {
     pub async fn connect() -> std::result::Result<Self, AgentHostError> {
-        let socket_path = std::env::var(ENV_AGENT_HOST_SOCKET)
+        let target = std::env::var(ENV_AGENT_HOST_SOCKET)
             .map_err(|_| AgentHostError::Env(format!("{ENV_AGENT_HOST_SOCKET} is not set")))?;
-        let channel = connect_unix(socket_path).await?;
+        let relay_token = std::env::var(ENV_AGENT_HOST_SOCKET_TOKEN).unwrap_or_default();
+        let channel = match parse_agent_host_target(&target)? {
+            AgentHostTarget::Unix(path) => connect_unix(path).await?,
+            AgentHostTarget::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            AgentHostTarget::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .connect()
+                    .await?
+            }
+        };
         Ok(Self {
-            client: ProtoAgentHostClient::new(channel),
+            client: ProtoAgentHostClient::with_interceptor(
+                channel,
+                agent_host_relay_token_interceptor(relay_token.trim())?,
+            ),
         })
     }
 
@@ -63,6 +86,87 @@ async fn connect_unix(
             async move { UnixStream::connect(path).await.map(TokioIo::new) }
         }))
         .await
+}
+
+#[derive(Clone)]
+struct AgentHostRelayTokenInterceptor {
+    token: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for AgentHostRelayTokenInterceptor {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
+        if let Some(token) = self.token.clone() {
+            request
+                .metadata_mut()
+                .insert(AGENT_HOST_RELAY_TOKEN_HEADER, token);
+        }
+        Ok(request)
+    }
+}
+
+fn agent_host_relay_token_interceptor(
+    token: &str,
+) -> std::result::Result<AgentHostRelayTokenInterceptor, AgentHostError> {
+    let trimmed = token.trim();
+    let token = if trimmed.is_empty() {
+        None
+    } else {
+        Some(MetadataValue::try_from(trimmed).map_err(|err| {
+            AgentHostError::Env(format!("agent host: invalid relay token metadata: {err}"))
+        })?)
+    };
+    Ok(AgentHostRelayTokenInterceptor { token })
+}
+
+enum AgentHostTarget {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_agent_host_target(raw: &str) -> std::result::Result<AgentHostTarget, AgentHostError> {
+    let target = raw.trim();
+    if target.is_empty() {
+        return Err(AgentHostError::Env(
+            "agent host: transport target is required".to_string(),
+        ));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(AgentHostError::Env(format!(
+                "agent host: tcp target {raw:?} is missing host:port"
+            )));
+        }
+        return Ok(AgentHostTarget::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(AgentHostError::Env(format!(
+                "agent host: tls target {raw:?} is missing host:port"
+            )));
+        }
+        return Ok(AgentHostTarget::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(AgentHostError::Env(format!(
+                "agent host: unix target {raw:?} is missing a socket path"
+            )));
+        }
+        return Ok(AgentHostTarget::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        return Err(AgentHostError::Env(format!(
+            "agent host: unsupported target scheme in {raw:?}"
+        )));
+    }
+    Ok(AgentHostTarget::Unix(target.to_string()))
 }
 
 #[async_trait]

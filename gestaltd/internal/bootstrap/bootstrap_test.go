@@ -566,14 +566,19 @@ type recordingAgentProvider struct {
 	turns                      map[string]*coreagent.Turn
 	turnEvents                 map[string][]*coreagent.TurnEvent
 	interactions               map[string]*coreagent.Interaction
+	sessionIdempotency         map[string]string
+	turnIdempotency            map[string]string
+	cancelTurnStatus           coreagent.ExecutionStatus
 }
 
 func newRecordingAgentProvider() *recordingAgentProvider {
 	return &recordingAgentProvider{
-		sessions:     map[string]*coreagent.Session{},
-		turns:        map[string]*coreagent.Turn{},
-		turnEvents:   map[string][]*coreagent.TurnEvent{},
-		interactions: map[string]*coreagent.Interaction{},
+		sessions:           map[string]*coreagent.Session{},
+		turns:              map[string]*coreagent.Turn{},
+		turnEvents:         map[string][]*coreagent.TurnEvent{},
+		interactions:       map[string]*coreagent.Interaction{},
+		sessionIdempotency: map[string]string{},
+		turnIdempotency:    map[string]string{},
 	}
 }
 
@@ -590,12 +595,58 @@ func (p *recordingAgentProvider) ensureStateLocked() {
 	if p.interactions == nil {
 		p.interactions = map[string]*coreagent.Interaction{}
 	}
+	if p.sessionIdempotency == nil {
+		p.sessionIdempotency = map[string]string{}
+	}
+	if p.turnIdempotency == nil {
+		p.turnIdempotency = map[string]string{}
+	}
+}
+
+func agentProviderSessionIdempotencyScope(subject coreagent.SubjectContext, actor coreagent.Actor, idempotencyKey string) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return ""
+	}
+	return strings.Join([]string{"session", agentProviderSubjectScope(subject, actor), idempotencyKey}, "\x00")
+}
+
+func agentProviderTurnIdempotencyScope(subject coreagent.SubjectContext, actor coreagent.Actor, sessionID, idempotencyKey string) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return ""
+	}
+	return strings.Join([]string{"turn", agentProviderSubjectScope(subject, actor), strings.TrimSpace(sessionID), idempotencyKey}, "\x00")
+}
+
+func agentProviderSubjectScope(subject coreagent.SubjectContext, actor coreagent.Actor) string {
+	if subjectID := strings.TrimSpace(subject.SubjectID); subjectID != "" {
+		return subjectID
+	}
+	return strings.TrimSpace(actor.SubjectID)
+}
+
+func turnStatusIsTerminalForTest(status coreagent.ExecutionStatus) bool {
+	switch status {
+	case coreagent.ExecutionStatusSucceeded, coreagent.ExecutionStatusFailed, coreagent.ExecutionStatusCanceled:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *recordingAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
+	idempotencyScope := agentProviderSessionIdempotencyScope(req.Subject, req.CreatedBy, req.IdempotencyKey)
+	if sessionID, ok := p.sessionIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
+		session, ok := p.sessions[sessionID]
+		if !ok {
+			return nil, core.ErrNotFound
+		}
+		return cloneBootstrapAgentSession(session), nil
+	}
 	p.createSessionRequests = append(p.createSessionRequests, req)
 	sessionID := strings.TrimSpace(req.SessionID)
 	if sessionID == "" {
@@ -614,6 +665,9 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req coreagent.
 		LastTurnAt: nil,
 	}
 	p.sessions[sessionID] = cloneBootstrapAgentSession(session)
+	if idempotencyScope != "" {
+		p.sessionIdempotency[idempotencyScope] = sessionID
+	}
 	return cloneBootstrapAgentSession(session), nil
 }
 
@@ -664,6 +718,14 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req coreagent.Cre
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureStateLocked()
+	idempotencyScope := agentProviderTurnIdempotencyScope(req.Subject, req.CreatedBy, req.SessionID, req.IdempotencyKey)
+	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
+		turn, ok := p.turns[turnID]
+		if !ok {
+			return nil, core.ErrNotFound
+		}
+		return cloneBootstrapAgentTurn(turn), nil
+	}
 	p.createTurnRequests = append(p.createTurnRequests, req)
 	turnID := strings.TrimSpace(req.TurnID)
 	if turnID == "" {
@@ -686,6 +748,9 @@ func (p *recordingAgentProvider) CreateTurn(_ context.Context, req coreagent.Cre
 	if session := p.sessions[turn.SessionID]; session != nil {
 		session.LastTurnAt = &now
 		session.UpdatedAt = &now
+	}
+	if idempotencyScope != "" {
+		p.turnIdempotency[idempotencyScope] = turnID
 	}
 	return cloneBootstrapAgentTurn(turn), nil
 }
@@ -725,9 +790,17 @@ func (p *recordingAgentProvider) CancelTurn(_ context.Context, req coreagent.Can
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
-	turn.Status = coreagent.ExecutionStatusCanceled
+	status := p.cancelTurnStatus
+	if status == "" {
+		status = coreagent.ExecutionStatusCanceled
+	}
+	turn.Status = status
 	turn.StatusMessage = strings.TrimSpace(req.Reason)
-	turn.CompletedAt = &now
+	if turnStatusIsTerminalForTest(status) {
+		turn.CompletedAt = &now
+	} else {
+		turn.CompletedAt = nil
+	}
 	return cloneBootstrapAgentTurn(turn), nil
 }
 
@@ -868,14 +941,21 @@ func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callb
 
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.ensureStateLocked()
+	idempotencyScope := agentProviderTurnIdempotencyScope(req.Subject, req.CreatedBy, req.SessionID, req.IdempotencyKey)
+	if turnID, ok := p.turnIdempotency[idempotencyScope]; idempotencyScope != "" && ok {
+		turn, ok := p.turns[turnID]
+		p.mu.Unlock()
+		if !ok {
+			return nil, core.ErrNotFound
+		}
+		return cloneBootstrapAgentTurn(turn), nil
+	}
 	p.createTurnRequests = append(p.createTurnRequests, req)
 	turnID := strings.TrimSpace(req.TurnID)
 	if turnID == "" {
 		turnID = fmt.Sprintf("turn-%d", len(p.turns)+1)
 	}
-	outputBody := ""
 	needsInteraction, _ := req.Metadata["requireInteraction"].(bool)
 	if !needsInteraction {
 		for _, message := range req.Messages {
@@ -885,6 +965,38 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 			}
 		}
 	}
+	now := time.Now().UTC().Truncate(time.Second)
+	turn := &coreagent.Turn{
+		ID:           turnID,
+		SessionID:    strings.TrimSpace(req.SessionID),
+		Model:        strings.TrimSpace(req.Model),
+		Status:       coreagent.ExecutionStatusRunning,
+		Messages:     cloneBootstrapAgentMessages(req.Messages),
+		CreatedBy:    req.CreatedBy,
+		CreatedAt:    &now,
+		StartedAt:    &now,
+		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
+	}
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": turn.SessionID})
+	p.turns[turn.ID] = cloneBootstrapAgentTurn(turn)
+	if session := p.sessions[turn.SessionID]; session != nil {
+		session.LastTurnAt = &now
+		session.UpdatedAt = &now
+	}
+	if idempotencyScope != "" {
+		p.turnIdempotency[idempotencyScope] = turn.ID
+	}
+	p.mu.Unlock()
+	cleanupPendingTurn := func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		delete(p.turns, turnID)
+		if idempotencyScope != "" {
+			delete(p.turnIdempotency, idempotencyScope)
+		}
+	}
+
+	outputBody := ""
 	if req.ToolSource == coreagent.ToolSourceModeNativeSearch || len(req.Tools) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
@@ -895,6 +1007,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		if err != nil {
+			cleanupPendingTurn()
 			return nil, fmt.Errorf("dial agent host: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
@@ -914,27 +1027,22 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 				TurnId:     turnID,
 				Query:      searchQuery,
 				MaxResults: maxResults,
+				ToolGrant:  req.ToolGrant,
 			}
 			searchReq.CandidateLimit = p.searchCandidateLimit
 			searchReq.LoadRefs = append([]*proto.AgentToolRef(nil), p.searchLoadRefs...)
 			resp, err := client.SearchTools(ctx, searchReq)
 			if err != nil {
+				cleanupPendingTurn()
 				return nil, err
 			}
 			p.searchRequests = append(p.searchRequests, gproto.Clone(searchReq).(*proto.SearchAgentToolsRequest))
 			p.searchResponses = append(p.searchResponses, gproto.Clone(resp).(*proto.SearchAgentToolsResponse))
 			for _, tool := range resp.GetTools() {
 				tools = append(tools, coreagent.Tool{
-					ID:          tool.GetId(),
-					Name:        tool.GetName(),
-					Description: tool.GetDescription(),
-					Target: coreagent.ToolTarget{
-						Plugin:         tool.GetTarget().GetPlugin(),
-						Operation:      tool.GetTarget().GetOperation(),
-						Connection:     tool.GetTarget().GetConnection(),
-						Instance:       tool.GetTarget().GetInstance(),
-						CredentialMode: core.ConnectionMode(tool.GetTarget().GetCredentialMode()),
-					},
+					ID:               tool.GetId(),
+					Name:             tool.GetName(),
+					Description:      tool.GetDescription(),
 					ParametersSchema: protoStructToBootstrapMap(tool.GetParametersSchema()),
 				})
 			}
@@ -945,6 +1053,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 				TurnId:     turnID,
 				ToolCallId: "tool-call-1",
 				ToolId:     tools[0].ID,
+				ToolGrant:  req.ToolGrant,
 				Arguments: func() *structpb.Struct {
 					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 					if err != nil {
@@ -954,28 +1063,25 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 				}(),
 			})
 			if err != nil {
+				cleanupPendingTurn()
 				return nil, err
 			}
 			outputBody = resp.GetBody()
-			p.toolBodies = append(p.toolBodies, outputBody)
 		}
 	}
 
-	now := time.Now().UTC().Truncate(time.Second)
-	turn := &coreagent.Turn{
-		ID:           turnID,
-		SessionID:    strings.TrimSpace(req.SessionID),
-		Model:        strings.TrimSpace(req.Model),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     cloneBootstrapAgentMessages(req.Messages),
-		OutputText:   outputBody,
-		CreatedBy:    req.CreatedBy,
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	turn = p.turns[turnID]
+	if turn == nil {
+		return nil, core.ErrNotFound
 	}
-	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": turn.SessionID})
+	turn.OutputText = outputBody
+	turn.Status = coreagent.ExecutionStatusSucceeded
+	turn.CompletedAt = &now
+	if outputBody != "" {
+		p.toolBodies = append(p.toolBodies, outputBody)
+	}
 	if needsInteraction {
 		turn.Status = coreagent.ExecutionStatusWaitingForInput
 		turn.StatusMessage = "waiting for input"
@@ -2475,31 +2581,14 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].Plugin != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.ToolRefs)
 	}
+	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
+		t.Fatal("CreateTurn tool_grant is empty")
+	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
 	}
 
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get: %v", err)
-	}
-	if ref.IdempotencyKey != "demo-idempotency-key" {
-		t.Fatalf("stored idempotency key = %q, want %q", ref.IdempotencyKey, "demo-idempotency-key")
-	}
-	if ref.SessionID != session.ID {
-		t.Fatalf("stored session id = %q, want %q", ref.SessionID, session.ID)
-	}
-	if len(ref.ToolRefs) != 1 || ref.ToolRefs[0].Plugin != "roadmap" || ref.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		t.Fatalf("stored tool source/refs = %q %#v", ref.ToolSource, ref.ToolRefs)
-	}
-	if len(ref.Tools) != 1 || ref.Tools[0].Target.Plugin != "roadmap" || ref.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("stored searched tools = %#v", ref.Tools)
-	}
-	if ref.CredentialSubjectID != "service_account:agent-credential" {
-		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, "service_account:agent-credential")
-	}
-
-	global, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
 		SessionID:      session.ID,
 		IdempotencyKey: "global-search-idempotency-key",
 		Model:          "gpt-test",
@@ -2513,16 +2602,6 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	provider.mu.Unlock()
 	if len(globalToolBodies) != 2 || !strings.Contains(globalToolBodies[1], `"subject":"user:user-123"`) || !strings.Contains(globalToolBodies[1], `"taskId":"task-123"`) {
 		t.Fatalf("global tool callback bodies = %#v", globalToolBodies)
-	}
-	globalRef, err := result.Services.AgentRunMetadata.Get(context.Background(), global.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get(global): %v", err)
-	}
-	if len(globalRef.ToolRefs) != 0 || globalRef.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		t.Fatalf("global stored tool source/refs = %q %#v", globalRef.ToolSource, globalRef.ToolRefs)
-	}
-	if len(globalRef.Tools) != 1 || globalRef.Tools[0].Target.Plugin != "roadmap" || globalRef.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("global stored searched tools = %#v", globalRef.Tools)
 	}
 
 	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
@@ -2754,14 +2833,6 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 		t.Fatalf("tool callback bodies = %#v, want first searched tool to be linear.list_issues", toolBodies)
 	}
 
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get: %v", err)
-	}
-	if len(ref.Tools) == 0 || ref.Tools[0].Target.Plugin != "linear" || ref.Tools[0].Target.Operation != "list_issues" {
-		t.Fatalf("stored searched tools = %#v, want linear.list_issues first", ref.Tools)
-	}
-
 	provider.mu.Lock()
 	provider.searchQuery = "assigned ticket issues"
 	provider.mu.Unlock()
@@ -2785,13 +2856,6 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 		t.Fatalf("tool callback bodies after unavailable hits = %#v, want second searched tool to be linear.list_issues", toolBodies)
 	}
 
-	secondRef, err := result.Services.AgentRunMetadata.Get(context.Background(), second.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get(after unavailable hits): %v", err)
-	}
-	if len(secondRef.Tools) == 0 || secondRef.Tools[0].Target.Plugin != "linear" || secondRef.Tools[0].Target.Operation != "list_issues" {
-		t.Fatalf("stored searched tools after unavailable hits = %#v, want linear.list_issues first", secondRef.Tools)
-	}
 }
 
 func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T) {
@@ -2902,10 +2966,20 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 		t.Fatalf("search response count = %d, want 1", len(searchResponses))
 	}
 	searchResp := searchResponses[0]
-	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetTarget().GetPlugin() != "docs" {
+	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetId() == "" {
 		t.Fatalf("loaded search tools = %#v, want one docs tool", searchResp.GetTools())
 	}
-	loadedOperation := searchResp.GetTools()[0].GetTarget().GetOperation()
+	if len(toolBodies) != 1 {
+		t.Fatalf("tool callback bodies = %#v, want one searched tool execution", toolBodies)
+	}
+	var loadedBody map[string]string
+	if err := json.Unmarshal([]byte(toolBodies[0]), &loadedBody); err != nil {
+		t.Fatalf("tool callback body = %q: %v", toolBodies[0], err)
+	}
+	if loadedBody["provider"] != "docs" {
+		t.Fatalf("tool callback body = %#v, want docs provider", loadedBody)
+	}
+	loadedOperation := loadedBody["operation"]
 	if loadedOperation == "" || loadedOperation == "hidden_admin" {
 		t.Fatalf("loaded operation = %q, want visible docs operation", loadedOperation)
 	}
@@ -2925,16 +2999,6 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	}
 	if !searchResp.GetHasMore() {
 		t.Fatal("search has_more = false, want true after candidate limit")
-	}
-	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], fmt.Sprintf(`"operation":"%s"`, loadedOperation)) {
-		t.Fatalf("tool callback bodies = %#v, want %s", toolBodies, loadedOperation)
-	}
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get(search): %v", err)
-	}
-	if len(ref.Tools) != 1 || ref.Tools[0].Target.Operation != loadedOperation {
-		t.Fatalf("stored searched tools = %#v, want %s only", ref.Tools, loadedOperation)
 	}
 
 	betaRef := gproto.Clone(searchResp.GetCandidates()[0].GetRef()).(*proto.AgentToolRef)
@@ -2962,13 +3026,6 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	provider.mu.Unlock()
 	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], fmt.Sprintf(`"operation":"%s"`, betaOperation)) {
 		t.Fatalf("tool callback bodies after load_ref = %#v, want %s", toolBodies, betaOperation)
-	}
-	exactRef, err := result.Services.AgentRunMetadata.Get(context.Background(), exact.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get(load ref): %v", err)
-	}
-	if len(exactRef.Tools) != 1 || exactRef.Tools[0].Target.Operation != betaOperation {
-		t.Fatalf("stored exact loaded tools = %#v, want %s only", exactRef.Tools, betaOperation)
 	}
 
 	provider.mu.Lock()
@@ -3091,25 +3148,11 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 		t.Fatal("AgentManager.CreateTurn returned nil turn")
 	}
 
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get: %v", err)
-	}
-
 	provider.mu.Lock()
 	toolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
-		t.Fatalf("tool callback bodies = %#v, ref permissions = %#v, ref tools = %#v, want searched linear.issues", toolBodies, ref.Permissions, ref.Tools)
-	}
-	if ref.Permissions != nil {
-		t.Fatalf("stored permissions = %#v, want unrestricted resolved user scope", ref.Permissions)
-	}
-	if len(ref.ToolRefs) != 1 || ref.ToolRefs[0].Plugin != "*" {
-		t.Fatalf("stored tool refs = %#v, want global search ref", ref.ToolRefs)
-	}
-	if len(ref.Tools) == 0 || ref.Tools[0].Target.Plugin != "linear" || ref.Tools[0].Target.Operation != "issues" {
-		t.Fatalf("stored searched tools = %#v, want linear.issues", ref.Tools)
+		t.Fatalf("tool callback bodies = %#v, want searched linear.issues", toolBodies)
 	}
 }
 
@@ -3637,74 +3680,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 	}
 }
 
-func TestBootstrapAgentManagerCreateTurnReturnsInProgressForClaimedIdempotencyWithoutMetadata(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	provider := newRecordingAgentProvider()
-	factories := validFactories()
-	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
-		return provider, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	p := &principal.Principal{
-		SubjectID: "user:user-123",
-		UserID:    "user-123",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	}
-	ctx := principal.WithPrincipal(context.Background(), p)
-
-	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession: %v", err)
-	}
-
-	const turnID = "pending-turn"
-	claimedTurnID, claimed, err := result.Services.AgentRunMetadata.ClaimIdempotency(context.Background(), p.SubjectID, "managed", "pending-key", turnID, time.Now())
-	if err != nil {
-		t.Fatalf("ClaimIdempotency: %v", err)
-	}
-	if !claimed || claimedTurnID != turnID {
-		t.Fatalf("ClaimIdempotency = (%q, %t), want (%q, true)", claimedTurnID, claimed, turnID)
-	}
-
-	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		SessionID:      session.ID,
-		IdempotencyKey: "pending-key",
-		Model:          "gpt-test",
-		Messages:       []coreagent.Message{{Role: "user", Text: "continue"}},
-	})
-	if !errors.Is(err, agentmanager.ErrAgentTurnCreationInProgress) {
-		t.Fatalf("AgentManager.CreateTurn error = %v, want %v", err, agentmanager.ErrAgentTurnCreationInProgress)
-	}
-
-	provider.mu.Lock()
-	createTurnCount := len(provider.createTurnRequests)
-	provider.mu.Unlock()
-	if createTurnCount != 0 {
-		t.Fatalf("CreateTurn count = %d, want 0", createTurnCount)
-	}
-}
-
-func TestBootstrapAgentManagerIdempotentTurnReplayDoesNotDeleteMetadataWhenCallerLosesToolAccess(t *testing.T) {
+func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -3804,14 +3780,6 @@ func TestBootstrapAgentManagerIdempotentTurnReplayDoesNotDeleteMetadataWhenCalle
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, invocation.ErrAuthorizationDenied)
-	}
-
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.ID)
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get: %v", err)
-	}
-	if ref.ID != first.ID {
-		t.Fatalf("stored turn id = %q, want %q", ref.ID, first.ID)
 	}
 
 	provider.mu.Lock()
@@ -5979,44 +5947,54 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	_, provider, err := result.AgentControl.ResolveProviderSelection("")
+	systemPrincipal := &principal.Principal{SubjectID: "system:config", Kind: principal.Kind("system"), Source: principal.SourceEnv}
+	startCtx := principal.WithPrincipal(context.Background(), systemPrincipal)
+	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "reviewer",
+		Model:        "gpt-test",
+	})
 	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
-	}
-	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	tool := coreagent.Tool{
-		ID: "roadmap.sync",
-		Target: coreagent.ToolTarget{
-			Plugin:    "roadmap",
-			Operation: "sync",
-		},
-	}
-	if _, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{
-		SessionID: "agent-session-1",
-		Model:     "gpt-test",
-		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
-	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, err := provider.CreateTurn(startCtx, coreagent.CreateTurnRequest{
-		TurnID:    "agent-turn-1",
-		SessionID: "agent-session-1",
+	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
 		Model:     "gpt-test",
-		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
-		Tools:     []coreagent.Tool{tool},
-	}); err != nil {
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "roadmap",
+			Operation: "sync",
+		}},
+	})
+	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
+	providerImpl.mu.Lock()
+	if len(providerImpl.createTurnRequests) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(providerImpl.createTurnRequests))
+	}
+	createTurnReq := providerImpl.createTurnRequests[0]
+	if stored := providerImpl.turns[turn.ID]; stored != nil {
+		stored.Status = coreagent.ExecutionStatusRunning
+		stored.CompletedAt = nil
+	}
+	providerImpl.mu.Unlock()
+	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
+		t.Fatal("CreateTurn tool_grant is empty")
+	}
+	if len(createTurnReq.Tools) != 1 {
+		t.Fatalf("CreateTurn tools = %#v, want one tool", createTurnReq.Tools)
+	}
+	tool := createTurnReq.Tools[0]
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 	if err != nil {
 		t.Fatalf("structpb.NewStruct: %v", err)
 	}
 	resp, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  "agent-session-1",
-		TurnId:     "agent-turn-1",
+		SessionId:  session.ID,
+		TurnId:     turn.ID,
 		ToolCallId: "tool-call-1",
 		ToolId:     tool.ID,
 		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
 	})
 	if err != nil {
 		t.Fatalf("invoke agent host callback: %v", err)
@@ -6033,46 +6011,96 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
 		SessionId:  "wrong-session",
-		TurnId:     "agent-turn-1",
+		TurnId:     turn.ID,
 		ToolCallId: "tool-call-mismatch",
 		ToolId:     tool.ID,
 		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback with mismatched session status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
+	providerImpl.mu.Lock()
+	if stored := providerImpl.turns[turn.ID]; stored != nil {
+		stored.ID = "different-live-turn"
+		stored.SessionID = session.ID
+		stored.Status = coreagent.ExecutionStatusRunning
+		stored.CompletedAt = nil
+	}
+	providerImpl.mu.Unlock()
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		SessionId:  session.ID,
+		TurnId:     turn.ID,
+		ToolCallId: "tool-call-wrong-turn",
+		ToolId:     tool.ID,
+		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
+	}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("invoke agent host callback with mismatched provider turn status = %s, want %s", status.Code(err), codes.PermissionDenied)
+	}
+	providerImpl.mu.Lock()
+	if stored := providerImpl.turns[turn.ID]; stored != nil {
+		stored.ID = turn.ID
+		stored.Status = coreagent.ExecutionStatusRunning
+		stored.CompletedAt = nil
+	}
+	providerImpl.mu.Unlock()
 
-	if _, err := provider.CancelTurn(startCtx, coreagent.CancelTurnRequest{TurnID: "agent-turn-1"}); err != nil {
+	if _, err := result.AgentManager.CancelTurn(startCtx, systemPrincipal, turn.ID, "done"); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
 	cancelRequests := providerImpl.CancelTurnRequests()
 	if len(cancelRequests) != 1 {
 		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
 	}
-	if cancelRequests[0].TurnID != "agent-turn-1" {
-		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, "agent-turn-1")
+	if cancelRequests[0].TurnID != turn.ID {
+		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, turn.ID)
 	}
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), "agent-turn-1")
-	if err != nil {
-		t.Fatalf("AgentRunMetadata.Get after cancel: %v", err)
+	providerImpl.mu.Lock()
+	if stored := providerImpl.turns[turn.ID]; stored != nil {
+		stored.Status = coreagent.ExecutionStatusRunning
+		stored.CompletedAt = nil
 	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("RevokedAt after cancel = %#v, want set", ref.RevokedAt)
-	}
+	providerImpl.mu.Unlock()
 	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  "agent-session-1",
-		TurnId:     "agent-turn-1",
+		SessionId:  session.ID,
+		TurnId:     turn.ID,
 		ToolCallId: "tool-call-2",
 		ToolId:     tool.ID,
 		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback after cancel status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
 }
 
-func TestBootstrapAgentProviderAssignedTurnIDCancelsOnTrackingFailure(t *testing.T) {
+func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T) {
 	t.Parallel()
 
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
 	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			ConnectionMode: providermanifestv1.ConnectionModeNone,
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: srv.URL,
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"reviewer": {
 			Source:  config.ProviderSource{Path: "stub"},
@@ -6080,12 +6108,15 @@ func TestBootstrapAgentProviderAssignedTurnIDCancelsOnTrackingFailure(t *testing
 		},
 	}
 
-	providerImpl := &generatedIDAgentProvider{}
+	var capturedHostServices []providerhost.HostService
+	providerImpl := newRecordingAgentProvider()
+	providerImpl.cancelTurnStatus = coreagent.ExecutionStatusRunning
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
 			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
 		}
+		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
 		return providerImpl, nil
 	}
 
@@ -6096,38 +6127,65 @@ func TestBootstrapAgentProviderAssignedTurnIDCancelsOnTrackingFailure(t *testing
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	_, provider, err := result.AgentControl.ResolveProviderSelection("")
+	systemPrincipal := &principal.Principal{SubjectID: "system:config", Kind: principal.Kind("system"), Source: principal.SourceEnv}
+	startCtx := principal.WithPrincipal(context.Background(), systemPrincipal)
+	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "reviewer",
+		Model:        "gpt-test",
+	})
 	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
+		t.Fatalf("CreateSession: %v", err)
 	}
-
-	_, err = provider.CreateTurn(context.Background(), coreagent.CreateTurnRequest{
-		SessionID: "generated-session-1",
+	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
 		Model:     "gpt-test",
-		Tools: []coreagent.Tool{{
-			ID: "roadmap.sync",
-			Target: coreagent.ToolTarget{
-				Plugin:    "roadmap",
-				Operation: "sync",
-			},
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "roadmap",
+			Operation: "sync",
 		}},
 	})
-	if err == nil {
-		t.Fatal("CreateTurn error = nil, want tracking failure for provider-assigned turn id")
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
 	}
-	if !strings.Contains(err.Error(), "agent execution principal is required") {
-		t.Fatalf("CreateTurn error = %v, want missing principal failure", err)
+	providerImpl.mu.Lock()
+	createTurnReq := providerImpl.createTurnRequests[0]
+	if stored := providerImpl.turns[turn.ID]; stored != nil {
+		stored.Status = coreagent.ExecutionStatusRunning
+		stored.CompletedAt = nil
+	}
+	providerImpl.mu.Unlock()
+	if strings.TrimSpace(createTurnReq.ToolGrant) == "" || len(createTurnReq.Tools) != 1 {
+		t.Fatalf("CreateTurn request = %#v, want tool grant and one tool", createTurnReq)
+	}
+	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+	if err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		SessionId:  session.ID,
+		TurnId:     turn.ID,
+		ToolCallId: "tool-call-before-cancel",
+		ToolId:     createTurnReq.Tools[0].ID,
+		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
+	}); err != nil {
+		t.Fatalf("invoke agent host callback before cancel: %v", err)
 	}
 
-	cancelRequests := providerImpl.CancelTurnRequests()
-	if len(cancelRequests) != 1 {
-		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
+	if _, err := result.AgentManager.CancelTurn(startCtx, systemPrincipal, turn.ID, "done"); err == nil {
+		t.Fatal("CancelTurn error = nil, want live turn rejection")
+	} else if !strings.Contains(err.Error(), "returned live turn") {
+		t.Fatalf("CancelTurn error = %v, want live turn rejection", err)
 	}
-	if cancelRequests[0].TurnID != "generated-turn-1" {
-		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, "generated-turn-1")
-	}
-	if cancelRequests[0].Reason != "agent turn tracking failed" {
-		t.Fatalf("CancelTurn reason = %q, want %q", cancelRequests[0].Reason, "agent turn tracking failed")
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		SessionId:  session.ID,
+		TurnId:     turn.ID,
+		ToolCallId: "tool-call-after-live-cancel",
+		ToolId:     createTurnReq.Tools[0].ID,
+		Arguments:  args,
+		ToolGrant:  createTurnReq.ToolGrant,
+	}); err != nil {
+		t.Fatalf("invoke agent host callback after live cancel: %v", err)
 	}
 }
 
@@ -6232,6 +6290,25 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 	if cancelRequests[0].Reason != "agent provider returned mismatched turn id" {
 		t.Fatalf("CancelTurn reason = %q, want %q", cancelRequests[0].Reason, "agent provider returned mismatched turn id")
+	}
+
+	replayedTurn, err := provider.CreateTurn(startCtx, coreagent.CreateTurnRequest{
+		TurnID:         "agent-turn-1",
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workflow:github:run-1:turn",
+		Model:          "gpt-test",
+		CreatedBy:      coreagent.Actor{SubjectID: "system:config"},
+		Tools:          []coreagent.Tool{tool},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn idempotent replay: %v", err)
+	}
+	if replayedTurn.ID != "generated-turn-1" {
+		t.Fatalf("CreateTurn idempotent replay ID = %q, want generated-turn-1", replayedTurn.ID)
+	}
+	cancelRequests = providerImpl.CancelTurnRequests()
+	if len(cancelRequests) != 1 {
+		t.Fatalf("CancelTurn requests after idempotent replay = %d, want 1", len(cancelRequests))
 	}
 
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})

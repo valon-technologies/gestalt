@@ -1162,7 +1162,7 @@ func TestNewServer_HumanListToolsFiltersRoleRestrictedTools(t *testing.T) {
 	}
 }
 
-func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testing.T) {
+func TestNewServer_HumanListToolsUsesCanonicalSubjectForStaticCollisions(t *testing.T) {
 	t.Parallel()
 
 	prov := &directCallerProvider{

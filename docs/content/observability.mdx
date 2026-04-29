@@ -277,21 +277,19 @@ Gestalt metrics: `<family>.count`, `<family>.error_count`, and
 | `gestaltd.agent.operation.*` | `gestaltd_agent_operation_count_total`, `gestaltd_agent_operation_error_count_total`, `gestaltd_agent_operation_duration_seconds` | Public agent manager operations such as `create_session`, `create_turn`, `list_turn_events`, and `resolve_interaction` |
 | `gestaltd.agent.provider.operation.*` | `gestaltd_agent_provider_operation_count_total`, `gestaltd_agent_provider_operation_error_count_total`, `gestaltd_agent_provider_operation_duration_seconds` | Calls into the selected provider-owned agent system of record |
 | `gestaltd.agent.tool.resolve.*` | `gestaltd_agent_tool_resolve_count_total`, `gestaltd_agent_tool_resolve_error_count_total`, `gestaltd_agent_tool_resolve_duration_seconds` | Tool reference resolution before a turn is sent to a provider |
-| `gestaltd.agent.run_metadata.write.*` | `gestaltd_agent_run_metadata_write_count_total`, `gestaltd_agent_run_metadata_write_error_count_total`, `gestaltd_agent_run_metadata_write_duration_seconds` | Platform writes that map provider-owned turns back to caller authorization metadata |
 
 These metric families use low-cardinality attributes:
 
 - `gestalt.agent.operation` identifies the agent operation or provider method.
 - `gestalt.agent.provider` identifies the configured agent provider on
-  provider-bound and run-metadata metric families.
+  provider-bound metric families.
 - `gestalt.agent.tool.source` identifies tool binding mode for tool resolution:
-  `explicit` or `inherit_invokes`.
+  `native_search`.
 
 Agent HTTP requests also form trace trees when OTLP tracing is enabled. A
 typical `POST /api/v1/agent/sessions/{id}/turns` trace contains
 `agent.operation`, `agent.tool.resolve`, `catalog.operation.resolve`,
-`agent.run_metadata.write`, and `agent.provider.operation` spans under the
-inbound HTTP server span.
+and `agent.provider.operation` spans under the inbound HTTP server span.
 
 ### Authorization Provider Metrics
 

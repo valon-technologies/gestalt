@@ -33,7 +33,9 @@ pub mod proto {
     pub use crate::generated::v1;
 }
 
-pub use agent::{AgentHost, AgentHostError, AgentProvider, ENV_AGENT_HOST_SOCKET};
+pub use agent::{
+    AgentHost, AgentHostError, AgentProvider, ENV_AGENT_HOST_SOCKET, ENV_AGENT_HOST_SOCKET_TOKEN,
+};
 pub use agent_manager::{
     AgentManager, AgentManagerError, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN,
 };

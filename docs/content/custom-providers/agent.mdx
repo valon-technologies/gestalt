@@ -61,9 +61,8 @@ These callbacks work the same way when the provider runs directly on the
 Provider authors do not need to emit the baseline `gestaltd` agent metrics.
 `gestaltd` wraps the configured provider interface and records
 `gestaltd.agent.provider.operation.*` for every provider method. The public
-agent facade records `gestaltd.agent.operation.*`, tool resolution records
-`gestaltd.agent.tool.resolve.*`, and turn authorization metadata writes record
-`gestaltd.agent.run_metadata.write.*`.
+agent facade records `gestaltd.agent.operation.*`, and tool resolution records
+`gestaltd.agent.tool.resolve.*`.
 
 When OTLP tracing is enabled, the `context.Context` passed into provider
 methods carries the active trace. Preserve that context when calling back into
@@ -132,6 +131,18 @@ events.
       proto.UnimplementedAgentProviderServer
     }
 
+    func actorFromSubject(subject *proto.AgentSubjectContext) *proto.AgentActor {
+      if subject == nil {
+        return nil
+      }
+      return &proto.AgentActor{
+        SubjectId:   subject.GetSubjectId(),
+        SubjectKind: subject.GetSubjectKind(),
+        DisplayName: subject.GetDisplayName(),
+        AuthSource:  subject.GetAuthSource(),
+      }
+    }
+
     func (p *provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
       return &proto.AgentSession{
         Id:           req.GetSessionId(),
@@ -139,6 +150,7 @@ events.
         Model:        req.GetModel(),
         ClientRef:    req.GetClientRef(),
         State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+        CreatedBy:    req.GetCreatedBy(),
         CreatedAt:    timestamppb.Now(),
         UpdatedAt:    timestamppb.Now(),
       }, nil
@@ -149,6 +161,7 @@ events.
         Id:           req.GetSessionId(),
         ProviderName: "example",
         State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+        CreatedBy:    actorFromSubject(req.GetSubject()),
       }, nil
     }
 
@@ -162,6 +175,7 @@ events.
         ProviderName: "example",
         ClientRef:    req.GetClientRef(),
         State:        req.GetState(),
+        CreatedBy:    actorFromSubject(req.GetSubject()),
         UpdatedAt:    timestamppb.Now(),
       }, nil
     }
@@ -174,6 +188,7 @@ events.
         Model:        req.GetModel(),
         Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
         Messages:     req.GetMessages(),
+        CreatedBy:    req.GetCreatedBy(),
         CreatedAt:    timestamppb.Now(),
         StartedAt:    timestamppb.Now(),
         ExecutionRef: req.GetExecutionRef(),
@@ -187,6 +202,7 @@ events.
         ProviderName: "example",
         Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
         OutputText:   "done",
+        CreatedBy:    actorFromSubject(req.GetSubject()),
         CompletedAt:  timestamppb.Now(),
       }, nil
     }
@@ -202,6 +218,7 @@ events.
         ProviderName:  "example",
         Status:        proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED,
         StatusMessage: "operator requested",
+        CreatedBy:     actorFromSubject(req.GetSubject()),
         CompletedAt:   timestamppb.Now(),
       }, nil
     }
@@ -255,6 +272,17 @@ events.
     } from "@valon-technologies/gestalt";
 
     const host = new AgentHost();
+    const turns = new Map();
+
+    const actorFromSubject = (subject) =>
+      subject
+        ? {
+            subjectId: subject.subjectId,
+            subjectKind: subject.subjectKind,
+            displayName: subject.displayName,
+            authSource: subject.authSource,
+          }
+        : undefined;
 
     export const provider = defineAgentProvider({
       displayName: "Example Agent",
@@ -267,6 +295,7 @@ events.
           model: request.model,
           clientRef: request.clientRef,
           state: AgentSessionState.ACTIVE,
+          createdBy: request.createdBy,
         };
       },
 
@@ -275,6 +304,7 @@ events.
           id: request.sessionId,
           providerName: "example",
           state: AgentSessionState.ACTIVE,
+          createdBy: actorFromSubject(request.subject),
         };
       },
 
@@ -288,53 +318,70 @@ events.
           providerName: "example",
           clientRef: request.clientRef,
           state: request.state,
+          createdBy: actorFromSubject(request.subject),
         };
       },
 
       async createTurn(request) {
-        if (request.tools.length > 0) {
-          await host.executeTool({
-            sessionId: request.sessionId,
-            turnId: request.turnId,
-            toolCallId: "call-1",
-            toolId: request.tools[0].id,
-            arguments: { taskId: "task-123" },
-          });
-        }
-
-        return {
+        const runningTurn = {
           id: request.turnId,
           sessionId: request.sessionId,
           providerName: "example",
           model: request.model,
           status: AgentExecutionStatus.RUNNING,
           messages: request.messages,
+          createdBy: request.createdBy,
           executionRef: request.executionRef,
         };
+        turns.set(request.turnId, runningTurn);
+
+        let outputText = "";
+        if (request.tools.length > 0) {
+          const response = await host.executeTool({
+            sessionId: request.sessionId,
+            turnId: request.turnId,
+            toolCallId: "call-1",
+            toolId: request.tools[0].id,
+            toolGrant: request.toolGrant,
+            arguments: { taskId: "task-123" },
+          });
+          outputText = response.body;
+        }
+
+        const completedTurn = {
+          ...runningTurn,
+          status: AgentExecutionStatus.SUCCEEDED,
+          outputText,
+        };
+        turns.set(request.turnId, completedTurn);
+        return completedTurn;
       },
 
       async getTurn(request) {
-        return {
-          id: request.turnId,
-          sessionId: "session-1",
-          providerName: "example",
-          status: AgentExecutionStatus.SUCCEEDED,
-          outputText: "done",
-        };
+        const turn = turns.get(request.turnId);
+        if (!turn) throw new Error(`unknown turn ${request.turnId}`);
+        return turn;
       },
 
-      async listTurns() {
-        return [];
+      async listTurns(request) {
+        return [...turns.values()].filter(
+          (turn) => turn.sessionId === request.sessionId,
+        );
       },
 
       async cancelTurn(request) {
-        return {
+        const existing = turns.get(request.turnId);
+        const canceledTurn = {
+          ...existing,
           id: request.turnId,
-          sessionId: "session-1",
+          sessionId: existing?.sessionId ?? "session-1",
           providerName: "example",
           status: AgentExecutionStatus.CANCELED,
           statusMessage: "operator requested",
+          createdBy: actorFromSubject(request.subject),
         };
+        turns.set(request.turnId, canceledTurn);
+        return canceledTurn;
       },
 
       async listTurnEvents() {

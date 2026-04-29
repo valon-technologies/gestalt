@@ -282,6 +282,7 @@ export {
 } from "./s3.ts";
 export {
   ENV_AGENT_HOST_SOCKET,
+  ENV_AGENT_HOST_SOCKET_TOKEN,
   AgentHost,
   AgentExecutionStatus,
   AgentInteractionState,
@@ -310,7 +311,6 @@ export {
   type AgentTurnDisplayValue,
   type AgentTurnEvent,
   type AgentTurnEventInit,
-  type BoundAgentToolTarget,
   type CancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest,
   type CreateAgentProviderTurnRequest,
