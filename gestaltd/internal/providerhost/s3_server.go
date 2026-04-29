@@ -19,16 +19,31 @@ import (
 
 type s3Server struct {
 	proto.UnimplementedS3Server
-	client    s3store.Client
-	keyPrefix string
+	client      s3store.Client
+	keyPrefix   string
+	pluginName  string
+	bindingName string
+	accessURLs  *S3ObjectAccessURLManager
 }
 
 const s3ContinuationTokenPrefix = "gestalt_s3_ct_"
 
+type S3ServerOptions struct {
+	BindingName string
+	AccessURLs  *S3ObjectAccessURLManager
+}
+
 func NewS3Server(client s3store.Client, pluginName string) proto.S3Server {
+	return NewS3ServerWithOptions(client, pluginName, S3ServerOptions{})
+}
+
+func NewS3ServerWithOptions(client s3store.Client, pluginName string, opts S3ServerOptions) proto.S3Server {
 	return &s3Server{
-		client:    client,
-		keyPrefix: s3NamespacePrefix(pluginName),
+		client:      client,
+		keyPrefix:   s3NamespacePrefix(pluginName),
+		pluginName:  strings.TrimSpace(pluginName),
+		bindingName: strings.TrimSpace(opts.BindingName),
+		accessURLs:  opts.AccessURLs,
 	}
 }
 
@@ -201,7 +216,31 @@ func (s *s3Server) CopyObject(ctx context.Context, req *proto.CopyObjectRequest)
 
 func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
 	if s.keyPrefix != "" {
-		return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
+		if s.accessURLs == nil || s.bindingName == "" {
+			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
+		}
+		result, err := s.accessURLs.MintURL(S3ObjectAccessURLRequest{
+			PluginName:         s.pluginName,
+			BindingName:        s.bindingName,
+			Ref:                objectRefFromProto(req.GetRef()),
+			Method:             presignMethodFromProto(req.GetMethod()),
+			Expires:            timeDurationSeconds(req.GetExpiresSeconds()),
+			ContentType:        req.GetContentType(),
+			ContentDisposition: req.GetContentDisposition(),
+			Headers:            s3store.CloneStringMap(req.GetHeaders()),
+		})
+		if err != nil {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		resp := &proto.PresignObjectResponse{
+			Url:     result.URL,
+			Method:  presignMethodToProto(result.Method),
+			Headers: s3store.CloneStringMap(result.Headers),
+		}
+		if !result.ExpiresAt.IsZero() {
+			resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
+		}
+		return resp, nil
 	}
 	result, err := s.client.PresignObject(ctx, s3store.PresignRequest{
 		Ref:                s.namespacedRef(objectRefFromProto(req.GetRef())),

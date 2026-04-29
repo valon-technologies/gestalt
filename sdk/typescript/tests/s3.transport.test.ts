@@ -162,6 +162,22 @@ describe("S3 transport", () => {
     }
   });
 
+  test("createAccessUrl returns a hosted object access URL", async () => {
+    const access = await client().object("docs-bucket", "uploads/object.txt").createAccessUrl({
+      method: PresignMethod.Put,
+      expiresSeconds: 60,
+      contentType: "text/plain",
+      headers: {
+        "Content-Length": "5",
+      },
+    });
+    expect(access.method).toBe(PresignMethod.Put);
+    expect(access.url).toStartWith("https://gestalt.example.test/api/v1/s3/object-access/");
+    expect(access.url).not.toContain("uploads/object.txt");
+    expect(access.headers).toEqual({ "Content-Length": "5" });
+    expect(access.expiresAt).toBeInstanceOf(Date);
+  });
+
   test("write, stat, read, and json round-trip", async () => {
     const s3 = client();
     const object = s3.object("docs-bucket", "payload.json");

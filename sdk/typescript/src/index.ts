@@ -267,6 +267,8 @@ export {
   type CopyOptions,
   type ListOptions,
   type ListPage,
+  type ObjectAccessURL,
+  type ObjectAccessURLOptions,
   type ObjectMeta,
   type ObjectRef,
   type PresignOptions,

@@ -693,6 +693,13 @@ portable S3 contract covers `HeadObject`, `ReadObject`, `WriteObject`,
 plugin can target AWS S3, MinIO, Cloudflare R2, GCS interoperability mode, or
 other S3-compatible backends without changing application code.
 
+Plugins can also create host-mediated object access URLs for their scoped S3
+bindings with SDK helpers such as TypeScript `object.createAccessUrl(...)` and
+Go `object.CreateAccessURL(...)`. These URLs are served by gestaltd at
+`/api/v1/s3/object-access/{token}` and require `server.baseURL` plus
+`server.encryptionKey`, because the host signs the logical plugin/binding/object
+scope before streaming bytes through the configured S3 provider.
+
 ## `providers.secrets`
 
 Structured secret refs name the provider explicitly:

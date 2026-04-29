@@ -25,8 +25,9 @@ letting the host decide which concrete storage backend sits behind each
 binding.
 
 The contract stays close to familiar S3 semantics. It supports metadata reads,
-object reads and writes, deletes, paginated listing, server-side copy, and
-presigned `GET`, `PUT`, `DELETE`, and `HEAD` URLs.
+object reads and writes, deletes, paginated listing, server-side copy,
+provider-native presigned `GET`, `PUT`, `DELETE`, and `HEAD` URLs, and
+host-mediated object access URLs for plugin-scoped browser uploads/downloads.
 
 ## Configuring the first-party S3 provider
 
@@ -155,13 +156,25 @@ language.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { S3 } from "@valon-technologies/gestalt";
+    import { PresignMethod, S3 } from "@valon-technologies/gestalt";
 
     const s3 = new S3();
     const avatar = s3.object("uploads", "avatars/user-123.png");
 
     await avatar.write(pngBytes, { contentType: "image/png" });
     const body = await avatar.bytes();
+
+    const upload = await avatar.createAccessUrl({
+      method: PresignMethod.Put,
+      contentType: "image/png",
+      headers: { "Content-Length": String(pngBytes.byteLength) },
+      expiresSeconds: 900,
+    });
+    await fetch(upload.url, {
+      method: upload.method,
+      headers: { ...upload.headers, "Content-Type": "image/png" },
+      body: pngBytes,
+    });
     ```
   </Tabs.Tab>
 </Tabs>
@@ -176,13 +189,26 @@ Python use `gestalt.S3("archive")`, Rust uses
 Gestalt does not use S3 providers for its own system state, so these bindings
 are plugin-only. The first-party provider preserves the portable object
 identity `{bucket, key, version_id}`, which means buckets are chosen by the
-caller instead of being fixed in provider config. Plugin-scoped presigning is
-not available through the SDK transport because signed URLs would expose the
-provider-internal namespace prefix that the host uses for isolation. The
-first-party provider also rejects writes and copies above the single-request S3
-limit instead of exposing multipart controls through the public contract.
-Published S3 provider packages can still be prepared with `gestaltd init`, just
-like auth, indexeddb, cache, and secrets providers.
+caller instead of being fixed in provider config.
+
+For plugin-scoped browser access, use `createAccessUrl` /
+`CreateAccessURL` rather than provider-native `presign`. Gestalt returns a
+short-lived URL under `/api/v1/s3/object-access/{token}`. The token is
+encrypted by the host, contains the plugin, S3 binding, logical object ref,
+HTTP method, expiry, and required headers, and the public route streams bytes
+through the configured S3 provider after applying the plugin namespace prefix.
+That keeps the S3 provider generic and avoids exposing provider-internal object
+keys to clients. The compatibility `presign` methods also return hosted object
+access URLs for plugin-scoped bindings when `server.baseURL` and
+`server.encryptionKey` are configured.
+
+The first-party provider rejects writes and copies above the single-request S3
+limit instead of exposing provider-specific multipart controls through the
+portable provider contract. Browser uploads that need direct client transport
+should use hosted object access URLs; product-specific multipart state still
+belongs in the plugin that owns that workflow. Published S3 provider packages
+can still be prepared with `gestaltd init`, just like auth, indexeddb, cache,
+and secrets providers.
 
 ## Building your own S3 provider
 

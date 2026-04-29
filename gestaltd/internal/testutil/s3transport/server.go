@@ -46,11 +46,20 @@ func Start(target string, opts Options) (*Server, error) {
 		return nil, err
 	}
 	stub := &coretesting.StubS3{}
+	accessURLs, err := providerhost.NewS3ObjectAccessURLManager(
+		[]byte("0123456789abcdef0123456789abcdef"),
+		"https://gestalt.example.test",
+	)
+	if err != nil {
+		_ = lis.Close()
+		return nil, err
+	}
 	srv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(requireRelayTokenUnary(opts.ExpectRelayToken)),
 		grpc.ChainStreamInterceptor(requireRelayTokenStream(opts.ExpectRelayToken)),
 	)
 	proto.RegisterS3Server(srv, providerhost.NewS3Server(stub, ""))
+	proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, "sdk-test", "default"))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil
 }

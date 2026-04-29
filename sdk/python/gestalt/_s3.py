@@ -190,6 +190,10 @@ class PresignResult:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+ObjectAccessURLOptions = PresignOptions
+ObjectAccessURL = PresignResult
+
+
 class S3ReadStream:
     """Streaming object body reader returned by :meth:`S3.read_object`."""
 
@@ -406,6 +410,7 @@ class S3:
         token = os.environ.get(s3_socket_token_env(name), "")
         self._channel = _s3_channel(target, token=token)
         self._stub = pb_grpc.S3Stub(self._channel)
+        self._object_access_stub = pb_grpc.S3ObjectAccessStub(self._channel)
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -543,6 +548,36 @@ class S3:
             result.method = _normalize_presign_method(opts.method)
         return result
 
+    def create_object_access_url(
+        self,
+        ref: ObjectRef,
+        opts: ObjectAccessURLOptions | None = None,
+    ) -> ObjectAccessURL:
+        """Create a host-mediated object access URL."""
+
+        request = pb.CreateObjectAccessURLRequest(ref=_object_ref_to_proto(ref))
+        if opts is not None:
+            request.method = _presign_method_to_proto(opts.method)
+            if opts.expires is not None:
+                request.expires_seconds = int(opts.expires.total_seconds())
+            request.content_type = opts.content_type
+            request.content_disposition = opts.content_disposition
+            request.headers.update(dict(opts.headers))
+        resp = _grpc_call(self._object_access_stub.CreateObjectAccessURL, request)
+        result = _presign_result_from_proto(resp)
+        if result.method is None and opts is not None:
+            result.method = _normalize_presign_method(opts.method)
+        return result
+
+    def create_access_url(
+        self,
+        ref: ObjectRef,
+        opts: ObjectAccessURLOptions | None = None,
+    ) -> ObjectAccessURL:
+        """Create a host-mediated object access URL."""
+
+        return self.create_object_access_url(ref, opts)
+
     def __enter__(self) -> S3:
         """Return the client for ``with`` statements."""
 
@@ -654,6 +689,11 @@ class S3Object:
         """Generate a presigned URL for this object."""
 
         return self._client.presign_object(self.ref, opts)
+
+    def create_access_url(self, opts: ObjectAccessURLOptions | None = None) -> ObjectAccessURL:
+        """Create a host-mediated object access URL for this object."""
+
+        return self._client.create_object_access_url(self.ref, opts)
 
 
 def _write_request_iter(

@@ -138,6 +138,8 @@ func (m providerMetadata) descriptionOr(v string) string {
 }
 
 type Deps struct {
+	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
+	// raw config value.
 	EncryptionKey         []byte
 	BaseURL               string
 	SecretManager         core.SecretManager
@@ -206,6 +208,7 @@ type Result struct {
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
+	S3                    map[string]s3store.Client
 	ExtraS3s              []s3store.Client
 	ExtraWorkflows        []coreworkflow.Provider
 	ExtraAgents           []coreagent.Provider
@@ -1091,6 +1094,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuthorizationProvider: prepared.AuthorizationProvider,
 		Services:              prepared.Services,
 		ExtraIndexedDBs:       prepared.ExtraIndexedDBs,
+		S3:                    prepared.Deps.S3,
 		ExtraS3s:              prepared.ExtraS3s,
 		ExtraWorkflows:        extraWorkflows,
 		ExtraAgents:           extraAgents,

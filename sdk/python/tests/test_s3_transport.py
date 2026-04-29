@@ -329,6 +329,21 @@ class TestListCopyDeleteAndPresign(unittest.TestCase):
         self.assertEqual(signed.headers, {"x-test": "1"})
         self.assertIsNotNone(signed.expires_at)
 
+        access_url = client.object("files", "docs/copy.txt").create_access_url(
+            PresignOptions(
+                method=PresignMethod.PUT,
+                expires=dt.timedelta(minutes=5),
+                headers={"Content-Length": "5"},
+            )
+        )
+        self.assertEqual(access_url.method, PresignMethod.PUT)
+        self.assertTrue(
+            access_url.url.startswith("https://gestalt.example.test/api/v1/s3/object-access/")
+        )
+        self.assertNotIn("docs/copy.txt", access_url.url)
+        self.assertEqual(access_url.headers, {"Content-Length": "5"})
+        self.assertIsNotNone(access_url.expires_at)
+
         with self.assertRaises(S3PreconditionFailedError):
             client.copy_object(
                 ObjectRef(bucket="files", key="docs/a.txt"),

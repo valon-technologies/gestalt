@@ -236,7 +236,7 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 		if binding.Path == "" {
 			return fmt.Errorf("http binding %s.%s path is required", binding.PluginName, binding.Name)
 		}
-		for _, prefix := range []string{"/api/v1/auth", "/api/v1/tokens", "/api/v1/workflow", "/api/v1/integrations"} {
+		for _, prefix := range []string{"/api/v1/auth", "/api/v1/tokens", "/api/v1/workflow", "/api/v1/integrations", "/api/v1/s3"} {
 			if binding.Path == prefix || strings.HasPrefix(binding.Path, prefix+"/") {
 				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.PluginName, binding.Name, binding.Path, prefix)
 			}

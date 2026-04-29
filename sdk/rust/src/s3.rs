@@ -14,7 +14,10 @@ use tower::service_fn;
 
 use crate::api::RuntimeMetadata;
 use crate::error::Result as ProviderResult;
-use crate::generated::v1::{self as pb, s3_client::S3Client as ProtoS3Client};
+use crate::generated::v1::{
+    self as pb, s3_client::S3Client as ProtoS3Client,
+    s3_object_access_client::S3ObjectAccessClient as ProtoS3ObjectAccessClient,
+};
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
@@ -156,6 +159,9 @@ pub struct PresignResult {
     pub headers: BTreeMap<String, String>,
 }
 
+pub type ObjectAccessURLOptions = PresignOptions;
+pub type ObjectAccessURL = PresignResult;
+
 #[async_trait]
 /// Lifecycle and RPC contract for S3-compatible providers.
 pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
@@ -249,6 +255,7 @@ where
 /// Client for a running S3 provider.
 pub struct S3 {
     client: ProtoS3Client<S3Transport>,
+    object_access_client: ProtoS3ObjectAccessClient<S3Transport>,
 }
 
 impl S3 {
@@ -289,11 +296,10 @@ impl S3 {
             }
         };
 
+        let interceptor = relay_token_interceptor(token.trim())?;
         Ok(Self {
-            client: ProtoS3Client::with_interceptor(
-                channel,
-                relay_token_interceptor(token.trim())?,
-            ),
+            client: ProtoS3Client::with_interceptor(channel.clone(), interceptor.clone()),
+            object_access_client: ProtoS3ObjectAccessClient::with_interceptor(channel, interceptor),
         })
     }
 
@@ -301,6 +307,7 @@ impl S3 {
     pub fn object(&self, bucket: &str, key: &str) -> Object {
         Object {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
                 bucket: bucket.to_string(),
                 key: key.to_string(),
@@ -313,6 +320,7 @@ impl S3 {
     pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object {
         Object {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
             reference: ObjectRef {
                 bucket: bucket.to_string(),
                 key: key.to_string(),
@@ -549,11 +557,47 @@ impl S3 {
             options.method,
         ))
     }
+
+    /// Creates a host-mediated object-access URL.
+    pub async fn create_object_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> ClientResult<ObjectAccessURL> {
+        let options = options.unwrap_or_default();
+        let expires_seconds = i64::try_from(options.expires.as_secs()).unwrap_or(i64::MAX);
+        let response = self
+            .object_access_client
+            .create_object_access_url(pb::CreateObjectAccessUrlRequest {
+                r#ref: Some(object_ref_to_proto(reference)),
+                method: presign_method_to_proto(options.method) as i32,
+                expires_seconds,
+                content_type: options.content_type,
+                content_disposition: options.content_disposition,
+                headers: options.headers,
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(object_access_url_from_proto(
+            response.into_inner(),
+            options.method,
+        ))
+    }
+
+    /// Alias for [`S3::create_object_access_url`].
+    pub async fn create_access_url(
+        &mut self,
+        reference: ObjectRef,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> ClientResult<ObjectAccessURL> {
+        self.create_object_access_url(reference, options).await
+    }
 }
 
 /// Convenience wrapper around repeated operations on one object key.
 pub struct Object {
     client: ProtoS3Client<S3Transport>,
+    object_access_client: ProtoS3ObjectAccessClient<S3Transport>,
     reference: ObjectRef,
 }
 
@@ -567,6 +611,7 @@ impl Object {
     pub async fn stat(&mut self) -> ClientResult<ObjectMeta> {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client.head_object(self.reference.clone()).await
     }
@@ -584,6 +629,7 @@ impl Object {
     pub async fn stream(&mut self, options: Option<ReadOptions>) -> ClientResult<ObjectReader> {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client.read_object(self.reference.clone(), options).await
     }
@@ -617,6 +663,7 @@ impl Object {
     {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client
             .write_object(self.reference.clone(), body, options)
@@ -636,6 +683,7 @@ impl Object {
     {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client
             .write_object_chunks(self.reference.clone(), chunks, options)
@@ -689,6 +737,7 @@ impl Object {
     pub async fn delete(&mut self) -> ClientResult<()> {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client.delete_object(self.reference.clone()).await
     }
@@ -700,8 +749,23 @@ impl Object {
     ) -> ClientResult<PresignResult> {
         let mut client = S3 {
             client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
         };
         client.presign_object(self.reference.clone(), options).await
+    }
+
+    /// Creates a host-mediated object-access URL for the current object.
+    pub async fn create_access_url(
+        &mut self,
+        options: Option<ObjectAccessURLOptions>,
+    ) -> ClientResult<ObjectAccessURL> {
+        let mut client = S3 {
+            client: self.client.clone(),
+            object_access_client: self.object_access_client.clone(),
+        };
+        client
+            .create_object_access_url(self.reference.clone(), options)
+            .await
     }
 }
 
@@ -953,6 +1017,23 @@ fn presign_result_from_proto(
 ) -> PresignResult {
     let method = presign_method_from_proto(result.method);
     PresignResult {
+        url: result.url,
+        method: if method == PresignMethod::Unspecified {
+            requested_method
+        } else {
+            method
+        },
+        expires_at: result.expires_at,
+        headers: result.headers,
+    }
+}
+
+fn object_access_url_from_proto(
+    result: pb::CreateObjectAccessUrlResponse,
+    requested_method: PresignMethod,
+) -> ObjectAccessURL {
+    let method = presign_method_from_proto(result.method);
+    ObjectAccessURL {
         url: result.url,
         method: if method == PresignMethod::Unspecified {
             requested_method

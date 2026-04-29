@@ -476,4 +476,27 @@ async fn presign_round_trip() {
     assert!(presigned.url.contains("method=PUT"));
     assert_eq!(presigned.headers.get("x-test"), Some(&"1".to_string()));
     assert!(presigned.expires_at.is_some());
+
+    let access_url = object
+        .create_access_url(Some(PresignOptions {
+            method: PresignMethod::Put,
+            expires: Duration::from_secs(300),
+            headers: BTreeMap::from([("Content-Length".to_string(), "5".to_string())]),
+            ..PresignOptions::default()
+        }))
+        .await
+        .expect("create access URL");
+
+    assert_eq!(access_url.method, PresignMethod::Put);
+    assert!(
+        access_url
+            .url
+            .starts_with("https://gestalt.example.test/api/v1/s3/object-access/")
+    );
+    assert!(!access_url.url.contains("docs/presign.txt"));
+    assert_eq!(
+        access_url.headers.get("Content-Length"),
+        Some(&"5".to_string())
+    );
+    assert!(access_url.expires_at.is_some());
 }
