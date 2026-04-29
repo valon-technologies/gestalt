@@ -31,6 +31,8 @@ func runProvider(args []string) error {
 	case "-h", "--help", "help":
 		printProviderUsage(os.Stderr)
 		return flag.ErrHelp
+	case "attach":
+		return runProviderAttach(args[1:])
 	case "dev":
 		return runProviderDev(args[1:])
 	case "validate":
@@ -607,6 +609,7 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  attach      List, inspect, or detach remote provider-dev attachments")
 	writeUsageLine(w, "  dev         Run a local source plugin inside a synthesized Gestalt config")
 	writeUsageLine(w, "  release     Build provider release archives")
 	writeUsageLine(w, "  validate    Validate a local source plugin inside a synthesized Gestalt config")

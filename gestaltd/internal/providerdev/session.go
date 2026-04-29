@@ -131,6 +131,10 @@ type AttachmentInfo struct {
 	Providers          []AttachmentProviderInfo `json:"providers"`
 }
 
+type ListAttachmentsResponse struct {
+	Attachments []AttachmentInfo `json:"attachments"`
+}
+
 type AttachmentProviderInfo struct {
 	Name   string `json:"name"`
 	Source string `json:"source,omitempty"`
@@ -1452,6 +1456,23 @@ func (c *Client) CreateAuthorizedSession(ctx context.Context, authorizationID st
 	}
 	c.DispatcherSecret = out.DispatcherSecret
 	c.AuthorizationSecret = ""
+	return &out, nil
+}
+
+func (c Client) ListAttachments(ctx context.Context) ([]AttachmentInfo, error) {
+	var out ListAttachmentsResponse
+	if err := c.doJSON(ctx, http.MethodGet, PathAttachments, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Attachments, nil
+}
+
+func (c Client) GetAttachment(ctx context.Context, attachID string) (*AttachmentInfo, error) {
+	path := PathAttachments + "/" + url.PathEscape(attachID)
+	var out AttachmentInfo
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
 	return &out, nil
 }
 

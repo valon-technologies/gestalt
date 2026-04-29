@@ -406,11 +406,29 @@ func openProviderRemoteBrowser(rawURL string) error {
 }
 
 func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
-	remoteBaseURL, err := providerRemoteBaseURL(opts.Remote)
+	return resolveProviderRemoteTokenWithErrors(opts.Remote, opts.RemoteToken, providerRemoteTokenErrors{
+		AuthMissing:              providerRemoteAuthMissingError,
+		StoredCredentialUnscoped: providerRemoteStoredCredentialUnscopedError,
+		StoredCredentialMismatch: providerRemoteStoredCredentialMismatchError,
+		StoredCredentialMissingToken: func(credentialPath string) error {
+			return fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; pass --remote-token with a user API token that grants provider_dev.attach for the target plugin", credentialPath)
+		},
+	})
+}
+
+type providerRemoteTokenErrors struct {
+	AuthMissing                  func(remoteOrigin string) error
+	StoredCredentialUnscoped     func(remoteOrigin, credentialPath string) error
+	StoredCredentialMismatch     func(remoteOrigin, storedOrigin, credentialPath string) error
+	StoredCredentialMissingToken func(credentialPath string) error
+}
+
+func resolveProviderRemoteTokenWithErrors(remote, explicitToken string, tokenErrors providerRemoteTokenErrors) (string, error) {
+	remoteBaseURL, err := providerRemoteBaseURL(remote)
 	if err != nil {
-		return "", fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
+		return "", fmt.Errorf("invalid --remote %q: %w", remote, err)
 	}
-	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
+	if token := strings.TrimSpace(explicitToken); token != "" {
 		return token, nil
 	}
 	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
@@ -422,22 +440,22 @@ func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error
 		return "", err
 	}
 	if !ok {
-		return "", providerRemoteAuthMissingError(remoteBaseURL)
+		return "", tokenErrors.AuthMissing(remoteBaseURL)
 	}
 	if strings.TrimSpace(credential.APIURL) == "" {
-		return "", providerRemoteStoredCredentialUnscopedError(remoteBaseURL, credentialPath)
+		return "", tokenErrors.StoredCredentialUnscoped(remoteBaseURL, credentialPath)
 	}
 	storedBaseURL, err := providerRemoteBaseURL(credential.APIURL)
 	if err != nil {
 		return "", fmt.Errorf("stored Gestalt CLI credential has invalid api_url in %s: %w", credentialPath, err)
 	}
 	if storedBaseURL != remoteBaseURL {
-		return "", providerRemoteStoredCredentialMismatchError(remoteBaseURL, storedBaseURL, credentialPath)
+		return "", tokenErrors.StoredCredentialMismatch(remoteBaseURL, storedBaseURL, credentialPath)
 	}
 	if token := strings.TrimSpace(credential.APIToken); token != "" {
 		return token, nil
 	}
-	return "", fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; pass --remote-token with a user API token that grants provider_dev.attach for the target plugin", credentialPath)
+	return "", tokenErrors.StoredCredentialMissingToken(credentialPath)
 }
 
 func loadStoredGestaltCLICredential() (storedGestaltCLICredential, string, bool, error) {
