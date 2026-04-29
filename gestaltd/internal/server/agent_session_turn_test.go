@@ -68,12 +68,14 @@ func (s *stubAgentControl) Ping(context.Context) error { return nil }
 
 type memoryAgentProvider struct {
 	coreagent.UnimplementedProvider
-	mu           sync.Mutex
-	sessions     map[string]*coreagent.Session
-	turns        map[string]*coreagent.Turn
-	turnEvents   map[string][]*coreagent.TurnEvent
-	interactions map[string]*coreagent.Interaction
-	turnRequests []coreagent.CreateTurnRequest
+	mu                  sync.Mutex
+	sessions            map[string]*coreagent.Session
+	turns               map[string]*coreagent.Turn
+	turnEvents          map[string][]*coreagent.TurnEvent
+	interactions        map[string]*coreagent.Interaction
+	turnRequests        []coreagent.CreateTurnRequest
+	listSessionRequests []coreagent.ListSessionsRequest
+	listTurnRequests    []coreagent.ListTurnsRequest
 }
 
 func newMemoryAgentProvider() *memoryAgentProvider {
@@ -116,13 +118,20 @@ func (p *memoryAgentProvider) GetSession(_ context.Context, req coreagent.GetSes
 	return cloneSession(session), nil
 }
 
-func (p *memoryAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+func (p *memoryAgentProvider) ListSessions(_ context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.listSessionRequests = append(p.listSessionRequests, cloneListSessionsRequest(req))
 	out := make([]*coreagent.Session, 0, len(p.sessions))
 	for _, session := range p.sessions {
+		if req.State != "" && session.State != req.State {
+			continue
+		}
 		out = append(out, cloneSession(session))
+		if req.Limit > 0 && len(out) >= req.Limit {
+			break
+		}
 	}
 	return out, nil
 }
@@ -243,6 +252,28 @@ func (p *memoryAgentProvider) capturedTurnRequests() []coreagent.CreateTurnReque
 	return out
 }
 
+func (p *memoryAgentProvider) capturedListSessionRequests() []coreagent.ListSessionsRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	out := make([]coreagent.ListSessionsRequest, 0, len(p.listSessionRequests))
+	for _, req := range p.listSessionRequests {
+		out = append(out, cloneListSessionsRequest(req))
+	}
+	return out
+}
+
+func (p *memoryAgentProvider) capturedListTurnRequests() []coreagent.ListTurnsRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	out := make([]coreagent.ListTurnsRequest, 0, len(p.listTurnRequests))
+	for _, req := range p.listTurnRequests {
+		out = append(out, cloneListTurnsRequest(req))
+	}
+	return out
+}
+
 func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -259,9 +290,16 @@ func (p *memoryAgentProvider) ListTurns(_ context.Context, req coreagent.ListTur
 	defer p.mu.Unlock()
 
 	out := make([]*coreagent.Turn, 0, len(p.turns))
+	p.listTurnRequests = append(p.listTurnRequests, cloneListTurnsRequest(req))
 	for _, turn := range p.turns {
 		if req.SessionID == "" || turn.SessionID == req.SessionID {
+			if req.Status != "" && turn.Status != req.Status {
+				continue
+			}
 			out = append(out, cloneTurn(turn))
+			if req.Limit > 0 && len(out) >= req.Limit {
+				break
+			}
 		}
 	}
 	return out, nil
@@ -349,12 +387,13 @@ func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagen
 
 func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return &coreagent.ProviderCapabilities{
-		StreamingText:    true,
-		ToolCalls:        true,
-		NativeToolSearch: true,
-		Interactions:     true,
-		ResumableTurns:   true,
-		StructuredOutput: true,
+		StreamingText:        true,
+		ToolCalls:            true,
+		NativeToolSearch:     true,
+		Interactions:         true,
+		ResumableTurns:       true,
+		StructuredOutput:     true,
+		BoundedListHydration: true,
 	}, nil
 }
 
@@ -402,6 +441,18 @@ func cloneCreateTurnRequest(src coreagent.CreateTurnRequest) coreagent.CreateTur
 	dst.ResponseSchema = cloneMap(src.ResponseSchema)
 	dst.Metadata = cloneMap(src.Metadata)
 	dst.ProviderOptions = cloneMap(src.ProviderOptions)
+	return dst
+}
+
+func cloneListSessionsRequest(src coreagent.ListSessionsRequest) coreagent.ListSessionsRequest {
+	dst := src
+	dst.SessionIDs = append([]string(nil), src.SessionIDs...)
+	return dst
+}
+
+func cloneListTurnsRequest(src coreagent.ListTurnsRequest) coreagent.ListTurnsRequest {
+	dst := src
+	dst.TurnIDs = append([]string(nil), src.TurnIDs...)
 	return dst
 }
 
@@ -493,7 +544,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1"}`))
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1","metadata":{"project":"docs"}}`))
 	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
@@ -544,8 +595,9 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 			Name         string `json:"name"`
 			Default      bool   `json:"default"`
 			Capabilities struct {
-				StreamingText    bool `json:"streamingText"`
-				NativeToolSearch bool `json:"nativeToolSearch"`
+				StreamingText        bool `json:"streamingText"`
+				NativeToolSearch     bool `json:"nativeToolSearch"`
+				BoundedListHydration bool `json:"boundedListHydration"`
 			} `json:"capabilities"`
 		} `json:"providers"`
 	}
@@ -559,8 +611,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if gotProvider.Name != "managed" || !gotProvider.Default {
 		t.Fatalf("provider = %#v, want managed default", gotProvider)
 	}
-	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.NativeToolSearch {
-		t.Fatalf("provider capabilities = %#v, want streaming text and native tool search", gotProvider.Capabilities)
+	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.NativeToolSearch || !gotProvider.Capabilities.BoundedListHydration {
+		t.Fatalf("provider capabilities = %#v, want streaming text, native tool search, and bounded list hydration", gotProvider.Capabilities)
 	}
 
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
@@ -623,6 +675,67 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 	if len(turns) != 1 || turns[0]["id"] != turnID {
 		t.Fatalf("turns = %#v, want %q", turns, turnID)
+	}
+	if len(turns[0]["messages"].([]any)) != 1 || turns[0]["outputText"] != "turn completed" {
+		t.Fatalf("full turn = %#v, want messages and output text", turns[0])
+	}
+
+	summarySessionsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions?view=summary&state=active", nil)
+	summarySessionsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	summarySessionsResp, err := http.DefaultClient.Do(summarySessionsReq)
+	if err != nil {
+		t.Fatalf("list summary sessions: %v", err)
+	}
+	defer func() { _ = summarySessionsResp.Body.Close() }()
+	if summarySessionsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(summarySessionsResp.Body)
+		t.Fatalf("list summary sessions status = %d body=%s", summarySessionsResp.StatusCode, body)
+	}
+	var summarySessions []map[string]any
+	if err := json.NewDecoder(summarySessionsResp.Body).Decode(&summarySessions); err != nil {
+		t.Fatalf("decode summary sessions: %v", err)
+	}
+	if len(summarySessions) != 1 || summarySessions[0]["id"] != sessionID {
+		t.Fatalf("summary sessions = %#v, want %q", summarySessions, sessionID)
+	}
+	if _, ok := summarySessions[0]["metadata"]; ok {
+		t.Fatalf("summary session metadata = %#v, want omitted", summarySessions[0]["metadata"])
+	}
+	listSessionRequests := provider.capturedListSessionRequests()
+	if got := listSessionRequests[len(listSessionRequests)-1]; got.State != coreagent.SessionStateActive || got.Limit != 100 || !got.SummaryOnly {
+		t.Fatalf("provider list sessions request = %#v, want active summary default limit", got)
+	}
+
+	summaryTurnsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?summary=true&limit=1&status=succeeded", nil)
+	summaryTurnsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	summaryTurnsResp, err := http.DefaultClient.Do(summaryTurnsReq)
+	if err != nil {
+		t.Fatalf("list summary turns: %v", err)
+	}
+	defer func() { _ = summaryTurnsResp.Body.Close() }()
+	if summaryTurnsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(summaryTurnsResp.Body)
+		t.Fatalf("list summary turns status = %d body=%s", summaryTurnsResp.StatusCode, body)
+	}
+	var summaryTurns []map[string]any
+	if err := json.NewDecoder(summaryTurnsResp.Body).Decode(&summaryTurns); err != nil {
+		t.Fatalf("decode summary turns: %v", err)
+	}
+	if len(summaryTurns) != 1 || summaryTurns[0]["id"] != turnID {
+		t.Fatalf("summary turns = %#v, want %q", summaryTurns, turnID)
+	}
+	if _, ok := summaryTurns[0]["messages"]; ok {
+		t.Fatalf("summary turn messages = %#v, want omitted", summaryTurns[0]["messages"])
+	}
+	if _, ok := summaryTurns[0]["outputText"]; ok {
+		t.Fatalf("summary turn outputText = %#v, want omitted", summaryTurns[0]["outputText"])
+	}
+	if _, ok := summaryTurns[0]["structuredOutput"]; ok {
+		t.Fatalf("summary turn structuredOutput = %#v, want omitted", summaryTurns[0]["structuredOutput"])
+	}
+	listTurnRequests := provider.capturedListTurnRequests()
+	if got := listTurnRequests[len(listTurnRequests)-1]; got.Status != coreagent.ExecutionStatusSucceeded || got.Limit != 1 || !got.SummaryOnly {
+		t.Fatalf("provider list turns request = %#v, want succeeded summary limit 1", got)
 	}
 
 	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/cancel", bytes.NewBufferString(`{"reason":"stop"}`))

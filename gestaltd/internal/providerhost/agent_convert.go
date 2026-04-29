@@ -654,14 +654,15 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		return nil
 	}
 	return &coreagent.ProviderCapabilities{
-		StreamingText:      value.GetStreamingText(),
-		ToolCalls:          value.GetToolCalls(),
-		ParallelToolCalls:  value.GetParallelToolCalls(),
-		StructuredOutput:   value.GetStructuredOutput(),
-		Interactions:       value.GetInteractions(),
-		ResumableTurns:     value.GetResumableTurns(),
-		ReasoningSummaries: value.GetReasoningSummaries(),
-		NativeToolSearch:   value.GetNativeToolSearch(),
+		StreamingText:        value.GetStreamingText(),
+		ToolCalls:            value.GetToolCalls(),
+		ParallelToolCalls:    value.GetParallelToolCalls(),
+		StructuredOutput:     value.GetStructuredOutput(),
+		Interactions:         value.GetInteractions(),
+		ResumableTurns:       value.GetResumableTurns(),
+		ReasoningSummaries:   value.GetReasoningSummaries(),
+		NativeToolSearch:     value.GetNativeToolSearch(),
+		BoundedListHydration: value.GetBoundedListHydration(),
 	}
 }
 

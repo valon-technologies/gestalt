@@ -141,6 +141,7 @@ message AgentProviderCapabilities {
   bool resumable_turns = 6;
   bool reasoning_summaries = 7;
   bool native_tool_search = 8;
+  bool bounded_list_hydration = 9;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
@@ -190,6 +191,10 @@ message GetAgentProviderSessionRequest {
 
 message ListAgentProviderSessionsRequest {
   AgentSubjectContext subject = 1;
+  repeated string session_ids = 2;
+  AgentSessionState state = 3;
+  int32 limit = 4;
+  bool summary_only = 5;
 }
 
 message ListAgentProviderSessionsResponse {
@@ -262,6 +267,10 @@ message GetAgentProviderTurnRequest {
 message ListAgentProviderTurnsRequest {
   string session_id = 1;
   AgentSubjectContext subject = 2;
+  repeated string turn_ids = 3;
+  AgentExecutionStatus status = 4;
+  int32 limit = 5;
+  bool summary_only = 6;
 }
 
 message ListAgentProviderTurnsResponse {
@@ -372,6 +381,9 @@ message AgentManagerListSessionsRequest {
   reserved "request_handle";
   string provider_name = 2;
   string invocation_token = 3;
+  AgentSessionState state = 4;
+  int32 limit = 5;
+  bool summary_only = 6;
 }
 
 message AgentManagerListSessionsResponse {
@@ -415,6 +427,9 @@ message AgentManagerListTurnsRequest {
   reserved "request_handle";
   string session_id = 2;
   string invocation_token = 3;
+  AgentExecutionStatus status = 4;
+  int32 limit = 5;
+  bool summary_only = 6;
 }
 
 message AgentManagerListTurnsResponse {

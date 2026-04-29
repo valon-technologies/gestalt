@@ -137,6 +137,8 @@ pub struct AgentProviderCapabilities {
     pub reasoning_summaries: bool,
     #[prost(bool, tag = "8")]
     pub native_tool_search: bool,
+    #[prost(bool, tag = "9")]
+    pub bounded_list_hydration: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderCapabilitiesRequest {}
@@ -218,6 +220,14 @@ pub struct GetAgentProviderSessionRequest {
 pub struct ListAgentProviderSessionsRequest {
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<AgentSubjectContext>,
+    #[prost(string, repeated, tag = "2")]
+    pub session_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "AgentSessionState", tag = "3")]
+    pub state: i32,
+    #[prost(int32, tag = "4")]
+    pub limit: i32,
+    #[prost(bool, tag = "5")]
+    pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsResponse {
@@ -341,6 +351,14 @@ pub struct ListAgentProviderTurnsRequest {
     pub session_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub subject: ::core::option::Option<AgentSubjectContext>,
+    #[prost(string, repeated, tag = "3")]
+    pub turn_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
+    pub status: i32,
+    #[prost(int32, tag = "5")]
+    pub limit: i32,
+    #[prost(bool, tag = "6")]
+    pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsResponse {
@@ -501,6 +519,12 @@ pub struct AgentManagerListSessionsRequest {
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentSessionState", tag = "4")]
+    pub state: i32,
+    #[prost(int32, tag = "5")]
+    pub limit: i32,
+    #[prost(bool, tag = "6")]
+    pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListSessionsResponse {
@@ -556,6 +580,12 @@ pub struct AgentManagerListTurnsRequest {
     pub session_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
+    pub status: i32,
+    #[prost(int32, tag = "5")]
+    pub limit: i32,
+    #[prost(bool, tag = "6")]
+    pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListTurnsResponse {

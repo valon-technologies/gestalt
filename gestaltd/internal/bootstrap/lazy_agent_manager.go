@@ -73,12 +73,12 @@ func (l *lazyAgentManager) GetSession(ctx context.Context, p *principal.Principa
 	return target.GetSession(ctx, p, sessionID)
 }
 
-func (l *lazyAgentManager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error) {
+func (l *lazyAgentManager) ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListSessions(ctx, p, providerName)
+	return target.ListSessions(ctx, p, req)
 }
 
 func (l *lazyAgentManager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
@@ -105,12 +105,12 @@ func (l *lazyAgentManager) GetTurn(ctx context.Context, p *principal.Principal, 
 	return target.GetTurn(ctx, p, turnID)
 }
 
-func (l *lazyAgentManager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error) {
+func (l *lazyAgentManager) ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListTurns(ctx, p, sessionID)
+	return target.ListTurns(ctx, p, req)
 }
 
 func (l *lazyAgentManager) CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error) {

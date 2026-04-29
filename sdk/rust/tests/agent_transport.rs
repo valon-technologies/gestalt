@@ -321,6 +321,7 @@ impl AgentProviderGrpc for TestAgentProvider {
             resumable_turns: true,
             reasoning_summaries: false,
             native_tool_search: true,
+            bounded_list_hydration: true,
         }))
     }
 }

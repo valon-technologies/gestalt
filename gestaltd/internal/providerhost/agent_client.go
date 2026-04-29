@@ -126,7 +126,11 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessio
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{
-		Subject: agentSubjectContextToProto(req.Subject),
+		Subject:     agentSubjectContextToProto(req.Subject),
+		SessionIds:  append([]string(nil), req.SessionIDs...),
+		State:       agentSessionStateToProto(req.State),
+		Limit:       int32(req.Limit),
+		SummaryOnly: req.SummaryOnly,
 	})
 	if err != nil {
 		return nil, err
@@ -225,8 +229,12 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequ
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{
-		SessionId: req.SessionID,
-		Subject:   agentSubjectContextToProto(req.Subject),
+		SessionId:   req.SessionID,
+		Subject:     agentSubjectContextToProto(req.Subject),
+		TurnIds:     append([]string(nil), req.TurnIDs...),
+		Status:      agentExecutionStatusToProto(req.Status),
+		Limit:       int32(req.Limit),
+		SummaryOnly: req.SummaryOnly,
 	})
 	if err != nil {
 		return nil, err

@@ -18,11 +18,11 @@ import (
 type AgentManagerService interface {
 	CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
 	GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error)
-	ListSessions(context.Context, *principal.Principal, string) ([]*coreagent.Session, error)
+	ListSessions(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
 	UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error)
 	CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
 	GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error)
-	ListTurns(context.Context, *principal.Principal, string) ([]*coreagent.Turn, error)
+	ListTurns(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
 	CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error)
 	ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error)
 	ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error)
@@ -94,7 +94,19 @@ func (s *AgentManagerServer) ListSessions(ctx context.Context, req *proto.AgentM
 	if err != nil {
 		return nil, err
 	}
-	sessions, err := s.manager.ListSessions(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, strings.TrimSpace(req.GetProviderName()))
+	state, err := agentSessionStateFromProto(req.GetState())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if req.GetLimit() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
+	}
+	sessions, err := s.manager.ListSessions(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, coreagent.ManagerListSessionsRequest{
+		ProviderName: strings.TrimSpace(req.GetProviderName()),
+		State:        state,
+		Limit:        int(req.GetLimit()),
+		SummaryOnly:  req.GetSummaryOnly(),
+	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -198,7 +210,19 @@ func (s *AgentManagerServer) ListTurns(ctx context.Context, req *proto.AgentMana
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	turns, err := s.manager.ListTurns(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, sessionID)
+	statusFilter, err := agentExecutionStatusFromProto(req.GetStatus())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if req.GetLimit() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
+	}
+	turns, err := s.manager.ListTurns(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, coreagent.ManagerListTurnsRequest{
+		SessionID:   sessionID,
+		Status:      statusFilter,
+		Limit:       int(req.GetLimit()),
+		SummaryOnly: req.GetSummaryOnly(),
+	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -316,9 +340,11 @@ func agentManagerStatusError(err error) error {
 		return existing.Err()
 	}
 	switch {
-	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired), errors.Is(err, invocation.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())

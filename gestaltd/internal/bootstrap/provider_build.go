@@ -2198,7 +2198,7 @@ func (unavailableAgentManager) GetSession(context.Context, *principal.Principal,
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListSessions(context.Context, *principal.Principal, string) ([]*coreagent.Session, error) {
+func (unavailableAgentManager) ListSessions(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
@@ -2214,7 +2214,7 @@ func (unavailableAgentManager) GetTurn(context.Context, *principal.Principal, st
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListTurns(context.Context, *principal.Principal, string) ([]*coreagent.Turn, error) {
+func (unavailableAgentManager) ListTurns(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
