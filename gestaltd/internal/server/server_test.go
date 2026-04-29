@@ -55,6 +55,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
@@ -5902,6 +5903,257 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *testing.T) {
+	t.Parallel()
+
+	newManager := func(t *testing.T) *providerdev.Manager {
+		t.Helper()
+		manager, err := providerdev.NewManager([]providerdev.Target{{
+			Name:   "roadmap",
+			Source: "github.com/acme/plugins/roadmap",
+			UIPath: "/roadmap",
+			RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
+				return providerdev.RuntimeEnv{
+					Env:          map[string]string{"SECRET": "do-not-return"},
+					AllowedHosts: []string{"example.test"},
+				}, nil
+			},
+		}})
+		if err != nil {
+			t.Fatalf("NewManager: %v", err)
+		}
+		return manager
+	}
+	auth := &coretesting.StubAuthProvider{
+		N: "test",
+		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+			switch token {
+			case "owner-session":
+				return &core.UserIdentity{Email: "owner@example.test"}, nil
+			case "other-session":
+				return &core.UserIdentity{Email: "other@example.test"}, nil
+			default:
+				return nil, principal.ErrInvalidToken
+			}
+		},
+	}
+	createBody := []byte(`{"providers":[{"name":"roadmap","ui":{}}]}`)
+
+	disabledTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.ProviderDevSessions = newManager(t)
+	})
+	testutil.CloseOnCleanup(t, disabledTS)
+	req, err := http.NewRequest(http.MethodPost, disabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("new disabled request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer owner-session")
+	resp, err := disabledTS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("disabled create request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("disabled create status = %d, want 403", resp.StatusCode)
+	}
+
+	noAuthTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderDevAttach = true
+		cfg.ProviderDevSessions = newManager(t)
+	})
+	testutil.CloseOnCleanup(t, noAuthTS)
+	resp, err = noAuthTS.Client().Post(noAuthTS.URL+providerdev.PathAttachments, "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("no-auth create request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("no-auth create status = %d, want 403", resp.StatusCode)
+	}
+
+	enabledTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.ProviderDevAttach = true
+		cfg.ProviderDevSessions = newManager(t)
+	})
+	testutil.CloseOnCleanup(t, enabledTS)
+	req, err = http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments, bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("new enabled request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer owner-session")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = enabledTS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("enabled create request: %v", err)
+	}
+	payload, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("enabled create status = %d, want 201; body = %s", resp.StatusCode, payload)
+	}
+	var created providerdev.CreateSessionResponse
+	if err := json.Unmarshal(payload, &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.AttachID == "" || created.DispatcherSecret == "" {
+		t.Fatalf("create response missing attachId or dispatcherSecret: %s", payload)
+	}
+
+	completeReq, err := http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/calls/call-1", strings.NewReader("not-json"))
+	if err != nil {
+		t.Fatalf("new complete request: %v", err)
+	}
+	completeReq.Header.Set("Authorization", "Bearer owner-session")
+	completeResp, err := enabledTS.Client().Do(completeReq)
+	if err != nil {
+		t.Fatalf("complete without dispatcher secret: %v", err)
+	}
+	_ = completeResp.Body.Close()
+	if completeResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("complete without dispatcher secret status = %d, want 401", completeResp.StatusCode)
+	}
+
+	legacyCompleteReq, err := http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathSessions+"/"+created.AttachID+"/calls/call-1", strings.NewReader("not-json"))
+	if err != nil {
+		t.Fatalf("new legacy complete request: %v", err)
+	}
+	legacyCompleteReq.Header.Set("Authorization", "Bearer owner-session")
+	legacyCompleteResp, err := enabledTS.Client().Do(legacyCompleteReq)
+	if err != nil {
+		t.Fatalf("legacy complete without dispatcher secret: %v", err)
+	}
+	_ = legacyCompleteResp.Body.Close()
+	if legacyCompleteResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("legacy complete without dispatcher secret status = %d, want 401", legacyCompleteResp.StatusCode)
+	}
+
+	pollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new poll request: %v", err)
+	}
+	pollReq.Header.Set("Authorization", "Bearer owner-session")
+	pollResp, err := enabledTS.Client().Do(pollReq)
+	if err != nil {
+		t.Fatalf("poll without dispatcher secret: %v", err)
+	}
+	_ = pollResp.Body.Close()
+	if pollResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("poll without dispatcher secret status = %d, want 401", pollResp.StatusCode)
+	}
+
+	legacyPollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathSessions+"/"+created.AttachID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new legacy poll request: %v", err)
+	}
+	legacyPollReq.Header.Set("Authorization", "Bearer owner-session")
+	legacyPollResp, err := enabledTS.Client().Do(legacyPollReq)
+	if err != nil {
+		t.Fatalf("legacy poll without dispatcher secret: %v", err)
+	}
+	_ = legacyPollResp.Body.Close()
+	if legacyPollResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("legacy poll without dispatcher secret status = %d, want 401", legacyPollResp.StatusCode)
+	}
+
+	invalidPollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new invalid-secret poll request: %v", err)
+	}
+	invalidPollReq.Header.Set("Authorization", "Bearer owner-session")
+	invalidPollReq.Header.Set(providerdev.HeaderDispatcherSecret, "wrong")
+	invalidPollResp, err := enabledTS.Client().Do(invalidPollReq)
+	if err != nil {
+		t.Fatalf("poll with invalid dispatcher secret: %v", err)
+	}
+	_ = invalidPollResp.Body.Close()
+	if invalidPollResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("poll with invalid dispatcher secret status = %d, want 403", invalidPollResp.StatusCode)
+	}
+
+	for _, path := range []string{providerdev.PathAttachments, providerdev.PathAttachments + "/" + created.AttachID} {
+		req, err = http.NewRequest(http.MethodGet, enabledTS.URL+path, nil)
+		if err != nil {
+			t.Fatalf("new GET %s request: %v", path, err)
+		}
+		req.Header.Set("Authorization", "Bearer owner-session")
+		resp, err = enabledTS.Client().Do(req)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		payload, err = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("read GET %s response: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200; body = %s", path, resp.StatusCode, payload)
+		}
+		body := string(payload)
+		if !strings.Contains(body, created.AttachID) {
+			t.Fatalf("GET %s response missing attachId %q: %s", path, created.AttachID, body)
+		}
+		for _, forbidden := range []string{created.DispatcherSecret, "do-not-return", "allowedHosts", "SECRET"} {
+			if forbidden != "" && strings.Contains(body, forbidden) {
+				t.Fatalf("GET %s leaked %q in %s", path, forbidden, body)
+			}
+		}
+	}
+
+	req, err = http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments, nil)
+	if err != nil {
+		t.Fatalf("new other list request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer other-session")
+	resp, err = enabledTS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("other list request: %v", err)
+	}
+	payload, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read other list response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("other list status = %d, want 200; body = %s", resp.StatusCode, payload)
+	}
+	if strings.Contains(string(payload), created.AttachID) {
+		t.Fatalf("other principal list leaked attachId %q: %s", created.AttachID, payload)
+	}
+
+	req, err = http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID, nil)
+	if err != nil {
+		t.Fatalf("new other get request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer other-session")
+	resp, err = enabledTS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("other get request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("other get status = %d, want 403", resp.StatusCode)
+	}
+
+	req, err = http.NewRequest(http.MethodDelete, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID, nil)
+	if err != nil {
+		t.Fatalf("new delete request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer owner-session")
+	resp, err = enabledTS.Client().Do(req)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete status = %d, want 200", resp.StatusCode)
 	}
 }
 

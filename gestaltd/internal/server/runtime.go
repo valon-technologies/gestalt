@@ -107,6 +107,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		},
 		PrometheusMetrics:   result.Telemetry.PrometheusHandler(),
 		ProviderDevSessions: result.ProviderDevSessions,
+		ProviderDevAttach:   cfg.Server.ProviderDev.RemoteAttach,
 		PublicHostServices:  result.PublicHostServices,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,

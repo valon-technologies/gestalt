@@ -1387,9 +1387,14 @@ type ServerConfig struct {
 	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
+	ProviderDev   ProviderDevConfig        `yaml:"providerDev,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+}
+
+type ProviderDevConfig struct {
+	RemoteAttach bool `yaml:"remoteAttach,omitempty"`
 }
 
 type ServerRuntimeConfig struct {

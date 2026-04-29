@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -35,7 +37,10 @@ const (
 	DefaultSessionIdleTimeout = 2 * time.Minute
 	DefaultCallIdleTimeout    = 30 * time.Minute
 
-	PathSessions = "/api/v1/provider-dev/sessions"
+	HeaderDispatcherSecret = "X-Gestalt-Provider-Dev-Dispatcher"
+
+	PathAttachments = "/api/v1/provider-dev/attachments"
+	PathSessions    = "/api/v1/provider-dev/sessions"
 )
 
 type RuntimeEnv struct {
@@ -52,6 +57,7 @@ type Target struct {
 	Spec       providerhost.StaticProviderSpec
 	Config     map[string]any
 	UI         *AttachUI
+	UIPath     string
 	RuntimeEnv RuntimeEnvBuilder
 }
 
@@ -75,14 +81,34 @@ type AttachProvider struct {
 }
 
 type CreateSessionResponse struct {
-	ID        string                  `json:"id"`
-	Providers []CreateSessionProvider `json:"providers"`
+	ID               string                  `json:"id,omitempty"`
+	AttachID         string                  `json:"attachId,omitempty"`
+	DispatcherSecret string                  `json:"dispatcherSecret,omitempty"`
+	Providers        []CreateSessionProvider `json:"providers"`
 }
 
 type CreateSessionProvider struct {
 	Name         string            `json:"name"`
 	Env          map[string]string `json:"env,omitempty"`
 	AllowedHosts []string          `json:"allowedHosts,omitempty"`
+	Source       string            `json:"source,omitempty"`
+	UI           bool              `json:"ui,omitempty"`
+	UIPath       string            `json:"uiPath,omitempty"`
+}
+
+type AttachmentInfo struct {
+	AttachID           string                   `json:"attachId"`
+	CreatedAt          time.Time                `json:"createdAt"`
+	LastSeenAt         time.Time                `json:"lastSeenAt"`
+	IdleTimeoutSeconds int                      `json:"idleTimeoutSeconds"`
+	Providers          []AttachmentProviderInfo `json:"providers"`
+}
+
+type AttachmentProviderInfo struct {
+	Name   string `json:"name"`
+	Source string `json:"source,omitempty"`
+	UI     bool   `json:"ui,omitempty"`
+	UIPath string `json:"uiPath,omitempty"`
 }
 
 type AttachUI struct{}
@@ -119,15 +145,17 @@ type RPCError struct {
 }
 
 type Session struct {
-	id      string
-	owner   string
-	targets map[string]*attachedTarget
+	id                   string
+	dispatcherSecretHash string
+	owner                string
+	targets              map[string]*attachedTarget
 
 	mu        sync.Mutex
 	calls     chan *rpcCall
 	pending   map[string]*rpcCall
 	done      chan struct{}
 	closeDone chan struct{}
+	createdAt time.Time
 	lastSeen  time.Time
 	closeErr  error
 	closed    bool
@@ -210,19 +238,28 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create provider dev session: %v", err)
 	}
+	dispatcherSecret, dispatcherSecretHash, err := newDispatcherSecret()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "create provider dev dispatcher secret: %v", err)
+	}
+	now := time.Now()
 	session := &Session{
-		id:        sessionID,
-		owner:     owner,
-		targets:   make(map[string]*attachedTarget, len(targets)),
-		calls:     make(chan *rpcCall, 128),
-		pending:   map[string]*rpcCall{},
-		done:      make(chan struct{}),
-		closeDone: make(chan struct{}),
-		lastSeen:  time.Now(),
+		id:                   sessionID,
+		dispatcherSecretHash: dispatcherSecretHash,
+		owner:                owner,
+		targets:              make(map[string]*attachedTarget, len(targets)),
+		calls:                make(chan *rpcCall, 128),
+		pending:              map[string]*rpcCall{},
+		done:                 make(chan struct{}),
+		closeDone:            make(chan struct{}),
+		createdAt:            now,
+		lastSeen:             now,
 	}
 	resp := &CreateSessionResponse{
-		ID:        sessionID,
-		Providers: make([]CreateSessionProvider, 0, len(targets)),
+		ID:               sessionID,
+		AttachID:         sessionID,
+		DispatcherSecret: dispatcherSecret,
+		Providers:        make([]CreateSessionProvider, 0, len(targets)),
 	}
 	cleanupOnError := true
 	defer func() {
@@ -248,6 +285,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			Name:         target.Name,
 			Env:          cloneStringMap(runtimeEnv.Env),
 			AllowedHosts: slices.Clone(runtimeEnv.AllowedHosts),
+			Source:       target.Source,
+			UI:           target.UI != nil,
+			UIPath:       target.UIPath,
 		})
 	}
 
@@ -265,31 +305,46 @@ func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessi
 	if err != nil {
 		return nil, false, err
 	}
-	session.touch()
+	return session.poll(ctx)
+}
+
+func (m *Manager) PollSessionWithDispatcherSecret(ctx context.Context, p *principal.Principal, sessionID, dispatcherSecret string) (*PollResponse, bool, error) {
+	session, err := m.sessionForPrincipal(p, sessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := session.verifyDispatcherSecret(dispatcherSecret); err != nil {
+		return nil, false, err
+	}
+	return session.poll(ctx)
+}
+
+func (s *Session) poll(ctx context.Context) (*PollResponse, bool, error) {
+	s.touch()
 
 	for {
 		select {
-		case call := <-session.calls:
-			session.mu.Lock()
-			if session.closed {
-				session.mu.Unlock()
+		case call := <-s.calls:
+			s.mu.Lock()
+			if s.closed {
+				s.mu.Unlock()
 				return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
 			}
 			if call.canceled {
-				session.mu.Unlock()
+				s.mu.Unlock()
 				continue
 			}
 			call.deliveredAt = time.Now()
-			session.pending[call.id] = call
-			session.lastSeen = call.deliveredAt
-			session.mu.Unlock()
+			s.pending[call.id] = call
+			s.lastSeen = call.deliveredAt
+			s.mu.Unlock()
 			return &PollResponse{
 				CallID:   call.id,
 				Provider: call.provider,
 				Method:   call.method,
 				Request:  hex.EncodeToString(call.request),
 			}, true, nil
-		case <-session.done:
+		case <-s.done:
 			return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
@@ -383,18 +438,41 @@ func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string,
 	if err != nil {
 		return err
 	}
-	session.touch()
+	return session.completeCall(callID, req)
+}
+
+func (m *Manager) CompleteCallWithDispatcherSecret(p *principal.Principal, sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
+	session, err := m.sessionForPrincipal(p, sessionID)
+	if err != nil {
+		return err
+	}
+	if err := session.verifyDispatcherSecret(dispatcherSecret); err != nil {
+		return err
+	}
+	return session.completeCall(callID, req)
+}
+
+func (m *Manager) VerifyDispatcherSecret(p *principal.Principal, sessionID, dispatcherSecret string) error {
+	session, err := m.sessionForPrincipal(p, sessionID)
+	if err != nil {
+		return err
+	}
+	return session.verifyDispatcherSecret(dispatcherSecret)
+}
+
+func (s *Session) completeCall(callID string, req CompleteCallRequest) error {
+	s.touch()
 	callID = strings.TrimSpace(callID)
 	if callID == "" {
 		return status.Error(codes.InvalidArgument, "call id is required")
 	}
 
-	session.mu.Lock()
-	call, ok := session.pending[callID]
+	s.mu.Lock()
+	call, ok := s.pending[callID]
 	if ok {
-		delete(session.pending, callID)
+		delete(s.pending, callID)
 	}
-	session.mu.Unlock()
+	s.mu.Unlock()
 	if !ok {
 		return status.Errorf(codes.NotFound, "provider dev call %q not found", callID)
 	}
@@ -424,13 +502,50 @@ func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string,
 
 	select {
 	case call.response <- resp:
-		session.touch()
+		s.touch()
 		return nil
-	case <-session.done:
+	case <-s.done:
 		return status.Error(codes.NotFound, "provider dev session is closed")
 	default:
 		return status.Error(codes.DeadlineExceeded, "provider dev caller is no longer waiting")
 	}
+}
+
+func (m *Manager) ListSessions(p *principal.Principal) ([]AttachmentInfo, error) {
+	owner := principalSubjectID(p)
+	if owner == "" {
+		return nil, status.Error(codes.Unauthenticated, "provider dev requires an authenticated principal")
+	}
+	if m == nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	m.closeIdleSessions(time.Now())
+	m.mu.RLock()
+	sessionIDs := append([]string(nil), m.ownerIndex[owner]...)
+	sessions := make([]*Session, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		if session := m.sessions[id]; session != nil {
+			sessions = append(sessions, session)
+		}
+	}
+	m.mu.RUnlock()
+	out := make([]AttachmentInfo, 0, len(sessions))
+	for _, session := range sessions {
+		if session == nil || session.isClosed() {
+			continue
+		}
+		out = append(out, session.attachmentInfo())
+	}
+	return out, nil
+}
+
+func (m *Manager) GetSession(p *principal.Principal, sessionID string) (*AttachmentInfo, error) {
+	session, err := m.sessionForPrincipal(p, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	info := session.attachmentInfo()
+	return &info, nil
 }
 
 func (m *Manager) CloseSession(p *principal.Principal, sessionID string) error {
@@ -667,6 +782,53 @@ func (s *Session) isClosed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
+}
+
+func (s *Session) verifyDispatcherSecret(secret string) error {
+	if s == nil {
+		return status.Error(codes.NotFound, "provider dev session not found")
+	}
+	secret = strings.TrimSpace(secret)
+	if secret == "" || s.dispatcherSecretHash == "" {
+		return status.Error(codes.Unauthenticated, "provider dev dispatcher secret is required")
+	}
+	if subtle.ConstantTimeCompare([]byte(hashDispatcherSecret(secret)), []byte(s.dispatcherSecretHash)) != 1 {
+		return status.Error(codes.PermissionDenied, "provider dev dispatcher secret is invalid")
+	}
+	return nil
+}
+
+func (s *Session) attachmentInfo() AttachmentInfo {
+	if s == nil {
+		return AttachmentInfo{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	providers := make([]AttachmentProviderInfo, 0, len(s.targets))
+	names := make([]string, 0, len(s.targets))
+	for name := range s.targets {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		target := s.targets[name]
+		if target == nil {
+			continue
+		}
+		providers = append(providers, AttachmentProviderInfo{
+			Name:   name,
+			Source: target.target.Source,
+			UI:     target.target.UI != nil,
+			UIPath: target.target.UIPath,
+		})
+	}
+	return AttachmentInfo{
+		AttachID:           s.id,
+		CreatedAt:          s.createdAt,
+		LastSeenAt:         s.lastSeen,
+		IdleTimeoutSeconds: int(DefaultSessionIdleTimeout / time.Second),
+		Providers:          providers,
+	}
 }
 
 func (s *Session) touch() {
@@ -936,9 +1098,10 @@ func (c *sessionProviderClient) PostConnect(ctx context.Context, req *proto.Post
 }
 
 type Client struct {
-	BaseURL    string
-	Token      string
-	HTTPClient *http.Client
+	BaseURL          string
+	Token            string
+	DispatcherSecret string
+	HTTPClient       *http.Client
 }
 
 type DispatcherOption func(*dispatcherConfig)
@@ -953,16 +1116,17 @@ func WithUIHandlers(handlers map[string]http.Handler) DispatcherOption {
 	}
 }
 
-func (c Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*CreateSessionResponse, error) {
+func (c *Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*CreateSessionResponse, error) {
 	var out CreateSessionResponse
-	if err := c.doJSON(ctx, http.MethodPost, PathSessions, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, PathAttachments, req, &out); err != nil {
 		return nil, err
 	}
+	c.DispatcherSecret = out.DispatcherSecret
 	return &out, nil
 }
 
 func (c Client) Poll(ctx context.Context, sessionID string) (*PollResponse, bool, error) {
-	path := PathSessions + "/" + url.PathEscape(sessionID) + "/poll"
+	path := PathAttachments + "/" + url.PathEscape(sessionID) + "/poll"
 	var out PollResponse
 	statusCode, err := c.doJSONStatus(ctx, http.MethodGet, path, nil, &out)
 	if err != nil {
@@ -975,12 +1139,12 @@ func (c Client) Poll(ctx context.Context, sessionID string) (*PollResponse, bool
 }
 
 func (c Client) Complete(ctx context.Context, sessionID, callID string, req CompleteCallRequest) error {
-	path := PathSessions + "/" + url.PathEscape(sessionID) + "/calls/" + url.PathEscape(callID)
+	path := PathAttachments + "/" + url.PathEscape(sessionID) + "/calls/" + url.PathEscape(callID)
 	return c.doJSON(ctx, http.MethodPost, path, req, nil)
 }
 
 func (c Client) CloseSession(ctx context.Context, sessionID string) error {
-	path := PathSessions + "/" + url.PathEscape(sessionID)
+	path := PathAttachments + "/" + url.PathEscape(sessionID)
 	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
 }
 
@@ -1195,6 +1359,9 @@ func (c Client) doJSONStatus(ctx context.Context, method, path string, in any, o
 	}
 	if token := strings.TrimSpace(c.Token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if secret := strings.TrimSpace(c.DispatcherSecret); secret != "" {
+		req.Header.Set(HeaderDispatcherSecret, secret)
 	}
 	httpClient := c.HTTPClient
 	if httpClient == nil {
@@ -1449,4 +1616,18 @@ func randomID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b[:]), nil
+}
+
+func newDispatcherSecret() (secret string, hash string, err error) {
+	id, err := randomID()
+	if err != nil {
+		return "", "", err
+	}
+	secret = "pda_" + id
+	return secret, hashDispatcherSecret(secret), nil
+}
+
+func hashDispatcherSecret(secret string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(secret)))
+	return hex.EncodeToString(sum[:])
 }

@@ -1066,6 +1066,32 @@ local manifest `source` to the remote configured plugin and preserves the
 remote plugin config; layered `--config` files are only needed for explicit
 local config overrides or multi-plugin attach sessions.
 
+Remote provider attach is disabled by default on servers. Enable it explicitly
+on shared remotes:
+
+```yaml
+server:
+  providerDev:
+    remoteAttach: true
+```
+
+The attach transport is private to the authenticated owner. The create response
+includes an `attachId` for addressing and a one-time dispatcher secret used only
+by the local CLI for poll/complete traffic. Owner diagnostic list/get routes
+return redacted attachment metadata and never return dispatcher secrets, runtime
+environment, host-service env, plugin config, access tokens, or browser binding
+URLs.
+
+Remote attach v1 stores attachments in the `gestaltd` process that accepted the
+create request. For load-balanced deployments, treat single-replica operation or
+sticky routing for attach creation, poll/complete traffic, provider invocations,
+and provider-owned UI requests as a hard prerequisite before enabling
+`remoteAttach`.
+
+Attach creation currently uses the same provider access checks as normal
+provider use. A dedicated `provider_dev.attach` action permission is planned
+separately and is not part of this transport contract.
+
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider`.
 
 <Tabs items={['Go', 'Python', 'Rust']}>

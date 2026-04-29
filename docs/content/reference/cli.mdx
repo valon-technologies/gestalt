@@ -76,6 +76,12 @@ keeps its existing config-relative behavior for backward compatibility.
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session.
+The remote server must opt in with `server.providerDev.remoteAttach: true`;
+otherwise the command fails before local code is attached.
+Remote attach v1 is also process-local: only enable it on a single-replica
+server or behind sticky routing that keeps attach creation, CLI poll/complete
+traffic, provider invocations, and provider-owned UI requests for the same
+authenticated owner on the same `gestaltd` process.
 Authentication resolves in this order: `--remote-token`, `GESTALT_API_KEY`, then
 the stored CLI token from `gestalt auth login` when its recorded server base URL
 matches `--remote`. Stored CLI tokens are not sent to a different remote URL,
@@ -89,6 +95,13 @@ remote plugin's config. If multiple remote plugins share the same source, or the
 manifest has no source, pass `--name` to choose the configured remote plugin.
 All non-local plugins and remote host services continue to resolve through the
 remote instance.
+
+After the remote creates an attachment, the CLI uses the returned `attachId` plus
+a one-time dispatcher secret for poll/complete traffic. The dispatcher secret is
+not shown by list/get diagnostics and is not needed for owner cleanup detach.
+This version authorizes attach creation with the same provider access checks used
+by the remote server for the target plugin. A narrower `provider_dev.attach`
+capability is not implemented yet.
 
 When `--config` is present, source-backed plugin entries in the layered local
 config are treated as explicit local overrides. Their plugin config is sent to

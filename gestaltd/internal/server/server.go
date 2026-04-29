@@ -121,6 +121,7 @@ type Server struct {
 	publicHostServices     *providerhost.PublicHostServiceRegistry
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
 	providerDevSessions    *providerdev.Manager
+	providerDevAttach      bool
 	mountedHTTPBindings    []MountedHTTPBinding
 	mountedUIs             []MountedUI
 	adminRoute             AdminRouteConfig
@@ -167,6 +168,7 @@ type Config struct {
 	MCPHandler            http.Handler
 	PublicHostServices    *providerhost.PublicHostServiceRegistry
 	ProviderDevSessions   *providerdev.Manager
+	ProviderDevAttach     bool
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
 	AdminUIProvider       string
@@ -340,6 +342,7 @@ func New(cfg Config) (*Server, error) {
 		publicHostServices:     cfg.PublicHostServices,
 		egressProxyTokens:      egressProxyTokens,
 		providerDevSessions:    cfg.ProviderDevSessions,
+		providerDevAttach:      cfg.ProviderDevAttach,
 		mountedHTTPBindings:    mountedHTTPBindings,
 		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,

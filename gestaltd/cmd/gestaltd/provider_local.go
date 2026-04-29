@@ -244,7 +244,14 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = client.CloseSession(context.Background(), session.ID) }()
+	attachID := strings.TrimSpace(session.AttachID)
+	if attachID == "" {
+		attachID = strings.TrimSpace(session.ID)
+	}
+	if attachID == "" {
+		return fmt.Errorf("remote provider dev did not return attachId")
+	}
+	defer func() { _ = client.CloseSession(context.Background(), attachID) }()
 
 	sessionProviders := make(map[string]providerdev.CreateSessionProvider, len(session.Providers))
 	for _, provider := range session.Providers {
@@ -289,12 +296,12 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 
 	slog.Info("provider dev attached",
 		"remote", strings.TrimRight(opts.Remote, "/"),
-		"session", session.ID,
+		"attachId", attachID,
 		"providers", providerRemoteTargetNames(targets),
 		"ui_providers", providerRemoteUIProviderNames(localUIHandlers),
 		"config_files", configPaths,
 	)
-	return client.RunDispatcher(ctx, session.ID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
+	return client.RunDispatcher(ctx, attachID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
 }
 
 func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
