@@ -461,7 +461,6 @@ func mustMintWorkflowSystemToolGrant(t *testing.T, runtime *agentRuntime, scope 
 		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
-		ToolSource:          coreagent.ToolSourceModeNativeSearch,
 	})
 	if err != nil {
 		t.Fatalf("Mint workflow system tool grant: %v", err)

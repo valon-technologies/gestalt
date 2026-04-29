@@ -268,7 +268,6 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		Prompt:          strings.TrimSpace(agent.Prompt),
 		Messages:        messages,
 		ToolRefs:        tools,
-		ToolSource:      coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:  maps.Clone(agent.ResponseSchema),
 		Metadata:        maps.Clone(agent.Metadata),
 		ProviderOptions: maps.Clone(agent.ProviderOptions),

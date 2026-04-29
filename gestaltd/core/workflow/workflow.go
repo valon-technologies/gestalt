@@ -49,7 +49,6 @@ type AgentTarget struct {
 	Prompt          string
 	Messages        []coreagent.Message
 	ToolRefs        []coreagent.ToolRef
-	ToolSource      coreagent.ToolSourceMode
 	ResponseSchema  map[string]any
 	ProviderOptions map[string]any
 	Metadata        map[string]any

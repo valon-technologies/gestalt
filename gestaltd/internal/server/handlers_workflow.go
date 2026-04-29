@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -284,7 +283,6 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		Prompt:          strings.TrimSpace(target.Prompt),
 		Messages:        agentMessagesFromRequest(target.Messages),
 		ToolRefs:        agentToolRefsFromRequest(target.ToolRefs),
-		ToolSource:      coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:  maps.Clone(target.ResponseSchema),
 		Metadata:        maps.Clone(target.Metadata),
 		ProviderOptions: maps.Clone(target.ProviderOptions),

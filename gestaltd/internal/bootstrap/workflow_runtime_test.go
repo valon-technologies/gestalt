@@ -526,7 +526,6 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeNativeSearch,
 			ToolRefs:       []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
 			TimeoutSeconds: 5,
 		}},
@@ -625,7 +624,6 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeNativeSearch,
 			TimeoutSeconds: 5,
 		},
 	}
@@ -697,7 +695,6 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeNativeSearch,
 			TimeoutSeconds: 5,
 		}},
 	})
@@ -735,7 +732,6 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 			Agent: &coreworkflow.AgentTarget{
 				ProviderName:   "managed",
 				Prompt:         "send reminder",
-				ToolSource:     coreagent.ToolSourceModeNativeSearch,
 				TimeoutSeconds: 5,
 			},
 		},
