@@ -114,12 +114,12 @@ type agentToolSearchRankedCandidate struct {
 
 func agentToolSearchQuery(searchText string) blevequery.Query {
 	queries := []blevequery.Query{
-		agentToolSearchMatchQuery("plugin", searchText, 16),
-		agentToolSearchMatchQuery("operation", searchText, 12),
-		agentToolSearchMatchQuery("aliases", searchText, 10),
+		agentToolSearchMatchQuery("plugin", searchText, 12),
+		agentToolSearchMatchQuery("operation", searchText, 9),
 		agentToolSearchMatchQuery("title", searchText, 8),
 		agentToolSearchMatchQuery("parameters", searchText, 5),
-		agentToolSearchMatchQuery("description", searchText, 1),
+		agentToolSearchMatchQuery("aliases", searchText, 2),
+		agentToolSearchMatchQuery("description", searchText, 4),
 	}
 	return bleve.NewDisjunctionQuery(queries...)
 }
@@ -212,6 +212,8 @@ func agentToolSearchAliases(token string) []string {
 		return []string{"issue", "issues", "task", "tasks"}
 	case "issue", "issues":
 		return []string{"ticket", "tickets", "task", "tasks"}
+	case "task", "tasks":
+		return []string{"issue", "issues", "ticket", "tickets"}
 	case "assigned":
 		return []string{"assignee", "assignees"}
 	case "assignee", "assignees":
@@ -220,10 +222,12 @@ func agentToolSearchAliases(token string) []string {
 		return []string{"direct", "message", "messages", "conversation", "conversations"}
 	case "direct":
 		return []string{"dm", "dms"}
+	case "message", "messages", "conversation", "conversations":
+		return []string{"dm", "dms"}
 	case "pr", "prs":
-		return []string{"pull", "request", "requests", "merge"}
+		return []string{"pull", "request", "requests"}
 	case "pull":
-		return []string{"pr", "prs", "merge"}
+		return []string{"pr", "prs"}
 	case "merge":
 		return []string{"mr", "mrs", "pull", "request", "requests"}
 	case "mr", "mrs":
@@ -260,20 +264,7 @@ func agentToolSearchText(value string) string {
 	if len(tokens) == 0 {
 		return ""
 	}
-	expanded := make([]string, 0, len(tokens)*2)
-	seen := make(map[string]struct{}, len(tokens)*2)
-	for _, token := range tokens {
-		for _, value := range append([]string{token}, agentToolSearchAliases(token)...) {
-			for _, normalized := range uniqueAgentToolSearchTokens(value) {
-				if _, ok := seen[normalized]; ok {
-					continue
-				}
-				seen[normalized] = struct{}{}
-				expanded = append(expanded, normalized)
-			}
-		}
-	}
-	return strings.Join(expanded, " ")
+	return strings.Join(tokens, " ")
 }
 
 func uniqueAgentToolSearchTokens(value string) []string {
