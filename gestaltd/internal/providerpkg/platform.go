@@ -21,22 +21,13 @@ func CurrentPlatformString() string {
 }
 
 // ParsePlatformString parses "darwin/arm64" or "linux/amd64" into (goos, goarch).
-// A trailing third component (e.g. "linux/amd64/musl") is accepted and ignored
-// for backwards compatibility with older platform strings.
 func ParsePlatformString(s string) (goos, goarch string, err error) {
 	parts := strings.Split(s, "/")
-	switch len(parts) {
-	case 2:
-		if parts[0] == "" || parts[1] == "" {
-			return "", "", fmt.Errorf("invalid platform string %q: empty component", s)
-		}
-		return parts[0], parts[1], nil
-	case 3:
-		if parts[0] == "" || parts[1] == "" {
-			return "", "", fmt.Errorf("invalid platform string %q: empty component", s)
-		}
-		return parts[0], parts[1], nil
-	default:
+	if len(parts) != 2 {
 		return "", "", fmt.Errorf("invalid platform string %q: expected os/arch", s)
 	}
+	if parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid platform string %q: empty component", s)
+	}
+	return parts[0], parts[1], nil
 }

@@ -30,9 +30,9 @@ func initConfigWithStatePaths(configFlags []string, state operator.StatePaths, p
 		return err
 	}
 
-	platArgs := make([]struct{ GOOS, GOARCH, LibC string }, len(platforms))
+	platArgs := make([]struct{ GOOS, GOARCH string }, len(platforms))
 	for i, p := range platforms {
-		platArgs[i] = struct{ GOOS, GOARCH, LibC string }{p.GOOS, p.GOARCH, ""}
+		platArgs[i] = struct{ GOOS, GOARCH string }{p.GOOS, p.GOARCH}
 	}
 
 	_, err = operatorLifecycle().InitAtPathsWithPlatforms(configPaths, state, platArgs)

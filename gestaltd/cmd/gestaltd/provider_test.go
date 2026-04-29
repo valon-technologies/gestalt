@@ -933,7 +933,7 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 		t.Skip("fake cargo test fixture is POSIX-only")
 	}
 
-	hostTarget, _, err := providerpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	hostTarget, err := providerpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("providerpkgRustTargetTriple(host): %v", err)
 	}
@@ -959,7 +959,7 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 		"--output", outputDir,
 	)
 
-	archiveName := expectedRustArchiveName(testVersion, runtime.GOOS, runtime.GOARCH, "")
+	archiveName := expectedRustArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "greet")
@@ -968,7 +968,7 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
-	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH)
 	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
 		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
 	}
@@ -1013,51 +1013,6 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 	if !strings.Contains(result.Body, "Hi, Ada!") {
 		t.Fatalf("body = %q, want greeting", result.Body)
 	}
-}
-
-func TestRun_ProviderReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake cargo test fixture is POSIX-only")
-	}
-
-	hostTarget, _, err := providerpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
-	if err != nil {
-		t.Fatalf("providerpkgRustTargetTriple(host): %v", err)
-	}
-	explicitTarget, _, err := providerpkgRustTargetTriple("linux", "amd64", "musl")
-	if err != nil {
-		t.Fatalf("providerpkgRustTargetTriple(linux/amd64/musl): %v", err)
-	}
-
-	fakeCargoDir := t.TempDir()
-	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
-		ExpectedPluginName:   rustReleasePluginName,
-		ExpectedServeExport:  "__gestalt_serve",
-		ExpectedCatalogWrite: true,
-		GeneratedCatalog:     rustReleasePluginName,
-		DelegateBinary:       pluginBin,
-		AllowedTargets:       []string{hostTarget, explicitTarget},
-	})
-	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	pluginDir := newRustSourceReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.12-rust-musl"
-
-	runProviderReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", "linux/amd64/musl",
-		"--output", outputDir,
-	)
-
-	archiveName := expectedRustArchiveName(testVersion, "linux", "amd64", "musl")
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := releaseBinaryName(rustReleasePluginName, "linux")
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], "linux", "amd64", "musl")
 }
 
 func TestRun_ProviderReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
@@ -1651,7 +1606,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 			prepare: func(t *testing.T) string {
 				t.Helper()
 
-				hostTarget, _, err := providerpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+				hostTarget, err := providerpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH)
 				if err != nil {
 					t.Fatalf("providerpkgRustTargetTriple(host): %v", err)
 				}
@@ -1671,7 +1626,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 			},
 			assertArtifact: func(t *testing.T, artifact providermanifestv1.Artifact) {
 				t.Helper()
-				assertExpectedRustArtifactPlatform(t, artifact, runtime.GOOS, runtime.GOARCH, "")
+				assertExpectedRustArtifactPlatform(t, artifact, runtime.GOOS, runtime.GOARCH)
 			},
 			assertSessionTTL: true,
 		},
@@ -3012,7 +2967,7 @@ func expectedPythonArchiveName(version, goos, goarch string) string {
 	return expectedPythonArchiveNameFor("python-release", version, goos, goarch)
 }
 
-func expectedRustArchiveName(version, goos, goarch, _ string) string {
+func expectedRustArchiveName(version, goos, goarch string) string {
 	return platformArchiveNameForTest(rustReleasePluginName, version, goos, goarch)
 }
 
@@ -3026,7 +2981,7 @@ func assertExpectedGoArtifactPlatform(t *testing.T, artifact providermanifestv1.
 	assertArtifactPlatform(t, artifact, goos, goarch)
 }
 
-func assertExpectedRustArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, goos, goarch, _ string) {
+func assertExpectedRustArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, goos, goarch string) {
 	t.Helper()
 	assertArtifactPlatform(t, artifact, goos, goarch)
 }
@@ -3750,29 +3705,29 @@ fi`
 fi`
 }
 
-func providerpkgRustTargetTriple(goos, goarch, _ string) (string, string, error) {
+func providerpkgRustTargetTriple(goos, goarch string) (string, error) {
 	switch goos {
 	case "darwin":
 		switch goarch {
 		case "amd64":
-			return "x86_64-apple-darwin", "", nil
+			return "x86_64-apple-darwin", nil
 		case "arm64":
-			return "aarch64-apple-darwin", "", nil
+			return "aarch64-apple-darwin", nil
 		}
 	case "linux":
 		switch goarch {
 		case "amd64":
-			return "x86_64-unknown-linux-musl", "", nil
+			return "x86_64-unknown-linux-musl", nil
 		case "arm64":
-			return "aarch64-unknown-linux-musl", "", nil
+			return "aarch64-unknown-linux-musl", nil
 		}
 	case "windows":
 		switch goarch {
 		case "amd64":
-			return "x86_64-pc-windows-gnu", "", nil
+			return "x86_64-pc-windows-gnu", nil
 		}
 	}
-	return "", "", fmt.Errorf("unsupported Rust target platform %s/%s", goos, goarch)
+	return "", fmt.Errorf("unsupported Rust target platform %s/%s", goos, goarch)
 }
 
 func shellSingleQuoted(value string) string {

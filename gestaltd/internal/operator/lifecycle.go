@@ -130,13 +130,13 @@ func (l *Lifecycle) InitAtPathsWithStatePaths(configPaths []string, state StateP
 
 // InitAtPathWithPlatforms runs init and additionally downloads and hashes
 // archives for the specified extra platforms.
-func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
+func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
 	return l.InitAtPathsWithPlatforms([]string{configPath}, StatePaths{ArtifactsDir: artifactsDir}, platforms)
 }
 
 // InitAtPathsWithPlatforms runs init and additionally downloads and hashes
 // archives for the specified extra platforms.
-func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
+func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
 	lock, cfg, paths, err := l.initAtPaths(configPaths, state)
 	if err != nil {
 		return nil, err
@@ -1489,19 +1489,10 @@ func preparedManifestMatchesLock(entry LockEntry, manifest *providermanifestv1.M
 }
 
 // resolveArchiveForPlatform looks up a LockArchive for the given platform
-// string using a fallback chain: exact match → without libc → generic.
+// string using a fallback chain: exact match → generic.
 func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, string, bool) {
 	if a, ok := entry.Archives[platform]; ok {
 		return a, platform, true
-	}
-	goos, goarch, err := providerpkg.ParsePlatformString(platform)
-	if err == nil {
-		key := providerpkg.PlatformString(goos, goarch)
-		if key != platform {
-			if a, ok := entry.Archives[key]; ok {
-				return a, key, true
-			}
-		}
 	}
 	if a, ok := entry.Archives[platformKeyGeneric]; ok {
 		return a, platformKeyGeneric, true
@@ -2707,7 +2698,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	return nil
 }
 
-func (l *Lifecycle) downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths initPaths, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
+func (l *Lifecycle) downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths initPaths, platforms []struct{ GOOS, GOARCH string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
 		platformKey := providerpkg.PlatformString(plat.GOOS, plat.GOARCH)
 		if err := l.hashPlatformInEntries(ctx, lock, paths, platformKey, tokenForSource); err != nil {

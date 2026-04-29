@@ -123,7 +123,7 @@ func runInit(args []string) error {
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch[/libc] or \"all\")")
+	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch or \"all\")")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch[/libc] or \"all\")")
+	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch or \"all\")")
 }
 
 func printValidateUsage(w io.Writer) {

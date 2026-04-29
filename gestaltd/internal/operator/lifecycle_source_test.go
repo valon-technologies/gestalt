@@ -602,7 +602,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 			}
 
 			lc := NewLifecycle()
-			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{
 				{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
 			})
 			if err == nil {
@@ -2789,9 +2789,9 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 			cacheSource := "github.com/acme/tools/cache-session"
 			version := "1.0.0"
 
-			extraPlatform := struct{ GOOS, GOARCH, LibC string }{GOOS: "linux", GOARCH: "amd64"}
+			extraPlatform := struct{ GOOS, GOARCH string }{GOOS: "linux", GOARCH: "amd64"}
 			if runtime.GOOS == extraPlatform.GOOS && runtime.GOARCH == extraPlatform.GOARCH {
-				extraPlatform = struct{ GOOS, GOARCH, LibC string }{GOOS: "darwin", GOARCH: "arm64"}
+				extraPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
 			}
 			extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
 			currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-plugin", "fake-cache-binary")
@@ -2918,7 +2918,7 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 			if client != nil {
 				lc = lc.WithHTTPClient(client)
 			}
-			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{extraPlatform})
+			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{extraPlatform})
 			if err != nil {
 				t.Fatalf("InitAtPathWithPlatforms: %v", err)
 			}

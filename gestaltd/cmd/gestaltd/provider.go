@@ -93,7 +93,7 @@ func runProviderRelease(args []string) (err error) {
 	fs.Usage = func() { printProviderReleaseUsage(fs.Output()) }
 	version := fs.String("version", "", "semantic version string (required)")
 	outputDir := fs.String("output", defaultReleaseOutputDir, "output directory")
-	platforms := fs.String("platform", "", "comma-separated platforms (os/arch[/libc]) or 'all'")
+	platforms := fs.String("platform", "", "comma-separated platforms (os/arch) or 'all'")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func expandReleasePlatformValue(value string) (string, error) {
 	trimmed := strings.TrimSpace(value)
 	switch {
 	case trimmed == "":
-		return "", fmt.Errorf("--platform requires a comma-separated os/arch[/libc] list or %q", allPlatformsValue)
+		return "", fmt.Errorf("--platform requires a comma-separated os/arch list or %q", allPlatformsValue)
 	case strings.EqualFold(trimmed, allPlatformsValue):
 		return defaultPlatforms, nil
 	default:
@@ -620,7 +620,7 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Build a provider release archive for the host platform by default.")
-	writeUsageLine(w, "Pass --platform with a comma-separated os/arch[/libc] list or --platform all")
+	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
 	writeUsageLine(w, "Run from the provider source directory.")
 	writeUsageLine(w, "For apiVersion v4 local deploy configs, point source.path at dist/provider-release.yaml.")
@@ -628,5 +628,5 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")
 	writeUsageLine(w, "  --output     Output directory (default: dist/)")
-	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch[/libc]) or all (default: host platform only)")
+	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch) or all (default: host platform only)")
 }

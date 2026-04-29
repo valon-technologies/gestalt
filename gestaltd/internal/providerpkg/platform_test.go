@@ -16,17 +16,6 @@ func TestParsePlatformString_TwoComponents(t *testing.T) {
 	}
 }
 
-func TestParsePlatformString_ThreeComponentsIgnoresLibC(t *testing.T) {
-	t.Parallel()
-	goos, goarch, err := ParsePlatformString("linux/amd64/musl")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if goos != "linux" || goarch != "amd64" {
-		t.Fatalf("got (%q, %q), want (linux, amd64)", goos, goarch)
-	}
-}
-
 func TestParsePlatformString_RoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"darwin/arm64", "linux/amd64", "windows/amd64"} {
@@ -43,7 +32,7 @@ func TestParsePlatformString_RoundTrip(t *testing.T) {
 
 func TestParsePlatformString_RejectsInvalid(t *testing.T) {
 	t.Parallel()
-	for _, input := range []string{"", "darwin", "a/b/c/d", "/arm64", "darwin/"} {
+	for _, input := range []string{"", "darwin", "linux/amd64/musl", "a/b/c/d", "/arm64", "darwin/"} {
 		_, _, err := ParsePlatformString(input)
 		if err == nil {
 			t.Errorf("ParsePlatformString(%q) should fail", input)
