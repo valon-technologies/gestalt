@@ -9,11 +9,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 type stubProviderWithOps struct {

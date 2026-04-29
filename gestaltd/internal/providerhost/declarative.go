@@ -11,9 +11,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 const declarativeHTTPTimeout = 30 * time.Second

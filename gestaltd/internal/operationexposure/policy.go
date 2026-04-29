@@ -7,8 +7,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 // Policy normalizes allowed_operations handling so every provider type uses the

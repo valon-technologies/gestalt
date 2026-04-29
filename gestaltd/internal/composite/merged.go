@@ -10,7 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/integration"
+	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 type MergedProvider struct {

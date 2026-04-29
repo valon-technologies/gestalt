@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 // BuildOption configures optional aspects of provider construction.

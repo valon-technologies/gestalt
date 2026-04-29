@@ -1,4 +1,4 @@
-package integration
+package declarative
 
 import "github.com/valon-technologies/gestalt/server/core/catalog"
 
