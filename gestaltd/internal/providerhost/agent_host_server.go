@@ -46,24 +46,30 @@ func (s *AgentHostServer) SearchTools(ctx context.Context, req *proto.SearchAgen
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	resp, err := s.searchTools(ctx, coreagent.SearchToolsRequest{
-		ProviderName: strings.TrimSpace(s.providerName),
-		SessionID:    sessionID,
-		TurnID:       turnID,
-		Query:        strings.TrimSpace(req.GetQuery()),
-		MaxResults:   int(req.GetMaxResults()),
+		ProviderName:   strings.TrimSpace(s.providerName),
+		SessionID:      sessionID,
+		TurnID:         turnID,
+		Query:          strings.TrimSpace(req.GetQuery()),
+		MaxResults:     int(req.GetMaxResults()),
+		CandidateLimit: int(req.GetCandidateLimit()),
+		LoadRefs:       agentToolRefsFromProto(req.GetLoadRefs()),
 	})
 	if err != nil {
 		return nil, status.Errorf(agentHostErrorCode(err), "agent search tools: %v", err)
 	}
 	out := &proto.SearchAgentToolsResponse{}
-	if resp == nil || len(resp.Tools) == 0 {
+	if resp == nil {
 		return out, nil
 	}
-	tools, err := agentToolsToProto(resp.Tools)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode agent search tools: %v", err)
+	if len(resp.Tools) > 0 {
+		tools, err := agentToolsToProto(resp.Tools)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "encode agent search tools: %v", err)
+		}
+		out.Tools = tools
 	}
-	out.Tools = tools
+	out.Candidates = agentToolCandidatesToProto(resp.Candidates)
+	out.HasMore = resp.HasMore
 	return out, nil
 }
 

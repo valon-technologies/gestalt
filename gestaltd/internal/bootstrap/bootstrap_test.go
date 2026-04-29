@@ -822,6 +822,11 @@ type callbackAgentProvider struct {
 	started                *providerhost.StartedHostServices
 	socketPath             string
 	searchQuery            string
+	searchMaxResults       int32
+	searchCandidateLimit   int32
+	searchLoadRefs         []*proto.AgentToolRef
+	searchRequests         []*proto.SearchAgentToolsRequest
+	searchResponses        []*proto.SearchAgentToolsResponse
 	toolBodies             []string
 	resolveInteractionHook func(context.Context, coreagent.ResolveInteractionRequest) error
 }
@@ -895,25 +900,35 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 			if searchQuery == "" {
 				searchQuery = "roadmap sync"
 			}
-			resp, err := client.SearchTools(ctx, &proto.SearchAgentToolsRequest{
+			maxResults := p.searchMaxResults
+			if maxResults == 0 {
+				maxResults = 5
+			}
+			searchReq := &proto.SearchAgentToolsRequest{
 				SessionId:  req.SessionID,
 				TurnId:     turnID,
 				Query:      searchQuery,
-				MaxResults: 5,
-			})
+				MaxResults: maxResults,
+			}
+			searchReq.CandidateLimit = p.searchCandidateLimit
+			searchReq.LoadRefs = append([]*proto.AgentToolRef(nil), p.searchLoadRefs...)
+			resp, err := client.SearchTools(ctx, searchReq)
 			if err != nil {
 				return nil, err
 			}
+			p.searchRequests = append(p.searchRequests, gproto.Clone(searchReq).(*proto.SearchAgentToolsRequest))
+			p.searchResponses = append(p.searchResponses, gproto.Clone(resp).(*proto.SearchAgentToolsResponse))
 			for _, tool := range resp.GetTools() {
 				tools = append(tools, coreagent.Tool{
 					ID:          tool.GetId(),
 					Name:        tool.GetName(),
 					Description: tool.GetDescription(),
 					Target: coreagent.ToolTarget{
-						Plugin:     tool.GetTarget().GetPlugin(),
-						Operation:  tool.GetTarget().GetOperation(),
-						Connection: tool.GetTarget().GetConnection(),
-						Instance:   tool.GetTarget().GetInstance(),
+						Plugin:         tool.GetTarget().GetPlugin(),
+						Operation:      tool.GetTarget().GetOperation(),
+						Connection:     tool.GetTarget().GetConnection(),
+						Instance:       tool.GetTarget().GetInstance(),
+						CredentialMode: core.ConnectionMode(tool.GetTarget().GetCredentialMode()),
 					},
 					ParametersSchema: protoStructToBootstrapMap(tool.GetParametersSchema()),
 				})
@@ -2774,6 +2789,203 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 	}
 	if len(secondRef.Tools) == 0 || secondRef.Tools[0].Target.Plugin != "linear" || secondRef.Tools[0].Target.Operation != "list_issues" {
 		t.Fatalf("stored searched tools after unavailable hits = %#v, want linear.list_issues first", secondRef.Tools)
+	}
+}
+
+func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	hidden := false
+	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
+		N:        "docs",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name:        "docs",
+			DisplayName: "Docs",
+			Description: "Search and inspect docs",
+			Operations: []catalog.CatalogOperation{
+				{ID: "alpha_search", Method: http.MethodGet, Title: "Docs alpha search", Description: "Search docs alpha", ReadOnly: true},
+				{ID: "beta_list", Method: http.MethodGet, Title: "Docs beta list", Description: "List docs beta", ReadOnly: true},
+				{ID: "delta_export", Method: http.MethodGet, Title: "Docs delta export", Description: "Export docs delta", ReadOnly: true},
+				{ID: "gamma_get", Method: http.MethodGet, Title: "Docs gamma get", Description: "Get docs gamma", ReadOnly: true},
+				{ID: "hidden_admin", Method: http.MethodPost, Title: "Hidden docs admin", Description: "Hidden admin operation", Visible: &hidden},
+			},
+		},
+		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+			body, err := json.Marshal(map[string]any{
+				"provider":  "docs",
+				"operation": operation,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		},
+	})
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		value.searchQuery = "docs"
+		value.searchMaxResults = 1
+		value.searchCandidateLimit = 2
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "docs",
+		Operations: []string{"alpha_search", "beta_list", "delta_export", "gamma_get", "hidden_admin"},
+	}})
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := principal.WithPrincipal(context.Background(), p)
+
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-candidate-search",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "candidate-search-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "search docs"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
+	}
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn(search) returned nil turn")
+	}
+
+	provider.mu.Lock()
+	searchResponses := append([]*proto.SearchAgentToolsResponse(nil), provider.searchResponses...)
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(searchResponses) != 1 {
+		t.Fatalf("search response count = %d, want 1", len(searchResponses))
+	}
+	searchResp := searchResponses[0]
+	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetTarget().GetPlugin() != "docs" {
+		t.Fatalf("loaded search tools = %#v, want one docs tool", searchResp.GetTools())
+	}
+	loadedOperation := searchResp.GetTools()[0].GetTarget().GetOperation()
+	if loadedOperation == "" || loadedOperation == "hidden_admin" {
+		t.Fatalf("loaded operation = %q, want visible docs operation", loadedOperation)
+	}
+	if len(searchResp.GetCandidates()) != 2 {
+		t.Fatalf("search candidates len = %d, want 2: %#v", len(searchResp.GetCandidates()), searchResp.GetCandidates())
+	}
+	candidateOperations := map[string]bool{}
+	for _, candidate := range searchResp.GetCandidates() {
+		operation := candidate.GetRef().GetOperation()
+		if operation == "" || operation == loadedOperation || operation == "hidden_admin" {
+			t.Fatalf("candidate operation = %q, loaded = %q, candidates = %#v", operation, loadedOperation, searchResp.GetCandidates())
+		}
+		candidateOperations[operation] = true
+	}
+	if len(candidateOperations) != 2 {
+		t.Fatalf("candidate operations = %#v, want two distinct operations", candidateOperations)
+	}
+	if !searchResp.GetHasMore() {
+		t.Fatal("search has_more = false, want true after candidate limit")
+	}
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], fmt.Sprintf(`"operation":"%s"`, loadedOperation)) {
+		t.Fatalf("tool callback bodies = %#v, want %s", toolBodies, loadedOperation)
+	}
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get(search): %v", err)
+	}
+	if len(ref.Tools) != 1 || ref.Tools[0].Target.Operation != loadedOperation {
+		t.Fatalf("stored searched tools = %#v, want %s only", ref.Tools, loadedOperation)
+	}
+
+	betaRef := gproto.Clone(searchResp.GetCandidates()[0].GetRef()).(*proto.AgentToolRef)
+	betaOperation := betaRef.GetOperation()
+	provider.mu.Lock()
+	provider.searchMaxResults = -1
+	provider.searchCandidateLimit = 0
+	provider.searchLoadRefs = []*proto.AgentToolRef{betaRef}
+	provider.mu.Unlock()
+	exact, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "candidate-load-ref-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "load beta docs"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(load ref): %v", err)
+	}
+	if exact == nil {
+		t.Fatal("AgentManager.CreateTurn(load ref) returned nil turn")
+	}
+
+	provider.mu.Lock()
+	toolBodies = append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], fmt.Sprintf(`"operation":"%s"`, betaOperation)) {
+		t.Fatalf("tool callback bodies after load_ref = %#v, want %s", toolBodies, betaOperation)
+	}
+	exactRef, err := result.Services.AgentRunMetadata.Get(context.Background(), exact.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get(load ref): %v", err)
+	}
+	if len(exactRef.Tools) != 1 || exactRef.Tools[0].Target.Operation != betaOperation {
+		t.Fatalf("stored exact loaded tools = %#v, want %s only", exactRef.Tools, betaOperation)
+	}
+
+	provider.mu.Lock()
+	provider.searchLoadRefs = []*proto.AgentToolRef{{Plugin: "docs", Operation: "hidden_admin"}}
+	provider.mu.Unlock()
+	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "candidate-hidden-load-ref-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "load hidden docs"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(hidden load ref): %v", err)
+	}
+	provider.mu.Lock()
+	toolBodies = append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(toolBodies) != 2 {
+		t.Fatalf("tool callback bodies after hidden load_ref = %#v, want no hidden execution", toolBodies)
 	}
 }
 

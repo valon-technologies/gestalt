@@ -73,6 +73,8 @@ pub struct BoundAgentToolTarget {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub credential_mode: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentTool {
@@ -101,6 +103,23 @@ pub struct AgentToolRef {
     pub title: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub description: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub credential_mode: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentToolCandidate {
+    #[prost(message, optional, tag = "1")]
+    pub r#ref: ::core::option::Option<AgentToolRef>,
+    #[prost(string, tag = "2")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub description: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "5")]
+    pub parameters: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(double, tag = "6")]
+    pub score: f64,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {
@@ -391,7 +410,7 @@ pub struct ExecuteAgentToolResponse {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchAgentToolsRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
@@ -401,11 +420,19 @@ pub struct SearchAgentToolsRequest {
     pub query: ::prost::alloc::string::String,
     #[prost(int32, tag = "4")]
     pub max_results: i32,
+    #[prost(int32, tag = "5")]
+    pub candidate_limit: i32,
+    #[prost(message, repeated, tag = "6")]
+    pub load_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SearchAgentToolsResponse {
     #[prost(message, repeated, tag = "1")]
     pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
+    #[prost(message, repeated, tag = "2")]
+    pub candidates: ::prost::alloc::vec::Vec<AgentToolCandidate>,
+    #[prost(bool, tag = "3")]
+    pub has_more: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerCreateSessionRequest {

@@ -42,10 +42,14 @@ var (
 )
 
 const (
-	agentSessionCreationWaitTimeout  = 5 * time.Second
-	agentSessionCreationPollInterval = 100 * time.Millisecond
-	agentToolSearchAllPlugin         = "*"
-	agentToolInputSchemaMaxBytes     = 128 * 1024
+	agentSessionCreationWaitTimeout   = 5 * time.Second
+	agentSessionCreationPollInterval  = 100 * time.Millisecond
+	agentToolSearchAllPlugin          = "*"
+	agentToolSearchDefaultMaxResults  = 8
+	agentToolSearchAdaptiveMaxResults = 3
+	agentToolSearchMaxResults         = 20
+	agentToolSearchMaxCandidates      = 20
+	agentToolInputSchemaMaxBytes      = 128 * 1024
 )
 
 type AgentProviderNotAvailableError struct {
@@ -186,7 +190,7 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	tools, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
+	tools, _, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -915,29 +919,40 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query, true)
+	loadRefs, err := normalizeToolRefs(req.LoadRefs)
 	if err != nil {
 		return nil, err
 	}
-	maxResults := req.MaxResults
-	if maxResults <= 0 {
-		maxResults = 8
+	exactLoad := len(loadRefs) > 0
+	var candidates []agentToolSearchCandidate
+	if exactLoad {
+		candidates, err = m.searchToolCandidatesForLoadRefs(ctx, p, refs, loadRefs)
+	} else {
+		candidates, err = m.searchToolCandidates(ctx, p, refs, req.Query, true)
 	}
-	if maxResults > 20 {
-		maxResults = 20
-	}
-	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, len(refs) > 0)
 	if err != nil {
 		return nil, err
 	}
-	return &coreagent.SearchToolsResponse{Tools: tools}, nil
+	maxResults := effectiveAgentToolSearchMaxResults(req.MaxResults, req.CandidateLimit, exactLoad)
+	tools, loadedCandidateKeys, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, len(refs) > 0 || exactLoad)
+	if err != nil {
+		return nil, err
+	}
+	candidateLimit := effectiveAgentToolSearchCandidateLimit(req.CandidateLimit)
+	compactCandidates, hasMore := agentToolCandidates(candidates, tools, loadedCandidateKeys, candidateLimit)
+	return &coreagent.SearchToolsResponse{
+		Tools:      tools,
+		Candidates: compactCandidates,
+		HasMore:    hasMore,
+	}, nil
 }
 
-func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, failIfOnlyUnavailable bool) ([]coreagent.Tool, error) {
+func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, failIfOnlyUnavailable bool) ([]coreagent.Tool, []agentToolTargetKey, error) {
 	tools := make([]coreagent.Tool, 0, len(candidates))
 	if maxResults > 0 {
 		tools = make([]coreagent.Tool, 0, min(maxResults, len(candidates)))
 	}
+	loadedCandidateKeys := make([]agentToolTargetKey, 0, cap(tools))
 	seen := map[string]struct{}{}
 	var firstUnavailableErr error
 	for i := range candidates {
@@ -956,8 +971,9 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 				}
 				continue
 			}
-			return nil, err
+			return nil, nil, err
 		}
+		loadedCandidateKeys = append(loadedCandidateKeys, agentToolTargetKeyFromRef(candidate.ref))
 		if _, ok := seen[tool.ID]; ok {
 			continue
 		}
@@ -965,9 +981,111 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 		tools = append(tools, tool)
 	}
 	if len(tools) == 0 && failIfOnlyUnavailable && firstUnavailableErr != nil {
-		return nil, firstUnavailableErr
+		return nil, nil, firstUnavailableErr
 	}
-	return tools, nil
+	return tools, loadedCandidateKeys, nil
+}
+
+func effectiveAgentToolSearchMaxResults(maxResults int, candidateLimit int, exactLoad bool) int {
+	if exactLoad {
+		if maxResults <= 0 || maxResults > agentToolSearchMaxResults {
+			return agentToolSearchMaxResults
+		}
+		return maxResults
+	}
+	if maxResults <= 0 {
+		if candidateLimit > 0 {
+			return agentToolSearchAdaptiveMaxResults
+		}
+		return agentToolSearchDefaultMaxResults
+	}
+	if maxResults > agentToolSearchMaxResults {
+		return agentToolSearchMaxResults
+	}
+	return maxResults
+}
+
+func effectiveAgentToolSearchCandidateLimit(limit int) int {
+	if limit <= 0 {
+		return 0
+	}
+	if limit > agentToolSearchMaxCandidates {
+		return agentToolSearchMaxCandidates
+	}
+	return limit
+}
+
+func agentToolCandidates(candidates []agentToolSearchCandidate, tools []coreagent.Tool, loadedCandidateKeys []agentToolTargetKey, limit int) ([]coreagent.ToolCandidate, bool) {
+	if limit <= 0 || len(candidates) == 0 {
+		return nil, false
+	}
+	seen := make(map[agentToolTargetKey]struct{}, len(tools)+len(loadedCandidateKeys)+limit)
+	for i := range tools {
+		seen[agentToolTargetKeyFromTarget(tools[i].Target)] = struct{}{}
+	}
+	for _, key := range loadedCandidateKeys {
+		seen[key] = struct{}{}
+	}
+	out := make([]coreagent.ToolCandidate, 0, min(limit, len(candidates)))
+	for i := range candidates {
+		key := agentToolTargetKeyFromRef(candidates[i].ref)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		if len(out) >= limit {
+			return out, true
+		}
+		out = append(out, agentToolCandidate(candidates[i], key))
+	}
+	return out, false
+}
+
+func agentToolCandidate(candidate agentToolSearchCandidate, key agentToolTargetKey) coreagent.ToolCandidate {
+	op := candidate.operation
+	ref := candidate.ref
+	name := strings.TrimSpace(op.Title)
+	if name == "" {
+		name = strings.TrimSpace(ref.Title)
+	}
+	if name == "" {
+		name = ref.Plugin + "." + op.ID
+	}
+	description := strings.TrimSpace(ref.Description)
+	if description == "" {
+		description = strings.TrimSpace(op.Description)
+	}
+	return coreagent.ToolCandidate{
+		Ref:         ref,
+		ID:          key.String(),
+		Name:        name,
+		Description: description,
+		Parameters:  agentToolCandidateParameterNames(op),
+		Score:       candidate.score,
+	}
+}
+
+func agentToolCandidateParameterNames(op catalog.CatalogOperation) []string {
+	if len(op.Parameters) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(op.Parameters))
+	seen := make(map[string]struct{}, len(op.Parameters))
+	for _, param := range op.Parameters {
+		name := strings.TrimSpace(param.Name)
+		if name == "" {
+			name = strings.TrimSpace(param.WireName)
+		}
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
 }
 
 func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
@@ -1105,11 +1223,48 @@ type agentToolSearchCandidate struct {
 	catalog         *catalog.Catalog
 	operation       catalog.CatalogOperation
 	skipUnavailable bool
+	score           float64
 }
 
 type agentToolSearchCatalog struct {
 	ref     coreagent.ToolRef
 	catalog *catalog.Catalog
+}
+
+type agentToolTargetKey struct {
+	plugin         string
+	operation      string
+	connection     string
+	instance       string
+	credentialMode core.ConnectionMode
+}
+
+func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
+	return agentToolTargetKey{
+		plugin:         strings.TrimSpace(ref.Plugin),
+		operation:      strings.TrimSpace(ref.Operation),
+		connection:     config.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		instance:       strings.TrimSpace(ref.Instance),
+		credentialMode: ref.CredentialMode,
+	}
+}
+
+func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
+	return agentToolTargetKey{
+		plugin:         strings.TrimSpace(target.Plugin),
+		operation:      strings.TrimSpace(target.Operation),
+		connection:     config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		instance:       strings.TrimSpace(target.Instance),
+		credentialMode: target.CredentialMode,
+	}
+}
+
+func (k agentToolTargetKey) String() string {
+	parts := []string{k.plugin, k.operation}
+	if k.connection != "" || k.instance != "" || k.credentialMode != "" {
+		parts = append(parts, k.connection, k.instance, string(k.credentialMode))
+	}
+	return strings.Join(parts, "/")
 }
 
 func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, error) {
@@ -1197,6 +1352,84 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		return nil, firstUnavailableErr
 	}
 	return rankAgentToolSearchCandidates(query, candidates)
+}
+
+func (m *Manager) searchToolCandidatesForLoadRefs(ctx context.Context, p *principal.Principal, scopeRefs []coreagent.ToolRef, loadRefs []coreagent.ToolRef) ([]agentToolSearchCandidate, error) {
+	if len(loadRefs) == 0 {
+		return nil, nil
+	}
+	out := make([]agentToolSearchCandidate, 0, len(loadRefs))
+	seen := map[agentToolTargetKey]struct{}{}
+	var eligible []agentToolSearchCandidate
+	var eligibleErr error
+	eligibleLoaded := false
+	for i := range loadRefs {
+		loadRef := loadRefs[i]
+		if strings.TrimSpace(loadRef.Operation) == "" {
+			return nil, fmt.Errorf("%w: agent load_refs[%d].operation is required", invocation.ErrOperationNotFound, i)
+		}
+		if exactRef, ok := configuredExactAgentLoadRef(loadRef, scopeRefs); ok {
+			candidates, err := m.searchToolCandidates(ctx, p, []coreagent.ToolRef{exactRef}, "", true)
+			if err != nil {
+				return nil, err
+			}
+			for j := range candidates {
+				key := agentToolTargetKeyFromRef(candidates[j].ref)
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				out = append(out, candidates[j])
+			}
+			continue
+		}
+		if !eligibleLoaded {
+			eligible, eligibleErr = m.searchToolCandidates(ctx, p, scopeRefs, "", true)
+			eligibleLoaded = true
+		}
+		if eligibleErr != nil {
+			return nil, eligibleErr
+		}
+		for j := range eligible {
+			if !agentLoadRefMatchesCandidate(loadRef, eligible[j].ref) {
+				continue
+			}
+			key := agentToolTargetKeyFromRef(eligible[j].ref)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, eligible[j])
+		}
+	}
+	return out, nil
+}
+
+func configuredExactAgentLoadRef(loadRef coreagent.ToolRef, refs []coreagent.ToolRef) (coreagent.ToolRef, bool) {
+	loadPlugin := strings.TrimSpace(loadRef.Plugin)
+	loadOperation := strings.TrimSpace(loadRef.Operation)
+	loadConnection := config.ResolveConnectionAlias(strings.TrimSpace(loadRef.Connection))
+	loadInstance := strings.TrimSpace(loadRef.Instance)
+	for _, ref := range exactAgentToolRefs(refs) {
+		if strings.TrimSpace(ref.Plugin) != loadPlugin || strings.TrimSpace(ref.Operation) != loadOperation {
+			continue
+		}
+		if loadConnection != "" && config.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)) != loadConnection {
+			continue
+		}
+		if loadInstance != "" && strings.TrimSpace(ref.Instance) != loadInstance {
+			continue
+		}
+		if loadRef.CredentialMode != "" && ref.CredentialMode != loadRef.CredentialMode {
+			continue
+		}
+		return ref, true
+	}
+	return coreagent.ToolRef{}, false
+}
+
+func agentLoadRefMatchesCandidate(loadRef coreagent.ToolRef, candidateRef coreagent.ToolRef) bool {
+	return agentToolTargetKeyFromRef(loadRef) == agentToolTargetKeyFromRef(candidateRef)
 }
 
 func agentToolSearchUnavailable(err error) bool {
@@ -1327,8 +1560,8 @@ func shouldExpandAgentToolSearchCatalogTargets(ref coreagent.ToolRef, credential
 
 type agentToolSearchScope struct {
 	all      bool
-	plugins  map[string]coreagent.ToolRef
-	exactOps map[string]map[string]coreagent.ToolRef
+	plugins  map[string][]coreagent.ToolRef
+	exactOps map[string]map[string][]coreagent.ToolRef
 }
 
 func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
@@ -1336,8 +1569,8 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		return agentToolSearchScope{all: true}
 	}
 	scope := agentToolSearchScope{
-		plugins:  map[string]coreagent.ToolRef{},
-		exactOps: map[string]map[string]coreagent.ToolRef{},
+		plugins:  map[string][]coreagent.ToolRef{},
+		exactOps: map[string]map[string][]coreagent.ToolRef{},
 	}
 	for _, ref := range refs {
 		pluginName := strings.TrimSpace(ref.Plugin)
@@ -1351,13 +1584,13 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 			continue
 		}
 		if ref.Operation == "" {
-			scope.plugins[pluginName] = ref
+			scope.plugins[pluginName] = append(scope.plugins[pluginName], ref)
 			continue
 		}
 		if scope.exactOps[pluginName] == nil {
-			scope.exactOps[pluginName] = map[string]coreagent.ToolRef{}
+			scope.exactOps[pluginName] = map[string][]coreagent.ToolRef{}
 		}
-		scope.exactOps[pluginName][ref.Operation] = ref
+		scope.exactOps[pluginName][ref.Operation] = append(scope.exactOps[pluginName][ref.Operation], ref)
 	}
 	return scope
 }
@@ -1393,11 +1626,11 @@ func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.Too
 		}
 		sort.Strings(operations)
 		for _, operation := range operations {
-			refs = append(refs, ops[operation])
+			refs = append(refs, ops[operation]...)
 		}
 	}
-	if ref, ok := s.plugins[pluginName]; ok {
-		refs = append(refs, ref)
+	if pluginRefs := s.plugins[pluginName]; len(pluginRefs) > 0 {
+		refs = append(refs, pluginRefs...)
 	}
 	return refs
 }

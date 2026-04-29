@@ -338,6 +338,7 @@ impl AgentHostRpc for TestAgentHostService {
                 target: Some(pb::BoundAgentToolTarget {
                     plugin: "search".to_string(),
                     operation: "lookup".to_string(),
+                    credential_mode: "user".to_string(),
                     ..Default::default()
                 }),
                 parameters_schema: Some(helpers::struct_from_json(serde_json::json!({
@@ -347,6 +348,20 @@ impl AgentHostRpc for TestAgentHostService {
                     }
                 }))),
             }],
+            candidates: vec![pb::AgentToolCandidate {
+                r#ref: Some(pb::AgentToolRef {
+                    plugin: "search".to_string(),
+                    operation: "lookup_more".to_string(),
+                    credential_mode: "user".to_string(),
+                    ..Default::default()
+                }),
+                id: "search/lookup_more///user".to_string(),
+                name: "lookup_more".to_string(),
+                description: "Lookup more records".to_string(),
+                parameters: vec!["query".to_string()],
+                score: 2.5,
+            }],
+            has_more: true,
         }))
     }
 
@@ -636,6 +651,13 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             query: "look up people".to_string(),
             max_results: 3,
+            candidate_limit: 12,
+            load_refs: vec![pb::AgentToolRef {
+                plugin: "search".to_string(),
+                operation: "lookup_more".to_string(),
+                credential_mode: "user".to_string(),
+                ..Default::default()
+            }],
         })
         .await
         .expect("search tools");
@@ -648,6 +670,24 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             .expect("tool target")
             .plugin,
         "search"
+    );
+    assert_eq!(
+        searched.tools[0]
+            .target
+            .as_ref()
+            .expect("tool target")
+            .credential_mode,
+        "user"
+    );
+    assert!(searched.has_more);
+    assert_eq!(searched.candidates.len(), 1);
+    assert_eq!(
+        searched.candidates[0]
+            .r#ref
+            .as_ref()
+            .expect("candidate ref")
+            .credential_mode,
+        "user"
     );
 
     let invoked = host

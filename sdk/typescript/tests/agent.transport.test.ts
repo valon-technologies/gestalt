@@ -91,7 +91,19 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
   const calls: Array<{ turnId: string; toolCallId: string; toolId: string }> = [];
-  const searches: Array<{ turnId: string; query: string; maxResults: number }> = [];
+  const searches: Array<{
+    turnId: string;
+    query: string;
+    maxResults: number;
+    candidateLimit: number;
+    loadRefs: Array<{
+      plugin: string;
+      operation: string;
+      connection: string;
+      instance: string;
+      credentialMode: string;
+    }>;
+  }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -118,6 +130,14 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             query: input.query,
             maxResults: input.maxResults,
+            candidateLimit: input.candidateLimit,
+            loadRefs: input.loadRefs.map((ref) => ({
+              plugin: ref.plugin,
+              operation: ref.operation,
+              connection: ref.connection,
+              instance: ref.instance,
+              credentialMode: ref.credentialMode,
+            })),
           });
           return create(SearchAgentToolsResponseSchema, {
             tools: [
@@ -128,9 +148,29 @@ test("AgentHost executes tools through the configured unix socket", async () => 
                 target: {
                   plugin: "slack",
                   operation: "send_message",
+                  connection: "workspace",
+                  instance: "primary",
+                  credentialMode: "user",
                 },
               },
             ],
+            candidates: [
+              {
+                ref: {
+                  plugin: "slack",
+                  operation: "search_messages",
+                  connection: "workspace",
+                  instance: "primary",
+                  credentialMode: "user",
+                },
+                id: "slack/search_messages/workspace/primary/user",
+                name: "Search Slack messages",
+                description: "Search messages",
+                parameters: ["query", "channel"],
+                score: 12.5,
+              },
+            ],
+            hasMore: true,
           });
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
@@ -184,17 +224,42 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         query: "send slack dm",
         maxResults: 3,
+        candidateLimit: 12,
+        loadRefs: [
+          {
+            plugin: "slack",
+            operation: "search_messages",
+            connection: "workspace",
+            instance: "primary",
+            credentialMode: "user",
+          },
+        ],
       }),
     );
 
     expect(searchResponse.tools).toHaveLength(1);
     expect(searchResponse.tools[0]?.target?.plugin).toBe("slack");
     expect(searchResponse.tools[0]?.target?.operation).toBe("send_message");
+    expect(searchResponse.tools[0]?.target?.credentialMode).toBe("user");
+    expect(searchResponse.candidates).toHaveLength(1);
+    expect(searchResponse.candidates[0]?.ref?.operation).toBe("search_messages");
+    expect(searchResponse.candidates[0]?.ref?.credentialMode).toBe("user");
+    expect(searchResponse.hasMore).toBe(true);
     expect(searches).toEqual([
       {
         turnId: "turn-123",
         query: "send slack dm",
         maxResults: 3,
+        candidateLimit: 12,
+        loadRefs: [
+          {
+            plugin: "slack",
+            operation: "search_messages",
+            connection: "workspace",
+            instance: "primary",
+            credentialMode: "user",
+          },
+        ],
       },
     ]);
   } finally {

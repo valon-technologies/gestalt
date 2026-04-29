@@ -103,6 +103,15 @@ type ToolRef struct {
 	Description    string
 }
 
+type ToolCandidate struct {
+	Ref         ToolRef
+	ID          string
+	Name        string
+	Description string
+	Parameters  []string
+	Score       float64
+}
+
 type ResolveToolsRequest struct {
 	ToolRefs         []ToolRef
 	ToolSource       ToolSourceMode
@@ -269,17 +278,21 @@ type ExecuteToolResponse struct {
 }
 
 type SearchToolsRequest struct {
-	ProviderName string
-	SessionID    string
-	TurnID       string
-	Query        string
-	MaxResults   int
-	ToolRefs     []ToolRef
-	ToolSource   ToolSourceMode
+	ProviderName   string
+	SessionID      string
+	TurnID         string
+	Query          string
+	MaxResults     int
+	CandidateLimit int
+	LoadRefs       []ToolRef
+	ToolRefs       []ToolRef
+	ToolSource     ToolSourceMode
 }
 
 type SearchToolsResponse struct {
-	Tools []Tool
+	Tools      []Tool
+	Candidates []ToolCandidate
+	HasMore    bool
 }
 
 type InteractionType string

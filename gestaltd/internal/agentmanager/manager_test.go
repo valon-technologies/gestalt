@@ -861,6 +861,66 @@ func TestSearchToolsExpandsAmbiguousCredentialInstances(t *testing.T) {
 	if !instances["z"] || !instances["sa"] {
 		t.Fatalf("tool instances = %#v, want z and sa", instances)
 	}
+
+	exactScopedResp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+	}, coreagent.SearchToolsRequest{
+		Query: "github pull requests",
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "github", Operation: "list_pull_requests", Connection: "default", Instance: "z"},
+			{Plugin: "github", Operation: "list_pull_requests", Connection: "default", Instance: "sa"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools exact scoped refs: %v", err)
+	}
+	if len(exactScopedResp.Tools) != 2 {
+		t.Fatalf("exact scoped SearchTools returned %d tools, want 2: %#v", len(exactScopedResp.Tools), exactScopedResp.Tools)
+	}
+
+	candidateResp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+	}, coreagent.SearchToolsRequest{
+		Query:          "github pull requests",
+		MaxResults:     1,
+		CandidateLimit: 5,
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools candidates: %v", err)
+	}
+	if len(candidateResp.Tools) != 1 || len(candidateResp.Candidates) != 1 {
+		t.Fatalf("candidate SearchTools = tools %#v candidates %#v, want one loaded and one candidate", candidateResp.Tools, candidateResp.Candidates)
+	}
+	if candidateResp.Candidates[0].Ref.Connection != "default" || candidateResp.Candidates[0].Ref.Instance == "" {
+		t.Fatalf("candidate ref = %#v, want resolved connection and instance", candidateResp.Candidates[0].Ref)
+	}
+
+	broadLoadResp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+	}, coreagent.SearchToolsRequest{
+		LoadRefs: []coreagent.ToolRef{{Plugin: "github", Operation: "list_pull_requests"}},
+		ToolRefs: []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools broad load_ref: %v", err)
+	}
+	if len(broadLoadResp.Tools) != 0 {
+		t.Fatalf("broad load_ref loaded %#v, want no tools without exact identity", broadLoadResp.Tools)
+	}
+
+	exactLoadResp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: subjectID,
+	}, coreagent.SearchToolsRequest{
+		LoadRefs: []coreagent.ToolRef{candidateResp.Candidates[0].Ref},
+		ToolRefs: []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools exact load_ref: %v", err)
+	}
+	if len(exactLoadResp.Tools) != 1 || exactLoadResp.Tools[0].Target.Instance != candidateResp.Candidates[0].Ref.Instance {
+		t.Fatalf("exact load_ref loaded %#v, want candidate instance %q", exactLoadResp.Tools, candidateResp.Candidates[0].Ref.Instance)
+	}
 }
 
 func TestSearchToolsSkipsUnavailablePluginScopedProviders(t *testing.T) {
