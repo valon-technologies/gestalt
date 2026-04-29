@@ -1,4 +1,4 @@
-package main
+package daemon
 
 import (
 	"crypto/sha256"
@@ -47,7 +47,10 @@ func TestMain(m *testing.M) {
 	var wg sync.WaitGroup
 	errs := make([]error, 4)
 	wg.Add(4)
-	go func() { defer wg.Done(); errs[0] = buildTarget(".", ".", gestaltdBin) }()
+	go func() {
+		defer wg.Done()
+		errs[0] = buildTarget(".", "github.com/valon-technologies/gestalt/server/cmd/gestaltd", gestaltdBin)
+	}()
 	go func() {
 		defer wg.Done()
 		errs[1] = providerpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
