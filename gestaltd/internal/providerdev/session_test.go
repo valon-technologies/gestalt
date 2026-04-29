@@ -98,7 +98,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
 		Name: "roadmap",
 		Spec: spec,
-		UI:   &AttachUI{},
+		UI:   true,
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -474,7 +474,7 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
 	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
 		Name: "roadmap",
-		UI:   &AttachUI{},
+		UI:   true,
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)

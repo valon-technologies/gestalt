@@ -58,7 +58,7 @@ type Target struct {
 	Source     string
 	Spec       providerhost.StaticProviderSpec
 	Config     map[string]any
-	UI         *AttachUI
+	UI         bool
 	UIPath     string
 	RuntimeEnv RuntimeEnvBuilder
 }
@@ -79,7 +79,7 @@ type AttachProvider struct {
 	Source string                          `json:"source,omitempty"`
 	Spec   providerhost.StaticProviderSpec `json:"spec"`
 	Config *map[string]any                 `json:"config,omitempty"`
-	UI     *AttachUI                       `json:"ui,omitempty"`
+	UI     bool                            `json:"ui,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -134,8 +134,6 @@ type AttachmentProviderInfo struct {
 	UI     bool   `json:"ui,omitempty"`
 	UIPath string `json:"uiPath,omitempty"`
 }
-
-type AttachUI struct{}
 
 type AttachAuthorization struct {
 	id               string
@@ -317,7 +315,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			Name:   target.Name,
 			Env:    cloneStringMap(runtimeEnv.Env),
 			Source: target.Source,
-			UI:     target.UI != nil,
+			UI:     target.UI,
 			UIPath: target.UIPath,
 		})
 	}
@@ -542,7 +540,7 @@ func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]T
 		if requested.Config != nil {
 			target.Config = cloneAnyMap(*requested.Config)
 		}
-		target.UI = cloneAttachUI(requested.UI)
+		target.UI = requested.UI
 		targets = append(targets, target)
 	}
 	return targets, nil
@@ -749,7 +747,7 @@ func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, prov
 			continue
 		}
 		target := session.targets[providerName]
-		if target == nil || target.target.UI == nil {
+		if target == nil || !target.target.UI {
 			continue
 		}
 		resp, err := session.serveUIAsset(ctx, providerName, req)
@@ -1024,7 +1022,7 @@ func (s *Session) attachmentInfo() AttachmentInfo {
 		providers = append(providers, AttachmentProviderInfo{
 			Name:   name,
 			Source: target.target.Source,
-			UI:     target.target.UI != nil,
+			UI:     target.target.UI,
 			UIPath: target.target.UIPath,
 		})
 	}
@@ -1811,14 +1809,6 @@ func cloneStaticProviderSpec(spec providerhost.StaticProviderSpec) providerhost.
 		out.DiscoveryConfig = &discovery
 	}
 	return out
-}
-
-func cloneAttachUI(ui *AttachUI) *AttachUI {
-	if ui == nil {
-		return nil
-	}
-	out := *ui
-	return &out
 }
 
 func cloneHTTPHeader(header http.Header) http.Header {

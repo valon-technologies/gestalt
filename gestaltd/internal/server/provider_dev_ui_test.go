@@ -29,7 +29,7 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
 	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{Providers: []providerdev.AttachProvider{{
 		Name: "roadmap",
-		UI:   &providerdev.AttachUI{},
+		UI:   true,
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -169,7 +169,7 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 	}
 	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{Providers: []providerdev.AttachProvider{{
 		Name: "roadmap",
-		UI:   &providerdev.AttachUI{},
+		UI:   true,
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -261,7 +261,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 	}
 	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{Providers: []providerdev.AttachProvider{{
 		Name: "roadmap",
-		UI:   &providerdev.AttachUI{},
+		UI:   true,
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)

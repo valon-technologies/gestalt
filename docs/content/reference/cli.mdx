@@ -112,7 +112,10 @@ remote instance.
 After browser approval or attach-token authentication, the remote creates an
 attachment and the CLI uses the returned `attachId` plus a one-time dispatcher
 secret for poll/complete traffic. The dispatcher secret is not shown by list/get
-diagnostics and is not needed for owner cleanup detach. Use
+diagnostics and is not needed for owner cleanup detach. Remote attach requests
+mark an attached provider with `ui: true` when the local dispatcher will serve
+that provider's mounted UI assets; diagnostic responses report the mounted
+`uiPath` but never return local UI contents. Use
 `gestaltd provider attach list --remote URL`,
 `gestaltd provider attach show --remote URL ATTACH_ID`, and
 `gestaltd provider attach detach --remote URL ATTACH_ID` to inspect or clean up
