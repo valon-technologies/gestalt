@@ -799,6 +799,10 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     session.wait_for(&mut output, "hello");
     session.wait_for(&mut output, "Brewed for");
     session.write("/quit\r");
+    session.wait_for(&mut output, "\x1b[?1049l");
+    session.wait_for(&mut output, "Resume this session:");
+    session.wait_for(&mut output, "gestalt --url");
+    session.wait_for(&mut output, "agent --session session-1");
     session.wait_for_exit();
 
     assert!(
@@ -811,6 +815,20 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
             && output.contains("footer-branch")
             && output.contains("session session-1"),
         "TTY footer did not render local model/session/path/branch metadata:\n{output}"
+    );
+    assert!(
+        !output.contains("\x1b[?1000h"),
+        "TTY enabled mouse capture by default, preventing native drag selection:\n{output}"
+    );
+    assert!(
+        output.contains("Resume this session:")
+            && output.contains("gestalt --url")
+            && output.contains("agent --session session-1"),
+        "TTY exit did not print a resume command after restoring the terminal:\n{output}"
+    );
+    assert!(
+        output.find("\x1b[?1049l").unwrap() < output.find("Resume this session:").unwrap(),
+        "TTY printed the resume command before restoring the alternate screen:\n{output}"
     );
     assert!(
         !output.contains("You")
@@ -1273,19 +1291,29 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("/help\r");
-    session.wait_for(&mut output, "mouse wheel");
+    session.wait_for(&mut output, "PgUp/PgDn scrolls");
     session.wait_for(&mut output, "cancels");
     output.clear();
     session.write("\x1b[5~\x1b[5~");
-    session.wait_for(&mut output, "Commands");
+    session.wait_for(&mut output, "native text selection");
     output.clear();
     session.write("\x1b[6~\x1b[6~");
     session.wait_for(&mut output, "cancels");
     output.clear();
-    session.write("\x1b[<64;1;1M\x1b[<64;1;1M");
-    session.wait_for(&mut output, "Commands");
+    session.write("/mouse on\r");
+    session.wait_for(&mut output, "\x1b[?1000h");
     output.clear();
-    session.write("\x1b[<65;1;1M\x1b[<65;1;1M");
+    session.write("/mouse off\r");
+    session.wait_for(&mut output, "\x1b[?1000l");
+    session.wait_for(&mut output, "selection is");
+    output.clear();
+    session.write("/mouse on\r");
+    session.wait_for(&mut output, "\x1b[?1000h");
+    output.clear();
+    session.write("\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M\x1b[<64;1;1M");
+    session.wait_for(&mut output, "PgUp/PgDn");
+    output.clear();
+    session.write("\x1b[<65;1;1M\x1b[<65;1;1M\x1b[<65;1;1M\x1b[<65;1;1M");
     session.wait_for(&mut output, "cancels");
     session.write("/quit\r");
     session.wait_for_exit();
