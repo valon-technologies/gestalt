@@ -3691,7 +3691,7 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 		wantOK   bool
 	}{
 		{"exact match", "darwin/arm64", "https://example.com/darwin-arm64", true},
-		{"fallback without libc", "linux/amd64", "https://example.com/linux-amd64", true},
+		{"linux match", "linux/amd64", "https://example.com/linux-amd64", true},
 		{"no match falls to generic", "windows/amd64", "https://example.com/generic", true},
 	}
 	for _, tt := range tests {
