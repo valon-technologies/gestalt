@@ -14,12 +14,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -172,6 +174,13 @@ type storedGestaltCLICredential struct {
 	APIToken string `json:"api_token"`
 }
 
+type providerRemoteAuth struct {
+	Token    string
+	Explicit bool
+}
+
+var providerRemoteOpenBrowser = openProviderRemoteBrowser
+
 func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(opts)
 	if err != nil {
@@ -192,17 +201,17 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		return errors.New("provider dev --remote requires at least one source-backed plugin in --config or --path")
 	}
 
-	token, err := resolveProviderRemoteToken(opts)
-	if err != nil {
-		return err
+	if _, err := providerRemoteBaseURL(opts.Remote); err != nil {
+		return fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
 	}
+	auth := resolveProviderRemoteAttachAuth(opts)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	client := providerdev.Client{
 		BaseURL: opts.Remote,
-		Token:   token,
+		Token:   auth.Token,
 	}
 	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
 	localUIHandlersByTarget := map[int]http.Handler{}
@@ -240,9 +249,10 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 		requestedProviders = append(requestedProviders, requested)
 	}
-	session, err := client.CreateSession(ctx, providerdev.CreateSessionRequest{Providers: requestedProviders})
+	sessionReq := providerdev.CreateSessionRequest{Providers: requestedProviders}
+	session, err := createProviderRemoteSession(ctx, &client, sessionReq, auth)
 	if err != nil {
-		return providerRemoteCreateSessionError(err)
+		return err
 	}
 	attachID := strings.TrimSpace(session.AttachID)
 	if attachID == "" {
@@ -302,6 +312,97 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		"config_files", configPaths,
 	)
 	return client.RunDispatcher(ctx, attachID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
+}
+
+func resolveProviderRemoteAttachAuth(opts providerLocalCommandOptions) providerRemoteAuth {
+	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
+		return providerRemoteAuth{Token: token, Explicit: true}
+	}
+	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
+		return providerRemoteAuth{Token: token, Explicit: true}
+	}
+	token, _ := resolveProviderRemoteToken(opts)
+	if token == "" {
+		return providerRemoteAuth{}
+	}
+	return providerRemoteAuth{Token: token}
+}
+
+func createProviderRemoteSession(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest, auth providerRemoteAuth) (*providerdev.CreateSessionResponse, error) {
+	if strings.TrimSpace(auth.Token) != "" {
+		session, err := client.CreateSession(ctx, req)
+		if err == nil {
+			return session, nil
+		}
+		if auth.Explicit || !providerRemoteCreateSessionCanUseBrowserApproval(err) {
+			return nil, providerRemoteCreateSessionError(err)
+		}
+		fmt.Fprintf(os.Stderr, "Stored CLI credentials could not create provider-dev attach directly; opening browser approval instead.\n\n")
+		client.Token = ""
+	}
+	return createProviderRemoteSessionWithBrowser(ctx, client, req)
+}
+
+func providerRemoteCreateSessionCanUseBrowserApproval(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "provider dev attach access denied") ||
+		strings.Contains(msg, "401 Unauthorized") ||
+		strings.Contains(msg, "403 Forbidden")
+}
+
+func createProviderRemoteSessionWithBrowser(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
+	authorization, err := client.CreateAttachAuthorization(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("create provider dev browser approval: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Approve provider-dev attach in your browser:\n\n  %s\n\nVerification code: %s\n\nOnly approve if the browser asks for this code.\n\n", authorization.ApprovalURL, authorization.VerificationCode)
+	if err := providerRemoteOpenBrowser(authorization.ApprovalURL); err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open browser automatically: %v\nOpen the URL above to continue.\n\n", err)
+	}
+
+	pollInterval := time.Duration(authorization.PollIntervalMillis) * time.Millisecond
+	if pollInterval <= 0 {
+		pollInterval = time.Second
+	}
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+		status, err := client.PollAttachAuthorization(ctx, authorization.AuthorizationID)
+		if err != nil {
+			return nil, fmt.Errorf("poll provider dev browser approval: %w", err)
+		}
+		if status.Approved {
+			code := strings.TrimSpace(status.AttachAuthorizationCode)
+			if code == "" {
+				return nil, errors.New("provider dev browser approval did not return an authorization code")
+			}
+			req.AttachAuthorizationCode = code
+			return client.CreateAuthorizedSession(ctx, authorization.AuthorizationID, req)
+		}
+		if !authorization.ExpiresAt.IsZero() && time.Now().After(authorization.ExpiresAt) {
+			return nil, errors.New("provider dev browser approval expired")
+		}
+		timer.Reset(pollInterval)
+	}
+}
+
+func openProviderRemoteBrowser(rawURL string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", rawURL).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL).Start()
+	default:
+		return exec.Command("xdg-open", rawURL).Start()
+	}
 }
 
 func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
@@ -464,7 +565,7 @@ func providerRemoteCreateSessionError(err error) error {
 
 remote provider-dev attach was denied. The remote plugin must grant providerDev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
 
-provider scopes, operation permissions, subject-owned API tokens, and plain gestalt auth login credentials do not grant remote attach`, err)
+provider scopes, operation permissions, subject-owned API tokens, and stored gestalt auth login API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
@@ -1630,5 +1731,5 @@ func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
 	writeUsageLine(w, "  --remote   Remote gestaltd base URL to attach local source plugins to")
-	writeUsageLine(w, "  --remote-token  Bearer token for --remote (default: GESTALT_API_KEY or matching stored CLI credential; must grant provider_dev.attach)")
+	writeUsageLine(w, "  --remote-token  Bearer token for non-interactive --remote attach (must grant provider_dev.attach)")
 }

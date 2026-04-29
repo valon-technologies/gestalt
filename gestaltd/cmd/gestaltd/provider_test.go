@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -247,7 +248,8 @@ func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing
 		"remote provider-dev attach was denied",
 		"providerDev.attach.allowedRoles",
 		"permissions[].actions including provider_dev.attach",
-		"plain gestalt auth login credentials do not grant remote attach",
+		"stored gestalt auth login API tokens do not grant direct remote attach",
+		"browser approval",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error missing %q:\n%s", want, err)
@@ -258,6 +260,116 @@ func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing
 	if got := providerRemoteCreateSessionError(other); got != other {
 		t.Fatalf("unrelated error was wrapped: %v", got)
 	}
+}
+
+func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *testing.T) {
+	t.Parallel()
+
+	var openedURL string
+	previousOpenBrowser := providerRemoteOpenBrowser
+	providerRemoteOpenBrowser = func(rawURL string) error {
+		openedURL = rawURL
+		return nil
+	}
+	t.Cleanup(func() { providerRemoteOpenBrowser = previousOpenBrowser })
+
+	const (
+		authID       = "auth-1"
+		clientSecret = "pdaa_secret"
+		code         = "pdac_code"
+		dispatcher   = "pda_dispatcher"
+	)
+	var sawDirectToken bool
+	var createdAuthorizedSession bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachments:
+			if r.Header.Get("Authorization") != "Bearer stored-token" {
+				t.Fatalf("direct attach Authorization = %q, want stored token", r.Header.Get("Authorization"))
+			}
+			sawDirectToken = true
+			http.Error(w, "provider dev attach access denied", http.StatusForbidden)
+		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachAuthorizations:
+			if r.Header.Get("Authorization") != "" {
+				t.Fatalf("browser authorization should not send bearer token, got %q", r.Header.Get("Authorization"))
+			}
+			writeJSONForProviderRemoteTest(t, w, http.StatusCreated, providerdev.CreateAttachAuthorizationResponse{
+				AuthorizationID:    authID,
+				ClientSecret:       clientSecret,
+				VerificationCode:   "123-456",
+				ApprovalURL:        tsURL(t, r) + "/approve",
+				ExpiresAt:          time.Now().Add(time.Minute),
+				PollIntervalMillis: 1,
+			})
+		case r.Method == http.MethodGet && r.URL.Path == providerdev.PathAttachAuthorizations+"/"+authID+"/poll":
+			if r.Header.Get(providerdev.HeaderAuthorizationSecret) != clientSecret {
+				t.Fatalf("poll authorization secret = %q, want %q", r.Header.Get(providerdev.HeaderAuthorizationSecret), clientSecret)
+			}
+			writeJSONForProviderRemoteTest(t, w, http.StatusOK, providerdev.PollAttachAuthorizationResponse{
+				Approved:                true,
+				AttachAuthorizationCode: code,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachAuthorizations+"/"+authID+"/attachments":
+			if r.Header.Get(providerdev.HeaderAuthorizationSecret) != clientSecret {
+				t.Fatalf("authorized attach secret = %q, want %q", r.Header.Get(providerdev.HeaderAuthorizationSecret), clientSecret)
+			}
+			var req providerdev.CreateSessionRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode authorized attach request: %v", err)
+			}
+			if req.AttachAuthorizationCode != code {
+				t.Fatalf("attach authorization code = %q, want %q", req.AttachAuthorizationCode, code)
+			}
+			createdAuthorizedSession = true
+			writeJSONForProviderRemoteTest(t, w, http.StatusCreated, providerdev.CreateSessionResponse{
+				AttachID:         "attach-1",
+				DispatcherSecret: dispatcher,
+				Providers:        []providerdev.CreateSessionProvider{{Name: "roadmap"}},
+			})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	client := providerdev.Client{BaseURL: ts.URL, Token: "stored-token", HTTPClient: ts.Client()}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	session, err := createProviderRemoteSession(ctx, &client, providerdev.CreateSessionRequest{
+		Providers: []providerdev.AttachProvider{{Name: "roadmap"}},
+	}, providerRemoteAuth{Token: "stored-token"})
+	if err != nil {
+		t.Fatalf("createProviderRemoteSession: %v", err)
+	}
+	if !sawDirectToken {
+		t.Fatal("expected direct attach attempt with stored token")
+	}
+	if openedURL == "" {
+		t.Fatal("expected browser approval URL to be opened")
+	}
+	if !createdAuthorizedSession {
+		t.Fatal("expected authorized browser attach session to be created")
+	}
+	if session.AttachID != "attach-1" || client.DispatcherSecret != dispatcher {
+		t.Fatalf("session = %#v, dispatcher secret = %q", session, client.DispatcherSecret)
+	}
+	if client.AuthorizationSecret != "" {
+		t.Fatalf("authorization secret retained after authorized session: %q", client.AuthorizationSecret)
+	}
+}
+
+func writeJSONForProviderRemoteTest(t *testing.T, w http.ResponseWriter, status int, value any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		t.Fatalf("encode JSON response: %v", err)
+	}
+}
+
+func tsURL(t *testing.T, r *http.Request) string {
+	t.Helper()
+	return "http://" + r.Host
 }
 
 func TestProviderRemoteBaseURLNormalizesDefaultPortsAndTrailingSlashes(t *testing.T) {

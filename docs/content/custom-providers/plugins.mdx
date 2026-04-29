@@ -834,7 +834,6 @@ a path-only attach is enough:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
-export GESTALT_API_KEY=<token-with-provider_dev.attach>
 
 gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
@@ -842,9 +841,11 @@ gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 The remote URL is environment-agnostic; it can point at any `gestaltd` instance
 that exposes provider-dev attach targets and has opted in with
 `server.providerDev.remoteAttach: true`. The target plugin must also opt into
-private remote attach with `providerDev.attach.allowedRoles`, and API-token
-callers must use a token with the `provider_dev.attach` action for that plugin.
-The local command replaces only the source plugin attached by your
+private remote attach with `providerDev.attach.allowedRoles`. The CLI opens a
+browser approval page for the interactive happy path; approve it with your
+normal browser session and enter the verification code shown in your terminal.
+API-token callers must use a token with the `provider_dev.attach` action for
+that plugin. The local command replaces only the source plugin attached by your
 authenticated session. Providers that are not attached locally continue to run
 through the remote server and its existing configuration.
 
@@ -889,15 +890,15 @@ Remote attach v1 is process-local. On a load-balanced remote, enable it only
 when the deployment is single-replica or sticky-routes attach creation, CLI
 poll/complete traffic, provider invocations, and provider-owned UI requests for
 the same authenticated owner to the same `gestaltd` process.
-Remote provider dev authenticates with `--remote-token` first, then
-`GESTALT_API_KEY`, then a stored CLI token when the stored credential's server
-base URL matches `--remote`. The token must include `permissions[].actions:
-["provider_dev.attach"]` for every attached plugin. Plain `gestalt auth login`
-credentials are not enough unless the stored API token was minted with that
-action. A stored credential for a different server URL, including a different
-path prefix on the same host, is not sent; the command exits with the stored
-credential's server and file path plus commands to pass an explicit token. Use
-`--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
+Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY`, then a
+stored CLI token when the stored credential's server base URL matches
+`--remote`. An API token used for direct attach must include
+`permissions[].actions: ["provider_dev.attach"]` for every attached plugin. A
+stored CLI token without that action is not enough for direct attach, so the CLI
+falls back to browser approval when available. A stored credential for a
+different server URL, including a different path prefix on the same host, is not
+sent; the browser approval flow is used instead. Use `--remote-token` or
+`GESTALT_API_KEY` for non-interactive automation.
 
 Remote attach creates an owner-scoped attachment. The server returns an
 `attachId` and a one-time dispatcher secret; the CLI uses both for local

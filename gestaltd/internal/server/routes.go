@@ -169,6 +169,7 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(60 * time.Second))
 		s.mountAuthRoutes(r)
+		s.mountProviderDevPublicRoutes(r)
 		s.mountAuthenticatedRoutes(r)
 	})
 }

@@ -6476,6 +6476,335 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 	}
 }
 
+func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t *testing.T) {
+	t.Parallel()
+
+	manager, err := providerdev.NewManager([]providerdev.Target{{
+		Name:   "roadmap",
+		Source: "github.com/acme/plugins/roadmap",
+		RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
+			return providerdev.RuntimeEnv{Env: map[string]string{"SESSION_ENV": "ok"}}, nil
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	auth := &coretesting.StubAuthProvider{
+		N: "test",
+		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+			if token == "owner-session" {
+				return &core.UserIdentity{Email: "owner@example.test"}, nil
+			}
+			return nil, principal.ErrInvalidToken
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.ProviderDevAttach = true
+		cfg.ProviderDevSessions = manager
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap": {
+				AuthorizationPolicy: "provider_devs",
+				ProviderDev: &config.ProviderEntryDevConfig{
+					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.SubjectPolicyDef{
+				"provider_devs": {Default: "allow"},
+			},
+		}, cfg.PluginDefs)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
+	if err != nil {
+		t.Fatalf("new attach authorization request: %v", err)
+	}
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := ts.Client().Do(createReq)
+	if err != nil {
+		t.Fatalf("create attach authorization: %v", err)
+	}
+	createBody, err := io.ReadAll(createResp.Body)
+	_ = createResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read attach authorization response: %v", err)
+	}
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create attach authorization status = %d, want 201; body = %s", createResp.StatusCode, createBody)
+	}
+	var authorization providerdev.CreateAttachAuthorizationResponse
+	if err := json.Unmarshal(createBody, &authorization); err != nil {
+		t.Fatalf("decode attach authorization response: %v", err)
+	}
+	if authorization.AuthorizationID == "" || authorization.ClientSecret == "" || authorization.VerificationCode == "" || authorization.ApprovalURL == "" {
+		t.Fatalf("attach authorization response missing fields: %s", createBody)
+	}
+
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	showReq, err := http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
+	if err != nil {
+		t.Fatalf("new show approval request: %v", err)
+	}
+	showResp, err := noRedirect.Do(showReq)
+	if err != nil {
+		t.Fatalf("show approval without browser session: %v", err)
+	}
+	_ = showResp.Body.Close()
+	if showResp.StatusCode != http.StatusFound {
+		t.Fatalf("show approval without browser session status = %d, want 302", showResp.StatusCode)
+	}
+	if location := showResp.Header.Get("Location"); !strings.HasPrefix(location, "/api/v1/auth/login?next=") {
+		t.Fatalf("show approval redirect = %q, want browser login", location)
+	}
+
+	bearerOnlyReq, err := http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
+	if err != nil {
+		t.Fatalf("new bearer-only approval request: %v", err)
+	}
+	bearerOnlyReq.Header.Set("Authorization", "Bearer owner-session")
+	bearerOnlyResp, err := noRedirect.Do(bearerOnlyReq)
+	if err != nil {
+		t.Fatalf("show approval with bearer only: %v", err)
+	}
+	_ = bearerOnlyResp.Body.Close()
+	if bearerOnlyResp.StatusCode != http.StatusFound {
+		t.Fatalf("show approval with bearer only status = %d, want 302", bearerOnlyResp.StatusCode)
+	}
+
+	showReq, err = http.NewRequest(http.MethodGet, authorization.ApprovalURL, nil)
+	if err != nil {
+		t.Fatalf("new authenticated approval request: %v", err)
+	}
+	showReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
+	showResp, err = ts.Client().Do(showReq)
+	if err != nil {
+		t.Fatalf("show approval with browser session: %v", err)
+	}
+	showBody, err := io.ReadAll(showResp.Body)
+	_ = showResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read approval page: %v", err)
+	}
+	if showResp.StatusCode != http.StatusOK {
+		t.Fatalf("show approval with browser session status = %d, want 200; body = %s", showResp.StatusCode, showBody)
+	}
+	if showResp.Header.Get("Cache-Control") != "no-store" || !strings.Contains(string(showBody), "roadmap") {
+		t.Fatalf("approval page missing no-store or provider name: headers=%v body=%s", showResp.Header, showBody)
+	}
+	wantAction := `action="./` + authorization.AuthorizationID + `/approve"`
+	if !strings.Contains(string(showBody), wantAction) {
+		t.Fatalf("approval page action = %s, want relative action %q", showBody, wantAction)
+	}
+	if strings.Contains(string(showBody), authorization.VerificationCode) {
+		t.Fatalf("approval page leaked verification code: %s", showBody)
+	}
+
+	wrongCode := "000-000"
+	if authorization.VerificationCode == wrongCode {
+		wrongCode = "111-111"
+	}
+	approveReq, err := http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {wrongCode}}.Encode()))
+	if err != nil {
+		t.Fatalf("new wrong-code approve request: %v", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
+	approveResp, err := ts.Client().Do(approveReq)
+	if err != nil {
+		t.Fatalf("approve attach authorization with wrong code: %v", err)
+	}
+	_ = approveResp.Body.Close()
+	if approveResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("wrong-code approve status = %d, want 403", approveResp.StatusCode)
+	}
+
+	approveReq, err = http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {authorization.VerificationCode}}.Encode()))
+	if err != nil {
+		t.Fatalf("new approve request: %v", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
+	approveResp, err = ts.Client().Do(approveReq)
+	if err != nil {
+		t.Fatalf("approve attach authorization: %v", err)
+	}
+	approveBody, err := io.ReadAll(approveResp.Body)
+	_ = approveResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read approve response: %v", err)
+	}
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200; body = %s", approveResp.StatusCode, approveBody)
+	}
+	if approveResp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("approve Cache-Control = %q, want no-store", approveResp.Header.Get("Cache-Control"))
+	}
+
+	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new poll request: %v", err)
+	}
+	pollResp, err := ts.Client().Do(pollReq)
+	if err != nil {
+		t.Fatalf("poll without authorization secret: %v", err)
+	}
+	_ = pollResp.Body.Close()
+	if pollResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("poll without authorization secret status = %d, want 401", pollResp.StatusCode)
+	}
+
+	pollReq, err = http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new authorized poll request: %v", err)
+	}
+	pollReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
+	pollResp, err = ts.Client().Do(pollReq)
+	if err != nil {
+		t.Fatalf("poll approval: %v", err)
+	}
+	pollBody, err := io.ReadAll(pollResp.Body)
+	_ = pollResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read poll response: %v", err)
+	}
+	if pollResp.StatusCode != http.StatusOK {
+		t.Fatalf("poll status = %d, want 200; body = %s", pollResp.StatusCode, pollBody)
+	}
+	var poll providerdev.PollAttachAuthorizationResponse
+	if err := json.Unmarshal(pollBody, &poll); err != nil {
+		t.Fatalf("decode poll response: %v", err)
+	}
+	if !poll.Approved || poll.AttachAuthorizationCode == "" {
+		t.Fatalf("poll response missing approval/code: %s", pollBody)
+	}
+
+	approveReq, err = http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {authorization.VerificationCode}}.Encode()))
+	if err != nil {
+		t.Fatalf("new second approve request: %v", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
+	approveResp, err = ts.Client().Do(approveReq)
+	if err != nil {
+		t.Fatalf("approve attach authorization again: %v", err)
+	}
+	_ = approveResp.Body.Close()
+	if approveResp.StatusCode != http.StatusOK {
+		t.Fatalf("second approve status = %d, want 200", approveResp.StatusCode)
+	}
+	pollReq, err = http.NewRequest(http.MethodGet, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("new second authorized poll request: %v", err)
+	}
+	pollReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
+	pollResp, err = ts.Client().Do(pollReq)
+	if err != nil {
+		t.Fatalf("poll approval after second approve: %v", err)
+	}
+	pollBody, err = io.ReadAll(pollResp.Body)
+	_ = pollResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read second poll response: %v", err)
+	}
+	var secondPoll providerdev.PollAttachAuthorizationResponse
+	if err := json.Unmarshal(pollBody, &secondPoll); err != nil {
+		t.Fatalf("decode second poll response: %v", err)
+	}
+	if secondPoll.AttachAuthorizationCode != poll.AttachAuthorizationCode {
+		t.Fatalf("approval code changed after idempotent approve: got %q want %q", secondPoll.AttachAuthorizationCode, poll.AttachAuthorizationCode)
+	}
+
+	sessionReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(fmt.Sprintf(`{"attachAuthorizationCode":%q,"providers":[{"name":"roadmap"}]}`, poll.AttachAuthorizationCode)))
+	if err != nil {
+		t.Fatalf("new authorized session request: %v", err)
+	}
+	sessionReq.Header.Set("Content-Type", "application/json")
+	sessionReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
+	sessionResp, err := ts.Client().Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create authorized session: %v", err)
+	}
+	sessionBody, err := io.ReadAll(sessionResp.Body)
+	_ = sessionResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read authorized session response: %v", err)
+	}
+	if sessionResp.StatusCode != http.StatusCreated {
+		t.Fatalf("authorized session status = %d, want 201; body = %s", sessionResp.StatusCode, sessionBody)
+	}
+	var session providerdev.CreateSessionResponse
+	if err := json.Unmarshal(sessionBody, &session); err != nil {
+		t.Fatalf("decode authorized session response: %v", err)
+	}
+	if session.AttachID == "" || session.DispatcherSecret == "" {
+		t.Fatalf("authorized session missing attachId/dispatcherSecret: %s", sessionBody)
+	}
+
+	deleteReq, err := http.NewRequest(http.MethodDelete, ts.URL+providerdev.PathAttachments+"/"+session.AttachID, nil)
+	if err != nil {
+		t.Fatalf("new dispatcher delete request: %v", err)
+	}
+	deleteReq.Header.Set(providerdev.HeaderDispatcherSecret, session.DispatcherSecret)
+	deleteResp, err := ts.Client().Do(deleteReq)
+	if err != nil {
+		t.Fatalf("delete by dispatcher secret: %v", err)
+	}
+	deleteBody, err := io.ReadAll(deleteResp.Body)
+	_ = deleteResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read delete response: %v", err)
+	}
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("delete by dispatcher secret status = %d, want 200; body = %s", deleteResp.StatusCode, deleteBody)
+	}
+}
+
+func TestProviderDevAttachAuthorizationApprovalURLPreservesPublicBasePath(t *testing.T) {
+	t.Parallel()
+
+	manager, err := providerdev.NewManager([]providerdev.Target{{Name: "roadmap"}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.PublicBaseURL = "https://gestalt.example.test/team-a"
+		cfg.ProviderDevAttach = true
+		cfg.ProviderDevSessions = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations, strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
+	if err != nil {
+		t.Fatalf("new attach authorization request: %v", err)
+	}
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := ts.Client().Do(createReq)
+	if err != nil {
+		t.Fatalf("create attach authorization: %v", err)
+	}
+	createBody, err := io.ReadAll(createResp.Body)
+	_ = createResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read attach authorization response: %v", err)
+	}
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create attach authorization status = %d, want 201; body = %s", createResp.StatusCode, createBody)
+	}
+	var authorization providerdev.CreateAttachAuthorizationResponse
+	if err := json.Unmarshal(createBody, &authorization); err != nil {
+		t.Fatalf("decode attach authorization response: %v", err)
+	}
+	if !strings.HasPrefix(authorization.ApprovalURL, "https://gestalt.example.test/team-a/api/v1/provider-dev/attach-authorizations/") {
+		t.Fatalf("approvalUrl = %q, want public base path preserved", authorization.ApprovalURL)
+	}
+}
+
 func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	t.Parallel()
 
