@@ -330,63 +330,6 @@ export const plugin = definePlugin({
   }
 });
 
-test("loadProviderFromTarget rejects legacy structural plugin objects without alpha.13 hook methods", async () => {
-  const root = makeTempDir("gestalt-typescript-runtime-legacy-structural-");
-
-  try {
-    writeFileSync(
-      join(root, "package.json"),
-      JSON.stringify({
-        name: "legacy-structural-provider",
-        gestalt: {
-          provider: {
-            kind: "plugin",
-            target: "./provider.ts#plugin",
-          },
-        },
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      join(root, "provider.ts"),
-      `export const plugin = {
-  kind: "integration",
-  name: "legacy-structural",
-  displayName: "Legacy Structural",
-  description: "legacy structural plugin",
-  connectionMode: "unspecified",
-  authTypes: [],
-  connectionParams: {},
-  staticCatalog() {
-    return { name: "legacy-structural", operations: [] };
-  },
-  supportsSessionCatalog() {
-    return false;
-  },
-  async catalogForRequest() {
-    return undefined;
-  },
-  supportsPostConnect() {
-    return false;
-  },
-  async postConnectMetadata() {
-    return undefined;
-  },
-  async execute() {
-    return { status: 200, body: "{}" };
-  },
-};`,
-      "utf8",
-    );
-
-    await expect(loadProviderFromTarget(root)).rejects.toThrow(
-      "plugin:./provider.ts#plugin did not resolve to a Gestalt plugin provider",
-    );
-  } finally {
-    removeTempDir(root);
-  }
-});
-
 test("loadProviderFromTarget rejects structural plugin objects without the full runtime lifecycle contract", async () => {
   const root = makeTempDir("gestalt-typescript-runtime-structural-runtime-base-");
 

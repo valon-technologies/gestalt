@@ -38,7 +38,10 @@ func (s *PluginInvokerServer) ExchangeInvocationToken(_ context.Context, req *pr
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	grants := decodePluginInvocationGrantProto(req.GetGrants())
+	grants, err := decodePluginInvocationGrantProto(req.GetGrants())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if len(grants) > 0 && !invocationGrantSubset(grants, s.allowed) {
 		return nil, status.Error(codes.PermissionDenied, "requested invocation grants exceed the plugin's declared invokes")
 	}

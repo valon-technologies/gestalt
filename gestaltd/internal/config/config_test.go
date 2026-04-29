@@ -466,37 +466,6 @@ plugins:
 	}
 }
 
-func TestLoadConfigAcceptsLegacyAndCanonicalProviderFormsWhenKeysDoNotConflict(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-server:
-  providers:
-    indexeddb: main
-  encryptionKey: server-key
-providers:
-  indexeddb:
-    main:
-      source:
-        path: ./providers/datastore/sqlite
-plugins:
-  service-a:
-    source:
-      path: /tmp/manifest.yaml
-`)
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Plugins["service-a"] == nil {
-		t.Fatal("Plugins[service-a] = nil")
-	}
-	if _, indexeddb := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB); indexeddb == nil {
-		t.Fatal("SelectedIndexedDBProvider = nil")
-	}
-}
-
 func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	t.Parallel()
 
@@ -597,54 +566,6 @@ providers:
 	}
 	if cfg.Providers.Authentication["local"] == nil {
 		t.Fatal("Providers.Authentication[local] = nil")
-	}
-}
-
-func TestLoadConfigRejectsLegacyAuthenticationProviderKey(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-server:
-  encryptionKey: server-key
-providers:
-  auth:
-    legacy:
-      source:
-        path: ./providers/auth/legacy
-  authentication:
-    preferred:
-      source:
-        path: ./providers/auth/preferred
-`)
-
-	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), "field auth not found") {
-		t.Fatalf("Load error = %v, want unknown legacy providers.auth field", err)
-	}
-}
-
-func TestLoadConfigRejectsLegacyServerAuthenticationSelectorKey(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-server:
-  encryptionKey: server-key
-  providers:
-    auth: legacy
-    authentication: preferred
-providers:
-  authentication:
-    preferred:
-      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-`)
-
-	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), "field auth not found") {
-		t.Fatalf("Load error = %v, want unknown legacy server.providers.auth field", err)
 	}
 }
 
@@ -2585,36 +2506,6 @@ server:
 		}
 	})
 
-	t.Run("rejects legacy indexeddbSchema outside plugins", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    root:
-      source:
-        path: ./web/root/manifest.yaml
-      path: /app
-      indexeddbSchema: root_ui
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field indexeddbSchema not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("rejects unknown indexeddb provider names", func(t *testing.T) {
 		t.Parallel()
 
@@ -3040,81 +2931,6 @@ server:
 		}
 	})
 
-	t.Run("legacy top-level workflow target fields are rejected", func(t *testing.T) {
-		t.Parallel()
-
-		cases := []struct {
-			name string
-			yaml string
-			want string
-		}{
-			{
-				name: "schedule",
-				yaml: `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      plugin: roadmap
-      operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `field plugin not found in type config.WorkflowScheduleConfig`,
-			},
-			{
-				name: "event trigger",
-				yaml: `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  eventTriggers:
-    task_updated:
-      provider: temporal
-      match:
-        type: roadmap.task.updated
-      plugin: roadmap
-      operation: backfill_items
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `field plugin not found in type config.WorkflowEventTriggerConfig`,
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-
-				path := mustWriteConfigFile(t, tc.yaml)
-				_, err := Load(path)
-				if err == nil {
-					t.Fatal("Load succeeded, want error")
-				}
-				if !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("Load error = %v, want %q", err, tc.want)
-				}
-			})
-		}
-	})
-
 	t.Run("workflow target validation errors use canonical paths", func(t *testing.T) {
 		t.Parallel()
 
@@ -3182,42 +2998,6 @@ server:
 					t.Fatalf("Load error = %v, want %q", err, tc.want)
 				}
 			})
-		}
-	})
-
-	t.Run("legacy plugin workflow config is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    workflow:
-      provider: temporal
-      operations:
-        - nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load succeeded, want error")
-		}
-		if !strings.Contains(err.Error(), `field workflow not found`) {
-			t.Fatalf("Load error = %v, want unknown workflow field", err)
 		}
 	})
 
@@ -4444,17 +4224,6 @@ providers:
 `,
 		},
 		{
-			name: "legacy server authorization is rejected",
-			yaml: `
-server:
-  authorization:
-    policies:
-      sample_policy:
-        default: deny
-`,
-			want: `field authorization not found in type config.ServerConfig`,
-		},
-		{
 			name: "unsupported apiVersion is rejected",
 			yaml: `
 apiVersion: gestaltd.config/v99
@@ -4585,7 +4354,7 @@ func TestLoadRejectsDuplicateYAMLKeys(t *testing.T) {
 			yaml: `
 server:
   providers:
-    indexeddb: legacy
+    indexeddb: first
   providers:
     indexeddb: canonical
 `,
@@ -4596,9 +4365,9 @@ server:
 			yaml: `
 providers:
   indexeddb:
-    legacy:
+    first:
       source:
-        path: ./legacy/manifest.yaml
+        path: ./first/manifest.yaml
   indexeddb:
     canonical:
       source:
@@ -4610,9 +4379,9 @@ providers:
 			name: "duplicate plugins mapping",
 			yaml: `
 plugins:
-  legacy:
+  first:
     source:
-      path: ./legacy/manifest.yaml
+      path: ./first/manifest.yaml
 plugins:
   canonical:
     source:

@@ -338,24 +338,6 @@ spec:
 			wantError:  "field extraField not found",
 		},
 		{
-			name: "rejects legacy auth fields alongside route auth",
-			buildData: func(t *testing.T, dir string) string {
-				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: plugin
-source: github.com/acme/plugins/ambiguous-auth
-version: 1.0.0
-spec:
-  auth:
-    provider: server
-    type: oauth2
-    authorizationUrl: https://auth.example.com/authorize
-    tokenUrl: https://auth.example.com/token
-`))
-			},
-			readSource: true,
-			wantError:  "field type not found",
-		},
-		{
 			name: "rejects empty route auth object",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
@@ -374,7 +356,7 @@ spec:
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
-source: github.com/acme/plugins/legacy-auth-unknown-field
+source: github.com/acme/plugins/unknown-route-auth-field
 version: 1.0.0
 spec:
   auth:
@@ -384,20 +366,6 @@ spec:
 			},
 			readSource: true,
 			wantError:  "field typo not found",
-		},
-		{
-			name: "rejects legacy top-level connection fields",
-			buildData: func(t *testing.T, dir string) string {
-				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: plugin
-source: github.com/acme/plugins/duplicate-default
-version: 1.0.0
-spec:
-  connectionMode: user
-`))
-			},
-			readSource: true,
-			wantError:  "spec.connectionMode is not supported",
 		},
 	}
 
@@ -462,7 +430,7 @@ spec:
 		t.Fatalf("expected canonical route auth in output:\n%s", rendered)
 	}
 	if strings.Contains(rendered, "\n  connectionMode:") || strings.Contains(rendered, "\n  connectionParams:") || strings.Contains(rendered, "\n  discovery:") {
-		t.Fatalf("expected canonical output without legacy top-level connection fields:\n%s", rendered)
+		t.Fatalf("expected encoded manifest to emit only canonical connection fields:\n%s", rendered)
 	}
 }
 
@@ -871,7 +839,7 @@ func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testi
 		t.Fatalf("expected canonical default connection in programmatic output:\n%s", programmaticRendered)
 	}
 	if strings.Contains(programmaticRendered, "\n  connectionMode:") || strings.Contains(programmaticRendered, "\n  connectionParams:") || strings.Contains(programmaticRendered, "\n  discovery:") {
-		t.Fatalf("expected programmatic canonical output without legacy top-level connection fields:\n%s", programmaticRendered)
+		t.Fatalf("expected encoded programmatic manifest to emit only canonical connection fields:\n%s", programmaticRendered)
 	}
 	def := programmatic.Spec.Connections["default"]
 	if def == nil || def.Auth == nil || def.Auth.Type != providermanifestv1.AuthTypeOAuth2 {

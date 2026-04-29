@@ -5,9 +5,13 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) {
@@ -110,6 +114,49 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 	}
 }
 
+func TestPluginInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewInvocationTokenManager([]byte("invocation-token-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+
+	now := time.Date(2026, time.April, 21, 12, 0, 0, 0, time.UTC)
+	manager.now = func() time.Time { return now }
+
+	ctx := principal.WithPrincipal(
+		context.Background(),
+		&principal.Principal{
+			SubjectID: "user:test-user",
+			UserID:    "test-user",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+		},
+	)
+	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+		"example": {AllOperations: true},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	server := NewPluginInvokerServer("caller", []config.PluginInvocationDependency{{
+		Plugin:    "example",
+		Operation: "request_context",
+	}}, nil, manager)
+	_, err = server.ExchangeInvocationToken(context.Background(), &proto.ExchangeInvocationTokenRequest{
+		ParentInvocationToken: rootToken,
+		Grants: []*proto.PluginInvocationGrant{{
+			Plugin: "example",
+		}},
+		TtlSeconds: 60,
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("ExchangeInvocationToken error = %v, want InvalidArgument", err)
+	}
+}
+
 func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 	t.Parallel()
 
@@ -170,5 +217,17 @@ func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testi
 	}
 	if got := slackGrant.Operations["chat.postMessage"]; got != core.ConnectionModeUser {
 		t.Fatalf("chat.postMessage mode = %q, want %q", got, core.ConnectionModeUser)
+	}
+}
+
+func TestDecodeInvocationGrantClaimsRequiresGrantScope(t *testing.T) {
+	t.Parallel()
+
+	grants := decodeInvocationGrantClaims(map[string]invocationGrantClaims{
+		"slack": {},
+	})
+
+	if allowsOperation(grants, "slack", "chat.postMessage") {
+		t.Fatal("empty grant claims should not grant wildcard operation access")
 	}
 }

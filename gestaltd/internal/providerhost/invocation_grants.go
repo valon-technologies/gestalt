@@ -1,6 +1,7 @@
 package providerhost
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -60,9 +61,9 @@ func InvocationDependencyGrants(deps []config.PluginInvocationDependency) Invoca
 	return grants
 }
 
-func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) invocationGrants {
+func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) (invocationGrants, error) {
 	if len(grants) == 0 {
-		return nil
+		return nil, nil
 	}
 	decoded := make(invocationGrants, len(grants))
 	for _, grant := range grants {
@@ -71,9 +72,10 @@ func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) inv
 		}
 		plugin := strings.TrimSpace(grant.GetPlugin())
 		if plugin == "" {
-			continue
+			return nil, fmt.Errorf("invocation grant plugin is required")
 		}
 		decodedGrant := decoded[plugin]
+		entryHasAccess := grant.GetAllOperations()
 		if grant.GetAllOperations() {
 			decodedGrant.AllOperations = true
 		}
@@ -86,6 +88,7 @@ func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) inv
 				decodedGrant.Operations = make(map[string]core.ConnectionMode)
 			}
 			decodedGrant.Operations[operation] = ""
+			entryHasAccess = true
 		}
 		for _, surface := range grant.GetSurfaces() {
 			surface = strings.ToLower(strings.TrimSpace(surface))
@@ -96,18 +99,17 @@ func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) inv
 				decodedGrant.Surfaces = make(map[string]struct{})
 			}
 			decodedGrant.Surfaces[surface] = struct{}{}
+			entryHasAccess = true
 		}
-		if !decodedGrant.AllOperations && len(decodedGrant.Operations) == 0 && len(decodedGrant.Surfaces) == 0 {
-			// Preserve existing behavior for older clients that represented
-			// wildcard grants as a plugin entry with no explicit operations.
-			decodedGrant.AllOperations = true
+		if !entryHasAccess {
+			return nil, fmt.Errorf("invocation grant for plugin %q must set all_operations, operations, or surfaces", plugin)
 		}
 		decoded[plugin] = decodedGrant
 	}
 	if len(decoded) == 0 {
-		return nil
+		return nil, nil
 	}
-	return decoded
+	return decoded, nil
 }
 
 func cloneInvocationGrants(src invocationGrants) invocationGrants {
@@ -158,6 +160,10 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) invocatio
 	}
 	out := make(invocationGrants, len(src))
 	for plugin, grant := range src {
+		plugin = strings.TrimSpace(plugin)
+		if plugin == "" {
+			continue
+		}
 		decoded := invocationGrant{
 			AllOperations: grant.AllOperations,
 		}
@@ -192,9 +198,12 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) invocatio
 			decoded.Surfaces[surface] = struct{}{}
 		}
 		if !decoded.AllOperations && len(decoded.Operations) == 0 && len(decoded.Surfaces) == 0 {
-			decoded.AllOperations = true
+			continue
 		}
 		out[plugin] = decoded
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

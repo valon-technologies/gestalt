@@ -2231,12 +2231,12 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 			t.Fatalf("expected released manifest to contain canonical field %q, got: %s", expected, manifestData)
 		}
 	}
-	for _, legacy := range []string{
+	for _, unsupported := range []string{
 		"connectionMode:",
 		"connectionParams:",
 	} {
-		if strings.Contains(string(manifestData), legacy) {
-			t.Fatalf("expected released manifest to omit legacy field %q, got: %s", legacy, manifestData)
+		if strings.Contains(string(manifestData), unsupported) {
+			t.Fatalf("expected released manifest to emit only canonical connection fields; found %q in: %s", unsupported, manifestData)
 		}
 	}
 }

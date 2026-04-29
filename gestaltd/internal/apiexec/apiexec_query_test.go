@@ -174,7 +174,7 @@ func TestDo_QueryParamsNil_DefaultPOSTBehavior(t *testing.T) {
 	}
 
 	if resp["query"] != "" {
-		t.Fatalf("query = %q, want empty (legacy POST should have no query string)", resp["query"])
+		t.Fatalf("query = %q, want empty POST query string", resp["query"])
 	}
 
 	body := resp["body"].(map[string]any)
@@ -217,7 +217,7 @@ func TestExpandedPathWithQuery(t *testing.T) {
 			wantQuery:   url.Values{"page": {"1"}, "limit": {"10"}},
 		},
 		{
-			name:       "nil query params delegates to legacy",
+			name:       "nil query params uses path params",
 			method:     http.MethodGet,
 			path:       "/items",
 			params:     map[string]any{"limit": 5},

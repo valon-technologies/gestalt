@@ -4969,65 +4969,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	}
 }
 
-func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExecutionRef(t *testing.T) {
-	t.Parallel()
-
-	db := &coretesting.StubIndexedDB{}
-	provider := &recordingWorkflowProvider{}
-	factories := validFactories()
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	_ = result.Close(context.Background())
-
-	provider.omitScheduleExecutionRef = true
-	cfg = workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap remove schedule: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked execution ref: %v", err)
-	}
-	if ref.RevokedAt != nil {
-		t.Fatalf("revokedAt = %#v, want nil when provider omits execution_ref", ref.RevokedAt)
-	}
-}
-
-func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing.T) {
+func TestBootstrapIgnoresMissingPreviousScheduleDuringWorkflowProviderMove(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
@@ -5093,6 +5035,64 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	}
 	if len(temporal.deletedSchedules) != 0 {
 		t.Fatalf("temporal deleted schedules = %d, want 0", len(temporal.deletedSchedules))
+	}
+}
+
+func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	_ = result.Close(context.Background())
+
+	provider.omitScheduleExecutionRef = true
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove schedule: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get revoked execution ref: %v", err)
+	}
+	if ref.RevokedAt != nil {
+		t.Fatalf("revokedAt = %#v, want nil when provider omits execution_ref", ref.RevokedAt)
 	}
 }
 
@@ -5639,7 +5639,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 	}
 }
 
-func TestBootstrapIgnoresMissingOldEventTriggerDuringWorkflowProviderMove(t *testing.T) {
+func TestBootstrapIgnoresMissingPreviousEventTriggerDuringWorkflowProviderMove(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}

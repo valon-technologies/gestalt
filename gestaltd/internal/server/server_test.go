@@ -1939,7 +1939,7 @@ func TestMountedUIRoutes_HumanAuthorization(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1965,7 +1965,7 @@ func TestMountedUIRoutes_HumanAuthorization(t *testing.T) {
 			},
 		}
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
@@ -2068,7 +2068,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -2112,7 +2112,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 			},
 		}
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {
 				AuthorizationPolicy: "sample_policy",
@@ -2215,7 +2215,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 	}
 
 	svc := coretesting.NewStubServices(t)
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
@@ -2243,7 +2243,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 			},
 		}
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
@@ -2321,7 +2321,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	adminUser := seedUser(t, svc, "admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -2337,7 +2337,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_portal", "viewer@example.test", "viewer")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2431,7 +2431,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 	}
 
 	svc := coretesting.NewStubServices(t)
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
@@ -2457,7 +2457,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 			},
 		}
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
@@ -2508,7 +2508,7 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -2521,7 +2521,7 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	}, nil)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2648,7 +2648,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -2661,7 +2661,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	}, nil)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2770,7 +2770,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	auth := &stubHostIssuedSessionAuth{secret: secret}
 	svc := coretesting.NewStubServices(t)
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -2799,7 +2799,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 		cfg.Auth = auth
 		cfg.StateSecret = secret
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.PublicBaseURL = publicURL
 		cfg.ManagementBaseURL = managementURL
 		cfg.RouteProfile = server.RouteProfilePublic
@@ -2827,7 +2827,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 		cfg.Auth = auth
 		cfg.StateSecret = secret
 		cfg.Services = svc
-		cfg.Authorizer = legacy
+		cfg.Authorizer = baseAuthz
 		cfg.PublicBaseURL = publicURL
 		cfg.ManagementBaseURL = managementURL
 		cfg.RouteProfile = server.RouteProfileManagement
@@ -3172,7 +3172,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -3188,7 +3188,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	})
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -3706,7 +3706,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -3721,7 +3721,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	})
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -3871,7 +3871,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -3888,7 +3888,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -4089,7 +4089,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -4105,7 +4105,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4152,7 +4152,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "legacy-raw-subject"},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "raw-subject"},
 		Relation: "viewer",
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
 	})
@@ -4272,7 +4272,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -4288,7 +4288,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -4328,7 +4328,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -4340,7 +4340,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}, nil)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4527,7 +4527,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -4538,7 +4538,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4603,7 +4603,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	}
 }
 
-func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testing.T) {
+func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	t.Run("plugin members", func(t *testing.T) {
@@ -4611,7 +4611,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 
 		svc := coretesting.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"sample_policy": {
 					Default: "deny",
@@ -4627,7 +4627,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, provider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -4677,7 +4677,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		svc := coretesting.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		seedUser(t, svc, "static-admin@example.test")
-		legacy := mustAuthorizer(t, config.AuthorizationConfig{
+		baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"admin_policy": {
 					Default: "deny",
@@ -4688,7 +4688,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 			},
 		}, nil)
 
-		authz := mustProviderBackedAuthorizer(t, legacy, provider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -4738,7 +4738,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 	seedUser(t, svc, "viewer@example.test")
 	const adminRole = "ops-admin"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -4749,7 +4749,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5020,7 +5020,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -5031,7 +5031,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	provider.writeErr = fmt.Errorf("provider write failed")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -5068,7 +5068,7 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
@@ -5079,7 +5079,7 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 		},
 	}, nil)
 
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	provider.writeErr = fmt.Errorf("provider write failed")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -6386,9 +6386,9 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 	}
 
 	for name, token := range map[string]string{
-		"legacy broad token": broadToken,
-		"invoke permission":  invokeToken,
-		"subject token":      subjectToken,
+		"broad token":       broadToken,
+		"invoke permission": invokeToken,
+		"subject token":     subjectToken,
 	} {
 		status, body := create(t, token)
 		if status != http.StatusForbidden {
@@ -7095,7 +7095,7 @@ func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("Authorization", "Bearer unprefixed-legacy-token")
+	req.Header.Set("Authorization", "Bearer unprefixed-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9104,11 +9104,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "", Instance: "default", AccessToken: "test-token",
@@ -9187,11 +9187,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "workspace", Instance: "team-a", AccessToken: "test-token-a",
@@ -9272,11 +9272,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "", Instance: "default", AccessToken: "test-token",
@@ -9746,26 +9746,26 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("legacy override list request: %v", err)
+		t.Fatalf("query override list request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("legacy override list: expected 200, got %d: %s", resp.StatusCode, respBody)
+		t.Fatalf("query override list: expected 200, got %d: %s", resp.StatusCode, respBody)
 	}
 	ops = nil
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
-		t.Fatalf("decoding legacy override response: %v", err)
+		t.Fatalf("decoding query override response: %v", err)
 	}
 	if len(ops) != 2 {
-		t.Fatalf("expected 2 legacy override operations, got %d", len(ops))
+		t.Fatalf("expected 2 query override operations, got %d", len(ops))
 	}
 	if ops[0]["id"] != "alpha_rest" {
-		t.Fatalf("expected first id 'alpha_rest' for legacy override, got %v", ops[0]["id"])
+		t.Fatalf("expected first id 'alpha_rest' for query override, got %v", ops[0]["id"])
 	}
 	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest' for legacy override, got %v", ops[1]["id"])
+		t.Fatalf("expected second id 'zeta_rest' for query override, got %v", ops[1]["id"])
 	}
 }
 
@@ -10126,7 +10126,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	pluginDefs := map[string]*config.ProviderEntry{
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -10136,7 +10136,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 		t.Fatalf("authorization.New: %v", err)
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderPluginAuthorization(t, svc, authz, provider, "test-int", "viewer-user@test.local", "viewer")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -11815,7 +11815,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	pluginDefs := map[string]*config.ProviderEntry{
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
-	legacy, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -11825,7 +11825,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		t.Fatalf("authorization.New: %v", err)
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "viewer-user@test.local", "viewer")
 
 	var auditBuf bytes.Buffer
@@ -13456,11 +13456,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
@@ -13660,11 +13660,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
 			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
@@ -13868,11 +13868,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
@@ -17444,11 +17444,11 @@ func TestConnectManual(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
 				stubManualProvider: stubManualProvider{
@@ -17539,11 +17539,11 @@ func TestConnectManual(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := mustProviderBackedAuthorizer(t, legacy, authzProvider)
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
 				stubManualProvider: stubManualProvider{
@@ -20905,54 +20905,6 @@ func TestServerAllowsProviderNamedIdentities(t *testing.T) {
 	if missingResp.StatusCode != http.StatusNotFound {
 		body, _ := io.ReadAll(missingResp.Body)
 		t.Fatalf("GET identities/missing status = %d, want %d: %s", missingResp.StatusCode, http.StatusNotFound, body)
-	}
-}
-
-func TestLegacyManagedIdentityRoutesAreRemoved(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	seedUser(t, svc, "admin@example.test")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("unknown session %q", token)
-				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	for _, tc := range []struct {
-		method string
-		path   string
-		body   string
-	}{
-		{method: http.MethodGet, path: "/api/v1/identities"},
-		{method: http.MethodPost, path: "/api/v1/identities", body: `{"displayName":"Legacy"}`},
-		{method: http.MethodGet, path: "/api/v1/identities/legacy-id/members"},
-		{method: http.MethodPost, path: "/api/v1/identities/legacy-id/tokens", body: `{}`},
-		{method: http.MethodPost, path: "/api/v1/identities/legacy-id/auth/start-oauth", body: `{}`},
-	} {
-		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, bytes.NewBufferString(tc.body))
-		if tc.body != "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusNotFound {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("%s %s status = %d, want %d: %s", tc.method, tc.path, resp.StatusCode, http.StatusNotFound, body)
-		}
 	}
 }
 

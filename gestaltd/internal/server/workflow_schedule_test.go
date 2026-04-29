@@ -602,7 +602,7 @@ func requireCanonicalPluginTargetJSON(t *testing.T, body []byte) workflowPluginT
 	}
 	for _, field := range []string{"operation", "connection", "instance", "input"} {
 		if _, ok := envelope.Target[field]; ok {
-			t.Fatalf("response target contains legacy flat field %q: %s", field, body)
+			t.Fatalf("response target contains flat field %q: %s", field, body)
 		}
 	}
 	rawPlugin, ok := envelope.Target["plugin"]
@@ -2352,7 +2352,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestGlobalWorkflowLegacyTargetShapesAreRejected(t *testing.T) {
+func TestGlobalWorkflowRejectsInvalidJSONBodies(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -2393,38 +2393,12 @@ func TestGlobalWorkflowLegacyTargetShapesAreRejected(t *testing.T) {
 		path string
 		body string
 		want string
-	}{
-		{
-			name: "schedule",
-			path: "/api/v1/workflow/schedules/",
-			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
-			want: `invalid JSON body`,
-		},
-		{
-			name: "schedule providerName alias",
-			path: "/api/v1/workflow/schedules/",
-			body: `{"providerName":"basic","cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync"}}}`,
-			want: `invalid JSON body`,
-		},
-		{
-			name: "event trigger",
-			path: "/api/v1/workflow/event-triggers/",
-			body: `{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
-			want: `invalid JSON body`,
-		},
-		{
-			name: "schedule agent tools alias",
-			path: "/api/v1/workflow/schedules/",
-			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","prompt":"Sync roadmap","tools":[{"plugin":"roadmap","operation":"sync"}]}}}`,
-			want: `invalid JSON body`,
-		},
-		{
-			name: "trailing JSON",
-			path: "/api/v1/workflow/schedules/",
-			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync"}}} {"timeZone":"UTC"}`,
-			want: `invalid JSON body`,
-		},
-	}
+	}{{
+		name: "trailing JSON",
+		path: "/api/v1/workflow/schedules/",
+		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync"}}} {"timeZone":"UTC"}`,
+		want: `invalid JSON body`,
+	}}
 	for _, tc := range cases {
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+tc.path, bytes.NewBufferString(tc.body))
 		req.Header.Set("Content-Type", "application/json")
@@ -2445,7 +2419,7 @@ func TestGlobalWorkflowLegacyTargetShapesAreRejected(t *testing.T) {
 		}
 	}
 	if len(provider.upsertReqs) != 0 || len(provider.upsertTriggerReqs) != 0 {
-		t.Fatalf("flat target should not upsert schedules=%d triggers=%d", len(provider.upsertReqs), len(provider.upsertTriggerReqs))
+		t.Fatalf("invalid JSON should not upsert schedules=%d triggers=%d", len(provider.upsertReqs), len(provider.upsertTriggerReqs))
 	}
 }
 

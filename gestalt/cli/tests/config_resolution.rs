@@ -44,30 +44,6 @@ fn test_cli_ignores_blank_stored_credentials_api_url() {
 }
 
 #[test]
-fn test_cli_accepts_legacy_credentials_without_api_url_when_url_is_provided() {
-    let mut server = Server::new();
-    let _tokens = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
-        .with_body("[]")
-        .create();
-
-    let home = tempfile::tempdir().unwrap();
-    write_cli_credentials(
-        home.path(),
-        &format!(
-            r#"{{"api_token":"{}","api_token_id":"tok-123"}}"#,
-            TEST_TOKEN
-        ),
-    );
-
-    cli_command(home.path())
-        .arg("--url")
-        .arg(server.url())
-        .args(["tokens", "list"])
-        .assert()
-        .success();
-}
-
-#[test]
 fn test_bare_command_shows_server_footer() {
     let home = tempfile::tempdir().unwrap();
 
@@ -156,7 +132,7 @@ fn test_resolve_url_does_not_read_unsupported_dot_gestalt_json_file() {
     std::fs::create_dir_all(&nested).unwrap();
     std::fs::write(
         repo_root.join(".gestalt.json"),
-        "{\n  \"url\": \"https://legacy.example.com\"\n}\n",
+        "{\n  \"url\": \"https://unsupported.example.com\"\n}\n",
     )
     .unwrap();
 
