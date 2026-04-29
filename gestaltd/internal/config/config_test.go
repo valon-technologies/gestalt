@@ -134,6 +134,77 @@ plugins:
 	}
 }
 
+func TestLoadConfigValidatesProviderDevAttachmentState(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{
+			name: "remote attach requires explicit process local state",
+			yaml: `
+server:
+  providerDev:
+    remoteAttach: true
+`,
+			wantErr: `server.providerDev.remoteAttach requires server.providerDev.attachmentState: "processLocal"`,
+		},
+		{
+			name: "unsupported attachment state",
+			yaml: `
+server:
+  providerDev:
+    remoteAttach: true
+    attachmentState: sharedRelay
+`,
+			wantErr: `server.providerDev.attachmentState "sharedRelay" is not supported`,
+		},
+		{
+			name: "attachment state requires remote attach",
+			yaml: `
+server:
+  providerDev:
+    attachmentState: processLocal
+`,
+			wantErr: `server.providerDev.attachmentState requires server.providerDev.remoteAttach`,
+		},
+		{
+			name: "process local remote attach",
+			yaml: `
+server:
+  providerDev:
+    remoteAttach: true
+    attachmentState: processLocal
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			cfg, err := Load(path)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatal("Load: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("Load error = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got := cfg.Server.ProviderDev.AttachmentState; got != ProviderDevAttachmentStateProcessLocal {
+				t.Fatalf("providerDev.attachmentState = %q, want %q", got, ProviderDevAttachmentStateProcessLocal)
+			}
+		})
+	}
+}
+
 func TestLoadConfigParsesPluginHTTPSecuritySchemesAndBindings(t *testing.T) {
 	t.Parallel()
 

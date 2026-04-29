@@ -166,6 +166,8 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `providerDev.remoteAttach` | `false` | Enables private remote provider-dev attach routes. Requires `providerDev.attachmentState: processLocal`. |
+| `providerDev.attachmentState` | | Required when `providerDev.remoteAttach` is true. Use `processLocal` to acknowledge that remote attach v1 stores attachment state in this `gestaltd` process and therefore requires single-replica operation or sticky routing for provider-dev traffic. |
 | `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
@@ -1081,6 +1083,7 @@ on shared remotes:
 server:
   providerDev:
     remoteAttach: true
+    attachmentState: processLocal
 
 authorization:
   policies:
@@ -1107,10 +1110,11 @@ environment, host-service env, plugin config, access tokens, or browser binding
 URLs.
 
 Remote attach v1 stores attachments in the `gestaltd` process that accepted the
-create request. For load-balanced deployments, treat single-replica operation or
-sticky routing for attach creation, poll/complete traffic, provider invocations,
-and provider-owned UI requests as a hard prerequisite before enabling
-`remoteAttach`.
+create request. `attachmentState: processLocal` is required as an explicit
+operator acknowledgement of that model. For load-balanced deployments, treat
+single-replica operation or sticky routing for attach creation, poll/complete
+traffic, provider invocations, and provider-owned UI requests as a hard
+prerequisite before enabling `remoteAttach`.
 
 Interactive attach creation uses a short-lived browser approval page plus a
 verification code shown in the initiating terminal. The approving browser

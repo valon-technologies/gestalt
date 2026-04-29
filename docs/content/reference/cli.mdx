@@ -76,12 +76,14 @@ keeps its existing config-relative behavior for backward compatibility.
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session.
-The remote server must opt in with `server.providerDev.remoteAttach: true`;
-otherwise the command fails before local code is attached.
-Remote attach v1 is also process-local: only enable it on a single-replica
-server or behind sticky routing that keeps attach creation, CLI poll/complete
-traffic, provider invocations, and provider-owned UI requests for the same
-authenticated owner on the same `gestaltd` process.
+The remote server must opt in with `server.providerDev.remoteAttach: true` and
+`server.providerDev.attachmentState: processLocal`; otherwise the command fails
+before local code is attached. `attachmentState: processLocal` acknowledges that
+remote attach v1 stores attachments in the `gestaltd` process that accepted the
+create request. Only enable it on a single-replica server or behind sticky
+routing that keeps attach creation, CLI poll/complete traffic, provider
+invocations, and provider-owned UI requests for the same authenticated owner on
+the same `gestaltd` process.
 For the interactive happy path, `provider dev --remote` creates a short-lived
 attach approval request and opens the remote server in your browser. Approving
 that page with your normal browser session creates an owner-scoped attachment
