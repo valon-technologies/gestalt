@@ -652,6 +652,8 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 
 	bin := buildAgentProviderBinary(t)
 	runtimeProvider := newCapturingPluginRuntime()
+	var drainMu sync.Mutex
+	var firstDrainAt time.Time
 	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
 		startedAt := time.Now().UTC()
 		expiresAt := startedAt.Add(time.Hour)
@@ -660,8 +662,11 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 			ExpiresAt: &expiresAt,
 		}
 		if index == 1 {
-			recommendedDrainAt := startedAt.Add(75 * time.Millisecond)
+			recommendedDrainAt := startedAt.Add(500 * time.Millisecond)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+			drainMu.Lock()
+			firstDrainAt = recommendedDrainAt
+			drainMu.Unlock()
 		}
 		return lifecycle
 	}
@@ -670,6 +675,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		return runtimeProvider, nil
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.Pool.MaxReadyInstances = 2
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
 	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
 	cfg := &config.Config{
@@ -717,6 +723,19 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		ready := pool.readyBackends()
 		return len(runtimeProvider.startSessionRequests()) >= 2 && len(ready) == 1 && ready[0] != first
 	})
+	startTimes := runtimeProvider.startSessionTimes()
+	if len(startTimes) < 2 {
+		t.Fatalf("start session times = %d, want at least 2", len(startTimes))
+	}
+	drainMu.Lock()
+	drainAt := firstDrainAt
+	drainMu.Unlock()
+	if drainAt.IsZero() {
+		t.Fatal("first runtime drain deadline was not captured")
+	}
+	if !startTimes[1].Before(drainAt) {
+		t.Fatalf("replacement started at %s, want before first runtime drain deadline %s", startTimes[1].Format(time.RFC3339Nano), drainAt.Format(time.RFC3339Nano))
+	}
 	pool.mu.Lock()
 	firstRetired := first.draining || first.closed
 	pool.mu.Unlock()
@@ -732,6 +751,202 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	}
 	if session == nil || session.ID != "session-after-runtime-drain" {
 		t.Fatalf("CreateSession(after runtime drain) = %#v, want session-after-runtime-drain", session)
+	}
+}
+
+//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
+func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartFails(t *testing.T) {
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+		startedAt := time.Now().UTC()
+		expiresAt := startedAt.Add(time.Hour)
+		lifecycle := &pluginruntime.SessionLifecycle{
+			StartedAt: &startedAt,
+			ExpiresAt: &expiresAt,
+		}
+		if index == 1 {
+			recommendedDrainAt := startedAt.Add(3 * time.Second)
+			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+		}
+		return lifecycle
+	}
+	runtimeProvider.startErrForSession = func(index int) error {
+		if index > 1 {
+			return errors.New("replacement start failed")
+		}
+		return nil
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.Pool.MaxReadyInstances = 2
+	runtimeConfig.Pool.StartupTimeout = "5s"
+	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	backends := pool.readyBackends()
+	if len(backends) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(backends))
+	}
+	first := backends[0]
+	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+		return len(runtimeProvider.startSessionRequests()) >= 2 && !first.replacing
+	})
+	pool.mu.Lock()
+	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, time.Now().UTC())
+	firstDraining := first.draining
+	pool.mu.Unlock()
+	if !acceptsNewWork || firstDraining {
+		t.Fatalf("first backend acceptsNewWork=%v draining=%v, want serving after failed proactive replacement", acceptsNewWork, firstDraining)
+	}
+	session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "session-after-failed-proactive-replacement",
+		Model:     "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(after failed proactive replacement): %v", err)
+	}
+	if session == nil || session.ID != "session-after-failed-proactive-replacement" {
+		t.Fatalf("CreateSession(after failed proactive replacement) = %#v, want session", session)
+	}
+	if backend := pool.sessionBackend("session-after-failed-proactive-replacement"); backend != first {
+		t.Fatalf("session backend = %#v, want first backend after failed proactive replacement", backend)
+	}
+}
+
+//nolint:paralleltest // Uses short lifecycle timing assertions that are flaky under parallel package load.
+func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *testing.T) {
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	releaseReplacement := make(chan struct{})
+	replacementStarted := make(chan struct{})
+	var replacementStartedOnce sync.Once
+	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+		startedAt := time.Now().UTC()
+		expiresAt := startedAt.Add(time.Hour)
+		lifecycle := &pluginruntime.SessionLifecycle{
+			StartedAt: &startedAt,
+			ExpiresAt: &expiresAt,
+		}
+		if index <= 2 {
+			recommendedDrainAt := startedAt.Add(500 * time.Millisecond)
+			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+		}
+		return lifecycle
+	}
+	runtimeProvider.startErrForSession = func(index int) error {
+		if index <= 2 {
+			return nil
+		}
+		replacementStartedOnce.Do(func() {
+			close(replacementStarted)
+		})
+		<-releaseReplacement
+		return nil
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.Pool.MinReadyInstances = 2
+	runtimeConfig.Pool.MaxReadyInstances = 3
+	runtimeConfig.Pool.HealthCheckInterval = "25ms"
+	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
+					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		close(releaseReplacement)
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	if ready := pool.readyBackends(); len(ready) != 2 {
+		t.Fatalf("ready backends = %d, want 2", len(ready))
+	}
+	select {
+	case <-replacementStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("proactive replacement did not start")
+	}
+	time.Sleep(150 * time.Millisecond)
+	if got := len(runtimeProvider.startSessionRequests()); got != 3 {
+		t.Fatalf("start session requests while one replacement is starting = %d, want 3", got)
+	}
+	pool.mu.Lock()
+	_, starting, _ := pool.instanceCountsLocked()
+	pool.mu.Unlock()
+	if starting != 1 {
+		t.Fatalf("starting instances = %d, want 1", starting)
 	}
 }
 

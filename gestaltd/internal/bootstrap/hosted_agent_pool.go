@@ -49,11 +49,13 @@ type hostedAgentPoolBackend struct {
 	runtimeProvider  pluginruntime.Provider
 	runtimeSessionID string
 	runtimeSession   *pluginruntime.Session
+	startedAt        time.Time
 	runtimeDrainAt   *time.Time
 	forceCloseAt     *time.Time
 	active           int
 	liveTurns        map[string]struct{}
 	draining         bool
+	replacing        bool
 	closing          bool
 	closed           bool
 }
@@ -1157,6 +1159,10 @@ func (p *hostedAgentProviderPool) healthLoop() {
 			if err := p.pingBackend(backend); err != nil {
 				slog.Warn("hosted agent runtime instance failed health check", "provider", p.name, "instance", backend.id, "error", err)
 				p.replaceBackend(backend)
+				continue
+			}
+			if reason := p.runtimeSessionProactiveReplacementReason(backend, session, drainAt, time.Now().UTC()); reason != "" {
+				p.startProactiveReplacement(backend, reason)
 			}
 		}
 	}
@@ -1212,6 +1218,48 @@ func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *plugin
 		return fmt.Sprintf("runtime session expired at %s", expiresAt.Format(time.RFC3339Nano))
 	}
 	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionProactiveReplacementReason(backend *hostedAgentPoolBackend, session *pluginruntime.Session, drainAt *time.Time, now time.Time) string {
+	if session == nil {
+		return ""
+	}
+	switch session.State {
+	case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
+		return ""
+	}
+	if drainAt == nil {
+		return ""
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	drainDeadline := drainAt.UTC()
+	if !now.Before(drainDeadline) {
+		return ""
+	}
+	startAt := drainDeadline.Add(-p.runtimeSessionReplacementLeadTime())
+	if backend != nil && !backend.startedAt.IsZero() && backend.startedAt.Before(drainDeadline) {
+		minStartAt := backend.startedAt.UTC().Add(drainDeadline.Sub(backend.startedAt.UTC()) / 2)
+		if startAt.Before(minStartAt) {
+			startAt = minStartAt
+		}
+	}
+	if now.Before(startAt) {
+		return ""
+	}
+	return fmt.Sprintf("runtime session approaching drain deadline %s", drainDeadline.Format(time.RFC3339Nano))
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionReplacementLeadTime() time.Duration {
+	lead := p.policy.StartupTimeout + p.policy.HealthCheckInterval
+	if lead <= 0 {
+		lead = p.policy.HealthCheckInterval
+	}
+	if lead <= 0 {
+		return time.Second
+	}
+	return lead
 }
 
 func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *pluginruntime.Session, now time.Time) *time.Time {
@@ -1320,6 +1368,50 @@ func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend
 	}()
 }
 
+func (p *hostedAgentProviderPool) startProactiveReplacement(backend *hostedAgentPoolBackend, reason string) {
+	if backend == nil || p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever {
+		return
+	}
+	p.mu.Lock()
+	if p.closed || backend.draining || backend.closing || backend.closed || backend.replacing || !p.backendAvailableLocked(backend, false) || !p.canScaleOutLocked() {
+		p.mu.Unlock()
+		return
+	}
+	backend.replacing = true
+	p.starting++
+	ready, starting, draining := p.instanceCountsLocked()
+	p.lifecycleWG.Add(1)
+	p.mu.Unlock()
+	p.recordInstanceCounts(p.ctx, ready, starting, draining)
+
+	go func() {
+		defer p.lifecycleWG.Done()
+		slog.Info("starting proactive hosted agent runtime replacement", "provider", p.name, "instance", backend.id, "reason", reason)
+		_, startErr := p.startBackend(p.ctx)
+		recordHostedAgentRuntimeReplacement(p.ctx, p.name, startErr)
+		p.mu.Lock()
+		p.starting--
+		if p.backendAvailableLocked(backend, true) {
+			if startErr == nil {
+				backend.draining = true
+			}
+			backend.replacing = false
+		}
+		ready, starting, draining := p.instanceCountsLocked()
+		p.mu.Unlock()
+		p.recordInstanceCounts(p.ctx, ready, starting, draining)
+		if startErr != nil {
+			if !errors.Is(startErr, context.Canceled) {
+				slog.Warn("failed to proactively replace hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", startErr)
+			}
+			return
+		}
+		if err := p.drainAndCloseBackend(backend); err != nil {
+			slog.Warn("failed to close proactively replaced hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", err)
+		}
+	}()
+}
+
 func (p *hostedAgentProviderPool) addLifecycleWork() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -1380,13 +1472,15 @@ func (p *hostedAgentProviderPool) startBackend(ctx context.Context) (*hostedAgen
 		return nil, fmt.Errorf("hosted agent provider %q is closed", p.name)
 	}
 	p.nextID++
+	now := time.Now().UTC()
 	backend := &hostedAgentPoolBackend{
 		id:               p.nextID,
 		provider:         instance.provider,
 		runtimeProvider:  instance.runtimeProvider,
 		runtimeSessionID: instance.runtimeSessionID,
 		runtimeSession:   instance.runtimeSession,
-		runtimeDrainAt:   p.runtimeSessionDrainAt(instance.runtimeSession, time.Now().UTC()),
+		startedAt:        now,
+		runtimeDrainAt:   p.runtimeSessionDrainAt(instance.runtimeSession, now),
 		forceCloseAt:     runtimeSessionExpiresAt(instance.runtimeSession),
 		liveTurns:        map[string]struct{}{},
 	}

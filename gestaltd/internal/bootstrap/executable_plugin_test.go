@@ -200,6 +200,7 @@ type capturingPluginRuntime struct {
 	bindRequests        []pluginruntime.BindHostServiceRequest
 	sessionLifecycles   map[string]*pluginruntime.SessionLifecycle
 	lifecycleForSession func(index int) *pluginruntime.SessionLifecycle
+	startErrForSession  func(index int) error
 	stopCount           atomic.Int32
 }
 
@@ -223,7 +224,13 @@ func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginrun
 	r.startTimes = append(r.startTimes, time.Now().UTC())
 	index := len(r.startRequests)
 	lifecycleForSession := r.lifecycleForSession
+	startErrForSession := r.startErrForSession
 	r.mu.Unlock()
+	if startErrForSession != nil {
+		if err := startErrForSession(index); err != nil {
+			return nil, err
+		}
+	}
 	session, err := r.provider.StartSession(ctx, req)
 	if err != nil {
 		return nil, err
