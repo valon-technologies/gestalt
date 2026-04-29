@@ -4794,7 +4794,12 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 	}
 
 	recorder := &recordingWorkflowProvider{
-		getSchedule: &coreworkflow.Schedule{ID: workflowConfigScheduleID("nightly_sync")},
+		getSchedule: &coreworkflow.Schedule{
+			ID:       workflowConfigScheduleID("nightly_sync"),
+			Cron:     "0 2 * * *",
+			Timezone: "UTC",
+			Target:   coreWorkflowPluginTarget("roadmap", "sync"),
+		},
 	}
 	factories := validFactories()
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
@@ -4807,71 +4812,6 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 	}
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
-	}
-}
-
-func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingWorkflowProvider{}
-	db1 := &coretesting.StubIndexedDB{}
-	db2 := &coretesting.StubIndexedDB{}
-	factories := validFactories()
-	currentDB := db1
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return currentDB, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	_ = result.Close(context.Background())
-	if len(provider.upsertedSchedules) != 1 {
-		t.Fatalf("initial upserted schedules = %d, want 1", len(provider.upsertedSchedules))
-	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.schedules[workflowConfigScheduleID("nightly_sync")].Target.Plugin.Input = map[string]any{
-		"limit": float64(1),
-	}
-
-	currentDB = db2
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap re-adopt: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(provider.upsertedSchedules) != 2 {
-		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
-	}
-	rotatedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
-	if rotatedExecutionRef != initialExecutionRef {
-		t.Fatalf("execution ref = %q, want reuse of %q", rotatedExecutionRef, initialExecutionRef)
-	}
-	newRef, err := provider.GetExecutionReference(context.Background(), rotatedExecutionRef)
-	if err != nil {
-		t.Fatalf("Get rotated execution ref: %v", err)
-	}
-	if newRef.RevokedAt != nil {
-		t.Fatalf("rotated revokedAt = %#v, want nil", newRef.RevokedAt)
 	}
 }
 
@@ -5641,7 +5581,13 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 	}
 
 	recorder := &recordingWorkflowProvider{
-		getEventTrigger: &coreworkflow.EventTrigger{ID: workflowConfigEventTriggerID("task_updated")},
+		getEventTrigger: &coreworkflow.EventTrigger{
+			ID: workflowConfigEventTriggerID("task_updated"),
+			Match: coreworkflow.EventMatch{
+				Type: "task.updated",
+			},
+			Target: coreWorkflowPluginTarget("roadmap", "sync"),
+		},
 	}
 	factories := validFactories()
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
@@ -5654,68 +5600,6 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 	}
 	if len(recorder.upsertedEventTriggers) != 0 {
 		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
-	}
-}
-
-func TestBootstrapReAdoptsManagedEventTriggersWhenOwnershipStateIsMissing(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingWorkflowProvider{}
-	db1 := &coretesting.StubIndexedDB{}
-	db2 := &coretesting.StubIndexedDB{}
-	factories := validFactories()
-	currentDB := db1
-	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return currentDB, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return provider, nil
-	}
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		EventTriggers: map[string]workflowFixtureEventTrigger{
-			"task_updated": {
-				Match: workflowFixtureEventMatch{
-					Type: "task.updated",
-				},
-				Operation: "sync",
-			},
-		},
-	})
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap initial: %v", err)
-	}
-	_ = result.Close(context.Background())
-	if len(provider.upsertedEventTriggers) != 1 {
-		t.Fatalf("initial upserted event triggers = %d, want 1", len(provider.upsertedEventTriggers))
-	}
-	provider.eventTriggers[workflowConfigEventTriggerID("task_updated")].Target.Plugin.Input = map[string]any{
-		"limit": float64(1),
-	}
-
-	currentDB = db2
-	cfg.Workflows.EventTriggers["task_updated"] = config.WorkflowEventTriggerConfig{
-		Target: workflowFixtureTarget("roadmap", "sync", map[string]any{
-			"limit": 1,
-		}),
-		Match: config.WorkflowEventMatch{
-			Type: "task.updated",
-		},
-	}
-	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap re-adopt: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if len(provider.upsertedEventTriggers) != 2 {
-		t.Fatalf("upserted event triggers = %d, want 2", len(provider.upsertedEventTriggers))
 	}
 }
 

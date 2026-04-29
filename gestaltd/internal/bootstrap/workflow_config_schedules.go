@@ -57,8 +57,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		})
 		switch {
 		case err == nil:
-			if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.ScheduleID) &&
-				!isAdoptableWorkflowSchedule(existing, schedule, desiredEntry.ScheduleID) {
+			if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.ScheduleID) {
 				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, pluginName, desiredEntry.ScheduleID)
 			}
 		case isWorkflowObjectNotFound(err):
@@ -67,7 +66,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
 		}
 		if existing != nil {
-			existingExecutionRef = workflowScheduleExecutionRef(existing, "")
+			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		}
 		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
 		if err != nil {
@@ -186,17 +185,6 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 
 func workflowConfigProviderObjectKey(providerName, objectID string) string {
 	return strings.TrimSpace(providerName) + "\x00" + strings.TrimSpace(objectID)
-}
-
-func isAdoptableWorkflowSchedule(existing *coreworkflow.Schedule, schedule config.WorkflowScheduleConfig, scheduleID string) bool {
-	if existing == nil {
-		return false
-	}
-	return existing.ID == scheduleID &&
-		existing.Cron == schedule.Cron &&
-		existing.Timezone == schedule.Timezone &&
-		existing.Paused == schedule.Paused &&
-		workflowTargetsEqual(existing.Target, workflowConfigScheduleTarget(schedule))
 }
 
 func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, scheduleID string) bool {
@@ -322,15 +310,6 @@ func workflowConfigScheduleID(scheduleKey string) string {
 
 func workflowConfigScheduleExecutionRefID(scheduleID string) string {
 	return "workflow_schedule:" + scheduleID + ":" + uuid.NewString()
-}
-
-func workflowScheduleExecutionRef(existing *coreworkflow.Schedule, fallback string) string {
-	if existing != nil {
-		if refID := strings.TrimSpace(existing.ExecutionRef); refID != "" {
-			return refID
-		}
-	}
-	return strings.TrimSpace(fallback)
 }
 
 func workflowEnsureConfigExecutionRef(
