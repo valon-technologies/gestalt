@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ErrSessionNotFound indicates that logs were requested for an unknown runtime session.
+// ErrSessionNotFound indicates that logs were requested for an unknown or evicted runtime session.
 var ErrSessionNotFound = errors.New("runtime session not found")
 
 const (
@@ -56,6 +56,7 @@ func (s *MemoryStore) RegisterSession(_ context.Context, registration SessionReg
 		s.logs = make(map[string][]Record)
 	}
 	s.sessions[key] = memorySession{lastUsedAt: time.Now().UTC()}
+	s.logs[key] = nil
 	s.evictOldSessionsLocked()
 	return nil
 }
@@ -171,7 +172,7 @@ func (s *MemoryStore) TailSessionLogs(_ context.Context, runtimeProviderName, se
 	return out, nil
 }
 
-func (s *MemoryStore) MarkSessionStopped(_ context.Context, runtimeProviderName, sessionID string, _ time.Time) error {
+func (s *MemoryStore) MarkSessionStopped(_ context.Context, runtimeProviderName, sessionID string, stoppedAt time.Time) error {
 	if s == nil {
 		return nil
 	}
@@ -180,11 +181,16 @@ func (s *MemoryStore) MarkSessionStopped(_ context.Context, runtimeProviderName,
 	if runtimeProviderName == "" || sessionID == "" {
 		return nil
 	}
+	now := time.Now().UTC()
+	if stoppedAt.IsZero() || stoppedAt.Before(now) {
+		stoppedAt = now
+	}
 	key := memorySessionKey(runtimeProviderName, sessionID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.sessions, key)
-	delete(s.logs, key)
+	if _, ok := s.sessions[key]; ok {
+		s.sessions[key] = memorySession{lastUsedAt: stoppedAt.UTC()}
+	}
 	return nil
 }
 

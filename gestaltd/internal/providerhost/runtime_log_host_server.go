@@ -55,7 +55,7 @@ func (s *RuntimeLogHostServer) AppendLogs(ctx context.Context, req *proto.Append
 	lastSeq, err := s.appendLogs(ctx, s.runtimeProviderName, sessionID, entries)
 	if err != nil {
 		switch {
-		case errors.Is(err, indexeddb.ErrNotFound):
+		case errors.Is(err, indexeddb.ErrNotFound), errors.Is(err, runtimelogs.ErrSessionNotFound):
 			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Errorf(codes.Internal, "append runtime session logs: %v", err)
