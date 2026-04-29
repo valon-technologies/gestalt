@@ -365,6 +365,7 @@ type ManifestOperationOverride struct {
 	Alias        string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
 	Description  string                    `json:"description,omitempty" yaml:"description,omitempty"`
 	AllowedRoles []string                  `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
+	Tags         []string                  `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Paginate     bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
 	Pagination   *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
@@ -390,6 +391,7 @@ type ProviderOperation struct {
 	Connection         string                       `json:"connection,omitempty" yaml:"connection,omitempty"`
 	ConnectionSelector *OperationConnectionSelector `json:"connectionSelector,omitempty" yaml:"connectionSelector,omitempty"`
 	AllowedRoles       []string                     `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
+	Tags               []string                     `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Parameters         []ProviderParameter          `json:"parameters,omitempty" yaml:"parameters,omitempty"`
 }
 

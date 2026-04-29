@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -82,7 +83,9 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 		t.Fatalf("provider.Build: %v", err)
 	}
 
-	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, nil, map[string]string{
+	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{
+		"viewer": {Tags: []string{"profile"}},
+	}, map[string]string{
 		"viewer": "id",
 	})
 	if got := len(wrapped.Catalog().Operations); got != 0 {
@@ -109,6 +112,9 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 	}
 	if viewer.Transport != "graphql" {
 		t.Fatalf("viewer transport = %q, want %q", viewer.Transport, "graphql")
+	}
+	if got, want := viewer.Tags, []string{"profile"}; !slices.Equal(got, want) {
+		t.Fatalf("viewer tags = %#v, want %#v", got, want)
 	}
 
 	result, err := wrapped.Execute(context.Background(), "viewer", nil, "test-token")

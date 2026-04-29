@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
@@ -92,6 +93,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 		desc := field.Description
 		opName := field.Name
 		var allowedRoles []string
+		var tags []string
 		if override := allowedOps[field.Name]; override != nil {
 			if override.Description != "" {
 				desc = override.Description
@@ -100,6 +102,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 				opName = override.Alias
 			}
 			allowedRoles = override.AllowedRoles
+			tags = catalog.MergeTags(override.Tags)
 		}
 
 		query := generateQuery(schema, field, isMutation, selectionOverrides[field.Name])
@@ -107,6 +110,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 		opDef := provider.OperationDef{
 			Description:  provider.TruncateDescription(desc),
 			AllowedRoles: allowedRoles,
+			Tags:         tags,
 			Transport:    "graphql",
 			Query:        query,
 		}

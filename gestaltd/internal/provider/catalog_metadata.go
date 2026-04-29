@@ -28,6 +28,7 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 			Path:         opDef.Path,
 			Description:  opDef.Description,
 			AllowedRoles: opDef.AllowedRoles,
+			Tags:         catalog.MergeTags(opDef.Tags),
 			Transport:    opDef.Transport,
 			Query:        opDef.Query,
 			InputSchema:  opDef.InputSchema,

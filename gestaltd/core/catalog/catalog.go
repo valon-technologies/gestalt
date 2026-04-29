@@ -55,6 +55,28 @@ func OperationVisibleByDefault(op CatalogOperation) bool {
 	return op.Visible == nil || *op.Visible
 }
 
+// MergeTags returns provider-owned search tags with empty values removed and
+// case-insensitive duplicates collapsed while preserving the first spelling.
+func MergeTags(groups ...[]string) []string {
+	var out []string
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, tag := range group {
+			tag = strings.TrimSpace(tag)
+			if tag == "" {
+				continue
+			}
+			key := strings.ToLower(tag)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
 func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	type catalogOperationYAML struct {
 		ID             string               `yaml:"id"`

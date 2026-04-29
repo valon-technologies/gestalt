@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -50,6 +51,7 @@ func testSpec() map[string]any {
 				"get": map[string]any{
 					"operationId": "list_items",
 					"summary":     "List all items",
+					"tags":        []any{"inventory"},
 					"parameters": []any{
 						map[string]any{
 							"name": "limit", "in": "query",
@@ -81,7 +83,7 @@ func TestLoadDefinition(t *testing.T) {
 	testutil.CloseOnCleanup(t, srv)
 
 	allowed := map[string]*config.OperationOverride{
-		"list_items": {Description: "List items with pagination"},
+		"list_items": {Description: "List items with pagination", Tags: []string{"pagination"}},
 		"get_item":   nil,
 	}
 
@@ -112,6 +114,9 @@ func TestLoadDefinition(t *testing.T) {
 	listOp := def.Operations["list_items"]
 	if listOp.Description != "List items with pagination" {
 		t.Errorf("list_items description = %q, want override", listOp.Description)
+	}
+	if got, want := listOp.Tags, []string{"inventory", "pagination"}; !slices.Equal(got, want) {
+		t.Errorf("list_items tags = %#v, want %#v", got, want)
 	}
 	if len(listOp.Parameters) != 1 {
 		t.Fatalf("list_items params = %d, want 1", len(listOp.Parameters))

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -141,7 +142,7 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	defer srv.Close()
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*config.OperationOverride{
-		"teams": {Description: "My custom description"},
+		"teams": {Description: "My custom description", Tags: []string{"workspace"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
@@ -154,6 +155,9 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	teams := def.Operations["teams"]
 	if teams.Description != "My custom description" {
 		t.Errorf("teams.Description: got %q, want custom override", teams.Description)
+	}
+	if got, want := teams.Tags, []string{"workspace"}; !slices.Equal(got, want) {
+		t.Errorf("teams.Tags: got %#v, want %#v", got, want)
 	}
 }
 

@@ -88,6 +88,7 @@ type OperationDef struct {
 	Method       string          `yaml:"method" json:"method"`
 	Path         string          `yaml:"path" json:"path"`
 	AllowedRoles []string        `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+	Tags         []string        `yaml:"tags,omitempty" json:"tags,omitempty"`
 	Parameters   []ParameterDef  `yaml:"parameters" json:"parameters"`
 	Query        string          `yaml:"query" json:"query"`                       // GraphQL query/mutation template
 	Transport    string          `yaml:"transport" json:"transport"`               // "rest" (default) or "graphql"
