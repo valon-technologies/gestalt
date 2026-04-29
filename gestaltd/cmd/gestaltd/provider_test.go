@@ -104,137 +104,33 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	}
 }
 
-func TestResolveProviderRemoteTokenPrecedence(t *testing.T) {
+func TestResolveProviderRemoteAttachTokenPrecedence(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	writeStoredGestaltCLICredentialForTest(t, configHome, "https://stored.example.com", "stored-token")
 
 	t.Setenv(gestaltAPIKeyEnv, "env-token")
-	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	token := resolveProviderRemoteAttachToken(providerLocalCommandOptions{
 		Remote:      "https://remote.example.com",
 		RemoteToken: "flag-token",
 	})
-	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken with explicit token: %v", err)
-	}
 	if token != "flag-token" {
 		t.Fatalf("token = %q, want explicit flag token", token)
 	}
 
-	token, err = resolveProviderRemoteToken(providerLocalCommandOptions{
+	token = resolveProviderRemoteAttachToken(providerLocalCommandOptions{
 		Remote: "https://remote.example.com",
 	})
-	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken with env token: %v", err)
-	}
 	if token != "env-token" {
 		t.Fatalf("token = %q, want env token", token)
 	}
-}
 
-func TestResolveProviderRemoteTokenUsesMatchingStoredCLICredential(t *testing.T) {
-	configHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv(gestaltAPIKeyEnv, "")
-	writeStoredGestaltCLICredentialForTest(t, configHome, "https://Valon.Tools:443/team-a/", "stored-token")
-
-	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
-		Remote: "https://valon.tools/team-a",
+	token = resolveProviderRemoteAttachToken(providerLocalCommandOptions{
+		Remote: "https://stored.example.com",
 	})
-	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken: %v", err)
-	}
-	if token != "stored-token" {
-		t.Fatalf("token = %q, want stored token", token)
-	}
-}
-
-func TestResolveProviderRemoteTokenErrors(t *testing.T) {
-	tests := []struct {
-		name         string
-		remote       string
-		storedServer string
-		writeStored  bool
-		want         func(configHome string) []string
-	}{
-		{
-			name:         "different base paths",
-			remote:       "https://valon.tools/team-b",
-			storedServer: "https://valon.tools/team-a",
-			writeStored:  true,
-			want: func(string) []string {
-				return []string{
-					"Remote server:\n  https://valon.tools/team-b",
-					"Stored credential:\n  server: https://valon.tools/team-a",
-					"The stored credential is scoped to a different Gestalt server, so it was not sent.",
-				}
-			},
-		},
-		{
-			name:         "mismatched stored credential",
-			remote:       "https://staging.valon.tools",
-			storedServer: "https://valon.tools",
-			writeStored:  true,
-			want: func(configHome string) []string {
-				return []string{
-					"provider dev --remote could not use the stored Gestalt CLI credential.",
-					"Remote server:\n  https://staging.valon.tools",
-					"Stored credential:\n  server: https://valon.tools",
-					filepath.Join(configHome, "gestalt", "credentials.json"),
-					"The stored credential is scoped to a different Gestalt server, so it was not sent.",
-					"permissions[].actions including provider_dev.attach",
-					"gestaltd provider dev --remote https://staging.valon.tools --remote-token <token> --path ./plugin",
-					"You can also set GESTALT_API_KEY for this command",
-				}
-			},
-		},
-		{
-			name:        "unscoped stored credential",
-			remote:      "https://valon.tools",
-			writeStored: true,
-			want: func(string) []string {
-				return []string{
-					"Stored credential:\n  server: <missing>",
-					"The stored credential does not record which Gestalt server it belongs to, so it was not sent.",
-					"permissions[].actions including provider_dev.attach",
-				}
-			},
-		},
-		{
-			name:   "missing credential",
-			remote: "https://valon.tools",
-			want: func(string) []string {
-				return []string{
-					"provider dev --remote requires authentication.",
-					"Remote server:\n  https://valon.tools",
-					"No --remote-token or GESTALT_API_KEY was provided, and no stored Gestalt CLI credential for this server was found.",
-					"permissions[].actions including provider_dev.attach",
-					"gestaltd provider dev --remote https://valon.tools --remote-token <token> --path ./plugin",
-				}
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			configHome := t.TempDir()
-			t.Setenv("XDG_CONFIG_HOME", configHome)
-			t.Setenv(gestaltAPIKeyEnv, "")
-			if tc.writeStored {
-				writeStoredGestaltCLICredentialForTest(t, configHome, tc.storedServer, "stored-token")
-			}
-
-			_, err := resolveProviderRemoteToken(providerLocalCommandOptions{Remote: tc.remote})
-			if err == nil {
-				t.Fatal("expected remote token resolution error")
-			}
-			errText := err.Error()
-			for _, want := range tc.want(configHome) {
-				if !strings.Contains(errText, want) {
-					t.Fatalf("error missing %q:\n%s", want, errText)
-				}
-			}
-		})
+	if token != "" {
+		t.Fatalf("token = %q, want stored CLI credentials ignored for browser approval", token)
 	}
 }
 
@@ -249,7 +145,6 @@ func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing
 		"remote provider-dev attach was denied",
 		"providerDev.attach.allowedRoles",
 		"permissions[].actions including provider_dev.attach",
-		"stored gestalt auth login API tokens do not grant direct remote attach",
 		"browser approval",
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -263,7 +158,7 @@ func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing
 	}
 }
 
-func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *testing.T) {
+func TestCreateProviderRemoteSessionUsesBrowserApprovalWithoutAttachToken(t *testing.T) {
 	t.Parallel()
 
 	var openedURL string
@@ -280,16 +175,9 @@ func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *
 		code         = "pdac_code"
 		dispatcher   = "pda_dispatcher"
 	)
-	var sawDirectToken bool
 	var createdAuthorizedSession bool
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachments:
-			if r.Header.Get("Authorization") != "Bearer stored-token" {
-				t.Fatalf("direct attach Authorization = %q, want stored token", r.Header.Get("Authorization"))
-			}
-			sawDirectToken = true
-			http.Error(w, "provider dev attach access denied", http.StatusForbidden)
 		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachAuthorizations:
 			if r.Header.Get("Authorization") != "" {
 				t.Fatalf("browser authorization should not send bearer token, got %q", r.Header.Get("Authorization"))
@@ -321,6 +209,9 @@ func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *
 			if req.AttachAuthorizationCode != code {
 				t.Fatalf("attach authorization code = %q, want %q", req.AttachAuthorizationCode, code)
 			}
+			if len(req.Providers) != 1 || req.Providers[0].Name != "roadmap" {
+				t.Fatalf("authorized attach providers = %#v, want roadmap", req.Providers)
+			}
 			createdAuthorizedSession = true
 			writeJSONForProviderRemoteTest(t, w, http.StatusCreated, providerdev.CreateSessionResponse{
 				AttachID:         "attach-1",
@@ -333,17 +224,14 @@ func TestCreateProviderRemoteSessionFallsBackToBrowserApprovalForStoredToken(t *
 	}))
 	defer ts.Close()
 
-	client := providerdev.Client{BaseURL: ts.URL, Token: "stored-token", HTTPClient: ts.Client()}
+	client := providerdev.Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	session, err := createProviderRemoteSession(ctx, &client, providerdev.CreateSessionRequest{
 		Providers: []providerdev.AttachProvider{{Name: "roadmap"}},
-	}, providerRemoteAuth{Token: "stored-token"})
+	})
 	if err != nil {
 		t.Fatalf("createProviderRemoteSession: %v", err)
-	}
-	if !sawDirectToken {
-		t.Fatal("expected direct attach attempt with stored token")
 	}
 	if openedURL == "" {
 		t.Fatal("expected browser approval URL to be opened")

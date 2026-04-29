@@ -174,11 +174,6 @@ type storedGestaltCLICredential struct {
 	APIToken string `json:"api_token"`
 }
 
-type providerRemoteAuth struct {
-	Token    string
-	Explicit bool
-}
-
 var providerRemoteOpenBrowser = openProviderRemoteBrowser
 
 func runProviderRemoteDev(opts providerLocalCommandOptions) error {
@@ -204,14 +199,14 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	if _, err := providerRemoteBaseURL(opts.Remote); err != nil {
 		return fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
 	}
-	auth := resolveProviderRemoteAttachAuth(opts)
+	remoteToken := resolveProviderRemoteAttachToken(opts)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	client := providerdev.Client{
 		BaseURL: opts.Remote,
-		Token:   auth.Token,
+		Token:   remoteToken,
 	}
 	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
 	localUIHandlersByTarget := map[int]http.Handler{}
@@ -250,7 +245,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		requestedProviders = append(requestedProviders, requested)
 	}
 	sessionReq := providerdev.CreateSessionRequest{Providers: requestedProviders}
-	session, err := createProviderRemoteSession(ctx, &client, sessionReq, auth)
+	session, err := createProviderRemoteSession(ctx, &client, sessionReq)
 	if err != nil {
 		return err
 	}
@@ -311,43 +306,25 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	return client.RunDispatcher(ctx, attachID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
 }
 
-func resolveProviderRemoteAttachAuth(opts providerLocalCommandOptions) providerRemoteAuth {
+func resolveProviderRemoteAttachToken(opts providerLocalCommandOptions) string {
 	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
-		return providerRemoteAuth{Token: token, Explicit: true}
+		return token
 	}
 	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
-		return providerRemoteAuth{Token: token, Explicit: true}
+		return token
 	}
-	token, _ := resolveProviderRemoteToken(opts)
-	if token == "" {
-		return providerRemoteAuth{}
-	}
-	return providerRemoteAuth{Token: token}
+	return ""
 }
 
-func createProviderRemoteSession(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest, auth providerRemoteAuth) (*providerdev.CreateSessionResponse, error) {
-	if strings.TrimSpace(auth.Token) != "" {
+func createProviderRemoteSession(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
+	if strings.TrimSpace(client.Token) != "" {
 		session, err := client.CreateSession(ctx, req)
 		if err == nil {
 			return session, nil
 		}
-		if auth.Explicit || !providerRemoteCreateSessionCanUseBrowserApproval(err) {
-			return nil, providerRemoteCreateSessionError(err)
-		}
-		fmt.Fprintf(os.Stderr, "Stored CLI credentials could not create provider-dev attach directly; opening browser approval instead.\n\n")
-		client.Token = ""
+		return nil, providerRemoteCreateSessionError(err)
 	}
 	return createProviderRemoteSessionWithBrowser(ctx, client, req)
-}
-
-func providerRemoteCreateSessionCanUseBrowserApproval(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "provider dev attach access denied") ||
-		strings.Contains(msg, "401 Unauthorized") ||
-		strings.Contains(msg, "403 Forbidden")
 }
 
 func createProviderRemoteSessionWithBrowser(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
@@ -400,17 +377,6 @@ func openProviderRemoteBrowser(rawURL string) error {
 	default:
 		return exec.Command("xdg-open", rawURL).Start()
 	}
-}
-
-func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
-	return resolveProviderRemoteTokenWithErrors(opts.Remote, opts.RemoteToken, providerRemoteTokenErrors{
-		AuthMissing:              providerRemoteAuthMissingError,
-		StoredCredentialUnscoped: providerRemoteStoredCredentialUnscopedError,
-		StoredCredentialMismatch: providerRemoteStoredCredentialMismatchError,
-		StoredCredentialMissingToken: func(credentialPath string) error {
-			return fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; pass --remote-token with a user API token that grants provider_dev.attach for the target plugin", credentialPath)
-		},
-	})
 }
 
 type providerRemoteTokenErrors struct {
@@ -518,57 +484,6 @@ func providerRemoteBaseURL(rawURL string) (string, error) {
 	return baseURL, nil
 }
 
-func providerRemoteAuthMissingError(remoteOrigin string) error {
-	return fmt.Errorf(`provider dev --remote requires authentication.
-
-Remote server:
-  %s
-
-No --remote-token or %s was provided, and no stored Gestalt CLI credential for this server was found.
-
-Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
-
-  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
-
-You can also set %s for this command`, remoteOrigin, gestaltAPIKeyEnv, remoteOrigin, gestaltAPIKeyEnv)
-}
-
-func providerRemoteStoredCredentialUnscopedError(remoteOrigin, credentialPath string) error {
-	return fmt.Errorf(`provider dev --remote could not use the stored Gestalt CLI credential.
-
-Remote server:
-  %s
-
-Stored credential:
-  server: <missing>
-  file: %s
-
-The stored credential does not record which Gestalt server it belongs to, so it was not sent.
-
-Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
-
-  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, credentialPath, remoteOrigin)
-}
-
-func providerRemoteStoredCredentialMismatchError(remoteOrigin, storedOrigin, credentialPath string) error {
-	return fmt.Errorf(`provider dev --remote could not use the stored Gestalt CLI credential.
-
-Remote server:
-  %s
-
-Stored credential:
-  server: %s
-  file: %s
-
-The stored credential is scoped to a different Gestalt server, so it was not sent.
-
-Create a user API token for this server with permissions[].actions including provider_dev.attach for the target plugin, then pass it explicitly:
-
-  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
-
-You can also set %s for this command`, remoteOrigin, storedOrigin, credentialPath, remoteOrigin, gestaltAPIKeyEnv)
-}
-
 func providerRemoteCreateSessionError(err error) error {
 	if err == nil {
 		return nil
@@ -580,7 +495,7 @@ func providerRemoteCreateSessionError(err error) error {
 
 remote provider-dev attach was denied. The remote plugin must grant providerDev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
 
-provider scopes, operation permissions, subject-owned API tokens, and stored gestalt auth login API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
+provider scopes, operation permissions, and subject-owned API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
