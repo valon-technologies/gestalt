@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -342,6 +344,419 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 	return &proto.DeleteResponse{Deleted: deleted}, nil
 }
 
+func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	begin := first.GetBegin()
+	if begin == nil {
+		return status.Error(codes.InvalidArgument, "first message must be BeginTransactionRequest")
+	}
+	stores, err := s.transactionStores(begin.GetStores())
+	if err != nil {
+		return indexeddbToGRPCErr(err)
+	}
+	tx, err := metricutil.UnwrapIndexedDB(s.ds).Transaction(
+		stream.Context(),
+		stores,
+		protoTransactionMode(begin.GetMode()),
+		indexeddb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
+	)
+	if err != nil {
+		return indexeddbToGRPCErr(err)
+	}
+	finished := false
+	defer func() {
+		if !finished {
+			_ = tx.Abort(stream.Context())
+		}
+	}()
+
+	if err := stream.Send(&proto.TransactionServerMessage{
+		Msg: &proto.TransactionServerMessage_Begin{Begin: &proto.TransactionBeginResponse{}},
+	}); err != nil {
+		return err
+	}
+
+	for {
+		msg, recvErr := stream.Recv()
+		if recvErr != nil {
+			if errors.Is(recvErr, io.EOF) {
+				finished = true
+				_ = tx.Abort(stream.Context())
+				return nil
+			}
+			return recvErr
+		}
+
+		switch body := msg.GetMsg().(type) {
+		case *proto.TransactionClientMessage_Operation:
+			resp, opErr := s.executeTransactionOperation(stream.Context(), tx, body.Operation)
+			if opErr != nil {
+				finished = true
+				abortErr := tx.Abort(stream.Context())
+				if err := stream.Send(&proto.TransactionServerMessage{
+					Msg: &proto.TransactionServerMessage_Operation{Operation: transactionOperationError(body.Operation.GetRequestId(), opErr)},
+				}); err != nil {
+					return err
+				}
+				if err := stream.Send(&proto.TransactionServerMessage{
+					Msg: &proto.TransactionServerMessage_Abort{Abort: &proto.TransactionAbortResponse{Error: rpcStatusFromError(abortErr)}},
+				}); err != nil {
+					return err
+				}
+				return drainTransactionStream(stream)
+			}
+			if err := stream.Send(&proto.TransactionServerMessage{
+				Msg: &proto.TransactionServerMessage_Operation{Operation: resp},
+			}); err != nil {
+				return err
+			}
+		case *proto.TransactionClientMessage_Commit:
+			finished = true
+			commitErr := tx.Commit(stream.Context())
+			return stream.Send(&proto.TransactionServerMessage{
+				Msg: &proto.TransactionServerMessage_Commit{Commit: &proto.TransactionCommitResponse{Error: rpcStatusFromError(commitErr)}},
+			})
+		case *proto.TransactionClientMessage_Abort:
+			finished = true
+			abortErr := tx.Abort(stream.Context())
+			return stream.Send(&proto.TransactionServerMessage{
+				Msg: &proto.TransactionServerMessage_Abort{Abort: &proto.TransactionAbortResponse{Error: rpcStatusFromError(abortErr)}},
+			})
+		default:
+			finished = true
+			_ = tx.Abort(stream.Context())
+			return status.Error(codes.InvalidArgument, "expected transaction operation, commit, or abort")
+		}
+	}
+}
+
+func drainTransactionStream(stream proto.IndexedDB_TransactionServer) error {
+	for {
+		_, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func (s *indexedDBServer) transactionStores(stores []string) ([]string, error) {
+	if len(stores) == 0 {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	out := make([]string, len(stores))
+	for i, store := range stores {
+		if err := s.ensureAllowedStore(store); err != nil {
+			return nil, err
+		}
+		out[i] = s.storeName(store)
+	}
+	return out, nil
+}
+
+func (s *indexedDBServer) transactionObjectStore(tx indexeddb.Transaction, name string) (indexeddb.TransactionObjectStore, error) {
+	if err := s.ensureAllowedStore(name); err != nil {
+		return nil, err
+	}
+	return tx.ObjectStore(s.storeName(name)), nil
+}
+
+func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx indexeddb.Transaction, op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
+	if op == nil {
+		return nil, status.Error(codes.InvalidArgument, "transaction operation is required")
+	}
+	resp := &proto.TransactionOperationResponse{RequestId: op.GetRequestId()}
+	switch body := op.GetOperation().(type) {
+	case *proto.TransactionOperation_Get:
+		store, err := s.transactionObjectStore(tx, body.Get.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		rec, err := store.Get(ctx, body.Get.GetId())
+		if err != nil {
+			return nil, err
+		}
+		pbRec, err := recordToProto(rec)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Record{Record: pbRec}
+	case *proto.TransactionOperation_GetKey:
+		store, err := s.transactionObjectStore(tx, body.GetKey.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		key, err := store.GetKey(ctx, body.GetKey.GetId())
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Key{Key: &proto.KeyResponse{Key: key}}
+	case *proto.TransactionOperation_Add:
+		record, err := gestalt.RecordFromProto(body.Add.GetRecord())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
+		}
+		store, err := s.transactionObjectStore(tx, body.Add.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Add(ctx, record); err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
+	case *proto.TransactionOperation_Put:
+		record, err := gestalt.RecordFromProto(body.Put.GetRecord())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
+		}
+		store, err := s.transactionObjectStore(tx, body.Put.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Put(ctx, record); err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
+	case *proto.TransactionOperation_Delete:
+		store, err := s.transactionObjectStore(tx, body.Delete.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Delete(ctx, body.Delete.GetId()); err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
+	case *proto.TransactionOperation_Clear:
+		store, err := s.transactionObjectStore(tx, body.Clear.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Clear(ctx); err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
+	case *proto.TransactionOperation_GetAll:
+		keyRange, err := protoToKeyRange(body.GetAll.Range)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+		}
+		store, err := s.transactionObjectStore(tx, body.GetAll.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		recs, err := store.GetAll(ctx, keyRange)
+		if err != nil {
+			return nil, err
+		}
+		pbRecs, err := recordsToProto(recs)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Records{Records: pbRecs}
+	case *proto.TransactionOperation_GetAllKeys:
+		keyRange, err := protoToKeyRange(body.GetAllKeys.Range)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+		}
+		store, err := s.transactionObjectStore(tx, body.GetAllKeys.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		keys, err := store.GetAllKeys(ctx, keyRange)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Keys{Keys: &proto.KeysResponse{Keys: keys}}
+	case *proto.TransactionOperation_Count:
+		keyRange, err := protoToKeyRange(body.Count.Range)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+		}
+		store, err := s.transactionObjectStore(tx, body.Count.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		count, err := store.Count(ctx, keyRange)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Count{Count: &proto.CountResponse{Count: count}}
+	case *proto.TransactionOperation_DeleteRange:
+		keyRange, err := protoToKeyRange(body.DeleteRange.Range)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+		}
+		if keyRange == nil {
+			return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
+		}
+		store, err := s.transactionObjectStore(tx, body.DeleteRange.GetStore())
+		if err != nil {
+			return nil, err
+		}
+		deleted, err := store.DeleteRange(ctx, *keyRange)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Delete{Delete: &proto.DeleteResponse{Deleted: deleted}}
+	case *proto.TransactionOperation_IndexGet:
+		record, err := s.executeTransactionIndexGet(ctx, tx, body.IndexGet)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Record{Record: record}
+	case *proto.TransactionOperation_IndexGetKey:
+		key, err := s.executeTransactionIndexGetKey(ctx, tx, body.IndexGetKey)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Key{Key: &proto.KeyResponse{Key: key}}
+	case *proto.TransactionOperation_IndexGetAll:
+		records, err := s.executeTransactionIndexGetAll(ctx, tx, body.IndexGetAll)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Records{Records: records}
+	case *proto.TransactionOperation_IndexGetAllKeys:
+		keys, err := s.executeTransactionIndexGetAllKeys(ctx, tx, body.IndexGetAllKeys)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Keys{Keys: &proto.KeysResponse{Keys: keys}}
+	case *proto.TransactionOperation_IndexCount:
+		count, err := s.executeTransactionIndexCount(ctx, tx, body.IndexCount)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Count{Count: &proto.CountResponse{Count: count}}
+	case *proto.TransactionOperation_IndexDelete:
+		deleted, err := s.executeTransactionIndexDelete(ctx, tx, body.IndexDelete)
+		if err != nil {
+			return nil, err
+		}
+		resp.Result = &proto.TransactionOperationResponse_Delete{Delete: &proto.DeleteResponse{Deleted: deleted}}
+	default:
+		return nil, status.Error(codes.InvalidArgument, "unknown transaction operation")
+	}
+	return resp, nil
+}
+
+func (s *indexedDBServer) transactionIndex(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (indexeddb.TransactionIndex, []any, *indexeddb.KeyRange, error) {
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, nil, nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, nil, nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	store, err := s.transactionObjectStore(tx, req.GetStore())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return store.Index(req.GetIndex()), values, keyRange, nil
+}
+
+func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
+	idx, values, _, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := idx.Get(ctx, values...)
+	if err != nil {
+		return nil, err
+	}
+	return recordToProto(rec)
+}
+
+func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (string, error) {
+	idx, values, _, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return "", err
+	}
+	return idx.GetKey(ctx, values...)
+}
+
+func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
+	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+	recs, err := idx.GetAll(ctx, keyRange, values...)
+	if err != nil {
+		return nil, err
+	}
+	return recordsToProto(recs)
+}
+
+func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {
+	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return nil, err
+	}
+	return idx.GetAllKeys(ctx, keyRange, values...)
+}
+
+func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
+	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return 0, err
+	}
+	return idx.Count(ctx, keyRange, values...)
+}
+
+func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx indexeddb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
+	idx, values, _, err := s.transactionIndex(ctx, tx, req)
+	if err != nil {
+		return 0, err
+	}
+	return idx.Delete(ctx, values...)
+}
+
+func protoTransactionMode(mode proto.TransactionMode) indexeddb.TransactionMode {
+	if mode == proto.TransactionMode_TRANSACTION_READWRITE {
+		return indexeddb.TransactionReadwrite
+	}
+	return indexeddb.TransactionReadonly
+}
+
+func protoDurabilityHint(hint proto.TransactionDurabilityHint) indexeddb.TransactionDurabilityHint {
+	switch hint {
+	case proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_STRICT:
+		return indexeddb.TransactionDurabilityStrict
+	case proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_RELAXED:
+		return indexeddb.TransactionDurabilityRelaxed
+	default:
+		return indexeddb.TransactionDurabilityDefault
+	}
+}
+
+func transactionOperationError(requestID uint64, err error) *proto.TransactionOperationResponse {
+	return &proto.TransactionOperationResponse{
+		RequestId: requestID,
+		Error:     rpcStatusFromError(err),
+	}
+}
+
+func rpcStatusFromError(err error) *rpcstatus.Status {
+	if err == nil {
+		return nil
+	}
+	if st, ok := status.FromError(err); ok {
+		return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
+	}
+	grpcErr := indexeddbToGRPCErr(err)
+	st, ok := status.FromError(grpcErr)
+	if !ok {
+		return &rpcstatus.Status{Code: int32(codes.Internal), Message: err.Error()}
+	}
+	return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
+}
+
 func protoCursorDirection(d proto.CursorDirection) indexeddb.CursorDirection {
 	switch d {
 	case proto.CursorDirection_CURSOR_NEXT_UNIQUE:
@@ -636,6 +1051,12 @@ func indexeddbToGRPCErr(err error) error {
 	}
 	if errors.Is(err, indexeddb.ErrAlreadyExists) {
 		return status.Error(codes.AlreadyExists, err.Error())
+	}
+	if errors.Is(err, indexeddb.ErrInvalidTransaction) {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	if errors.Is(err, indexeddb.ErrReadOnly) || errors.Is(err, indexeddb.ErrTransactionDone) {
+		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return status.Error(codes.Internal, err.Error())
 }

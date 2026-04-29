@@ -69,6 +69,12 @@ class AlreadyExistsError(Exception):
     pass
 
 
+class TransactionError(Exception):
+    """Raised when a transaction has failed or already finished."""
+
+    pass
+
+
 @dataclass
 class KeyRange:
     """Lower and upper bounds for a cursor or range query."""
@@ -139,6 +145,17 @@ class IndexedDB:
         """Return a client bound to an object store."""
 
         return ObjectStore(self._stub, name)
+
+    def transaction(
+        self,
+        stores: list[str],
+        mode: str = "readonly",
+        *,
+        durability_hint: str = "default",
+    ) -> Transaction:
+        """Start an explicit IndexedDB transaction."""
+
+        return Transaction(self._stub, stores, mode, durability_hint=durability_hint)
 
     def __enter__(self) -> IndexedDB:
         """Return the client for ``with`` statements."""
@@ -366,6 +383,290 @@ class Index:
         )
 
 
+class Transaction:
+    """Explicit IndexedDB transaction over a fixed object-store scope."""
+
+    def __init__(
+        self,
+        stub: Any,
+        stores: list[str],
+        mode: str = "readonly",
+        *,
+        durability_hint: str = "default",
+    ) -> None:
+        self._stub = stub
+        self._closed = False
+        self._request_id = 0
+        self._request_iter = _RequestIterator()
+        self._request_iter.send(
+            pb.TransactionClientMessage(
+                begin=pb.BeginTransactionRequest(
+                    stores=stores,
+                    mode=_transaction_mode_to_proto(mode),
+                    durability_hint=_durability_hint_to_proto(durability_hint),
+                )
+            )
+        )
+        self._response_iter = stub.Transaction(iter(self._request_iter))
+        try:
+            resp = next(self._response_iter)
+        except StopIteration:
+            self._closed = True
+            self._request_iter.close()
+            raise TransactionError("transaction stream ended during begin") from None
+        except grpc.RpcError as e:
+            self._closed = True
+            self._request_iter.close()
+            _raise_grpc_error(e)
+        if resp.WhichOneof("msg") != "begin":
+            self._closed = True
+            self._request_iter.close()
+            raise TransactionError("expected transaction begin response")
+
+    def object_store(self, name: str) -> TransactionObjectStore:
+        """Return a transaction-scoped object store."""
+
+        return TransactionObjectStore(self, name)
+
+    def commit(self) -> None:
+        """Commit the transaction."""
+
+        self._ensure_open()
+        self._closed = True
+        self._request_iter.send(
+            pb.TransactionClientMessage(commit=pb.TransactionCommitRequest())
+        )
+        try:
+            resp = next(self._response_iter)
+        except StopIteration:
+            self._request_iter.close()
+            raise TransactionError("transaction stream ended during commit") from None
+        except grpc.RpcError as e:
+            self._request_iter.close()
+            _raise_grpc_error(e)
+        self._request_iter.close()
+        if resp.WhichOneof("msg") != "commit":
+            raise TransactionError("expected transaction commit response")
+        _raise_rpc_status(resp.commit.error)
+
+    def abort(self) -> None:
+        """Abort the transaction."""
+
+        if self._closed:
+            return
+        self._closed = True
+        self._request_iter.send(
+            pb.TransactionClientMessage(abort=pb.TransactionAbortRequest())
+        )
+        try:
+            resp = next(self._response_iter)
+        except StopIteration:
+            self._request_iter.close()
+            raise TransactionError("transaction stream ended during abort") from None
+        except grpc.RpcError as e:
+            self._request_iter.close()
+            _raise_grpc_error(e)
+        self._request_iter.close()
+        if resp.WhichOneof("msg") != "abort":
+            raise TransactionError("expected transaction abort response")
+        _raise_rpc_status(resp.abort.error)
+
+    def _send_operation(self, operation: Any) -> Any:
+        self._ensure_open()
+        self._request_id += 1
+        operation.request_id = self._request_id
+        self._request_iter.send(pb.TransactionClientMessage(operation=operation))
+        try:
+            resp = next(self._response_iter)
+        except StopIteration:
+            self._closed = True
+            self._request_iter.close()
+            raise TransactionError(
+                "transaction stream ended during operation"
+            ) from None
+        except grpc.RpcError as e:
+            self._closed = True
+            self._request_iter.close()
+            _raise_grpc_error(e)
+        if resp.WhichOneof("msg") != "operation":
+            self._closed = True
+            self._request_iter.close()
+            raise TransactionError("expected transaction operation response")
+        op_resp = resp.operation
+        if op_resp.request_id != operation.request_id:
+            self._closed = True
+            self._request_iter.close()
+            raise TransactionError("transaction response request_id mismatch")
+        try:
+            _raise_rpc_status(op_resp.error)
+        except Exception:
+            self._closed = True
+            self._request_iter.close()
+            raise
+        return op_resp
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise TransactionError("transaction is already finished")
+
+    def __enter__(self) -> Transaction:
+        return self
+
+    def __exit__(self, exc_type: Any, _exc: Any, _tb: Any) -> None:
+        if exc_type is None:
+            self.commit()
+        else:
+            self.abort()
+
+
+class TransactionObjectStore:
+    """Transaction-scoped object store."""
+
+    def __init__(self, tx: Transaction, store: str) -> None:
+        self._tx = tx
+        self._store = store
+
+    def get(self, id: str) -> dict[str, Any]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(get=pb.ObjectStoreRequest(store=self._store, id=id))
+        )
+        return _record_to_dict(resp.record.record)
+
+    def get_key(self, id: str) -> str:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(
+                get_key=pb.ObjectStoreRequest(store=self._store, id=id)
+            )
+        )
+        return resp.key.key
+
+    def add(self, record: dict[str, Any]) -> None:
+        self._tx._send_operation(
+            pb.TransactionOperation(
+                add=pb.RecordRequest(store=self._store, record=_dict_to_record(record))
+            )
+        )
+
+    def put(self, record: dict[str, Any]) -> None:
+        self._tx._send_operation(
+            pb.TransactionOperation(
+                put=pb.RecordRequest(store=self._store, record=_dict_to_record(record))
+            )
+        )
+
+    def delete(self, id: str) -> None:
+        self._tx._send_operation(
+            pb.TransactionOperation(
+                delete=pb.ObjectStoreRequest(store=self._store, id=id)
+            )
+        )
+
+    def clear(self) -> None:
+        self._tx._send_operation(
+            pb.TransactionOperation(clear=pb.ObjectStoreNameRequest(store=self._store))
+        )
+
+    def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(
+                get_all=pb.ObjectStoreRangeRequest(
+                    store=self._store, range=_kr_to_proto(key_range)
+                )
+            )
+        )
+        return [_record_to_dict(r) for r in resp.records.records]
+
+    def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(
+                get_all_keys=pb.ObjectStoreRangeRequest(
+                    store=self._store, range=_kr_to_proto(key_range)
+                )
+            )
+        )
+        return list(resp.keys.keys)
+
+    def count(self, key_range: KeyRange | None = None) -> int:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(
+                count=pb.ObjectStoreRangeRequest(
+                    store=self._store, range=_kr_to_proto(key_range)
+                )
+            )
+        )
+        return int(resp.count.count)
+
+    def delete_range(self, key_range: KeyRange) -> int:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(
+                delete_range=pb.ObjectStoreRangeRequest(
+                    store=self._store, range=_kr_to_proto(key_range)
+                )
+            )
+        )
+        return int(resp.delete.deleted)
+
+    def index(self, name: str) -> TransactionIndex:
+        return TransactionIndex(self._tx, self._store, name)
+
+
+class TransactionIndex:
+    """Transaction-scoped secondary index."""
+
+    def __init__(self, tx: Transaction, store: str, index: str) -> None:
+        self._tx = tx
+        self._store = store
+        self._index = index
+
+    def get(self, *values: Any) -> dict[str, Any]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_get=self._req(values))
+        )
+        return _record_to_dict(resp.record.record)
+
+    def get_key(self, *values: Any) -> str:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_get_key=self._req(values))
+        )
+        return resp.key.key
+
+    def get_all(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[dict[str, Any]]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_get_all=self._req(values, key_range))
+        )
+        return [_record_to_dict(r) for r in resp.records.records]
+
+    def get_all_keys(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[str]:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_get_all_keys=self._req(values, key_range))
+        )
+        return list(resp.keys.keys)
+
+    def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_count=self._req(values, key_range))
+        )
+        return int(resp.count.count)
+
+    def delete(self, *values: Any) -> int:
+        resp = self._tx._send_operation(
+            pb.TransactionOperation(index_delete=self._req(values))
+        )
+        return int(resp.delete.deleted)
+
+    def _req(self, values: tuple[Any, ...], key_range: KeyRange | None = None) -> Any:
+        return pb.IndexQueryRequest(
+            store=self._store,
+            index=self._index,
+            values=[_to_typed_value(v) for v in values],
+            range=_kr_to_proto(key_range),
+        )
+
+
 def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     target = raw_target.strip()
     if not target:
@@ -483,7 +784,7 @@ class _ClientCallDetailsFields(Protocol):
 
 class _RequestIterator:
     def __init__(self) -> None:
-        self._q: queue.Queue[pb.CursorClientMessage | None] = queue.Queue()
+        self._q: queue.Queue[Any | None] = queue.Queue()
 
     def send(self, msg: Any) -> None:
         self._q.put(msg)
@@ -726,13 +1027,49 @@ def _grpc_call(method: Any, request: Any) -> Any:
     try:
         return method(request)
     except grpc.RpcError as e:
-        code = e.code()
-        details = e.details()
-        if code == grpc.StatusCode.NOT_FOUND:
-            raise NotFoundError(details) from e
-        if code == grpc.StatusCode.ALREADY_EXISTS:
-            raise AlreadyExistsError(details) from e
-        raise
+        _raise_grpc_error(e)
+
+
+def _raise_grpc_error(err: grpc.RpcError) -> None:
+    code = err.code()
+    details = err.details()
+    if code == grpc.StatusCode.NOT_FOUND:
+        raise NotFoundError(details) from err
+    if code == grpc.StatusCode.ALREADY_EXISTS:
+        raise AlreadyExistsError(details) from err
+    if code in (grpc.StatusCode.FAILED_PRECONDITION, grpc.StatusCode.INVALID_ARGUMENT):
+        raise TransactionError(details) from err
+    raise err
+
+
+def _raise_rpc_status(status: Any) -> None:
+    if status is None or status.code == 0:
+        return
+    if status.code == 5:
+        raise NotFoundError(status.message)
+    if status.code == 6:
+        raise AlreadyExistsError(status.message)
+    raise TransactionError(status.message)
+
+
+def _transaction_mode_to_proto(mode: str) -> int:
+    normalized = mode.replace("-", "").replace("_", "").lower()
+    if normalized == "readonly":
+        return pb.TRANSACTION_READONLY
+    if normalized == "readwrite":
+        return pb.TRANSACTION_READWRITE
+    raise ValueError(f"unsupported transaction mode: {mode!r}")
+
+
+def _durability_hint_to_proto(hint: str) -> int:
+    normalized = hint.replace("-", "").replace("_", "").lower()
+    if normalized == "default":
+        return pb.TRANSACTION_DURABILITY_DEFAULT
+    if normalized == "strict":
+        return pb.TRANSACTION_DURABILITY_STRICT
+    if normalized == "relaxed":
+        return pb.TRANSACTION_DURABILITY_RELAXED
+    raise ValueError(f"unsupported transaction durability hint: {hint!r}")
 
 
 def _dict_to_record(d: dict[str, Any]) -> Any:

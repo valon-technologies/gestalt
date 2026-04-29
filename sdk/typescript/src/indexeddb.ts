@@ -3,6 +3,8 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
   IndexedDB as IndexedDBService,
   CursorDirection as ProtoCursorDirection,
+  TransactionMode as ProtoTransactionMode,
+  TransactionDurabilityHint as ProtoTransactionDurabilityHint,
 } from "../gen/v1/datastore_pb";
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
@@ -423,9 +425,36 @@ export class AlreadyExistsError extends Error {
 }
 
 /**
+ * Error returned when an explicit transaction fails or is already closed.
+ */
+export class TransactionError extends Error {
+  constructor(message?: string) {
+    super(message ?? "transaction failed");
+    this.name = "TransactionError";
+  }
+}
+
+/**
  * Plain object record stored in IndexedDB.
  */
 export type Record = { [key: string]: unknown };
+
+/**
+ * IndexedDB transaction mode.
+ */
+export type TransactionMode = "readonly" | "readwrite";
+
+/**
+ * IndexedDB transaction durability hint.
+ */
+export type TransactionDurabilityHint = "default" | "strict" | "relaxed";
+
+/**
+ * Options for explicit IndexedDB transactions.
+ */
+export interface TransactionOptions {
+  durabilityHint?: TransactionDurabilityHint;
+}
 
 /**
  * Key range used to filter object store and index operations.
@@ -542,6 +571,17 @@ export class IndexedDB {
   objectStore(name: string): ObjectStore {
     return new ObjectStore(this.client, name);
   }
+
+  /**
+   * Opens an explicit transaction over a fixed object-store scope.
+   */
+  async transaction(
+    stores: string[],
+    mode: TransactionMode = "readonly",
+    options?: TransactionOptions,
+  ): Promise<Transaction> {
+    return Transaction.open(this.client, stores, mode, options);
+  }
 }
 
 function indexedDBRelayTokenInterceptor(token: string): Interceptor {
@@ -549,6 +589,395 @@ function indexedDBRelayTokenInterceptor(token: string): Interceptor {
     req.header.set(INDEXEDDB_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
+}
+
+/**
+ * Explicit transaction over one or more object stores.
+ */
+export class Transaction {
+  private sendQueue: AsyncQueue<any>;
+  private responseIterator: AsyncIterator<any>;
+  private closed = false;
+  private requestId = 0n;
+  private streamChain: Promise<void> = Promise.resolve();
+
+  private constructor(sendQueue: AsyncQueue<any>, responseIterator: AsyncIterator<any>) {
+    this.sendQueue = sendQueue;
+    this.responseIterator = responseIterator;
+  }
+
+  /**
+   * @internal
+   */
+  static async open(
+    client: Client<typeof IndexedDBService>,
+    stores: string[],
+    mode: TransactionMode,
+    options?: TransactionOptions,
+  ): Promise<Transaction> {
+    const sendQueue = new AsyncQueue<any>();
+    sendQueue.push({
+      msg: {
+        case: "begin" as const,
+        value: {
+          stores,
+          mode: toProtoTransactionMode(mode),
+          durabilityHint: toProtoTransactionDurabilityHint(options?.durabilityHint ?? "default"),
+        },
+      },
+    });
+    const responses = client.transaction(sendQueue);
+    const responseIterator = responses[Symbol.asyncIterator]();
+    const tx = new Transaction(sendQueue, responseIterator);
+    try {
+      const { value: resp, done } = await responseIterator.next();
+      if (done || !resp) {
+        tx.closeLocally();
+        throw new TransactionError("transaction stream ended during begin");
+      }
+      if (resp.msg?.case !== "begin") {
+        tx.closeLocally();
+        throw new TransactionError("expected transaction begin response");
+      }
+    } catch (err: any) {
+      tx.closeLocally();
+      mapTransactionTransportError(err);
+    }
+    return tx;
+  }
+
+  /**
+   * Returns a transaction-scoped object store.
+   */
+  objectStore(name: string): TransactionObjectStore {
+    return new TransactionObjectStore(this, name);
+  }
+
+  /**
+   * Commits the transaction.
+   */
+  async commit(): Promise<void> {
+    return this.withStreamLock(async () => {
+      this.ensureOpen();
+      this.closed = true;
+      this.sendQueue.push({ msg: { case: "commit" as const, value: {} } });
+      try {
+        const { value: resp, done } = await this.responseIterator.next();
+        this.sendQueue.end();
+        if (done || !resp) {
+          throw new TransactionError("transaction stream ended during commit");
+        }
+        if (resp.msg?.case !== "commit") {
+          throw new TransactionError("expected transaction commit response");
+        }
+        raiseStatus(resp.msg.value.error);
+      } catch (err: any) {
+        this.closeLocally();
+        mapTransactionTransportError(err);
+      }
+    });
+  }
+
+  /**
+   * Aborts the transaction. Calling abort after the transaction is already done is a no-op.
+   */
+  async abort(reason = ""): Promise<void> {
+    return this.withStreamLock(async () => {
+      if (this.closed) return;
+      this.closed = true;
+      this.sendQueue.push({ msg: { case: "abort" as const, value: { reason } } });
+      try {
+        const { value: resp, done } = await this.responseIterator.next();
+        this.sendQueue.end();
+        if (done || !resp) {
+          throw new TransactionError("transaction stream ended during abort");
+        }
+        if (resp.msg?.case !== "abort") {
+          throw new TransactionError("expected transaction abort response");
+        }
+        raiseStatus(resp.msg.value.error);
+      } catch (err: any) {
+        this.closeLocally();
+        mapTransactionTransportError(err);
+      }
+    });
+  }
+
+  /**
+   * @internal
+   */
+  async sendOperation(operation: any): Promise<any> {
+    return this.withStreamLock(async () => {
+      this.ensureOpen();
+      this.requestId += 1n;
+      const requestId = this.requestId;
+      this.sendQueue.push({
+        msg: {
+          case: "operation" as const,
+          value: { requestId, operation },
+        },
+      });
+      try {
+        const { value: resp, done } = await this.responseIterator.next();
+        if (done || !resp) {
+          this.closeLocally();
+          throw new TransactionError("transaction stream ended during operation");
+        }
+        if (resp.msg?.case !== "operation") {
+          this.closeLocally();
+          throw new TransactionError("expected transaction operation response");
+        }
+        const opResp = resp.msg.value;
+        if (opResp.requestId !== requestId) {
+          this.closeLocally();
+          throw new TransactionError("transaction response request id mismatch");
+        }
+        raiseStatus(opResp.error);
+        return opResp;
+      } catch (err: any) {
+        this.closeLocally();
+        mapTransactionTransportError(err);
+      }
+    });
+  }
+
+  private async withStreamLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = this.streamChain;
+    let release!: () => void;
+    this.streamChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  private ensureOpen(): void {
+    if (this.closed) throw new TransactionError("transaction is already finished");
+  }
+
+  private closeLocally(): void {
+    this.closed = true;
+    this.sendQueue.end();
+  }
+}
+
+/**
+ * Transaction-scoped object-store client.
+ */
+export class TransactionObjectStore {
+  /**
+   * @internal
+   */
+  constructor(
+    private tx: Transaction,
+    private store: string,
+  ) {}
+
+  /**
+   * Reads a record by primary key inside the transaction.
+   */
+  async get(id: string): Promise<Record> {
+    const resp = await this.tx.sendOperation({
+      case: "get" as const,
+      value: { store: this.store, id },
+    });
+    return fromProtoRecord(resp.result.value.record);
+  }
+
+  /**
+   * Reads the generated primary key for a record inside the transaction.
+   */
+  async getKey(id: string): Promise<string> {
+    const resp = await this.tx.sendOperation({
+      case: "getKey" as const,
+      value: { store: this.store, id },
+    });
+    return resp.result.value.key;
+  }
+
+  /**
+   * Inserts a new record inside the transaction.
+   */
+  async add(record: Record): Promise<void> {
+    await this.tx.sendOperation({
+      case: "add" as const,
+      value: { store: this.store, record: toProtoRecord(record) },
+    });
+  }
+
+  /**
+   * Inserts or replaces a record inside the transaction.
+   */
+  async put(record: Record): Promise<void> {
+    await this.tx.sendOperation({
+      case: "put" as const,
+      value: { store: this.store, record: toProtoRecord(record) },
+    });
+  }
+
+  /**
+   * Deletes a record by primary key inside the transaction.
+   */
+  async delete(id: string): Promise<void> {
+    await this.tx.sendOperation({
+      case: "delete" as const,
+      value: { store: this.store, id },
+    });
+  }
+
+  /**
+   * Clears every record in the object store inside the transaction.
+   */
+  async clear(): Promise<void> {
+    await this.tx.sendOperation({
+      case: "clear" as const,
+      value: { store: this.store },
+    });
+  }
+
+  /**
+   * Reads all records inside the transaction.
+   */
+  async getAll(keyRange?: KeyRange): Promise<Record[]> {
+    const resp = await this.tx.sendOperation({
+      case: "getAll" as const,
+      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+    });
+    return resp.result.value.records.map((r: any) => fromProtoRecord(r));
+  }
+
+  /**
+   * Reads all primary keys inside the transaction.
+   */
+  async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
+    const resp = await this.tx.sendOperation({
+      case: "getAllKeys" as const,
+      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+    });
+    return resp.result.value.keys;
+  }
+
+  /**
+   * Counts records inside the transaction.
+   */
+  async count(keyRange?: KeyRange): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "count" as const,
+      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+    });
+    return Number(resp.result.value.count);
+  }
+
+  /**
+   * Deletes records in a key range inside the transaction.
+   */
+  async deleteRange(keyRange: KeyRange): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "deleteRange" as const,
+      value: { store: this.store, range: toProtoKeyRange(keyRange) },
+    });
+    return Number(resp.result.value.deleted);
+  }
+
+  /**
+   * Returns a transaction-scoped secondary index.
+   */
+  index(name: string): TransactionIndex {
+    return new TransactionIndex(this.tx, this.store, name);
+  }
+}
+
+/**
+ * Transaction-scoped secondary-index client.
+ */
+export class TransactionIndex {
+  /**
+   * @internal
+   */
+  constructor(
+    private tx: Transaction,
+    private store: string,
+    private indexName: string,
+  ) {}
+
+  /**
+   * Reads the first matching indexed record inside the transaction.
+   */
+  async get(...values: unknown[]): Promise<Record> {
+    const resp = await this.tx.sendOperation({
+      case: "indexGet" as const,
+      value: this.indexRequest(values),
+    });
+    return fromProtoRecord(resp.result.value.record);
+  }
+
+  /**
+   * Reads the primary key for the first matching index entry inside the transaction.
+   */
+  async getKey(...values: unknown[]): Promise<string> {
+    const resp = await this.tx.sendOperation({
+      case: "indexGetKey" as const,
+      value: this.indexRequest(values),
+    });
+    return resp.result.value.key;
+  }
+
+  /**
+   * Reads all indexed records inside the transaction.
+   */
+  async getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]> {
+    const resp = await this.tx.sendOperation({
+      case: "indexGetAll" as const,
+      value: this.indexRequest(values, keyRange),
+    });
+    return resp.result.value.records.map((r: any) => fromProtoRecord(r));
+  }
+
+  /**
+   * Reads all indexed primary keys inside the transaction.
+   */
+  async getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]> {
+    const resp = await this.tx.sendOperation({
+      case: "indexGetAllKeys" as const,
+      value: this.indexRequest(values, keyRange),
+    });
+    return resp.result.value.keys;
+  }
+
+  /**
+   * Counts indexed records inside the transaction.
+   */
+  async count(keyRange?: KeyRange, ...values: unknown[]): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "indexCount" as const,
+      value: this.indexRequest(values, keyRange),
+    });
+    return Number(resp.result.value.count);
+  }
+
+  /**
+   * Deletes indexed records inside the transaction.
+   */
+  async delete(...values: unknown[]): Promise<number> {
+    const resp = await this.tx.sendOperation({
+      case: "indexDelete" as const,
+      value: this.indexRequest(values),
+    });
+    return Number(resp.result.value.deleted);
+  }
+
+  private indexRequest(values: unknown[], keyRange?: KeyRange): any {
+    return {
+      store: this.store,
+      index: this.indexName,
+      values: values.map(toProtoTypedValue),
+      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+    };
+  }
 }
 
 /**
@@ -956,4 +1385,45 @@ async function rpc<T>(fn: () => Promise<T>): Promise<T> {
     if (err?.code === 6) throw new AlreadyExistsError(err.message);
     throw err;
   }
+}
+
+function toProtoTransactionMode(mode: TransactionMode): ProtoTransactionMode {
+  switch (mode) {
+    case "readonly":
+      return ProtoTransactionMode.TRANSACTION_READONLY;
+    case "readwrite":
+      return ProtoTransactionMode.TRANSACTION_READWRITE;
+    default:
+      throw new TransactionError(`unsupported transaction mode: ${String(mode)}`);
+  }
+}
+
+function toProtoTransactionDurabilityHint(hint: TransactionDurabilityHint): ProtoTransactionDurabilityHint {
+  switch (hint) {
+    case "default":
+      return ProtoTransactionDurabilityHint.TRANSACTION_DURABILITY_DEFAULT;
+    case "strict":
+      return ProtoTransactionDurabilityHint.TRANSACTION_DURABILITY_STRICT;
+    case "relaxed":
+      return ProtoTransactionDurabilityHint.TRANSACTION_DURABILITY_RELAXED;
+    default:
+      throw new TransactionError(`unsupported transaction durability hint: ${String(hint)}`);
+  }
+}
+
+function raiseStatus(status: any): void {
+  if (!status || status.code === 0) return;
+  if (status.code === 5) throw new NotFoundError(status.message);
+  if (status.code === 6) throw new AlreadyExistsError(status.message);
+  throw new TransactionError(status.message);
+}
+
+function mapTransactionTransportError(err: any): never {
+  if (err instanceof NotFoundError || err instanceof AlreadyExistsError || err instanceof TransactionError) {
+    throw err;
+  }
+  if (err?.code === 5) throw new NotFoundError(err.message);
+  if (err?.code === 6) throw new AlreadyExistsError(err.message);
+  if (err?.code === 3 || err?.code === 9) throw new TransactionError(err.message);
+  throw err;
 }

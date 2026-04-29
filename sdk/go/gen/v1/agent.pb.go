@@ -2826,15 +2826,16 @@ func (x *ResolveAgentProviderInteractionRequest) GetSubject() *AgentSubjectConte
 }
 
 type ExecuteAgentToolRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	TurnId        string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	ToolCallId    string                 `protobuf:"bytes,3,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
-	ToolId        string                 `protobuf:"bytes,4,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
-	Arguments     *structpb.Struct       `protobuf:"bytes,5,opt,name=arguments,proto3" json:"arguments,omitempty"`
-	ToolGrant     string                 `protobuf:"bytes,6,opt,name=tool_grant,json=toolGrant,proto3" json:"tool_grant,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TurnId         string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	ToolCallId     string                 `protobuf:"bytes,3,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	ToolId         string                 `protobuf:"bytes,4,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
+	Arguments      *structpb.Struct       `protobuf:"bytes,5,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	ToolGrant      string                 `protobuf:"bytes,6,opt,name=tool_grant,json=toolGrant,proto3" json:"tool_grant,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ExecuteAgentToolRequest) Reset() {
@@ -2905,6 +2906,13 @@ func (x *ExecuteAgentToolRequest) GetArguments() *structpb.Struct {
 func (x *ExecuteAgentToolRequest) GetToolGrant() string {
 	if x != nil {
 		return x.ToolGrant
+	}
+	return ""
+}
+
+func (x *ExecuteAgentToolRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
 	}
 	return ""
 }
@@ -4277,7 +4285,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"resolution\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
 	"resolution\x12B\n" +
-	"\asubject\x18\x03 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\xe2\x01\n" +
+	"\asubject\x18\x03 \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\"\x8b\x02\n" +
 	"\x17ExecuteAgentToolRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -4287,7 +4295,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\atool_id\x18\x04 \x01(\tR\x06toolId\x125\n" +
 	"\targuments\x18\x05 \x01(\v2\x17.google.protobuf.StructR\targuments\x12\x1d\n" +
 	"\n" +
-	"tool_grant\x18\x06 \x01(\tR\ttoolGrant\"F\n" +
+	"tool_grant\x18\x06 \x01(\tR\ttoolGrant\x12'\n" +
+	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\"F\n" +
 	"\x18ExecuteAgentToolResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"\x90\x02\n" +

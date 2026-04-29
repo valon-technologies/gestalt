@@ -156,6 +156,7 @@ func TestMCPOAuthFlow(t *testing.T) {
 		reg, _ := store.GetRegistration(context.Background(), srv.URL, "http://localhost:9999/callback")
 		if reg == nil {
 			t.Fatal("expected stored registration")
+			return
 		}
 		if reg.ClientID != "dcr-client-001" {
 			t.Errorf("stored client_id = %q, want dcr-client-001", reg.ClientID)

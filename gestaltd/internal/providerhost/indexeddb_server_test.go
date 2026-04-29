@@ -178,6 +178,9 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	if _, err := remote.ObjectStore("events").Get(ctx, "evt-1"); !errors.Is(err, indexeddb.ErrNotFound) {
 		t.Fatalf("remote Get error = %v, want indexeddb.ErrNotFound", err)
 	}
+	if _, err := remote.Transaction(ctx, []string{"events"}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{}); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("remote Transaction error = %v, want indexeddb.ErrNotFound", err)
+	}
 	if _, err := remote.ObjectStore("events").DeleteRange(ctx, *indexeddb.Only("evt-1")); !errors.Is(err, indexeddb.ErrNotFound) {
 		t.Fatalf("remote DeleteRange error = %v, want indexeddb.ErrNotFound", err)
 	}
@@ -189,5 +192,78 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 			_ = cursor.Close()
 		}
 		t.Fatalf("remote OpenCursor error = %v, want indexeddb.ErrNotFound", err)
+	}
+}
+
+func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	ctx := context.Background()
+	if err := db.CreateObjectStore(ctx, "users", indexeddb.ObjectStoreSchema{
+		Indexes: []indexeddb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}, Unique: true}},
+	}); err != nil {
+		t.Fatalf("CreateObjectStore users: %v", err)
+	}
+	store := db.ObjectStore("users")
+	if err := store.Put(ctx, indexeddb.Record{"id": "user-1", "email": "same@example.com"}); err != nil {
+		t.Fatalf("seed user-1: %v", err)
+	}
+	if err := store.Put(ctx, indexeddb.Record{"id": "user-2", "email": "other@example.com"}); err != nil {
+		t.Fatalf("seed user-2: %v", err)
+	}
+
+	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, srv)
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	if err := remote.ObjectStore("users").Put(ctx, indexeddb.Record{"id": "user-2", "email": "same@example.com"}); !errors.Is(err, indexeddb.ErrAlreadyExists) {
+		t.Fatalf("conflicting remote Put error = %v, want indexeddb.ErrAlreadyExists", err)
+	}
+	got, err := remote.ObjectStore("users").Get(ctx, "user-2")
+	if err != nil {
+		t.Fatalf("Get user-2: %v", err)
+	}
+	if got["email"] != "other@example.com" {
+		t.Fatalf("user-2 email = %v, want unchanged value", got["email"])
+	}
+}
+
+func TestIndexedDBTransactionPreservesSentinelErrors(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	ctx := context.Background()
+	if err := db.CreateObjectStore(ctx, "events", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore events: %v", err)
+	}
+	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, srv)
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	readonly, err := remote.Transaction(ctx, []string{"events"}, indexeddb.TransactionReadonly, indexeddb.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("readonly Transaction: %v", err)
+	}
+	if err := readonly.ObjectStore("events").Put(ctx, indexeddb.Record{"id": "evt-1"}); !errors.Is(err, indexeddb.ErrReadOnly) {
+		t.Fatalf("readonly Put error = %v, want indexeddb.ErrReadOnly", err)
+	}
+	if err := readonly.Commit(ctx); !errors.Is(err, indexeddb.ErrReadOnly) {
+		t.Fatalf("readonly Commit error = %v, want indexeddb.ErrReadOnly", err)
+	}
+
+	readwrite, err := remote.Transaction(ctx, []string{"events"}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("readwrite Transaction: %v", err)
+	}
+	if err := readwrite.Abort(ctx); err != nil {
+		t.Fatalf("Abort: %v", err)
+	}
+	if err := readwrite.Commit(ctx); !errors.Is(err, indexeddb.ErrTransactionDone) {
+		t.Fatalf("Commit after Abort error = %v, want indexeddb.ErrTransactionDone", err)
 	}
 }

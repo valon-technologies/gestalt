@@ -4,15 +4,17 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema, NullValue, Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import type { Empty, EmptySchema, NullValue, Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Status } from "../google/rpc/status_pb";
+import { file_google_rpc_status } from "../google/rpc/status_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/datastore.proto.
  */
 export const file_v1_datastore: GenFile = /*@__PURE__*/
-  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCKSAQoIS2V5UmFuZ2USLgoFbG93ZXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSLgoFdXBwZXIYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIksKDVJlY29yZFJlcXVlc3QSDQoFc3RvcmUYASABKAkSKwoGcmVjb3JkGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPQoOUmVjb3JkUmVzcG9uc2USKwoGcmVjb3JkGAEgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPwoPUmVjb3Jkc1Jlc3BvbnNlEiwKB3JlY29yZHMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZCIcCgxLZXlzUmVzcG9uc2USDAoEa2V5cxgBIAMoCSIvChJPYmplY3RTdG9yZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSCgoCaWQYAiABKAkiJwoWT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBINCgVzdG9yZRgBIAEoCSJlChdPYmplY3RTdG9yZVJhbmdlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiYAoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNgoGc2NoZW1hGAIgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVNjaGVtYSIoChhEZWxldGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCSKfAQoRSW5kZXhRdWVyeVJlcXVlc3QSDQoFc3RvcmUYASABKAkSDQoFaW5kZXgYAiABKAkSLwoGdmFsdWVzGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlEjEKBXJhbmdlGAQgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSIeCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDIusBChFPcGVuQ3Vyc29yUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBARI3CglkaXJlY3Rpb24YAyABKA4yJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckRpcmVjdGlvbhIRCglrZXlzX29ubHkYBCABKAgSDQoFaW5kZXgYBSABKAkSLwoGdmFsdWVzGAYgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlQggKBl9yYW5nZSJ6CghLZXlWYWx1ZRIxCgZzY2FsYXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWVIABIzCgVhcnJheRgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVBcnJheUgAQgYKBGtpbmQiQAoNS2V5VmFsdWVBcnJheRIvCghlbGVtZW50cxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUiPQoPQ3Vyc29yS2V5VGFyZ2V0EioKA2tleRgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUi0AEKDUN1cnNvckNvbW1hbmQSDgoEbmV4dBgBIAEoCEgAEj8KD2NvbnRpbnVlX3RvX2tleRgCIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yS2V5VGFyZ2V0SAASEQoHYWR2YW5jZRgDIAEoBUgAEi0KBnVwZGF0ZRgEIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkSAASEAoGZGVsZXRlGAUgASgISAASDwoFY2xvc2UYBiABKAhIAEIJCgdjb21tYW5kIosBChNDdXJzb3JDbGllbnRNZXNzYWdlEjYKBG9wZW4YASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZW5DdXJzb3JSZXF1ZXN0SAASNQoHY29tbWFuZBgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yQ29tbWFuZEgAQgUKA21zZyJ7CgtDdXJzb3JFbnRyeRIqCgNrZXkYASADKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVZhbHVlEhMKC3ByaW1hcnlfa2V5GAIgASgJEisKBnJlY29yZBgDIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIl0KDkN1cnNvclJlc3BvbnNlEjEKBWVudHJ5GAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JFbnRyeUgAEg4KBGRvbmUYAiABKAhIAEIICgZyZXN1bHQiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkqYwoPQ3Vyc29yRGlyZWN0aW9uEg8KC0NVUlNPUl9ORVhUEAASFgoSQ1VSU09SX05FWFRfVU5JUVVFEAESDwoLQ1VSU09SX1BSRVYQAhIWChJDVVJTT1JfUFJFVl9VTklRVUUQAzKKDQoJSW5kZXhlZERCEloKEUNyZWF0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSWgoRRGVsZXRlT2JqZWN0U3RvcmUSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJTCgNHZXQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2USUwoGR2V0S2V5EicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlEkEKA0FkZBIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJBCgNQdXQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSSQoGRGVsZXRlEicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSTAoFQ2xlYXISKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSXAoGR2V0QWxsEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlEl0KCkdldEFsbEtleXMSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlzUmVzcG9uc2USWQoFQ291bnQSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlEmAKC0RlbGV0ZVJhbmdlEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVzcG9uc2USVwoISW5kZXhHZXQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXNwb25zZRJXCgtJbmRleEdldEtleRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlElsKC0luZGV4R2V0QWxsEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlElwKD0luZGV4R2V0QWxsS2V5cxImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZRJYCgpJbmRleENvdW50EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBoiLmdlc3RhbHQucHJvdmlkZXIudjEuQ291bnRSZXNwb25zZRJaCgtJbmRleERlbGV0ZRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlc3BvbnNlEl8KCk9wZW5DdXJzb3ISKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckNsaWVudE1lc3NhZ2UaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvclJlc3BvbnNlKAEwAUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCKSAQoIS2V5UmFuZ2USLgoFbG93ZXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSLgoFdXBwZXIYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIksKDVJlY29yZFJlcXVlc3QSDQoFc3RvcmUYASABKAkSKwoGcmVjb3JkGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPQoOUmVjb3JkUmVzcG9uc2USKwoGcmVjb3JkGAEgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPwoPUmVjb3Jkc1Jlc3BvbnNlEiwKB3JlY29yZHMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZCIcCgxLZXlzUmVzcG9uc2USDAoEa2V5cxgBIAMoCSIvChJPYmplY3RTdG9yZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSCgoCaWQYAiABKAkiJwoWT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBINCgVzdG9yZRgBIAEoCSJlChdPYmplY3RTdG9yZVJhbmdlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiYAoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNgoGc2NoZW1hGAIgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVNjaGVtYSIoChhEZWxldGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCSKfAQoRSW5kZXhRdWVyeVJlcXVlc3QSDQoFc3RvcmUYASABKAkSDQoFaW5kZXgYAiABKAkSLwoGdmFsdWVzGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlEjEKBXJhbmdlGAQgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSIeCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDIusBChFPcGVuQ3Vyc29yUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBARI3CglkaXJlY3Rpb24YAyABKA4yJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckRpcmVjdGlvbhIRCglrZXlzX29ubHkYBCABKAgSDQoFaW5kZXgYBSABKAkSLwoGdmFsdWVzGAYgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlQggKBl9yYW5nZSJ6CghLZXlWYWx1ZRIxCgZzY2FsYXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWVIABIzCgVhcnJheRgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVBcnJheUgAQgYKBGtpbmQiQAoNS2V5VmFsdWVBcnJheRIvCghlbGVtZW50cxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUiPQoPQ3Vyc29yS2V5VGFyZ2V0EioKA2tleRgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUi0AEKDUN1cnNvckNvbW1hbmQSDgoEbmV4dBgBIAEoCEgAEj8KD2NvbnRpbnVlX3RvX2tleRgCIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yS2V5VGFyZ2V0SAASEQoHYWR2YW5jZRgDIAEoBUgAEi0KBnVwZGF0ZRgEIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkSAASEAoGZGVsZXRlGAUgASgISAASDwoFY2xvc2UYBiABKAhIAEIJCgdjb21tYW5kIosBChNDdXJzb3JDbGllbnRNZXNzYWdlEjYKBG9wZW4YASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZW5DdXJzb3JSZXF1ZXN0SAASNQoHY29tbWFuZBgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yQ29tbWFuZEgAQgUKA21zZyJ7CgtDdXJzb3JFbnRyeRIqCgNrZXkYASADKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVZhbHVlEhMKC3ByaW1hcnlfa2V5GAIgASgJEisKBnJlY29yZBgDIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIl0KDkN1cnNvclJlc3BvbnNlEjEKBWVudHJ5GAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JFbnRyeUgAEg4KBGRvbmUYAiABKAhIAEIICgZyZXN1bHQiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkipgEKF0JlZ2luVHJhbnNhY3Rpb25SZXF1ZXN0Eg4KBnN0b3JlcxgBIAMoCRIyCgRtb2RlGAIgASgOMiQuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbk1vZGUSRwoPZHVyYWJpbGl0eV9oaW50GAMgASgOMi4uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkR1cmFiaWxpdHlIaW50IhoKGFRyYW5zYWN0aW9uQmVnaW5SZXNwb25zZSIaChhUcmFuc2FjdGlvbkNvbW1pdFJlcXVlc3QiPgoZVHJhbnNhY3Rpb25Db21taXRSZXNwb25zZRIhCgVlcnJvchgBIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzIikKF1RyYW5zYWN0aW9uQWJvcnRSZXF1ZXN0Eg4KBnJlYXNvbhgBIAEoCSI9ChhUcmFuc2FjdGlvbkFib3J0UmVzcG9uc2USIQoFZXJyb3IYASABKAsyEi5nb29nbGUucnBjLlN0YXR1cyKaCAoUVHJhbnNhY3Rpb25PcGVyYXRpb24SEgoKcmVxdWVzdF9pZBgBIAEoBBI2CgNnZXQYCiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjoKB2dldF9rZXkYCyABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjEKA2FkZBgMIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjEKA3B1dBgNIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjkKBmRlbGV0ZRgOIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0SAASPAoFY2xlYXIYDyABKAsyKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3RIABI/CgdnZXRfYWxsGBAgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdEgAEkQKDGdldF9hbGxfa2V5cxgRIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABI9CgVjb3VudBgSIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABJECgxkZWxldGVfcmFuZ2UYEyABKAsyLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0SAASOwoJaW5kZXhfZ2V0GBQgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAEj8KDWluZGV4X2dldF9rZXkYFSABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPwoNaW5kZXhfZ2V0X2FsbBgWIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3RIABJEChJpbmRleF9nZXRfYWxsX2tleXMYFyABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPQoLaW5kZXhfY291bnQYGCABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPgoMaW5kZXhfZGVsZXRlGBkgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAQgsKCW9wZXJhdGlvbiLIAwocVHJhbnNhY3Rpb25PcGVyYXRpb25SZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgEEiEKBWVycm9yGAIgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXMSJwoFZW1wdHkYCiABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABI1CgZyZWNvcmQYCyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlc3BvbnNlSAASNwoHcmVjb3JkcxgMIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlSAASLwoDa2V5GA0gASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZUgAEjEKBGtleXMYDiABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZUgAEjMKBWNvdW50GA8gASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlSAASNQoGZGVsZXRlGBAgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZUgAQggKBnJlc3VsdCKgAgoYVHJhbnNhY3Rpb25DbGllbnRNZXNzYWdlEj0KBWJlZ2luGAEgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpblRyYW5zYWN0aW9uUmVxdWVzdEgAEj4KCW9wZXJhdGlvbhgCIAEoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25PcGVyYXRpb25IABI/CgZjb21taXQYAyABKAsyLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVxdWVzdEgAEj0KBWFib3J0GAQgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkFib3J0UmVxdWVzdEgAQgUKA21zZyKrAgoYVHJhbnNhY3Rpb25TZXJ2ZXJNZXNzYWdlEj4KBWJlZ2luGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkJlZ2luUmVzcG9uc2VIABJGCglvcGVyYXRpb24YAiABKAsyMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uT3BlcmF0aW9uUmVzcG9uc2VIABJACgZjb21taXQYAyABKAsyLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVzcG9uc2VIABI+CgVhYm9ydBgEIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25BYm9ydFJlc3BvbnNlSABCBQoDbXNnKmMKD0N1cnNvckRpcmVjdGlvbhIPCgtDVVJTT1JfTkVYVBAAEhYKEkNVUlNPUl9ORVhUX1VOSVFVRRABEg8KC0NVUlNPUl9QUkVWEAISFgoSQ1VSU09SX1BSRVZfVU5JUVVFEAMqRgoPVHJhbnNhY3Rpb25Nb2RlEhgKFFRSQU5TQUNUSU9OX1JFQURPTkxZEAASGQoVVFJBTlNBQ1RJT05fUkVBRFdSSVRFEAEqhgEKGVRyYW5zYWN0aW9uRHVyYWJpbGl0eUhpbnQSIgoeVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9ERUZBVUxUEAASIQodVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9TVFJJQ1QQARIiCh5UUkFOU0FDVElPTl9EVVJBQklMSVRZX1JFTEFYRUQQAjL7DQoJSW5kZXhlZERCEloKEUNyZWF0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSWgoRRGVsZXRlT2JqZWN0U3RvcmUSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJTCgNHZXQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2USUwoGR2V0S2V5EicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlEkEKA0FkZBIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJBCgNQdXQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSSQoGRGVsZXRlEicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSTAoFQ2xlYXISKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSXAoGR2V0QWxsEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlEl0KCkdldEFsbEtleXMSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlzUmVzcG9uc2USWQoFQ291bnQSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlEmAKC0RlbGV0ZVJhbmdlEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVzcG9uc2USVwoISW5kZXhHZXQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXNwb25zZRJXCgtJbmRleEdldEtleRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlElsKC0luZGV4R2V0QWxsEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlElwKD0luZGV4R2V0QWxsS2V5cxImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZRJYCgpJbmRleENvdW50EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBoiLmdlc3RhbHQucHJvdmlkZXIudjEuQ291bnRSZXNwb25zZRJaCgtJbmRleERlbGV0ZRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlc3BvbnNlEl8KCk9wZW5DdXJzb3ISKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckNsaWVudE1lc3NhZ2UaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvclJlc3BvbnNlKAEwARJvCgtUcmFuc2FjdGlvbhItLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25DbGllbnRNZXNzYWdlGi0uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvblNlcnZlck1lc3NhZ2UoATABQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp, file_google_rpc_status]);
 
 /**
  * TypedValue stores one scalar or structured value in an IndexedDB record.
@@ -779,6 +781,396 @@ export const KeyResponseSchema: GenMessage<KeyResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 26);
 
 /**
+ * BeginTransactionRequest starts an IndexedDB transaction stream.
+ *
+ * @generated from message gestalt.provider.v1.BeginTransactionRequest
+ */
+export type BeginTransactionRequest = Message<"gestalt.provider.v1.BeginTransactionRequest"> & {
+  /**
+   * @generated from field: repeated string stores = 1;
+   */
+  stores: string[];
+
+  /**
+   * @generated from field: gestalt.provider.v1.TransactionMode mode = 2;
+   */
+  mode: TransactionMode;
+
+  /**
+   * @generated from field: gestalt.provider.v1.TransactionDurabilityHint durability_hint = 3;
+   */
+  durabilityHint: TransactionDurabilityHint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.BeginTransactionRequest.
+ * Use `create(BeginTransactionRequestSchema)` to create a new message.
+ */
+export const BeginTransactionRequestSchema: GenMessage<BeginTransactionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 27);
+
+/**
+ * @generated from message gestalt.provider.v1.TransactionBeginResponse
+ */
+export type TransactionBeginResponse = Message<"gestalt.provider.v1.TransactionBeginResponse"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionBeginResponse.
+ * Use `create(TransactionBeginResponseSchema)` to create a new message.
+ */
+export const TransactionBeginResponseSchema: GenMessage<TransactionBeginResponse> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 28);
+
+/**
+ * @generated from message gestalt.provider.v1.TransactionCommitRequest
+ */
+export type TransactionCommitRequest = Message<"gestalt.provider.v1.TransactionCommitRequest"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionCommitRequest.
+ * Use `create(TransactionCommitRequestSchema)` to create a new message.
+ */
+export const TransactionCommitRequestSchema: GenMessage<TransactionCommitRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 29);
+
+/**
+ * TransactionCommitResponse carries a non-OK status when commit failed after
+ * the provider accepted the commit frame and rolled the transaction back.
+ *
+ * @generated from message gestalt.provider.v1.TransactionCommitResponse
+ */
+export type TransactionCommitResponse = Message<"gestalt.provider.v1.TransactionCommitResponse"> & {
+  /**
+   * @generated from field: google.rpc.Status error = 1;
+   */
+  error?: Status | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionCommitResponse.
+ * Use `create(TransactionCommitResponseSchema)` to create a new message.
+ */
+export const TransactionCommitResponseSchema: GenMessage<TransactionCommitResponse> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 30);
+
+/**
+ * @generated from message gestalt.provider.v1.TransactionAbortRequest
+ */
+export type TransactionAbortRequest = Message<"gestalt.provider.v1.TransactionAbortRequest"> & {
+  /**
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionAbortRequest.
+ * Use `create(TransactionAbortRequestSchema)` to create a new message.
+ */
+export const TransactionAbortRequestSchema: GenMessage<TransactionAbortRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 31);
+
+/**
+ * TransactionAbortResponse acknowledges abort or reports an abort failure.
+ *
+ * @generated from message gestalt.provider.v1.TransactionAbortResponse
+ */
+export type TransactionAbortResponse = Message<"gestalt.provider.v1.TransactionAbortResponse"> & {
+  /**
+   * @generated from field: google.rpc.Status error = 1;
+   */
+  error?: Status | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionAbortResponse.
+ * Use `create(TransactionAbortResponseSchema)` to create a new message.
+ */
+export const TransactionAbortResponseSchema: GenMessage<TransactionAbortResponse> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 32);
+
+/**
+ * TransactionOperation is one ordered transaction-scoped object store or index
+ * operation. Cursor operations are intentionally excluded from the initial
+ * transaction contract.
+ *
+ * @generated from message gestalt.provider.v1.TransactionOperation
+ */
+export type TransactionOperation = Message<"gestalt.provider.v1.TransactionOperation"> & {
+  /**
+   * @generated from field: uint64 request_id = 1;
+   */
+  requestId: bigint;
+
+  /**
+   * @generated from oneof gestalt.provider.v1.TransactionOperation.operation
+   */
+  operation: {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRequest get = 10;
+     */
+    value: ObjectStoreRequest;
+    case: "get";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRequest get_key = 11;
+     */
+    value: ObjectStoreRequest;
+    case: "getKey";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.RecordRequest add = 12;
+     */
+    value: RecordRequest;
+    case: "add";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.RecordRequest put = 13;
+     */
+    value: RecordRequest;
+    case: "put";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRequest delete = 14;
+     */
+    value: ObjectStoreRequest;
+    case: "delete";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreNameRequest clear = 15;
+     */
+    value: ObjectStoreNameRequest;
+    case: "clear";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRangeRequest get_all = 16;
+     */
+    value: ObjectStoreRangeRequest;
+    case: "getAll";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRangeRequest get_all_keys = 17;
+     */
+    value: ObjectStoreRangeRequest;
+    case: "getAllKeys";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRangeRequest count = 18;
+     */
+    value: ObjectStoreRangeRequest;
+    case: "count";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ObjectStoreRangeRequest delete_range = 19;
+     */
+    value: ObjectStoreRangeRequest;
+    case: "deleteRange";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_get = 20;
+     */
+    value: IndexQueryRequest;
+    case: "indexGet";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_get_key = 21;
+     */
+    value: IndexQueryRequest;
+    case: "indexGetKey";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_get_all = 22;
+     */
+    value: IndexQueryRequest;
+    case: "indexGetAll";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_get_all_keys = 23;
+     */
+    value: IndexQueryRequest;
+    case: "indexGetAllKeys";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_count = 24;
+     */
+    value: IndexQueryRequest;
+    case: "indexCount";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.IndexQueryRequest index_delete = 25;
+     */
+    value: IndexQueryRequest;
+    case: "indexDelete";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionOperation.
+ * Use `create(TransactionOperationSchema)` to create a new message.
+ */
+export const TransactionOperationSchema: GenMessage<TransactionOperation> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 33);
+
+/**
+ * TransactionOperationResponse is the ordered response to one operation.
+ * Non-OK error marks the transaction failed and causes rollback in phase 1.
+ *
+ * @generated from message gestalt.provider.v1.TransactionOperationResponse
+ */
+export type TransactionOperationResponse = Message<"gestalt.provider.v1.TransactionOperationResponse"> & {
+  /**
+   * @generated from field: uint64 request_id = 1;
+   */
+  requestId: bigint;
+
+  /**
+   * @generated from field: google.rpc.Status error = 2;
+   */
+  error?: Status | undefined;
+
+  /**
+   * @generated from oneof gestalt.provider.v1.TransactionOperationResponse.result
+   */
+  result: {
+    /**
+     * @generated from field: google.protobuf.Empty empty = 10;
+     */
+    value: Empty;
+    case: "empty";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.RecordResponse record = 11;
+     */
+    value: RecordResponse;
+    case: "record";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.RecordsResponse records = 12;
+     */
+    value: RecordsResponse;
+    case: "records";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.KeyResponse key = 13;
+     */
+    value: KeyResponse;
+    case: "key";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.KeysResponse keys = 14;
+     */
+    value: KeysResponse;
+    case: "keys";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.CountResponse count = 15;
+     */
+    value: CountResponse;
+    case: "count";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.DeleteResponse delete = 16;
+     */
+    value: DeleteResponse;
+    case: "delete";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionOperationResponse.
+ * Use `create(TransactionOperationResponseSchema)` to create a new message.
+ */
+export const TransactionOperationResponseSchema: GenMessage<TransactionOperationResponse> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 34);
+
+/**
+ * TransactionClientMessage is one client frame in the transaction stream. The
+ * first frame must be BeginTransactionRequest.
+ *
+ * @generated from message gestalt.provider.v1.TransactionClientMessage
+ */
+export type TransactionClientMessage = Message<"gestalt.provider.v1.TransactionClientMessage"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.TransactionClientMessage.msg
+   */
+  msg: {
+    /**
+     * @generated from field: gestalt.provider.v1.BeginTransactionRequest begin = 1;
+     */
+    value: BeginTransactionRequest;
+    case: "begin";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionOperation operation = 2;
+     */
+    value: TransactionOperation;
+    case: "operation";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionCommitRequest commit = 3;
+     */
+    value: TransactionCommitRequest;
+    case: "commit";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionAbortRequest abort = 4;
+     */
+    value: TransactionAbortRequest;
+    case: "abort";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionClientMessage.
+ * Use `create(TransactionClientMessageSchema)` to create a new message.
+ */
+export const TransactionClientMessageSchema: GenMessage<TransactionClientMessage> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 35);
+
+/**
+ * @generated from message gestalt.provider.v1.TransactionServerMessage
+ */
+export type TransactionServerMessage = Message<"gestalt.provider.v1.TransactionServerMessage"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.TransactionServerMessage.msg
+   */
+  msg: {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionBeginResponse begin = 1;
+     */
+    value: TransactionBeginResponse;
+    case: "begin";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionOperationResponse operation = 2;
+     */
+    value: TransactionOperationResponse;
+    case: "operation";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionCommitResponse commit = 3;
+     */
+    value: TransactionCommitResponse;
+    case: "commit";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.TransactionAbortResponse abort = 4;
+     */
+    value: TransactionAbortResponse;
+    case: "abort";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TransactionServerMessage.
+ * Use `create(TransactionServerMessageSchema)` to create a new message.
+ */
+export const TransactionServerMessageSchema: GenMessage<TransactionServerMessage> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 36);
+
+/**
  * CursorDirection controls IndexedDB cursor traversal order.
  *
  * @generated from enum gestalt.provider.v1.CursorDirection
@@ -810,6 +1202,58 @@ export enum CursorDirection {
  */
 export const CursorDirectionSchema: GenEnum<CursorDirection> = /*@__PURE__*/
   enumDesc(file_v1_datastore, 0);
+
+/**
+ * TransactionMode controls whether a transaction may mutate scoped stores.
+ *
+ * @generated from enum gestalt.provider.v1.TransactionMode
+ */
+export enum TransactionMode {
+  /**
+   * @generated from enum value: TRANSACTION_READONLY = 0;
+   */
+  TRANSACTION_READONLY = 0,
+
+  /**
+   * @generated from enum value: TRANSACTION_READWRITE = 1;
+   */
+  TRANSACTION_READWRITE = 1,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.TransactionMode.
+ */
+export const TransactionModeSchema: GenEnum<TransactionMode> = /*@__PURE__*/
+  enumDesc(file_v1_datastore, 1);
+
+/**
+ * TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+ * provider hint. It is not a portable durability guarantee.
+ *
+ * @generated from enum gestalt.provider.v1.TransactionDurabilityHint
+ */
+export enum TransactionDurabilityHint {
+  /**
+   * @generated from enum value: TRANSACTION_DURABILITY_DEFAULT = 0;
+   */
+  TRANSACTION_DURABILITY_DEFAULT = 0,
+
+  /**
+   * @generated from enum value: TRANSACTION_DURABILITY_STRICT = 1;
+   */
+  TRANSACTION_DURABILITY_STRICT = 1,
+
+  /**
+   * @generated from enum value: TRANSACTION_DURABILITY_RELAXED = 2;
+   */
+  TRANSACTION_DURABILITY_RELAXED = 2,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.TransactionDurabilityHint.
+ */
+export const TransactionDurabilityHintSchema: GenEnum<TransactionDurabilityHint> = /*@__PURE__*/
+  enumDesc(file_v1_datastore, 2);
 
 /**
  * IndexedDB models the shared Gestalt IndexedDB-provider protocol.
@@ -978,6 +1422,17 @@ export const IndexedDB: GenService<{
     methodKind: "bidi_streaming";
     input: typeof CursorClientMessageSchema;
     output: typeof CursorResponseSchema;
+  },
+  /**
+   * Transaction stream. The first client message must be
+   * BeginTransactionRequest. Stream close before commit aborts the transaction.
+   *
+   * @generated from rpc gestalt.provider.v1.IndexedDB.Transaction
+   */
+  transaction: {
+    methodKind: "bidi_streaming";
+    input: typeof TransactionClientMessageSchema;
+    output: typeof TransactionServerMessageSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_datastore, 0);

@@ -39,6 +39,7 @@ const (
 	IndexedDB_IndexCount_FullMethodName        = "/gestalt.provider.v1.IndexedDB/IndexCount"
 	IndexedDB_IndexDelete_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexDelete"
 	IndexedDB_OpenCursor_FullMethodName        = "/gestalt.provider.v1.IndexedDB/OpenCursor"
+	IndexedDB_Transaction_FullMethodName       = "/gestalt.provider.v1.IndexedDB/Transaction"
 )
 
 // IndexedDBClient is the client API for IndexedDB service.
@@ -71,6 +72,9 @@ type IndexedDBClient interface {
 	IndexDelete(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	// Cursor iteration (bidirectional stream)
 	OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error)
+	// Transaction stream. The first client message must be
+	// BeginTransactionRequest. Stream close before commit aborts the transaction.
+	Transaction(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TransactionClientMessage, TransactionServerMessage], error)
 }
 
 type indexedDBClient struct {
@@ -274,6 +278,19 @@ func (c *indexedDBClient) OpenCursor(ctx context.Context, opts ...grpc.CallOptio
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IndexedDB_OpenCursorClient = grpc.BidiStreamingClient[CursorClientMessage, CursorResponse]
 
+func (c *indexedDBClient) Transaction(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TransactionClientMessage, TransactionServerMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[1], IndexedDB_Transaction_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TransactionClientMessage, TransactionServerMessage]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_TransactionClient = grpc.BidiStreamingClient[TransactionClientMessage, TransactionServerMessage]
+
 // IndexedDBServer is the server API for IndexedDB service.
 // All implementations must embed UnimplementedIndexedDBServer
 // for forward compatibility.
@@ -304,6 +321,9 @@ type IndexedDBServer interface {
 	IndexDelete(context.Context, *IndexQueryRequest) (*DeleteResponse, error)
 	// Cursor iteration (bidirectional stream)
 	OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error
+	// Transaction stream. The first client message must be
+	// BeginTransactionRequest. Stream close before commit aborts the transaction.
+	Transaction(grpc.BidiStreamingServer[TransactionClientMessage, TransactionServerMessage]) error
 	mustEmbedUnimplementedIndexedDBServer()
 }
 
@@ -370,6 +390,9 @@ func (UnimplementedIndexedDBServer) IndexDelete(context.Context, *IndexQueryRequ
 }
 func (UnimplementedIndexedDBServer) OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error {
 	return status.Error(codes.Unimplemented, "method OpenCursor not implemented")
+}
+func (UnimplementedIndexedDBServer) Transaction(grpc.BidiStreamingServer[TransactionClientMessage, TransactionServerMessage]) error {
+	return status.Error(codes.Unimplemented, "method Transaction not implemented")
 }
 func (UnimplementedIndexedDBServer) mustEmbedUnimplementedIndexedDBServer() {}
 func (UnimplementedIndexedDBServer) testEmbeddedByValue()                   {}
@@ -723,6 +746,13 @@ func _IndexedDB_OpenCursor_Handler(srv interface{}, stream grpc.ServerStream) er
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IndexedDB_OpenCursorServer = grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]
 
+func _IndexedDB_Transaction_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IndexedDBServer).Transaction(&grpc.GenericServerStream[TransactionClientMessage, TransactionServerMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_TransactionServer = grpc.BidiStreamingServer[TransactionClientMessage, TransactionServerMessage]
+
 // IndexedDB_ServiceDesc is the grpc.ServiceDesc for IndexedDB service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -807,6 +837,12 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "OpenCursor",
 			Handler:       _IndexedDB_OpenCursor_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Transaction",
+			Handler:       _IndexedDB_Transaction_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

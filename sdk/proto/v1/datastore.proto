@@ -5,6 +5,7 @@ package gestalt.provider.v1;
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
@@ -208,6 +209,107 @@ message KeyResponse {
   string key = 1;
 }
 
+// TransactionMode controls whether a transaction may mutate scoped stores.
+enum TransactionMode {
+  TRANSACTION_READONLY = 0;
+  TRANSACTION_READWRITE = 1;
+}
+
+// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+// provider hint. It is not a portable durability guarantee.
+enum TransactionDurabilityHint {
+  TRANSACTION_DURABILITY_DEFAULT = 0;
+  TRANSACTION_DURABILITY_STRICT = 1;
+  TRANSACTION_DURABILITY_RELAXED = 2;
+}
+
+// BeginTransactionRequest starts an IndexedDB transaction stream.
+message BeginTransactionRequest {
+  repeated string stores = 1;
+  TransactionMode mode = 2;
+  TransactionDurabilityHint durability_hint = 3;
+}
+
+message TransactionBeginResponse {}
+
+message TransactionCommitRequest {}
+
+// TransactionCommitResponse carries a non-OK status when commit failed after
+// the provider accepted the commit frame and rolled the transaction back.
+message TransactionCommitResponse {
+  google.rpc.Status error = 1;
+}
+
+message TransactionAbortRequest {
+  string reason = 1;
+}
+
+// TransactionAbortResponse acknowledges abort or reports an abort failure.
+message TransactionAbortResponse {
+  google.rpc.Status error = 1;
+}
+
+// TransactionOperation is one ordered transaction-scoped object store or index
+// operation. Cursor operations are intentionally excluded from the initial
+// transaction contract.
+message TransactionOperation {
+  uint64 request_id = 1;
+  oneof operation {
+    ObjectStoreRequest get = 10;
+    ObjectStoreRequest get_key = 11;
+    RecordRequest add = 12;
+    RecordRequest put = 13;
+    ObjectStoreRequest delete = 14;
+    ObjectStoreNameRequest clear = 15;
+    ObjectStoreRangeRequest get_all = 16;
+    ObjectStoreRangeRequest get_all_keys = 17;
+    ObjectStoreRangeRequest count = 18;
+    ObjectStoreRangeRequest delete_range = 19;
+    IndexQueryRequest index_get = 20;
+    IndexQueryRequest index_get_key = 21;
+    IndexQueryRequest index_get_all = 22;
+    IndexQueryRequest index_get_all_keys = 23;
+    IndexQueryRequest index_count = 24;
+    IndexQueryRequest index_delete = 25;
+  }
+}
+
+// TransactionOperationResponse is the ordered response to one operation.
+// Non-OK error marks the transaction failed and causes rollback in phase 1.
+message TransactionOperationResponse {
+  uint64 request_id = 1;
+  google.rpc.Status error = 2;
+  oneof result {
+    google.protobuf.Empty empty = 10;
+    RecordResponse record = 11;
+    RecordsResponse records = 12;
+    KeyResponse key = 13;
+    KeysResponse keys = 14;
+    CountResponse count = 15;
+    DeleteResponse delete = 16;
+  }
+}
+
+// TransactionClientMessage is one client frame in the transaction stream. The
+// first frame must be BeginTransactionRequest.
+message TransactionClientMessage {
+  oneof msg {
+    BeginTransactionRequest begin = 1;
+    TransactionOperation operation = 2;
+    TransactionCommitRequest commit = 3;
+    TransactionAbortRequest abort = 4;
+  }
+}
+
+message TransactionServerMessage {
+  oneof msg {
+    TransactionBeginResponse begin = 1;
+    TransactionOperationResponse operation = 2;
+    TransactionCommitResponse commit = 3;
+    TransactionAbortResponse abort = 4;
+  }
+}
+
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
   // Lifecycle
@@ -238,4 +340,8 @@ service IndexedDB {
 
   // Cursor iteration (bidirectional stream)
   rpc OpenCursor(stream CursorClientMessage) returns (stream CursorResponse);
+
+  // Transaction stream. The first client message must be
+  // BeginTransactionRequest. Stream close before commit aborts the transaction.
+  rpc Transaction(stream TransactionClientMessage) returns (stream TransactionServerMessage);
 }

@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -62,6 +64,13 @@ var (
 	// ErrKeysOnly indicates that the current cursor was opened in key-only mode
 	// and therefore has no value payload.
 	ErrKeysOnly = fmt.Errorf("indexeddb: value not available on key-only cursor")
+	// ErrTransactionDone indicates that a transaction has already committed,
+	// aborted, or failed.
+	ErrTransactionDone = fmt.Errorf("indexeddb: transaction is already finished")
+	// ErrReadOnly indicates that a readonly transaction received a write request.
+	ErrReadOnly = fmt.Errorf("indexeddb: transaction is readonly")
+	// ErrInvalidTransaction indicates an invalid transaction scope or mode.
+	ErrInvalidTransaction = fmt.Errorf("indexeddb: invalid transaction")
 )
 
 // CursorDirection controls IndexedDB cursor traversal order.
@@ -80,6 +89,28 @@ const (
 
 // Record is the JSON-like value stored in an object store row.
 type Record = map[string]any
+
+// TransactionMode controls whether a transaction may mutate scoped stores.
+type TransactionMode string
+
+const (
+	TransactionReadonly  TransactionMode = "readonly"
+	TransactionReadwrite TransactionMode = "readwrite"
+)
+
+// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+// provider hint. It is not a portable durability guarantee.
+type TransactionDurabilityHint string
+
+const (
+	TransactionDurabilityDefault TransactionDurabilityHint = "default"
+	TransactionDurabilityStrict  TransactionDurabilityHint = "strict"
+	TransactionDurabilityRelaxed TransactionDurabilityHint = "relaxed"
+)
+
+type TransactionOptions struct {
+	DurabilityHint TransactionDurabilityHint
+}
 
 // KeyRange constrains range queries and cursors by lower and upper bounds.
 type KeyRange struct {
@@ -305,6 +336,43 @@ func (db *IndexedDBClient) DeleteObjectStore(ctx context.Context, name string) e
 // ObjectStore returns a typed handle for working with one object store.
 func (db *IndexedDBClient) ObjectStore(name string) *ObjectStoreClient {
 	return &ObjectStoreClient{client: db.client, store: name}
+}
+
+// Transaction starts an explicit IndexedDB transaction over the supplied object
+// store scope.
+func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := db.client.Transaction(streamCtx)
+	if err != nil {
+		cancel()
+		return nil, grpcErr(err)
+	}
+	if err := stream.Send(&proto.TransactionClientMessage{
+		Msg: &proto.TransactionClientMessage_Begin{Begin: &proto.BeginTransactionRequest{
+			Stores:         stores,
+			Mode:           transactionModeToProto(mode),
+			DurabilityHint: durabilityHintToProto(opts.DurabilityHint),
+		}},
+	}); err != nil {
+		_ = stream.CloseSend()
+		cancel()
+		return nil, grpcErr(err)
+	}
+	resp, err := stream.Recv()
+	if err != nil {
+		_ = stream.CloseSend()
+		cancel()
+		return nil, grpcErr(err)
+	}
+	if resp.GetBegin() == nil {
+		_ = stream.CloseSend()
+		cancel()
+		return nil, fmt.Errorf("indexeddb: expected transaction begin response")
+	}
+	return &Transaction{stream: stream, cancel: cancel}, nil
 }
 
 // ObjectStoreClient provides CRUD, range-query, and cursor access to one
@@ -565,6 +633,379 @@ func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorD
 // OpenKeyCursor opens a key-only cursor over one secondary index.
 func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
 	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+}
+
+// Transaction is an explicit IndexedDB transaction over a fixed store scope.
+type Transaction struct {
+	stream proto.IndexedDB_TransactionClient
+	cancel context.CancelFunc
+	mu     sync.Mutex
+	nextID uint64
+	done   bool
+	err    error
+}
+
+// ObjectStore returns a transaction-scoped object store handle.
+func (tx *Transaction) ObjectStore(name string) *TransactionObjectStore {
+	return &TransactionObjectStore{tx: tx, store: name}
+}
+
+// Commit atomically commits all writes made in the transaction.
+func (tx *Transaction) Commit(ctx context.Context) error {
+	_ = ctx
+	tx.mu.Lock()
+	if tx.done {
+		err := tx.err
+		tx.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		return ErrTransactionDone
+	}
+	if tx.err != nil {
+		err := tx.err
+		tx.mu.Unlock()
+		return err
+	}
+	tx.done = true
+
+	if err := tx.stream.Send(&proto.TransactionClientMessage{Msg: &proto.TransactionClientMessage_Commit{Commit: &proto.TransactionCommitRequest{}}}); err != nil {
+		return tx.failLocked(grpcErr(err))
+	}
+	resp, err := tx.stream.Recv()
+	if err != nil {
+		return tx.failLocked(grpcErr(err))
+	}
+	commit := resp.GetCommit()
+	if commit == nil {
+		return tx.failLocked(fmt.Errorf("indexeddb: expected transaction commit response"))
+	}
+	if err := rpcStatusErr(commit.GetError()); err != nil {
+		return tx.failLocked(err)
+	}
+	tx.mu.Unlock()
+	tx.cleanup()
+	return nil
+}
+
+// Abort rolls back the transaction.
+func (tx *Transaction) Abort(ctx context.Context) error {
+	_ = ctx
+	tx.mu.Lock()
+	if tx.done {
+		err := tx.err
+		tx.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		return ErrTransactionDone
+	}
+	tx.done = true
+
+	if err := tx.stream.Send(&proto.TransactionClientMessage{Msg: &proto.TransactionClientMessage_Abort{Abort: &proto.TransactionAbortRequest{}}}); err != nil {
+		return tx.failLocked(grpcErr(err))
+	}
+	resp, err := tx.stream.Recv()
+	if err != nil {
+		return tx.failLocked(grpcErr(err))
+	}
+	abort := resp.GetAbort()
+	if abort == nil {
+		return tx.failLocked(fmt.Errorf("indexeddb: expected transaction abort response"))
+	}
+	if err := rpcStatusErr(abort.GetError()); err != nil {
+		return tx.failLocked(err)
+	}
+	tx.mu.Unlock()
+	tx.cleanup()
+	return nil
+}
+
+func (tx *Transaction) sendOperation(op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
+	tx.mu.Lock()
+	if tx.done {
+		err := tx.err
+		tx.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrTransactionDone
+	}
+	if tx.err != nil {
+		err := tx.err
+		tx.mu.Unlock()
+		return nil, err
+	}
+	tx.nextID++
+	op.RequestId = tx.nextID
+
+	if err := tx.stream.Send(&proto.TransactionClientMessage{Msg: &proto.TransactionClientMessage_Operation{Operation: op}}); err != nil {
+		return nil, tx.failLocked(grpcErr(err))
+	}
+	resp, err := tx.stream.Recv()
+	if err != nil {
+		return nil, tx.failLocked(grpcErr(err))
+	}
+	opResp := resp.GetOperation()
+	if opResp == nil {
+		return nil, tx.failLocked(fmt.Errorf("indexeddb: expected transaction operation response"))
+	}
+	if opResp.GetRequestId() != op.GetRequestId() {
+		return nil, tx.failLocked(fmt.Errorf("indexeddb: response request id %d does not match %d", opResp.GetRequestId(), op.GetRequestId()))
+	}
+	if err := rpcStatusErr(opResp.GetError()); err != nil {
+		tx.done = true
+		tx.err = err
+		tx.mu.Unlock()
+		tx.cleanup()
+		return nil, err
+	}
+	tx.mu.Unlock()
+	return opResp, nil
+}
+
+func (tx *Transaction) failLocked(err error) error {
+	tx.err = err
+	tx.done = true
+	tx.mu.Unlock()
+	tx.cleanup()
+	return err
+}
+
+func (tx *Transaction) cleanup() {
+	if tx.stream != nil {
+		_ = tx.stream.CloseSend()
+		tx.stream = nil
+	}
+	if tx.cancel != nil {
+		tx.cancel()
+		tx.cancel = nil
+	}
+}
+
+// TransactionObjectStore provides transaction-scoped object-store operations.
+type TransactionObjectStore struct {
+	tx    *Transaction
+	store string
+}
+
+func (s *TransactionObjectStore) Get(ctx context.Context, id string) (Record, error) {
+	_ = ctx
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Get{Get: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
+	if err != nil {
+		return nil, err
+	}
+	record, err := RecordFromProto(resp.GetRecord().GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
+}
+
+func (s *TransactionObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+	_ = ctx
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetKey{GetKey: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
+	if err != nil {
+		return "", err
+	}
+	return resp.GetKey().GetKey(), nil
+}
+
+func (s *TransactionObjectStore) Add(ctx context.Context, record Record) error {
+	_ = ctx
+	pbRecord, err := RecordToProto(record)
+	if err != nil {
+		return fmt.Errorf("marshal record: %w", err)
+	}
+	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Add{Add: &proto.RecordRequest{Store: s.store, Record: pbRecord}}})
+	return err
+}
+
+func (s *TransactionObjectStore) Put(ctx context.Context, record Record) error {
+	_ = ctx
+	pbRecord, err := RecordToProto(record)
+	if err != nil {
+		return fmt.Errorf("marshal record: %w", err)
+	}
+	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Put{Put: &proto.RecordRequest{Store: s.store, Record: pbRecord}}})
+	return err
+}
+
+func (s *TransactionObjectStore) Delete(ctx context.Context, id string) error {
+	_ = ctx
+	_, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Delete{Delete: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
+	return err
+}
+
+func (s *TransactionObjectStore) Clear(ctx context.Context) error {
+	_ = ctx
+	_, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Clear{Clear: &proto.ObjectStoreNameRequest{Store: s.store}}})
+	return err
+}
+
+func (s *TransactionObjectStore) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
+	_ = ctx
+	kr, err := krToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAll{GetAll: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	if err != nil {
+		return nil, err
+	}
+	records, err := RecordsFromProto(resp.GetRecords().GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
+}
+
+func (s *TransactionObjectStore) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
+	_ = ctx
+	kr, err := krToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAllKeys{GetAllKeys: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetKeys().GetKeys(), nil
+}
+
+func (s *TransactionObjectStore) Count(ctx context.Context, r *KeyRange) (int64, error) {
+	_ = ctx
+	kr, err := krToProto(r)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Count{Count: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetCount().GetCount(), nil
+}
+
+func (s *TransactionObjectStore) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
+	_ = ctx
+	kr, err := krToProto(&r)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_DeleteRange{DeleteRange: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetDelete().GetDeleted(), nil
+}
+
+func (s *TransactionObjectStore) Index(name string) *TransactionIndex {
+	return &TransactionIndex{tx: s.tx, store: s.store, index: name}
+}
+
+// TransactionIndex provides transaction-scoped index operations.
+type TransactionIndex struct {
+	tx    *Transaction
+	store string
+	index string
+}
+
+func (idx *TransactionIndex) Get(ctx context.Context, values ...any) (Record, error) {
+	_ = ctx
+	req, err := idx.query(nil, values)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGet{IndexGet: req}})
+	if err != nil {
+		return nil, err
+	}
+	record, err := RecordFromProto(resp.GetRecord().GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
+}
+
+func (idx *TransactionIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+	_ = ctx
+	req, err := idx.query(nil, values)
+	if err != nil {
+		return "", err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetKey{IndexGetKey: req}})
+	if err != nil {
+		return "", err
+	}
+	return resp.GetKey().GetKey(), nil
+}
+
+func (idx *TransactionIndex) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
+	_ = ctx
+	req, err := idx.query(r, values)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAll{IndexGetAll: req}})
+	if err != nil {
+		return nil, err
+	}
+	records, err := RecordsFromProto(resp.GetRecords().GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
+}
+
+func (idx *TransactionIndex) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
+	_ = ctx
+	req, err := idx.query(r, values)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: req}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetKeys().GetKeys(), nil
+}
+
+func (idx *TransactionIndex) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
+	_ = ctx
+	req, err := idx.query(r, values)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexCount{IndexCount: req}})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetCount().GetCount(), nil
+}
+
+func (idx *TransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	_ = ctx
+	req, err := idx.query(nil, values)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexDelete{IndexDelete: req}})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetDelete().GetDeleted(), nil
+}
+
+func (idx *TransactionIndex) query(r *KeyRange, values []any) (*proto.IndexQueryRequest, error) {
+	vals, err := anyToProtoValues(values)
+	if err != nil {
+		return nil, err
+	}
+	kr, err := krToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.IndexQueryRequest{Store: idx.store, Index: idx.index, Values: vals, Range: kr}, nil
 }
 
 // Cursor streams IndexedDB rows one at a time.
@@ -904,6 +1345,31 @@ func anyToProtoValues(values []any) ([]*proto.TypedValue, error) {
 	return TypedValuesFromAny(values)
 }
 
+func transactionModeToProto(mode TransactionMode) proto.TransactionMode {
+	if mode == TransactionReadwrite {
+		return proto.TransactionMode_TRANSACTION_READWRITE
+	}
+	return proto.TransactionMode_TRANSACTION_READONLY
+}
+
+func durabilityHintToProto(hint TransactionDurabilityHint) proto.TransactionDurabilityHint {
+	switch hint {
+	case TransactionDurabilityStrict:
+		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_STRICT
+	case TransactionDurabilityRelaxed:
+		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_RELAXED
+	default:
+		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_DEFAULT
+	}
+}
+
+func rpcStatusErr(st *rpcstatus.Status) error {
+	if st == nil || st.GetCode() == int32(codes.OK) {
+		return nil
+	}
+	return grpcErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
+}
+
 func grpcErr(err error) error {
 	if err == nil {
 		return nil
@@ -917,6 +1383,19 @@ func grpcErr(err error) error {
 		return ErrNotFound
 	case codes.AlreadyExists:
 		return ErrAlreadyExists
+	case codes.InvalidArgument:
+		if strings.Contains(st.Message(), "invalid transaction") {
+			return ErrInvalidTransaction
+		}
+		return err
+	case codes.FailedPrecondition:
+		if strings.Contains(st.Message(), "readonly") {
+			return ErrReadOnly
+		}
+		if strings.Contains(st.Message(), "already finished") {
+			return ErrTransactionDone
+		}
+		return err
 	default:
 		return err
 	}

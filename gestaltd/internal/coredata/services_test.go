@@ -81,6 +81,10 @@ func (d *countingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	return &countingObjectStore{name: name, db: d, inner: d.inner.ObjectStore(name)}
 }
 
+func (d *countingIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	return d.inner.Transaction(ctx, stores, mode, opts)
+}
+
 func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
 	return d.inner.CreateObjectStore(ctx, name, schema)
 }
@@ -119,6 +123,10 @@ func newCreateContextRecordingIndexedDB(inner indexeddb.IndexedDB) *createContex
 
 func (d *createContextRecordingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	return d.inner.ObjectStore(name)
+}
+
+func (d *createContextRecordingIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	return d.inner.Transaction(ctx, stores, mode, opts)
 }
 
 func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {

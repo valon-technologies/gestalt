@@ -48,6 +48,10 @@ func (d *instrumentedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	})
 }
 
+func (d *instrumentedIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	return d.inner.Transaction(ctx, stores, mode, opts)
+}
+
 func (d *instrumentedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
 	return d.inner.CreateObjectStore(ctx, name, schema)
 }

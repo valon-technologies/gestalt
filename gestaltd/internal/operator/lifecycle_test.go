@@ -527,14 +527,15 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 
 	intg := loaded.Plugins["example"]
+	if intg == nil || intg.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", intg)
+		return
+	}
 	if intg.DisplayName != "Local Provider" {
 		t.Fatalf("DisplayName = %q", intg.DisplayName)
 	}
 	if intg.Description != "Local executable provider" {
 		t.Fatalf("Description = %q", intg.Description)
-	}
-	if intg == nil || intg.ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
 	if !strings.HasSuffix(filepath.ToSlash(intg.ResolvedManifestPath), filepath.ToSlash(filepath.Join(".gestaltd", "providers", "example", "manifest.yaml"))) {
 		t.Fatalf("ResolvedManifestPath = %q", intg.ResolvedManifestPath)
@@ -593,6 +594,7 @@ spec:
 	intg := loaded.Plugins["notion"]
 	if intg == nil || intg.ResolvedManifest == nil || intg.ResolvedManifest.Spec == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
+		return
 	}
 	if got := intg.ResolvedManifest.Spec.MCPURL(); got != "https://mcp.notion.com/mcp" {
 		t.Fatalf("MCPURL = %q, want %q", got, "https://mcp.notion.com/mcp")
@@ -600,6 +602,7 @@ spec:
 	conn := intg.ResolvedManifest.Spec.Connections["mcp"]
 	if conn == nil || conn.Auth == nil {
 		t.Fatalf("MCP connection = %#v", conn)
+		return
 	}
 	if got := conn.Auth.Type; got != providermanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("MCP auth type = %q, want %q", got, providermanifestv1.AuthTypeMCPOAuth)
@@ -692,6 +695,7 @@ spec:
 			_, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
 			if err == nil {
 				t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+				return
 			}
 			if !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, tc.wantErr)
@@ -1442,6 +1446,7 @@ plugins:
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+					return
 				}
 				if !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
@@ -1455,9 +1460,11 @@ plugins:
 			entry := loaded.Providers.UI[tc.uiKey]
 			if entry == nil {
 				t.Fatalf(`Providers.UI[%q] = nil`, tc.uiKey)
+				return
 			}
 			if entry.ResolvedManifest == nil {
 				t.Fatal("ResolvedManifest = nil")
+				return
 			}
 			gotManifestPath := filepath.ToSlash(entry.ResolvedManifestPath)
 			wantUIManifest := filepath.ToSlash(filepath.Join(".gestaltd", "ui", tc.uiKey, "manifest.yaml"))
@@ -1486,6 +1493,7 @@ plugins:
 				plugin := loaded.Plugins["roadmap"]
 				if plugin == nil {
 					t.Fatal(`Plugins["roadmap"] = nil`)
+					return
 				}
 				if got := plugin.AuthorizationPolicy; got != tc.wantPolicy {
 					t.Fatalf("Plugin AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
@@ -1701,6 +1709,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		entry := loaded.Providers.UI["roadmap"]
 		if entry == nil || entry.ResolvedManifest == nil {
 			t.Fatalf("Resolved plugin-owned UI = %+v", entry)
+			return
 		}
 		if entry.Path != "/create-customer-roadmap-review" {
 			t.Fatalf("entry.Path = %q, want %q", entry.Path, "/create-customer-roadmap-review")
@@ -1800,6 +1809,7 @@ server:
 	}
 	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+		return
 	}
 	if loaded.Plugins["roadmap"].Command == "" {
 		t.Fatal("loaded plugin command is empty")
@@ -1946,6 +1956,7 @@ server:
 	}
 	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+		return
 	}
 	if got := loaded.Plugins["roadmap"].ResolvedManifest.Version; got != newVersion {
 		t.Fatalf("ResolvedManifest.Version = %q, want %q", got, newVersion)
@@ -2034,6 +2045,7 @@ server:
 		plugin := loaded.Plugins["example"]
 		if plugin == nil || plugin.ResolvedManifest == nil {
 			t.Fatalf("Plugins[example] = %+v", plugin)
+			return
 		}
 		if got := plugin.Command; strings.Contains(got, "stale/provider/executable") {
 			t.Fatalf("plugin.Command = %q, want derived prepared path", got)
@@ -2042,6 +2054,7 @@ server:
 		indexedDB := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindIndexedDB)
 		if indexedDB == nil || indexedDB.ResolvedManifest == nil {
 			t.Fatalf("SelectedHostProvider(indexeddb) = %+v", indexedDB)
+			return
 		}
 		if got := indexedDB.Command; strings.Contains(got, "stale/indexeddb/executable") {
 			t.Fatalf("indexeddb.Command = %q, want derived prepared path", got)
@@ -2050,6 +2063,7 @@ server:
 		ui := loaded.Providers.UI["roadmap"]
 		if ui == nil || ui.ResolvedManifest == nil {
 			t.Fatalf("Providers.UI[roadmap] = %+v", ui)
+			return
 		}
 		if got := ui.ResolvedAssetRoot; strings.Contains(got, "stale/ui/assets") {
 			t.Fatalf("ResolvedAssetRoot = %q, want derived prepared path", got)
@@ -2193,6 +2207,7 @@ func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedUIWithoutLockfile(t *
 	_, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
 	if err == nil {
 		t.Fatal("LoadForExecutionAtPath: expected error, got nil")
+		return
 	}
 	if !strings.Contains(err.Error(), "field disabled not found") {
 		t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, "field disabled not found")
@@ -2220,6 +2235,7 @@ func TestInitAtPath_RejectsDisabledManagedMountedUI(t *testing.T) {
 	_, err := lc.InitAtPath(cfgPath)
 	if err == nil {
 		t.Fatal("InitAtPath: expected error, got nil")
+		return
 	}
 	if !strings.Contains(err.Error(), "field disabled not found") {
 		t.Fatalf("InitAtPath error = %v, want substring %q", err, "field disabled not found")
@@ -2297,6 +2313,7 @@ providers:
 	_, err := lc.InitAtPath(cfgPath)
 	if err == nil {
 		t.Fatal("InitAtPath: expected error, got nil")
+		return
 	}
 	if !strings.Contains(err.Error(), "field disabled not found") {
 		t.Fatalf("InitAtPath error = %v, want substring %q", err, "field disabled not found")
@@ -2380,6 +2397,7 @@ providers:
 	_, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
 	if err == nil {
 		t.Fatal("LoadForExecutionAtPath: expected error, got nil")
+		return
 	}
 	if !strings.Contains(err.Error(), "field disabled not found") {
 		t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, "field disabled not found")
@@ -2501,6 +2519,7 @@ func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	_, err := lc.lockProviderEntryForSource(context.Background(), paths, "example", plugin, map[string]any{})
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
+		return
 	}
 	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
@@ -2627,6 +2646,7 @@ server:
 	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
+		return
 	}
 	if !strings.HasSuffix(filepath.ToSlash(authEntry.Command), filepath.ToSlash(filepath.Join(".gestaltd", "auth", "auth", filepath.FromSlash(authArtifact)))) {
 		t.Fatalf("auth command = %q", authEntry.Command)
@@ -2715,6 +2735,7 @@ server:
 	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
+		return
 	}
 	if authEntry.Command == "" {
 		t.Fatal("auth command = empty, want prepared executable path")
@@ -3555,6 +3576,7 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	_, err := ReadLockfile(lockPath)
 	if err == nil {
 		t.Fatal("expected error for unsupported lockfile version")
+		return
 	}
 	if !strings.Contains(err.Error(), "unsupported lockfile version") {
 		t.Fatalf("unexpected error: %v", err)
@@ -3613,6 +3635,7 @@ func TestReadLockfile_RejectsLegacyUILockShapeBeforeUnmarshal(t *testing.T) {
 	_, err := ReadLockfile(lockPath)
 	if err == nil {
 		t.Fatal("expected error for legacy ui lock shape")
+		return
 	}
 	if !strings.Contains(err.Error(), "unsupported lockfile version 3") {
 		t.Fatalf("unexpected error: %v", err)
@@ -3646,6 +3669,7 @@ func TestReadLockfile_RejectsSchemaV1PortableEntries(t *testing.T) {
 	_, err := ReadLockfile(lockPath)
 	if err == nil {
 		t.Fatal("expected error for schema v1 portable lockfile")
+		return
 	}
 	if !strings.Contains(err.Error(), "unsupported lockfile schema version 1") {
 		t.Fatalf("unexpected error: %v", err)

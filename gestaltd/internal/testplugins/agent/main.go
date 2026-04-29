@@ -312,12 +312,13 @@ func (p *agentProvider) startTurn(
 				return nil, nil, fmt.Errorf("build tool arguments: %w", err)
 			}
 			resp, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-				SessionId:  sessionID,
-				TurnId:     turnID,
-				ToolCallId: "call-1",
-				ToolId:     tools[0].GetId(),
-				Arguments:  arguments,
-				ToolGrant:  toolGrant,
+				SessionId:      sessionID,
+				TurnId:         turnID,
+				ToolCallId:     "call-1",
+				ToolId:         tools[0].GetId(),
+				Arguments:      arguments,
+				ToolGrant:      toolGrant,
+				IdempotencyKey: " tool-call-key-1 ",
 			})
 			if err != nil {
 				output["tool_error"] = err.Error()

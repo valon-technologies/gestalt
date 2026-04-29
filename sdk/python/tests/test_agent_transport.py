@@ -297,7 +297,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
         _record_host_relay_tokens(context)
         return agent_pb2.ExecuteAgentToolResponse(
             status=207,
-            body=f"{request.session_id}:{request.turn_id}:{request.tool_call_id}:{request.tool_id}",
+            body=f"{request.session_id}:{request.turn_id}:{request.tool_call_id}:{request.tool_id}:{request.idempotency_key}",
         )
 
 
@@ -809,6 +809,7 @@ class AgentTransportTests(unittest.TestCase):
                     tool_call_id="call-7",
                     tool_id="lookup",
                     arguments=arguments,
+                    idempotency_key="tool-call-key-7",
                 )
             )
 
@@ -821,7 +822,7 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(search_response.tools[1].id, "system.workflow.schedules.list")
         self.assertEqual(search_response.tools[1].name, "List workflow schedules")
         self.assertEqual(response.status, 207)
-        self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
+        self.assertEqual(response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7")
         self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])
         self.assertEqual(
             _host_search_requests,

@@ -40,6 +40,7 @@ jobs:
           version: v2.11.3
           working-directory: gestaltd
           verify: false
+          skip-cache: true
 
   test:
     name: Go Tests

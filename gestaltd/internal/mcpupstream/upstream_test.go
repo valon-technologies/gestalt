@@ -303,6 +303,7 @@ func TestUpstream_MetadataOverridesDecorateCatalogs(t *testing.T) {
 	staticCat := u.Catalog()
 	if staticCat == nil {
 		t.Fatal("expected static catalog")
+		return
 	}
 	if staticCat.DisplayName != "Override" {
 		t.Fatalf("DisplayName = %q, want %q", staticCat.DisplayName, "Override")
@@ -342,6 +343,7 @@ func TestUpstream_SetIconSVGDecoratesCatalogWithoutStaticCatalog(t *testing.T) {
 	cat := u.Catalog()
 	if cat == nil {
 		t.Fatal("expected catalog")
+		return
 	}
 	if cat.IconSVG != "<svg/>" {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")

@@ -10,6 +10,7 @@ import {
   IndexedDB,
   NotFoundError,
   AlreadyExistsError,
+  TransactionError,
   ColumnType,
   indexedDBSocketEnv,
   indexedDBSocketTokenEnv,
@@ -193,6 +194,86 @@ describe("IndexedDB transport", () => {
     expect(meta.created).toBe("2025-01-01");
     expect(meta.scores).toEqual([1, 2, 3]);
     expect(meta.nested).toEqual({ deep: true });
+  });
+
+  test("transaction readwrite commits and reads own writes", async () => {
+    const store = "transaction_commit";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    const tx = await db.transaction([store], "readwrite");
+    const txos = tx.objectStore(store);
+    await txos.put({ id: "lease-1", owner: "worker-a", attempt: 1 });
+    expect((await txos.get("lease-1")).owner).toBe("worker-a");
+    await txos.put({ id: "lease-1", owner: "worker-b", attempt: 2 });
+    expect(await txos.count()).toBe(1);
+    await tx.commit();
+
+    expect(await os.get("lease-1")).toEqual({ id: "lease-1", owner: "worker-b", attempt: 2 });
+  });
+
+  test("transaction abort rolls back writes", async () => {
+    const store = "transaction_abort";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    const tx = await db.transaction([store], "readwrite");
+    await tx.objectStore(store).put({ id: "row-1", value: "pending" });
+    await tx.abort();
+
+    await expect(os.get("row-1")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test("readonly transaction rejects writes", async () => {
+    const store = "transaction_readonly";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+    await os.put({ id: "row-1", value: "kept" });
+
+    const tx = await db.transaction([store], "readonly");
+    expect((await tx.objectStore(store).get("row-1")).value).toBe("kept");
+    await expect(tx.objectStore(store).put({ id: "row-2", value: "blocked" })).rejects.toBeInstanceOf(
+      TransactionError,
+    );
+    await expect(os.get("row-2")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test("transaction operation error rolls back writes", async () => {
+    const store = "transaction_error_rollback";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    const tx = await db.transaction([store], "readwrite");
+    const txos = tx.objectStore(store);
+    await txos.add({ id: "row-1", value: "pending" });
+    await expect(txos.add({ id: "row-1", value: "duplicate" })).rejects.toBeInstanceOf(AlreadyExistsError);
+
+    await expect(os.get("row-1")).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  test("transaction index operations and bulk deletes roll back", async () => {
+    const store = "transaction_index_bulk_rollback";
+    await db.createObjectStore(store, {
+      indexes: [{ name: "by_status", keyPath: ["status"] }],
+    });
+    const os = db.objectStore(store);
+    await os.add({ id: "a", status: "active" });
+    await os.add({ id: "b", status: "active" });
+    await os.add({ id: "c", status: "inactive" });
+    await os.add({ id: "d", status: "active" });
+
+    const tx = await db.transaction([store], "readwrite");
+    const txos = tx.objectStore(store);
+    expect(await txos.index("by_status").count(undefined, "active")).toBe(3);
+    expect(await txos.index("by_status").getAllKeys(undefined, "active")).toHaveLength(3);
+    expect(await txos.deleteRange({ lower: "b", upper: "c" })).toBe(2);
+    expect(await txos.index("by_status").delete("active")).toBe(2);
+    await txos.clear();
+    expect(await txos.count()).toBe(0);
+    await tx.abort();
+
+    expect(await os.count()).toBe(4);
+    expect(await os.index("by_status").count(undefined, "inactive")).toBe(1);
   });
 
   test("named socket env selects the requested binding", async () => {

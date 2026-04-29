@@ -60,6 +60,22 @@ func (d *pluginIndexedDBTransport) ObjectStore(name string) indexeddb.ObjectStor
 	}
 }
 
+func (d *pluginIndexedDBTransport) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	translated := make([]string, len(stores))
+	for i, store := range stores {
+		storeName, err := d.translateStore(store)
+		if err != nil {
+			return nil, err
+		}
+		translated[i] = storeName
+	}
+	tx, err := d.inner.Transaction(ctx, translated, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &pluginIndexedDBTransaction{transport: d, inner: tx}, nil
+}
+
 func (d *pluginIndexedDBTransport) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
 	storeName, err := d.translateStore(name)
 	if err != nil {
@@ -273,6 +289,27 @@ func (i *pluginIndexedDBIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.K
 	return index.OpenKeyCursor(ctx, r, dir, values...)
 }
 
+type pluginIndexedDBTransaction struct {
+	transport *pluginIndexedDBTransport
+	inner     indexeddb.Transaction
+}
+
+func (tx *pluginIndexedDBTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+	storeName, err := tx.transport.translateStore(name)
+	if err != nil {
+		return missingTransactionObjectStore{tx: tx.inner}
+	}
+	return tx.inner.ObjectStore(storeName)
+}
+
+func (tx *pluginIndexedDBTransaction) Commit(ctx context.Context) error {
+	return tx.inner.Commit(ctx)
+}
+
+func (tx *pluginIndexedDBTransaction) Abort(ctx context.Context) error {
+	return tx.inner.Abort(ctx)
+}
+
 type missingObjectStore struct{}
 
 func (missingObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
@@ -359,4 +396,90 @@ func (missingIndex) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.C
 
 func (missingIndex) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
 	return nil, indexeddb.ErrNotFound
+}
+
+type missingTransactionObjectStore struct {
+	tx indexeddb.Transaction
+}
+
+func (s missingTransactionObjectStore) fail(ctx context.Context) error {
+	_ = s.tx.Abort(ctx)
+	return indexeddb.ErrNotFound
+}
+
+func (s missingTransactionObjectStore) Get(ctx context.Context, _ string) (indexeddb.Record, error) {
+	return nil, s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) GetKey(ctx context.Context, _ string) (string, error) {
+	return "", s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Add(ctx context.Context, _ indexeddb.Record) error {
+	return s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Put(ctx context.Context, _ indexeddb.Record) error {
+	return s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Delete(ctx context.Context, _ string) error {
+	return s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Clear(ctx context.Context) error {
+	return s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) GetAll(ctx context.Context, _ *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	return nil, s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) GetAllKeys(ctx context.Context, _ *indexeddb.KeyRange) ([]string, error) {
+	return nil, s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Count(ctx context.Context, _ *indexeddb.KeyRange) (int64, error) {
+	return 0, s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) DeleteRange(ctx context.Context, _ indexeddb.KeyRange) (int64, error) {
+	return 0, s.fail(ctx)
+}
+
+func (s missingTransactionObjectStore) Index(string) indexeddb.TransactionIndex {
+	return missingTransactionIndex(s)
+}
+
+type missingTransactionIndex struct {
+	tx indexeddb.Transaction
+}
+
+func (i missingTransactionIndex) fail(ctx context.Context) error {
+	_ = i.tx.Abort(ctx)
+	return indexeddb.ErrNotFound
+}
+
+func (i missingTransactionIndex) Get(ctx context.Context, _ ...any) (indexeddb.Record, error) {
+	return nil, i.fail(ctx)
+}
+
+func (i missingTransactionIndex) GetKey(ctx context.Context, _ ...any) (string, error) {
+	return "", i.fail(ctx)
+}
+
+func (i missingTransactionIndex) GetAll(ctx context.Context, _ *indexeddb.KeyRange, _ ...any) ([]indexeddb.Record, error) {
+	return nil, i.fail(ctx)
+}
+
+func (i missingTransactionIndex) GetAllKeys(ctx context.Context, _ *indexeddb.KeyRange, _ ...any) ([]string, error) {
+	return nil, i.fail(ctx)
+}
+
+func (i missingTransactionIndex) Count(ctx context.Context, _ *indexeddb.KeyRange, _ ...any) (int64, error) {
+	return 0, i.fail(ctx)
+}
+
+func (i missingTransactionIndex) Delete(ctx context.Context, _ ...any) (int64, error) {
+	return 0, i.fail(ctx)
 }

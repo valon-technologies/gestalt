@@ -6,9 +6,12 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("datastore: not found")
-	ErrAlreadyExists = errors.New("datastore: already exists")
-	ErrKeysOnly      = errors.New("datastore: value not available on key-only cursor")
+	ErrNotFound           = errors.New("datastore: not found")
+	ErrAlreadyExists      = errors.New("datastore: already exists")
+	ErrKeysOnly           = errors.New("datastore: value not available on key-only cursor")
+	ErrReadOnly           = errors.New("datastore: transaction is readonly")
+	ErrTransactionDone    = errors.New("datastore: transaction is already finished")
+	ErrInvalidTransaction = errors.New("datastore: invalid transaction")
 )
 
 // CursorDirection controls the traversal order of a cursor.
@@ -23,14 +26,71 @@ const (
 
 type Record = map[string]any
 
+// TransactionMode controls whether a transaction may mutate scoped stores.
+type TransactionMode string
+
+const (
+	TransactionReadonly  TransactionMode = "readonly"
+	TransactionReadwrite TransactionMode = "readwrite"
+)
+
+// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+// provider hint. It is not a portable durability guarantee.
+type TransactionDurabilityHint string
+
+const (
+	TransactionDurabilityDefault TransactionDurabilityHint = "default"
+	TransactionDurabilityStrict  TransactionDurabilityHint = "strict"
+	TransactionDurabilityRelaxed TransactionDurabilityHint = "relaxed"
+)
+
+type TransactionOptions struct {
+	DurabilityHint TransactionDurabilityHint
+}
+
 // Datastore is the IndexedDB-inspired interface every provider implements.
 // Implementations must be safe for concurrent use.
 type IndexedDB interface {
 	ObjectStore(name string) ObjectStore
+	Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (Transaction, error)
 	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
 	DeleteObjectStore(ctx context.Context, name string) error
 	Ping(ctx context.Context) error
 	Close() error
+}
+
+// Transaction is an explicit IndexedDB transaction over a fixed object-store
+// scope. Cursor operations are intentionally excluded from the initial
+// transaction contract.
+type Transaction interface {
+	ObjectStore(name string) TransactionObjectStore
+	Commit(ctx context.Context) error
+	Abort(ctx context.Context) error
+}
+
+// TransactionObjectStore provides transaction-scoped object-store operations.
+type TransactionObjectStore interface {
+	Get(ctx context.Context, id string) (Record, error)
+	GetKey(ctx context.Context, id string) (string, error)
+	Add(ctx context.Context, record Record) error
+	Put(ctx context.Context, record Record) error
+	Delete(ctx context.Context, id string) error
+	Clear(ctx context.Context) error
+	GetAll(ctx context.Context, r *KeyRange) ([]Record, error)
+	GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error)
+	Count(ctx context.Context, r *KeyRange) (int64, error)
+	DeleteRange(ctx context.Context, r KeyRange) (int64, error)
+	Index(name string) TransactionIndex
+}
+
+// TransactionIndex provides transaction-scoped index operations.
+type TransactionIndex interface {
+	Get(ctx context.Context, values ...any) (Record, error)
+	GetKey(ctx context.Context, values ...any) (string, error)
+	GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error)
+	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
+	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
+	Delete(ctx context.Context, values ...any) (int64, error)
 }
 
 // ObjectStore provides CRUD by primary key ("id" field) and index-based queries.

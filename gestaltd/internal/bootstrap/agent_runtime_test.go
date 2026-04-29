@@ -61,6 +61,7 @@ type agentRuntimeInvokerCall struct {
 	params                 map[string]any
 	subjectID              string
 	credentialModeOverride core.ConnectionMode
+	idempotencyKey         string
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -76,6 +77,7 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		params:                 cloneAnyMap(params),
 		subjectID:              p.SubjectID,
 		credentialModeOverride: invocation.CredentialModeOverrideFromContext(ctx),
+		idempotencyKey:         invocation.IdempotencyKeyFromContext(ctx),
 	})
 	i.mu.Unlock()
 
@@ -1393,6 +1395,7 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 	if toolTurn == nil {
 		t.Fatal("CreateTurn returned nil turn")
+		return
 	}
 
 	var output struct {
@@ -1438,6 +1441,9 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 	if calls[0].credentialModeOverride != core.ConnectionModeNone {
 		t.Fatalf("invoker credential mode override = %q, want %q", calls[0].credentialModeOverride, core.ConnectionModeNone)
+	}
+	if calls[0].idempotencyKey != "tool-call-key-1" {
+		t.Fatalf("invoker idempotency key = %q, want tool-call-key-1", calls[0].idempotencyKey)
 	}
 
 	events, err := agents[0].ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{
@@ -1493,6 +1499,7 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 	if pausedTurn == nil {
 		t.Fatal("CreateTurn(waiting) returned nil turn")
+		return
 	}
 	if pausedTurn.Status != coreagent.ExecutionStatusWaitingForInput {
 		t.Fatalf("paused turn status = %q, want %q", pausedTurn.Status, coreagent.ExecutionStatusWaitingForInput)

@@ -95,13 +95,14 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 		return nil, status.Error(codes.InvalidArgument, "tool_id is required")
 	}
 	resp, err := s.executeTool(ctx, coreagent.ExecuteToolRequest{
-		ProviderName: strings.TrimSpace(s.providerName),
-		SessionID:    sessionID,
-		TurnID:       turnID,
-		ToolCallID:   strings.TrimSpace(req.GetToolCallId()),
-		ToolID:       toolID,
-		Arguments:    mapFromStruct(req.GetArguments()),
-		ToolGrant:    strings.TrimSpace(req.GetToolGrant()),
+		ProviderName:   strings.TrimSpace(s.providerName),
+		SessionID:      sessionID,
+		TurnID:         turnID,
+		ToolCallID:     strings.TrimSpace(req.GetToolCallId()),
+		ToolID:         toolID,
+		Arguments:      mapFromStruct(req.GetArguments()),
+		ToolGrant:      strings.TrimSpace(req.GetToolGrant()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 	})
 	if err != nil {
 		return nil, status.Errorf(agentHostErrorCode(err), "agent execute tool: %v", err)
