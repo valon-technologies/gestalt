@@ -72,8 +72,7 @@ type Manager struct {
 }
 
 type CreateSessionRequest struct {
-	Providers               []AttachProvider `json:"providers"`
-	AttachAuthorizationCode string           `json:"attachAuthorizationCode,omitempty"`
+	Providers []AttachProvider `json:"providers"`
 }
 
 type AttachProvider struct {
@@ -116,8 +115,7 @@ type AttachAuthorizationInfo struct {
 }
 
 type PollAttachAuthorizationResponse struct {
-	Approved                bool   `json:"approved"`
-	AttachAuthorizationCode string `json:"attachAuthorizationCode,omitempty"`
+	Approved bool `json:"approved"`
 }
 
 type AttachmentInfo struct {
@@ -151,8 +149,6 @@ type AttachAuthorization struct {
 	expiresAt        time.Time
 	approvedAt       time.Time
 	approvedBy       *principal.Principal
-	codeHash         string
-	code             string
 	used             bool
 }
 
@@ -492,14 +488,8 @@ func (m *Manager) ApproveAttachAuthorization(id string, p *principal.Principal, 
 		}
 		return status.Error(codes.FailedPrecondition, "provider dev attach authorization is already approved")
 	}
-	code, codeHash, err := newAttachAuthorizationCode()
-	if err != nil {
-		return status.Errorf(codes.Internal, "create provider dev attach authorization code: %v", err)
-	}
 	auth.approvedAt = time.Now()
 	auth.approvedBy = clonePrincipal(p)
-	auth.code = code
-	auth.codeHash = codeHash
 	return nil
 }
 
@@ -511,12 +501,11 @@ func (m *Manager) PollAttachAuthorization(id, clientSecret string) (*PollAttachA
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return &PollAttachAuthorizationResponse{
-		Approved:                !auth.approvedAt.IsZero(),
-		AttachAuthorizationCode: auth.code,
+		Approved: !auth.approvedAt.IsZero(),
 	}, nil
 }
 
-func (m *Manager) ConsumeAttachAuthorization(id, clientSecret, code string, req CreateSessionRequest) (*principal.Principal, error) {
+func (m *Manager) ConsumeAttachAuthorization(id, clientSecret string, req CreateSessionRequest) (*principal.Principal, error) {
 	auth, err := m.attachAuthorizationWithClientSecret(id, clientSecret, time.Now())
 	if err != nil {
 		return nil, err
@@ -525,20 +514,13 @@ func (m *Manager) ConsumeAttachAuthorization(id, clientSecret, code string, req 
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "hash provider dev attach authorization request: %v", err)
 	}
-	code = strings.TrimSpace(code)
-	if code == "" {
-		return nil, status.Error(codes.Unauthenticated, "provider dev attach authorization code is required")
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if auth.used {
 		return nil, status.Error(codes.FailedPrecondition, "provider dev attach authorization was already used")
 	}
-	if auth.approvedBy == nil || auth.codeHash == "" {
+	if auth.approvedBy == nil {
 		return nil, status.Error(codes.FailedPrecondition, "provider dev attach authorization is not approved")
-	}
-	if subtle.ConstantTimeCompare([]byte(hashAttachAuthorizationSecret(code)), []byte(auth.codeHash)) != 1 {
-		return nil, status.Error(codes.PermissionDenied, "provider dev attach authorization code is invalid")
 	}
 	if subtle.ConstantTimeCompare([]byte(requestHash), []byte(auth.requestHash)) != 1 {
 		return nil, status.Error(codes.PermissionDenied, "provider dev attach authorization request does not match")
@@ -1925,15 +1907,6 @@ func newAttachAuthorizationSecret() (secret string, hash string, err error) {
 	return secret, hashAttachAuthorizationSecret(secret), nil
 }
 
-func newAttachAuthorizationCode() (code string, hash string, err error) {
-	id, err := randomID()
-	if err != nil {
-		return "", "", err
-	}
-	code = "pdac_" + id
-	return code, hashAttachAuthorizationSecret(code), nil
-}
-
 func newAttachAuthorizationVerificationCode() (code string, hash string, err error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -1975,7 +1948,6 @@ func normalizeAttachAuthorizationVerificationCode(code string) string {
 }
 
 func attachAuthorizationRequestHash(req CreateSessionRequest) (string, error) {
-	req.AttachAuthorizationCode = ""
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return "", err

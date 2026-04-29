@@ -6609,8 +6609,8 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 	if err := json.Unmarshal(pollBody, &poll); err != nil {
 		t.Fatalf("decode poll response: %v", err)
 	}
-	if !poll.Approved || poll.AttachAuthorizationCode == "" {
-		t.Fatalf("poll response missing approval/code: %s", pollBody)
+	if !poll.Approved {
+		t.Fatalf("poll response missing approval: %s", pollBody)
 	}
 
 	approveReq, err = http.NewRequest(http.MethodPost, authorization.ApprovalURL+"/approve", strings.NewReader(url.Values{"verificationCode": {authorization.VerificationCode}}.Encode()))
@@ -6645,11 +6645,48 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 	if err := json.Unmarshal(pollBody, &secondPoll); err != nil {
 		t.Fatalf("decode second poll response: %v", err)
 	}
-	if secondPoll.AttachAuthorizationCode != poll.AttachAuthorizationCode {
-		t.Fatalf("approval code changed after idempotent approve: got %q want %q", secondPoll.AttachAuthorizationCode, poll.AttachAuthorizationCode)
+	if !secondPoll.Approved {
+		t.Fatalf("second poll response missing approval: %s", pollBody)
 	}
 
-	sessionReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(fmt.Sprintf(`{"attachAuthorizationCode":%q,"providers":[{"name":"roadmap"}]}`, poll.AttachAuthorizationCode)))
+	missingSecretReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
+	if err != nil {
+		t.Fatalf("new missing-secret authorized session request: %v", err)
+	}
+	missingSecretReq.Header.Set("Content-Type", "application/json")
+	missingSecretResp, err := ts.Client().Do(missingSecretReq)
+	if err != nil {
+		t.Fatalf("create authorized session without secret: %v", err)
+	}
+	missingSecretBody, err := io.ReadAll(missingSecretResp.Body)
+	_ = missingSecretResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read missing-secret session response: %v", err)
+	}
+	if missingSecretResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("missing-secret session status = %d, want 401; body = %s", missingSecretResp.StatusCode, missingSecretBody)
+	}
+
+	changedRequestReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"other"}]}`))
+	if err != nil {
+		t.Fatalf("new changed-request authorized session request: %v", err)
+	}
+	changedRequestReq.Header.Set("Content-Type", "application/json")
+	changedRequestReq.Header.Set(providerdev.HeaderAuthorizationSecret, authorization.ClientSecret)
+	changedRequestResp, err := ts.Client().Do(changedRequestReq)
+	if err != nil {
+		t.Fatalf("create authorized session with changed request: %v", err)
+	}
+	changedRequestBody, err := io.ReadAll(changedRequestResp.Body)
+	_ = changedRequestResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read changed-request session response: %v", err)
+	}
+	if changedRequestResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("changed-request session status = %d, want 403; body = %s", changedRequestResp.StatusCode, changedRequestBody)
+	}
+
+	sessionReq, err := http.NewRequest(http.MethodPost, ts.URL+providerdev.PathAttachAuthorizations+"/"+authorization.AuthorizationID+"/attachments", strings.NewReader(`{"providers":[{"name":"roadmap"}]}`))
 	if err != nil {
 		t.Fatalf("new authorized session request: %v", err)
 	}

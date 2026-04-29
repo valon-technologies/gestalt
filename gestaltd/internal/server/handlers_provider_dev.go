@@ -198,7 +198,7 @@ func (s *Server) createAuthorizedProviderDevSession(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusBadRequest, "invalid provider dev session request")
 		return
 	}
-	p, err := s.providerDevSessions.ConsumeAttachAuthorization(providerDevAuthorizationID(r), providerDevAuthorizationSecret(r), req.AttachAuthorizationCode, req)
+	p, err := s.providerDevSessions.ConsumeAttachAuthorization(providerDevAuthorizationID(r), providerDevAuthorizationSecret(r), req)
 	if err != nil {
 		writeProviderDevError(w, err)
 		return
