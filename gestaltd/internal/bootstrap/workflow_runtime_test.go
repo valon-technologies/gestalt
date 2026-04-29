@@ -168,6 +168,23 @@ func cloneMapAny(value map[string]any) map[string]any {
 	return out
 }
 
+func workflowSignalsFromTestContext(value any) []map[string]any {
+	switch signals := value.(type) {
+	case []map[string]any:
+		return signals
+	case []any:
+		out := make([]map[string]any, 0, len(signals))
+		for _, signal := range signals {
+			if typed, ok := signal.(map[string]any); ok {
+				out = append(out, typed)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 type workflowRuntimeAgentManagerStub struct {
 	agentmanager.Service
 	createSessionRequests []coreagent.ManagerCreateSessionRequest
@@ -339,6 +356,28 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		Metadata: map[string]any{
 			"attempt": 2,
 		},
+		Signals: []coreworkflow.Signal{{
+			ID:       "signal-1",
+			Name:     "github.webhook",
+			Sequence: 7,
+			Payload: map[string]any{
+				"delivery_id":                   "delivery-123",
+				"github_event":                  "issue_comment",
+				"github_action":                 "created",
+				"_gestalt_payload_preview_json": strings.Repeat("preview", 2000),
+				"payload": map[string]any{
+					"raw": strings.Repeat("raw-webhook", 2000),
+				},
+				"agent_request": map[string]any{
+					"user_prompt": strings.Repeat("please inspect this issue comment ", 500),
+					"subject": map[string]any{
+						"repository": "valon-technologies/gestalt",
+						"number":     123,
+					},
+				},
+				"payload_sha256": "abc123",
+			},
+		}},
 		CreatedBy: coreworkflow.Actor{
 			SubjectID:   principal.UserSubjectID("user-123"),
 			SubjectKind: string(principal.KindUser),
@@ -438,6 +477,30 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if got := trigger["scheduledFor"]; got != scheduledFor.UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("scheduledFor = %#v, want %q", got, scheduledFor.UTC().Format(time.RFC3339Nano))
 	}
+	signals := workflowSignalsFromTestContext(roundTripProvider.workflowContext["signals"])
+	if len(signals) != 1 {
+		t.Fatalf("workflow signals = %#v", roundTripProvider.workflowContext["signals"])
+	}
+	signalPayload, ok := signals[0]["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow signal payload = %#v", signals[0]["payload"])
+	}
+	if _, ok := signalPayload["_gestalt_payload_preview_json"]; ok {
+		t.Fatalf("workflow signal payload retained preview: %#v", signalPayload)
+	}
+	if _, ok := signalPayload["payload"]; ok {
+		t.Fatalf("workflow signal payload retained raw payload: %#v", signalPayload)
+	}
+	if signalPayload["payload_sha256"] != "abc123" {
+		t.Fatalf("workflow signal payload digest = %#v", signalPayload["payload_sha256"])
+	}
+	agentRequest, ok := signalPayload["agent_request"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow signal agent_request = %#v", signalPayload["agent_request"])
+	}
+	if prompt, _ := agentRequest["user_prompt"].(string); !strings.Contains(prompt, "please inspect") || len(prompt) > workflowSignalContextMaxStringBytes {
+		t.Fatalf("workflow signal user_prompt = %q", prompt)
+	}
 }
 
 func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) {
@@ -485,6 +548,24 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 			TimeoutSeconds: 5,
 		}},
 		Trigger: coreworkflow.RunTrigger{Manual: true},
+		Signals: []coreworkflow.Signal{{
+			ID:       "signal-agent-1",
+			Name:     "github.webhook",
+			Sequence: 11,
+			Payload: map[string]any{
+				"delivery_id":                   "delivery-agent-123",
+				"github_event":                  "pull_request",
+				"github_action":                 "opened",
+				"_gestalt_payload_preview_json": strings.Repeat("preview", 2000),
+				"payload": map[string]any{
+					"raw": strings.Repeat("raw-webhook", 2000),
+				},
+				"agent_request": map[string]any{
+					"user_prompt": "Review the opened pull request",
+				},
+				"payload_sha256": "def456",
+			},
+		}},
 	}
 	p := principal.Canonicalize(&principal.Principal{
 		SubjectID:           principal.UserSubjectID("ada"),
@@ -512,11 +593,35 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		t.Fatalf("turn requests = %d, want 1", len(agentProvider.createTurnRequests))
 	}
 	turnReq := agentProvider.createTurnRequests[0]
-	if got := turnReq.IdempotencyKey; got != "workflow:temporal:run-agent-123:turn" {
-		t.Fatalf("turn idempotency key = %q", got)
+	if got := turnReq.IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-123:turn:signal-batch-") {
+		t.Fatalf("turn idempotency key = %q, want workflow signal batch prefix", got)
 	}
-	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
+	if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" {
 		t.Fatalf("turn messages = %#v", turnReq.Messages)
+	}
+	if !strings.Contains(turnReq.Messages[1].Text, "Review the opened pull request") {
+		t.Fatalf("signal message text = %q", turnReq.Messages[1].Text)
+	}
+	if strings.Contains(turnReq.Messages[1].Text, "_gestalt_payload_preview_json") || strings.Contains(turnReq.Messages[1].Text, "raw-webhook") {
+		t.Fatalf("signal message retained raw payload: %q", turnReq.Messages[1].Text)
+	}
+	workflowMetadata, ok := turnReq.Metadata["workflow"].(map[string]any)
+	if !ok {
+		t.Fatalf("turn workflow metadata = %#v", turnReq.Metadata["workflow"])
+	}
+	metadataSignals := workflowSignalsFromTestContext(workflowMetadata["signals"])
+	if len(metadataSignals) != 1 {
+		t.Fatalf("turn workflow signals = %#v", workflowMetadata["signals"])
+	}
+	metadataPayload, ok := metadataSignals[0]["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("turn workflow signal payload = %#v", metadataSignals[0]["payload"])
+	}
+	if _, ok := metadataPayload["_gestalt_payload_preview_json"]; ok {
+		t.Fatalf("turn metadata retained preview: %#v", metadataPayload)
+	}
+	if _, ok := metadataPayload["payload"]; ok {
+		t.Fatalf("turn metadata retained raw payload: %#v", metadataPayload)
 	}
 	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.Plugin != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
 		t.Fatalf("turn tools = %#v, want preloaded roadmap.sync", turnReq.Tools)

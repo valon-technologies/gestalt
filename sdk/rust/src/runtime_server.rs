@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
     ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
-    ProviderKind,
+    ProviderKind, StartRuntimeProviderResponse,
 };
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
 use crate::secrets::SecretsProvider;
@@ -30,6 +30,8 @@ trait RuntimeHooks: Send + Sync {
     fn warnings(&self) -> Vec<String>;
 
     async fn health_check(&self) -> Result<()>;
+
+    async fn start(&self) -> Result<()>;
 }
 
 struct ProviderRuntime<P> {
@@ -85,6 +87,10 @@ macro_rules! impl_runtime_hooks {
 
             async fn health_check(&self) -> Result<()> {
                 self.provider.health_check().await
+            }
+
+            async fn start(&self) -> Result<()> {
+                self.provider.start().await
             }
         }
     };
@@ -234,6 +240,19 @@ impl ProviderLifecycle for RuntimeServer {
             })),
         }
     }
+
+    async fn start_provider(
+        &self,
+        _request: GrpcRequest<()>,
+    ) -> std::result::Result<GrpcResponse<StartRuntimeProviderResponse>, Status> {
+        self.provider
+            .start()
+            .await
+            .map_err(|error| rpc_status("start provider", error))?;
+        Ok(GrpcResponse::new(StartRuntimeProviderResponse {
+            protocol_version: CURRENT_PROTOCOL_VERSION,
+        }))
+    }
 }
 
 #[cfg(test)]
@@ -261,6 +280,10 @@ mod tests {
 
         async fn health_check(&self) -> Result<()> {
             Err(std::io::Error::other("health failed").into())
+        }
+
+        async fn start(&self) -> Result<()> {
+            Err(std::io::Error::other("start failed").into())
         }
     }
 
@@ -291,5 +314,17 @@ mod tests {
             .into_inner();
         assert!(!response.ready);
         assert_eq!(response.message, INTERNAL_ERROR_MESSAGE);
+    }
+
+    #[tokio::test]
+    async fn start_provider_sanitizes_hidden_internal_errors() {
+        let server = RuntimeServer::for_provider(Arc::new(HiddenRuntimeProvider));
+
+        let error = server
+            .start_provider(GrpcRequest::new(()))
+            .await
+            .expect_err("start provider should fail");
+        assert_eq!(error.code(), Code::Unknown);
+        assert_eq!(error.message(), "start provider: internal error");
     }
 }

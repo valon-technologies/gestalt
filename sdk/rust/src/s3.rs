@@ -189,6 +189,11 @@ pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
+    async fn start(&self) -> ProviderResult<()> {
+        Ok(())
+    }
+
     /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> ProviderResult<()> {
         Ok(())

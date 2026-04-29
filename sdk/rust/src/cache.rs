@@ -74,6 +74,11 @@ pub trait CacheProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
+    async fn start(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> Result<()> {
         Ok(())

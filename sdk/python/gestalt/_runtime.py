@@ -36,6 +36,7 @@ from ._providers import (
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
+    Starter,
     WarningsProvider,
     WorkflowProvider,
 )
@@ -214,7 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         if not isinstance(target, Plugin):
-            raise RuntimeError("catalog export is only supported for integration plugins")
+            raise RuntimeError(
+                "catalog export is only supported for integration plugins"
+            )
         target.write_catalog(catalog_path)
         return 0
 
@@ -320,16 +323,12 @@ def _parse_provider_socket_target(raw: str) -> tuple[str, str]:
     if target.startswith("tcp://"):
         address = target.removeprefix("tcp://").strip()
         if not address:
-            raise RuntimeError(
-                f"provider tcp target {raw!r} is missing host:port"
-            )
+            raise RuntimeError(f"provider tcp target {raw!r} is missing host:port")
         return "tcp", address
     if target.startswith("unix://"):
         address = target.removeprefix("unix://").strip()
         if not address:
-            raise RuntimeError(
-                f"provider unix target {raw!r} is missing a socket path"
-            )
+            raise RuntimeError(f"provider unix target {raw!r} is missing a socket path")
         return "unix", address
     if "://" in target:
         parsed = _urlparse.urlparse(target)
@@ -599,7 +598,12 @@ def _service_wrapper(
     for method_name in method_names:
         base_method = getattr(base_cls, method_name)
 
-        def _delegated(self, *args: Any, _method_name: str = method_name, _base_method: Any = base_method) -> Any:
+        def _delegated(
+            self,
+            *args: Any,
+            _method_name: str = method_name,
+            _base_method: Any = base_method,
+        ) -> Any:
             handler = getattr(self._provider, _method_name, None)
             if handler is None:
                 return _base_method(self, *args)
@@ -782,6 +786,14 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
                     )
                 return runtime_pb2.HealthCheckResponse(ready=True)
             return runtime_pb2.HealthCheckResponse(ready=True)
+
+        @_grpc_handler("start provider")
+        def StartProvider(self, _request: Any, _context: Any) -> Any:
+            if isinstance(provider, Starter):
+                provider.start()
+            return runtime_pb2.StartRuntimeProviderResponse(
+                protocol_version=CURRENT_PROTOCOL_VERSION
+            )
 
     return RuntimeServicer()
 

@@ -394,6 +394,10 @@ func (r *remoteWorkflow) Ping(ctx context.Context) error {
 	return err
 }
 
+func (r *remoteWorkflow) Start(ctx context.Context) error {
+	return StartRuntimeProvider(ctx, r.runtime)
+}
+
 func (r *remoteWorkflow) Close() error {
 	if r == nil || r.closer == nil {
 		return nil

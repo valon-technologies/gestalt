@@ -213,6 +213,10 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		return nil
 	}
 
+	if err := result.StartWorkflowProviders(ctx); err != nil {
+		return err
+	}
+
 	mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
 	if err != nil {
 		return err

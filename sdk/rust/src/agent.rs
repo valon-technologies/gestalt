@@ -191,6 +191,10 @@ pub trait AgentProvider: pb::agent_provider_server::AgentProvider + Send + Sync 
         Ok(())
     }
 
+    async fn start(&self) -> ProviderResult<()> {
+        Ok(())
+    }
+
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }

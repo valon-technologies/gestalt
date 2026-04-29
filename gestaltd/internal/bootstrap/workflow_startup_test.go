@@ -36,6 +36,16 @@ type startupTestWorkflowProvider struct {
 	listRuns func(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error)
 }
 
+type startableStartupTestWorkflowProvider struct {
+	startupTestWorkflowProvider
+	started int
+}
+
+func (p *startableStartupTestWorkflowProvider) Start(context.Context) error {
+	p.started++
+	return nil
+}
+
 type noopTelemetryProvider struct{}
 
 func (p startupTestWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -331,6 +341,75 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 	}
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
+}
+
+func TestResultStartWorkflowProvidersIsSeparateFromAuthorizerStart(t *testing.T) {
+	t.Parallel()
+
+	provider := &startableStartupTestWorkflowProvider{}
+	result := &Result{
+		ExtraWorkflows: []coreworkflow.Provider{provider},
+	}
+
+	if err := result.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if provider.started != 0 {
+		t.Fatalf("workflow provider started during Result.Start = %d, want 0", provider.started)
+	}
+	if err := result.StartWorkflowProviders(context.Background()); err != nil {
+		t.Fatalf("StartWorkflowProviders: %v", err)
+	}
+	if provider.started != 1 {
+		t.Fatalf("workflow provider started = %d, want 1", provider.started)
+	}
+}
+
+func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		provider coreworkflow.Provider
+	}{
+		{
+			name: "cleanup",
+			provider: &workflowProviderWithCleanup{
+				Provider: &startableStartupTestWorkflowProvider{},
+			},
+		},
+		{
+			name: "execution references cleanup",
+			provider: &workflowProviderWithExecutionReferencesAndCleanup{
+				Provider:                &startableStartupTestWorkflowProvider{},
+				ExecutionReferenceStore: newWorkflowRuntimeExecutionRefProvider(),
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &Result{ExtraWorkflows: []coreworkflow.Provider{tc.provider}}
+			if err := result.StartWorkflowProviders(context.Background()); err != nil {
+				t.Fatalf("StartWorkflowProviders: %v", err)
+			}
+			var inner *startableStartupTestWorkflowProvider
+			switch provider := tc.provider.(type) {
+			case *workflowProviderWithCleanup:
+				inner = provider.Provider.(*startableStartupTestWorkflowProvider)
+			case *workflowProviderWithExecutionReferencesAndCleanup:
+				inner = provider.Provider.(*startableStartupTestWorkflowProvider)
+			default:
+				t.Fatalf("unexpected provider type %T", provider)
+			}
+			if inner.started != 1 {
+				t.Fatalf("inner started = %d, want 1", inner.started)
+			}
+		})
+	}
 }
 
 func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {

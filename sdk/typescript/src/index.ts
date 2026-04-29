@@ -184,6 +184,7 @@ export {
   type ProviderKind,
   type ProviderMetadata,
   type RuntimeProviderOptions,
+  type StartHandler,
   type WarningsHandler,
 } from "./provider.ts";
 export {

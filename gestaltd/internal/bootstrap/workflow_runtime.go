@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -439,6 +440,15 @@ func workflowSignalBatchID(signals []coreworkflow.Signal) string {
 	return "signal-batch-" + fmt.Sprintf("%x", sha256.Sum256(body))
 }
 
+const (
+	workflowSignalContextMaxSignals     = 10
+	workflowSignalContextMaxItems       = 20
+	workflowSignalContextMaxDepth       = 4
+	workflowSignalContextMaxStringBytes = 4096
+	workflowSignalMessageMaxBytes       = 64 * 1024
+	workflowSignalMessagePrefix         = "Workflow signal batch:\n"
+)
+
 func workflowSignalMessage(signals []coreworkflow.Signal) *coreagent.Message {
 	if len(signals) == 0 {
 		return nil
@@ -446,13 +456,18 @@ func workflowSignalMessage(signals []coreworkflow.Signal) *coreagent.Message {
 	payload := map[string]any{
 		"signals": workflowSignalsContext(signals),
 	}
+	if omitted := len(signals) - workflowSignalContextMaxSignals; omitted > 0 {
+		payload["omittedSignals"] = omitted
+	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		body = []byte(fmt.Sprintf("%#v", payload))
 	}
+	textMaxBytes := workflowSignalMessageMaxBytes - len(workflowSignalMessagePrefix)
+	text := truncateWorkflowString(string(body), textMaxBytes)
 	return &coreagent.Message{
 		Role: "user",
-		Text: "Workflow signal batch:\n" + string(body),
+		Text: workflowSignalMessagePrefix + text,
 		Metadata: map[string]any{
 			"gestalt.workflow.signal_batch": true,
 		},
@@ -539,8 +554,12 @@ func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {
 	if len(signals) == 0 {
 		return nil
 	}
-	out := make([]map[string]any, 0, len(signals))
-	for i := range signals {
+	limit := len(signals)
+	if limit > workflowSignalContextMaxSignals {
+		limit = workflowSignalContextMaxSignals
+	}
+	out := make([]map[string]any, 0, limit)
+	for i := 0; i < limit; i++ {
 		signal := &signals[i]
 		value := map[string]any{}
 		if id := strings.TrimSpace(signal.ID); id != "" {
@@ -550,10 +569,14 @@ func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {
 			value["name"] = name
 		}
 		if signal.Payload != nil {
-			value["payload"] = maps.Clone(signal.Payload)
+			if payload := compactWorkflowSignalPayload(signal.Payload); len(payload) > 0 {
+				value["payload"] = payload
+			}
 		}
 		if signal.Metadata != nil {
-			value["metadata"] = maps.Clone(signal.Metadata)
+			if metadata, ok := compactWorkflowJSONValue(signal.Metadata, workflowSignalContextMaxDepth).(map[string]any); ok && len(metadata) > 0 {
+				value["metadata"] = metadata
+			}
 		}
 		if createdBy := workflowActorContext(signal.CreatedBy); len(createdBy) > 0 {
 			value["createdBy"] = createdBy
@@ -570,6 +593,173 @@ func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {
 		out = append(out, value)
 	}
 	return out
+}
+
+func compactWorkflowSignalPayload(payload map[string]any) map[string]any {
+	if len(payload) == 0 {
+		return nil
+	}
+	out := map[string]any{}
+	copyCompactPayloadField(out, payload, "delivery_id")
+	copyCompactPayloadField(out, payload, "deliveryId")
+	copyCompactPayloadField(out, payload, "github_event")
+	copyCompactPayloadField(out, payload, "githubEvent")
+	copyCompactPayloadField(out, payload, "github_action")
+	copyCompactPayloadField(out, payload, "githubAction")
+	copyCompactPayloadField(out, payload, "event")
+	copyCompactPayloadField(out, payload, "action")
+	copyCompactPayloadField(out, payload, "summary")
+	copyCompactPayloadField(out, payload, "user_prompt")
+	copyCompactPayloadField(out, payload, "userPrompt")
+	copyCompactPayloadField(out, payload, "payload_sha256")
+	copyCompactPayloadField(out, payload, "payloadSha256")
+	copyCompactPayloadField(out, payload, "payload_omitted")
+	copyCompactPayloadField(out, payload, "payloadOmitted")
+	for _, key := range []string{"agent_request", "agentRequest", "installation", "repository", "sender", "pull_request", "pullRequest", "issue", "comment", "review", "ref"} {
+		if value, ok := payload[key]; ok {
+			out[key] = compactWorkflowJSONValue(value, workflowSignalContextMaxDepth)
+		}
+	}
+	scalars := map[string]any{}
+	keys := make([]string, 0, len(payload))
+	for key := range payload {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if len(scalars) >= workflowSignalContextMaxItems {
+			break
+		}
+		if _, exists := out[key]; exists || workflowSignalPayloadKeyExcluded(key) {
+			continue
+		}
+		value := payload[key]
+		if compact, ok := compactWorkflowJSONScalar(value); ok {
+			scalars[key] = compact
+		}
+	}
+	if len(scalars) > 0 {
+		out["fields"] = scalars
+	}
+	out["payloadOmitted"] = true
+	return out
+}
+
+func copyCompactPayloadField(out map[string]any, payload map[string]any, key string) {
+	value, ok := payload[key]
+	if !ok || workflowSignalPayloadKeyExcluded(key) {
+		return
+	}
+	if compact, ok := compactWorkflowJSONScalar(value); ok {
+		out[key] = compact
+		return
+	}
+	out[key] = compactWorkflowJSONValue(value, workflowSignalContextMaxDepth)
+}
+
+func workflowSignalPayloadKeyExcluded(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "", "payload", "_gestalt_payload_preview_json":
+		return true
+	default:
+		return false
+	}
+}
+
+func compactWorkflowJSONScalar(value any) (any, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return nil, true
+	case string:
+		return truncateWorkflowString(typed, workflowSignalContextMaxStringBytes), true
+	case bool:
+		return typed, true
+	case int:
+		return typed, true
+	case int8:
+		return typed, true
+	case int16:
+		return typed, true
+	case int32:
+		return typed, true
+	case int64:
+		return typed, true
+	case uint:
+		return typed, true
+	case uint8:
+		return typed, true
+	case uint16:
+		return typed, true
+	case uint32:
+		return typed, true
+	case uint64:
+		return typed, true
+	case float32:
+		return typed, true
+	case float64:
+		return typed, true
+	default:
+		return nil, false
+	}
+}
+
+func compactWorkflowJSONValue(value any, depth int) any {
+	if scalar, ok := compactWorkflowJSONScalar(value); ok {
+		return scalar
+	}
+	if depth <= 0 {
+		return map[string]any{"omitted": true}
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		out := map[string]any{}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			if workflowSignalPayloadKeyExcluded(key) {
+				continue
+			}
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if len(out) >= workflowSignalContextMaxItems {
+				out["omittedFields"] = len(keys) - len(out)
+				break
+			}
+			out[key] = compactWorkflowJSONValue(typed[key], depth-1)
+		}
+		return out
+	case []any:
+		limit := len(typed)
+		if limit > workflowSignalContextMaxItems {
+			limit = workflowSignalContextMaxItems
+		}
+		out := make([]any, 0, limit)
+		for i := 0; i < limit; i++ {
+			out = append(out, compactWorkflowJSONValue(typed[i], depth-1))
+		}
+		return out
+	default:
+		return truncateWorkflowString(fmt.Sprintf("%v", typed), workflowSignalContextMaxStringBytes)
+	}
+}
+
+func truncateWorkflowString(value string, maxBytes int) string {
+	if maxBytes <= 0 || len(value) <= maxBytes {
+		return value
+	}
+	if maxBytes <= len("...") {
+		cut := maxBytes
+		for cut > 0 && !utf8.RuneStart(value[cut]) {
+			cut--
+		}
+		return value[:cut]
+	}
+	cut := maxBytes - len("...")
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
+	}
+	return value[:cut] + "..."
 }
 
 func workflowTargetContext(target coreworkflow.Target) map[string]any {

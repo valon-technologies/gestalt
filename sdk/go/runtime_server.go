@@ -75,6 +75,15 @@ func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*pro
 	return &proto.HealthCheckResponse{Ready: true}, nil
 }
 
+func (s *runtimeServer) StartProvider(ctx context.Context, _ *emptypb.Empty) (*proto.StartRuntimeProviderResponse, error) {
+	if starter, ok := s.provider.(Starter); ok {
+		if err := starter.Start(ctx); err != nil {
+			return nil, status.Errorf(codes.Unknown, "start provider: %v", err)
+		}
+	}
+	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+}
+
 func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 	switch kind {
 	case ProviderKindIntegration:

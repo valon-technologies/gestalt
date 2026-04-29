@@ -23,6 +23,7 @@ type configCall struct {
 type fullAuthenticationProvider struct {
 	closeTracker
 	configured []configCall
+	started    int
 }
 
 func (p *fullAuthenticationProvider) Configure(_ context.Context, name string, config map[string]any) error {
@@ -44,6 +45,11 @@ func (p *fullAuthenticationProvider) Warnings() []string {
 }
 
 func (p *fullAuthenticationProvider) HealthCheck(context.Context) error {
+	return nil
+}
+
+func (p *fullAuthenticationProvider) Start(context.Context) error {
+	p.started++
 	return nil
 }
 
@@ -155,6 +161,20 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 	}
 	if provider.configured[0].config["clientId"] != "abc" {
 		t.Fatalf("configured config[clientId] = %v, want %q", provider.configured[0].config["clientId"], "abc")
+	}
+	if provider.started != 0 {
+		t.Fatalf("started after configure = %d, want 0", provider.started)
+	}
+
+	startedResp, err := runtimeClient.StartProvider(rpcCtx, &emptypb.Empty{})
+	if err != nil {
+		t.Fatalf("StartProvider: %v", err)
+	}
+	if startedResp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Fatalf("started protocol_version = %d, want %d", startedResp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+	}
+	if provider.started != 1 {
+		t.Fatalf("started calls = %d, want 1", provider.started)
 	}
 
 	_, err = runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{

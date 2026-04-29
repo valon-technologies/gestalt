@@ -7,6 +7,8 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -99,6 +101,28 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 			message = "not ready"
 		}
 		return fmt.Errorf("provider health check failed: %s", message)
+	}
+	return nil
+}
+
+func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
+	if client == nil {
+		return fmt.Errorf("runtime client is required")
+	}
+	startCtx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := client.StartProvider(startCtx, &emptypb.Empty{})
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return nil
+		}
+		return fmt.Errorf("start provider: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("provider start returned nil response")
+	}
+	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		return fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 	return nil
 }

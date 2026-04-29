@@ -63,6 +63,7 @@ import {
   ProviderIdentitySchema,
   ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
+  StartRuntimeProviderResponseSchema,
   type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
@@ -464,6 +465,16 @@ export function createRuntimeService(
           message: errorMessage(error),
         });
       }
+    },
+    async startProvider() {
+      try {
+        await provider.startProvider();
+      } catch (error) {
+        throw providerRuntimeError("start provider", error);
+      }
+      return create(StartRuntimeProviderResponseSchema, {
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      });
     },
   };
 }
