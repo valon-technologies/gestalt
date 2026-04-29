@@ -38,9 +38,10 @@ const (
 )
 
 var providerReleaseFetchRetryDelays = []time.Duration{
-	200 * time.Millisecond,
-	500 * time.Millisecond,
 	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+	8 * time.Second,
 }
 
 type gitHubReleaseLocation struct {
