@@ -757,7 +757,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
 
 #[cfg(unix)]
 #[test]
-fn test_cli_runs_tty_agent_session_with_selectable_inline_ui() {
+fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::json(
             Method::POST,
@@ -833,8 +833,16 @@ fn test_cli_runs_tty_agent_session_with_selectable_inline_ui() {
         "TTY transcript did not render highlighted user input and assistant bullet:\n{output}"
     );
     assert!(
-        !output.contains("\x1b[?1049h"),
-        "TTY entered the alternate screen, which prevents normal terminal scrollback selection:\n{output}"
+        output.contains("\x1b[?1049h"),
+        "TTY did not enter the alternate screen, so terminal scrollback can include shell output before the session:\n{output}"
+    );
+    assert!(
+        !output.contains("\x1b[?1000h")
+            && !output.contains("\x1b[?1002h")
+            && !output.contains("\x1b[?1003h")
+            && !output.contains("\x1b[?1015h")
+            && !output.contains("\x1b[?1006h"),
+        "TTY enabled mouse capture, which prevents normal drag selection:\n{output}"
     );
     assert!(
         !output.contains("**hello**"),
@@ -1416,7 +1424,7 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
 
 #[cfg(unix)]
 #[test]
-fn test_cli_tty_resize_expands_selectable_inline_viewport() {
+fn test_cli_tty_resize_redraws_isolated_session() {
     let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
         Method::POST,
         "/api/v1/agent/sessions",
@@ -1440,6 +1448,10 @@ fn test_cli_tty_resize_expands_selectable_inline_viewport() {
     session.resize(24, 100);
     let mut resized_output = String::new();
     session.wait_for(&mut resized_output, "session session-1");
+    assert!(
+        resized_output.contains("session session-1"),
+        "TTY did not redraw the resized session after resize:\n{resized_output}"
+    );
 
     let mut help_output = String::new();
     session.write("/help\r");
@@ -1447,10 +1459,6 @@ fn test_cli_tty_resize_expands_selectable_inline_viewport() {
     assert!(
         help_output.contains("Ctrl-O toggles compact/full tool details."),
         "TTY help did not include tool detail toggle:\n{help_output}"
-    );
-    assert!(
-        !help_output.contains("\x1b[?1049h"),
-        "TTY entered the alternate screen after resize:\n{help_output}"
     );
 
     session.write("\x03");
