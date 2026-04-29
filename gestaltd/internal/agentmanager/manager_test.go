@@ -3,6 +3,7 @@ package agentmanager
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -448,6 +449,90 @@ func TestSearchToolsRestrictsToDefinedRefs(t *testing.T) {
 	}
 	if resp.Tools[0].Target.Plugin != "docs" || resp.Tools[0].Target.Operation != "search" {
 		t.Fatalf("tool target = %#v, want docs.search", resp.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsCompactsOversizedInputSchemaFromParameters(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:          "pulls.list",
+				Title:       "List Pull Requests",
+				Description: "List pull requests for a repository.",
+				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolInputSchemaMaxBytes) + `"}}}`),
+				Parameters: []catalog.CatalogParameter{
+					{Name: "owner", Type: "string", Description: "Repository owner.", Required: true},
+					{Name: "repo", Type: "string", Description: "Repository name.", Required: true},
+					{Name: "state", Type: "string", Description: "Pull request state."},
+				},
+				ReadOnly: true,
+			}}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "github pull requests",
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(resp.Tools))
+	}
+	schema := resp.Tools[0].ParametersSchema
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties = %#v, want object", schema["properties"])
+	}
+	if _, ok := properties["payload"]; ok {
+		t.Fatalf("schema properties include oversized raw payload: %#v", properties)
+	}
+	if _, ok := properties["owner"]; !ok {
+		t.Fatalf("schema properties = %#v, want owner", properties)
+	}
+	required, ok := schema["required"].([]any)
+	if !ok || len(required) != 2 || required[0] != "owner" || required[1] != "repo" {
+		t.Fatalf("schema required = %#v, want owner and repo", schema["required"])
+	}
+}
+
+func TestSearchToolsUsesOpenObjectSchemaForOversizedInputSchemaWithoutParameters(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:          "search.code",
+				Title:       "Search Code",
+				Description: "Search code.",
+				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolInputSchemaMaxBytes) + `"}}}`),
+				ReadOnly:    true,
+			}}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "github code",
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(resp.Tools))
+	}
+	schema := resp.Tools[0].ParametersSchema
+	if schema["type"] != "object" || schema["additionalProperties"] != true {
+		t.Fatalf("schema = %#v, want open object fallback", schema)
 	}
 }
 
