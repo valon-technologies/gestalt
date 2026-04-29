@@ -1,22 +1,35 @@
 package mcpupstream
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
+
+type countingMCPHTTPServer struct {
+	server *httptest.Server
+	mu     sync.Mutex
+	lists  map[string]int
+}
 
 func newTestServer() *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer("test-remote", "1.0.0")
@@ -93,6 +106,45 @@ func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[stri
 		}
 		handler.ServeHTTP(w, r)
 	}))
+}
+
+func newCountingMCPHTTPTestServer(t *testing.T, listDelay time.Duration) *countingMCPHTTPServer {
+	t.Helper()
+
+	handler := mcpserver.NewStreamableHTTPServer(
+		newTestServer(),
+		mcpserver.WithStateLess(true),
+	)
+	out := &countingMCPHTTPServer{lists: map[string]int{}}
+	out.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		if strings.Contains(string(body), "tools/list") {
+			out.mu.Lock()
+			out.lists[r.Header.Get("Authorization")]++
+			out.mu.Unlock()
+			if listDelay > 0 {
+				time.Sleep(listDelay)
+			}
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(out.server.Close)
+	return out
+}
+
+func (s *countingMCPHTTPServer) URL() string {
+	return s.server.URL
+}
+
+func (s *countingMCPHTTPServer) listCalls(auth string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lists[auth]
 }
 
 func TestUpstream_DiscoverTools(t *testing.T) {
@@ -370,6 +422,238 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_CatalogForRequestCachesDiscoveryByToken(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 0)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	u.clock = func() time.Time { return now }
+	u.catalogCacheTTL = time.Hour
+
+	first, err := u.CatalogForRequest(ctx, "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest first: %v", err)
+	}
+	if len(first.Operations) == 0 {
+		t.Fatal("expected first catalog operations")
+	}
+	first.Operations[0].ID = "mutated"
+
+	second, err := u.CatalogForRequest(ctx, "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest second: %v", err)
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 1 {
+		t.Fatalf("tools/list calls for secret-token = %d, want 1", got)
+	}
+	if second.Operations[0].ID == "mutated" {
+		t.Fatal("cached catalog was returned without cloning")
+	}
+
+	if _, err := u.CatalogForRequest(ctx, "other-token"); err != nil {
+		t.Fatalf("CatalogForRequest other token: %v", err)
+	}
+	if got := ts.listCalls("Bearer other-token"); got != 1 {
+		t.Fatalf("tools/list calls for other-token = %d, want 1", got)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.mcp.catalog.cache.hit.count", 1, map[string]string{
+		"gestalt.provider": "clickhouse",
+		"gestalt.result":   "hit",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.mcp.catalog.cache.miss.count", 2, map[string]string{
+		"gestalt.provider": "clickhouse",
+		"gestalt.result":   "miss",
+	})
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.mcp.catalog.discover.duration", map[string]string{
+		"gestalt.provider": "clickhouse",
+		"gestalt.result":   "success",
+	})
+}
+
+func TestUpstream_CatalogForRequestCacheExpires(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 0)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	u.clock = func() time.Time { return now }
+	u.catalogCacheTTL = time.Minute
+
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("CatalogForRequest first: %v", err)
+	}
+	now = now.Add(time.Minute + time.Second)
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("CatalogForRequest after expiry: %v", err)
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 2 {
+		t.Fatalf("tools/list calls after expiry = %d, want 2", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestCoalescesConcurrentDiscovery(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 50*time.Millisecond)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	u.clock = func() time.Time { return now }
+	u.catalogCacheTTL = time.Hour
+
+	const callers = 8
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make(chan error, callers)
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			cat, err := u.CatalogForRequest(context.Background(), "secret-token")
+			if err != nil {
+				errs <- err
+				return
+			}
+			if len(cat.Operations) != 2 {
+				errs <- fmt.Errorf("operations = %d, want 2", len(cat.Operations))
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 1 {
+		t.Fatalf("tools/list calls = %d, want 1", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestCallerCancellationDoesNotCancelSharedDiscovery(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 100*time.Millisecond)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	u.clock = func() time.Time { return now }
+	u.catalogCacheTTL = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errs := make(chan error, 1)
+	go func() {
+		_, err := u.CatalogForRequest(ctx, "secret-token")
+		errs <- err
+	}()
+
+	deadline := time.After(time.Second)
+	for ts.listCalls("Bearer secret-token") == 0 {
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatal("timed out waiting for tools/list to start")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errs:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("CatalogForRequest after caller cancellation = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for canceled caller")
+	}
+
+	cat, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest after cancellation: %v", err)
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 1 {
+		t.Fatalf("tools/list calls after canceled caller = %d, want 1", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestCanceledCallerDoesNotStartDiscovery(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 0)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = u.CatalogForRequest(ctx, "secret-token")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("CatalogForRequest with canceled context = %v, want context.Canceled", err)
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 0 {
+		t.Fatalf("tools/list calls for canceled caller = %d, want 0", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestCacheClearedAfterMetadataOverride(t *testing.T) {
+	t.Parallel()
+
+	ts := newCountingMCPHTTPTestServer(t, 0)
+	u, err := New(context.Background(), "clickhouse", ts.URL(), core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	now := time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC)
+	u.clock = func() time.Time { return now }
+	u.catalogCacheTTL = time.Hour
+
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("CatalogForRequest first: %v", err)
+	}
+
+	u.SetDisplayName("Renamed")
+
+	cat, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("CatalogForRequest after metadata override: %v", err)
+	}
+	if cat.DisplayName != "Renamed" {
+		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Renamed")
+	}
+	if got := ts.listCalls("Bearer secret-token"); got != 2 {
+		t.Fatalf("tools/list calls after metadata override = %d, want 2", got)
 	}
 }
 

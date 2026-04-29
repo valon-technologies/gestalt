@@ -45,6 +45,12 @@ type countMetricSet struct {
 	errorCount metric.Int64Counter
 }
 
+type mcpCatalogMetricSet struct {
+	cacheHit         metric.Int64Counter
+	cacheMiss        metric.Int64Counter
+	discoverDuration metric.Float64Histogram
+}
+
 var (
 	agentOperationMetrics                metricutil.MeterCache[metricSet]
 	agentProviderOperationMetrics        metricutil.MeterCache[metricSet]
@@ -58,6 +64,7 @@ var (
 	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
 	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
 	credentialProviderOperationMetrics   metricutil.MeterCache[metricSet]
+	mcpCatalogMetrics                    metricutil.MeterCache[mcpCatalogMetricSet]
 )
 
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
@@ -160,8 +167,52 @@ func RecordCatalogOperationResolve(ctx context.Context, startedAt time.Time, fai
 	record(ctx, &catalogOperationResolveMetrics, "gestaltd.catalog.operation.resolve", "gestaltd catalog operation resolution", startedAt, failed, attrs...)
 }
 
+func RecordMCPCatalogCache(ctx context.Context, hit bool, attrs ...attribute.KeyValue) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	metrics := mcpCatalogMetrics.Load(ctx, tracerName, newMCPCatalogMetrics)
+	if hit {
+		attrs = append(attrs, attribute.String("gestalt.result", "hit"))
+		metrics.cacheHit.Add(ctx, 1, metric.WithAttributes(attrs...))
+		return
+	}
+	attrs = append(attrs, attribute.String("gestalt.result", "miss"))
+	metrics.cacheMiss.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+func RecordMCPCatalogDiscover(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	metrics := mcpCatalogMetrics.Load(ctx, tracerName, newMCPCatalogMetrics)
+	attrs = append(attrs, attribute.String("gestalt.result", metricutil.ResultValue(failed)))
+	metrics.discoverDuration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
+}
+
 func RecordCredentialProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &credentialProviderOperationMetrics, "gestaltd.credential.provider.operation", "gestaltd credential provider operations", startedAt, failed, attrs...)
+}
+
+func newMCPCatalogMetrics(meter metric.Meter) mcpCatalogMetricSet {
+	return mcpCatalogMetricSet{
+		cacheHit: metricutil.NewInt64Counter(
+			meter,
+			"gestaltd.mcp.catalog.cache.hit.count",
+			"Counts successful gestaltd MCP catalog cache hits.",
+		),
+		cacheMiss: metricutil.NewInt64Counter(
+			meter,
+			"gestaltd.mcp.catalog.cache.miss.count",
+			"Counts gestaltd MCP catalog cache misses.",
+		),
+		discoverDuration: metricutil.NewFloat64Histogram(
+			meter,
+			"gestaltd.mcp.catalog.discover.duration",
+			"Measures gestaltd MCP catalog discovery duration.",
+			"s",
+		),
+	}
 }
 
 func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix, desc string, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
