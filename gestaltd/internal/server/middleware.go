@@ -85,12 +85,9 @@ func isProviderDevCompleteCallRequest(r *http.Request) bool {
 	if r == nil || r.Method != http.MethodPost || r.URL == nil {
 		return false
 	}
-	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathSessions+"/")
+	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathAttachments+"/")
 	if !ok {
-		rest, ok = strings.CutPrefix(r.URL.Path, providerdev.PathAttachments+"/")
-		if !ok {
-			return false
-		}
+		return false
 	}
 	sessionID, callID, ok := strings.Cut(rest, "/calls/")
 	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")

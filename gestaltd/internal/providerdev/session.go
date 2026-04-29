@@ -44,7 +44,6 @@ const (
 
 	PathAttachments          = "/api/v1/provider-dev/attachments"
 	PathAttachAuthorizations = "/api/v1/provider-dev/attach-authorizations"
-	PathSessions             = "/api/v1/provider-dev/sessions"
 )
 
 type RuntimeEnv struct {
@@ -87,7 +86,6 @@ type AttachProvider struct {
 }
 
 type CreateSessionResponse struct {
-	ID               string                  `json:"id,omitempty"`
 	AttachID         string                  `json:"attachId,omitempty"`
 	DispatcherSecret string                  `json:"dispatcherSecret,omitempty"`
 	Providers        []CreateSessionProvider `json:"providers"`
@@ -303,7 +301,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		lastSeen:             now,
 	}
 	resp := &CreateSessionResponse{
-		ID:               sessionID,
 		AttachID:         sessionID,
 		DispatcherSecret: dispatcherSecret,
 		Providers:        make([]CreateSessionProvider, 0, len(targets)),
@@ -350,17 +347,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessionID string) (*PollResponse, bool, error) {
 	session, err := m.sessionForPrincipal(p, sessionID)
 	if err != nil {
-		return nil, false, err
-	}
-	return session.poll(ctx)
-}
-
-func (m *Manager) PollSessionWithDispatcherSecret(ctx context.Context, p *principal.Principal, sessionID, dispatcherSecret string) (*PollResponse, bool, error) {
-	session, err := m.sessionForPrincipal(p, sessionID)
-	if err != nil {
-		return nil, false, err
-	}
-	if err := session.verifyDispatcherSecret(dispatcherSecret); err != nil {
 		return nil, false, err
 	}
 	return session.poll(ctx)
@@ -638,31 +624,12 @@ func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string,
 	return session.completeCall(callID, req)
 }
 
-func (m *Manager) CompleteCallWithDispatcherSecret(p *principal.Principal, sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
-	session, err := m.sessionForPrincipal(p, sessionID)
-	if err != nil {
-		return err
-	}
-	if err := session.verifyDispatcherSecret(dispatcherSecret); err != nil {
-		return err
-	}
-	return session.completeCall(callID, req)
-}
-
 func (m *Manager) CompleteCallWithDispatcherSecretOnly(sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
 	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	if err != nil {
 		return err
 	}
 	return session.completeCall(callID, req)
-}
-
-func (m *Manager) VerifyDispatcherSecret(p *principal.Principal, sessionID, dispatcherSecret string) error {
-	session, err := m.sessionForPrincipal(p, sessionID)
-	if err != nil {
-		return err
-	}
-	return session.verifyDispatcherSecret(dispatcherSecret)
 }
 
 func (m *Manager) VerifyDispatcherSecretOnly(sessionID, dispatcherSecret string) error {

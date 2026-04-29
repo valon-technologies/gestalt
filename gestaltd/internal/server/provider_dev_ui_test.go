@@ -40,7 +40,7 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 	defer cancel()
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(dispatchCtx, p, session.ID)
+		call, ok, err := manager.PollSession(dispatchCtx, p, session.AttachID)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
@@ -66,7 +66,7 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.ID, call.CallID, providerdev.CompleteCallRequest{
+		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
 			Response: hex.EncodeToString(respPayload),
 		})
 	}()
@@ -179,7 +179,7 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(context.Background(), p, session.ID)
+		call, ok, err := manager.PollSession(context.Background(), p, session.AttachID)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
@@ -193,7 +193,7 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.ID, call.CallID, providerdev.CompleteCallRequest{
+		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
 			Response: hex.EncodeToString(respPayload),
 		})
 	}()
@@ -271,7 +271,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(context.Background(), p, session.ID)
+		call, ok, err := manager.PollSession(context.Background(), p, session.AttachID)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
@@ -284,7 +284,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.ID, call.CallID, providerdev.CompleteCallRequest{
+		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
 			Response: hex.EncodeToString(respPayload),
 		})
 	}()
@@ -380,13 +380,6 @@ func TestMaxBodyMiddlewareAllowsLargeProviderDevCallCompletions(t *testing.T) {
 	}))
 	largeBody := bytes.Repeat([]byte("x"), defaultMaxBodyBytes+1024)
 
-	providerDevReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/sessions/session-1/calls/call-1", bytes.NewReader(largeBody))
-	providerDevRec := httptest.NewRecorder()
-	handler.ServeHTTP(providerDevRec, providerDevReq)
-	if providerDevRec.Code != http.StatusNoContent {
-		t.Fatalf("provider dev completion status = %d, want %d", providerDevRec.Code, http.StatusNoContent)
-	}
-
 	providerDevAttachmentReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1", bytes.NewReader(largeBody))
 	providerDevAttachmentRec := httptest.NewRecorder()
 	handler.ServeHTTP(providerDevAttachmentRec, providerDevAttachmentReq)
@@ -394,7 +387,7 @@ func TestMaxBodyMiddlewareAllowsLargeProviderDevCallCompletions(t *testing.T) {
 		t.Fatalf("provider dev attachment completion status = %d, want %d", providerDevAttachmentRec.Code, http.StatusNoContent)
 	}
 
-	extraPathReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/sessions/session-1/calls/call-1/extra", bytes.NewReader(largeBody))
+	extraPathReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1/extra", bytes.NewReader(largeBody))
 	extraPathRec := httptest.NewRecorder()
 	handler.ServeHTTP(extraPathRec, extraPathReq)
 	if extraPathRec.Code != http.StatusRequestEntityTooLarge {
