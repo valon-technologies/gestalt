@@ -5996,10 +5996,6 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
 		}
 	}
-	if !slices.Contains(env.AllowedHosts, "127.0.0.1") {
-		t.Fatalf("allowed hosts = %#v, want relay server host", env.AllowedHosts)
-	}
-
 	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env.Env)
 	if err != nil {
 		t.Fatalf("S3 round trip via provider-dev relay: %v", err)

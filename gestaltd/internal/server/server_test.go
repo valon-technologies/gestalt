@@ -6077,8 +6077,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 			UIPath: "/roadmap",
 			RuntimeEnv: func(string) (providerdev.RuntimeEnv, error) {
 				return providerdev.RuntimeEnv{
-					Env:          map[string]string{"SECRET": "do-not-return"},
-					AllowedHosts: []string{"example.test"},
+					Env: map[string]string{"SECRET": "do-not-return"},
 				}, nil
 			},
 		}})
