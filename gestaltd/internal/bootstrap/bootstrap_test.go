@@ -1372,11 +1372,7 @@ func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref
 	}
 	stored := cloneBootstrapWorkflowExecutionRef(ref)
 	if strings.TrimSpace(stored.TargetFingerprint) == "" {
-		fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
-		if err != nil {
-			return nil, err
-		}
-		stored.TargetFingerprint = fingerprint
+		return nil, errors.New("workflow execution reference target fingerprint is required")
 	}
 	p.executionRefs[stored.ID] = stored
 	return cloneBootstrapWorkflowExecutionRef(stored), nil
@@ -4215,11 +4211,17 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	if !ok {
 		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
 	}
+	target := coreWorkflowPluginTarget("roadmap", "sync")
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("workflow target fingerprint: %v", err)
+	}
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-test:ref-test",
-		ProviderName: "basic",
-		Target:       coreWorkflowPluginTarget("roadmap", "sync"),
-		SubjectID:    "user:ada",
+		ID:                "workflow_schedule:sched-test:ref-test",
+		ProviderName:      "basic",
+		Target:            target,
+		TargetFingerprint: targetFingerprint,
+		SubjectID:         "user:ada",
 	}); err != nil {
 		t.Fatalf("PutExecutionReference: %v", err)
 	}

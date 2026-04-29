@@ -278,6 +278,9 @@ func (p *testWorkflowProvider) SignalRun(_ context.Context, req coreworkflow.Sig
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	copied := *ref
+	if strings.TrimSpace(copied.TargetFingerprint) == "" {
+		return nil, errors.New("workflow execution reference target fingerprint is required")
+	}
 	p.refs[copied.ID] = &copied
 	return &copied, nil
 }

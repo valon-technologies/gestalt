@@ -362,11 +362,7 @@ func (p *memoryWorkflowProvider) PutExecutionReference(_ context.Context, ref *c
 	}
 	stored := cloneWorkflowExecutionReference(ref)
 	if strings.TrimSpace(stored.TargetFingerprint) == "" {
-		fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
-		if err != nil {
-			return nil, err
-		}
-		stored.TargetFingerprint = fingerprint
+		return nil, errors.New("workflow execution reference target fingerprint is required")
 	}
 	p.executionRefs[stored.ID] = stored
 	return cloneWorkflowExecutionReference(stored), nil
@@ -1037,26 +1033,29 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		UpdatedAt:    &now,
 	}
 	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada:ref-ada",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-ada"].Target,
-		SubjectID:    principal.UserSubjectID(ada.ID),
+		ID:                "workflow_schedule:sched-ada:ref-ada",
+		ProviderName:      "basic",
+		Target:            provider.schedules["sched-ada"].Target,
+		TargetFingerprint: workflowTargetFingerprint(t, provider.schedules["sched-ada"].Target),
+		SubjectID:         principal.UserSubjectID(ada.ID),
 	}); err != nil {
 		t.Fatalf("Put ada ref: %v", err)
 	}
 	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-grace:ref-grace",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-grace"].Target,
-		SubjectID:    principal.UserSubjectID(grace.ID),
+		ID:                "workflow_schedule:sched-grace:ref-grace",
+		ProviderName:      "basic",
+		Target:            provider.schedules["sched-grace"].Target,
+		TargetFingerprint: workflowTargetFingerprint(t, provider.schedules["sched-grace"].Target),
+		SubjectID:         principal.UserSubjectID(grace.ID),
 	}); err != nil {
 		t.Fatalf("Put grace ref: %v", err)
 	}
 	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-analytics:ref-analytics",
-		ProviderName: "basic",
-		Target:       provider.schedules["sched-analytics"].Target,
-		SubjectID:    principal.UserSubjectID(ada.ID),
+		ID:                "workflow_schedule:sched-analytics:ref-analytics",
+		ProviderName:      "basic",
+		Target:            provider.schedules["sched-analytics"].Target,
+		TargetFingerprint: workflowTargetFingerprint(t, provider.schedules["sched-analytics"].Target),
+		SubjectID:         principal.UserSubjectID(ada.ID),
 	}); err != nil {
 		t.Fatalf("Put analytics ref: %v", err)
 	}
@@ -1261,16 +1260,18 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:           "workflow_schedule:sched-sync:ref-sync",
-			ProviderName: "basic",
-			Target:       provider.schedules["sched-sync"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
+			ID:                "workflow_schedule:sched-sync:ref-sync",
+			ProviderName:      "basic",
+			Target:            provider.schedules["sched-sync"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, provider.schedules["sched-sync"].Target),
+			SubjectID:         principal.UserSubjectID(user.ID),
 		},
 		{
-			ID:           "workflow_schedule:sched-export:ref-export",
-			ProviderName: "basic",
-			Target:       provider.schedules["sched-export"].Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
+			ID:                "workflow_schedule:sched-export:ref-export",
+			ProviderName:      "basic",
+			Target:            provider.schedules["sched-export"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, provider.schedules["sched-export"].Target),
+			SubjectID:         principal.UserSubjectID(user.ID),
 		},
 	} {
 		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
@@ -1386,10 +1387,11 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 		UpdatedAt:    &now,
 	}
 	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada:ref-old",
-		ProviderName: "basic",
-		Target:       oldTarget,
-		SubjectID:    principal.UserSubjectID(user.ID),
+		ID:                "workflow_schedule:sched-ada:ref-old",
+		ProviderName:      "basic",
+		Target:            oldTarget,
+		TargetFingerprint: workflowTargetFingerprint(t, oldTarget),
+		SubjectID:         principal.UserSubjectID(user.ID),
 	}); err != nil {
 		t.Fatalf("Put old ref: %v", err)
 	}
@@ -1626,10 +1628,11 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 		UpdatedAt:    &now,
 	}
 	if _, err := basicProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_schedule:sched-ada-basic:ref-basic",
-		ProviderName: "basic",
-		Target:       basicProvider.schedules["sched-ada-basic"].Target,
-		SubjectID:    principal.UserSubjectID(user.ID),
+		ID:                "workflow_schedule:sched-ada-basic:ref-basic",
+		ProviderName:      "basic",
+		Target:            basicProvider.schedules["sched-ada-basic"].Target,
+		TargetFingerprint: workflowTargetFingerprint(t, basicProvider.schedules["sched-ada-basic"].Target),
+		SubjectID:         principal.UserSubjectID(user.ID),
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -1727,10 +1730,11 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 	provider.schedules[schedule.ID] = schedule
 	for _, refID := range []string{"workflow_schedule:sched-ada:active-ref-1", "workflow_schedule:sched-ada:active-ref-2"} {
 		if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-			ID:           refID,
-			ProviderName: "basic",
-			Target:       schedule.Target,
-			SubjectID:    principal.UserSubjectID(user.ID),
+			ID:                refID,
+			ProviderName:      "basic",
+			Target:            schedule.Target,
+			TargetFingerprint: workflowTargetFingerprint(t, schedule.Target),
+			SubjectID:         principal.UserSubjectID(user.ID),
 		}); err != nil {
 			t.Fatalf("Put execution ref %q: %v", refID, err)
 		}
@@ -2033,22 +2037,25 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:           "workflow_schedule:sched-ada-basic:ref-basic",
-			ProviderName: "basic",
-			Target:       basicProvider.schedules["sched-ada-basic"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
+			ID:                "workflow_schedule:sched-ada-basic:ref-basic",
+			ProviderName:      "basic",
+			Target:            basicProvider.schedules["sched-ada-basic"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, basicProvider.schedules["sched-ada-basic"].Target),
+			SubjectID:         principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "workflow_schedule:sched-ada-advanced:ref-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.schedules["sched-ada-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
+			ID:                "workflow_schedule:sched-ada-advanced:ref-advanced",
+			ProviderName:      "advanced",
+			Target:            advancedProvider.schedules["sched-ada-advanced"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, advancedProvider.schedules["sched-ada-advanced"].Target),
+			SubjectID:         principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.schedules["sched-grace-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(grace.ID),
+			ID:                "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
+			ProviderName:      "advanced",
+			Target:            advancedProvider.schedules["sched-grace-advanced"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, advancedProvider.schedules["sched-grace-advanced"].Target),
+			SubjectID:         principal.UserSubjectID(grace.ID),
 		},
 	} {
 		targetProvider := basicProvider
@@ -2478,22 +2485,25 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:           "workflow_event_trigger:trg-ada-basic:ref-basic",
-			ProviderName: "basic",
-			Target:       basicProvider.triggers["trg-ada-basic"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
+			ID:                "workflow_event_trigger:trg-ada-basic:ref-basic",
+			ProviderName:      "basic",
+			Target:            basicProvider.triggers["trg-ada-basic"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, basicProvider.triggers["trg-ada-basic"].Target),
+			SubjectID:         principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "workflow_event_trigger:trg-ada-advanced:ref-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.triggers["trg-ada-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(ada.ID),
+			ID:                "workflow_event_trigger:trg-ada-advanced:ref-advanced",
+			ProviderName:      "advanced",
+			Target:            advancedProvider.triggers["trg-ada-advanced"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, advancedProvider.triggers["trg-ada-advanced"].Target),
+			SubjectID:         principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
-			ProviderName: "advanced",
-			Target:       advancedProvider.triggers["trg-grace-advanced"].Target,
-			SubjectID:    principal.UserSubjectID(grace.ID),
+			ID:                "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
+			ProviderName:      "advanced",
+			Target:            advancedProvider.triggers["trg-grace-advanced"].Target,
+			TargetFingerprint: workflowTargetFingerprint(t, advancedProvider.triggers["trg-grace-advanced"].Target),
+			SubjectID:         principal.UserSubjectID(grace.ID),
 		},
 	} {
 		targetProvider := basicProvider

@@ -48,6 +48,15 @@ func testWorkflowPluginTargetWithInput(pluginName, operation, connection, instan
 	}
 }
 
+func testWorkflowTargetFingerprint(t *testing.T, target coreworkflow.Target) string {
+	t.Helper()
+	fingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("workflow target fingerprint: %v", err)
+	}
+	return fingerprint
+}
+
 const (
 	canonicalAgentWorkflowTargetFingerprint  = "df7c3d7dde92c5807d3268e17d2e2996163442f06624d003c7008e35be508b63"
 	canonicalPluginWorkflowTargetFingerprint = "ba910105b28aa331501c9ec3c34de4c0b67ff58204e0ec4a428122c089bb64a7"
@@ -76,11 +85,7 @@ func (p *workflowRuntimeExecutionRefProvider) PutExecutionReference(_ context.Co
 	}
 	stored := cloneRuntimeExecutionRef(ref)
 	if strings.TrimSpace(stored.TargetFingerprint) == "" {
-		fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
-		if err != nil {
-			return nil, err
-		}
-		stored.TargetFingerprint = fingerprint
+		return nil, errors.New("workflow execution reference target fingerprint is required")
 	}
 	p.refs[stored.ID] = stored
 	return cloneRuntimeExecutionRef(stored), nil
@@ -621,12 +626,14 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing.T) {
 	t.Parallel()
 
+	target := testWorkflowPluginTarget("roadmap", "sync")
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "plugin-ref",
-		ProviderName: "temporal",
-		Target:       testWorkflowPluginTarget("roadmap", "sync"),
-		SubjectID:    "service_account:scheduler",
+		ID:                "plugin-ref",
+		ProviderName:      "temporal",
+		Target:            target,
+		TargetFingerprint: testWorkflowTargetFingerprint(t, target),
+		SubjectID:         "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -639,7 +646,7 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 		ExecutionRef: "plugin-ref",
 		RunID:        "run-123",
 		Target: coreworkflow.Target{
-			Plugin: testWorkflowPluginTarget("roadmap", "sync").Plugin,
+			Plugin: target.Plugin,
 			Agent: &coreworkflow.AgentTarget{
 				ProviderName:   "managed",
 				Prompt:         "send reminder",
@@ -716,11 +723,13 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
+	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-123",
 		ProviderName:        "temporal",
-		Target:              testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"}),
+		Target:              target,
+		TargetFingerprint:   testWorkflowTargetFingerprint(t, target),
 		SubjectID:           principal.UserSubjectID(user.ID),
 		SubjectKind:         string(principal.KindUser),
 		DisplayName:         "Ada Lovelace",
@@ -757,15 +766,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		ExecutionRef: "exec-ref-123",
-		Target: testWorkflowPluginTargetWithInput(
-			"roadmap",
-			"sync",
-			"analytics",
-			"tenant-a",
-			map[string]any{
-				"mode": "full",
-			},
-		),
+		Target:       target,
 		Input: map[string]any{
 			"taskId": "task-123",
 		},
@@ -849,12 +850,14 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
+	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-ref-denied",
-		ProviderName: "temporal",
-		Target:       testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil),
-		SubjectID:    principal.UserSubjectID(user.ID),
+		ID:                "exec-ref-denied",
+		ProviderName:      "temporal",
+		Target:            target,
+		TargetFingerprint: testWorkflowTargetFingerprint(t, target),
+		SubjectID:         principal.UserSubjectID(user.ID),
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -912,7 +915,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		ExecutionRef: "exec-ref-denied",
-		Target:       testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil),
+		Target:       target,
 	})
 	if err == nil {
 		t.Fatal("expected authorization error, got nil")
@@ -931,12 +934,14 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	services := coretesting.NewStubServices(t)
 	ctx := context.Background()
 
+	target := testWorkflowPluginTargetWithInput("roadmap", "export", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
-		ID:           "exec-ref-123",
-		ProviderName: "basic",
-		Target:       testWorkflowPluginTargetWithInput("roadmap", "export", "analytics", "tenant-a", nil),
-		SubjectID:    principal.UserSubjectID("user-123"),
+		ID:                "exec-ref-123",
+		ProviderName:      "basic",
+		Target:            target,
+		TargetFingerprint: testWorkflowTargetFingerprint(t, target),
+		SubjectID:         principal.UserSubjectID("user-123"),
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -972,7 +977,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	_, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
 		RunID:        "run-123",
-		Target:       testWorkflowPluginTargetWithInput("roadmap", "export", "analytics", "tenant-a", nil),
+		Target:       target,
 		ExecutionRef: "exec-ref-123",
 	})
 	if !errors.Is(err, invocation.ErrScopeDenied) {
