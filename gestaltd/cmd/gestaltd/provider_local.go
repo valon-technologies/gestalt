@@ -354,11 +354,6 @@ func createProviderRemoteSessionWithBrowser(ctx context.Context, client *provide
 			return nil, fmt.Errorf("poll provider dev browser approval: %w", err)
 		}
 		if status.Approved {
-			code := strings.TrimSpace(status.AttachAuthorizationCode)
-			if code == "" {
-				return nil, errors.New("provider dev browser approval did not return an authorization code")
-			}
-			req.AttachAuthorizationCode = code
 			return client.CreateAuthorizedSession(ctx, authorization.AuthorizationID, req)
 		}
 		if !authorization.ExpiresAt.IsZero() && time.Now().After(authorization.ExpiresAt) {

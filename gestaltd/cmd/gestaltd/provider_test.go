@@ -172,7 +172,6 @@ func TestCreateProviderRemoteSessionUsesBrowserApprovalWithoutAttachToken(t *tes
 	const (
 		authID       = "auth-1"
 		clientSecret = "pdaa_secret"
-		code         = "pdac_code"
 		dispatcher   = "pda_dispatcher"
 	)
 	var createdAuthorizedSession bool
@@ -195,8 +194,7 @@ func TestCreateProviderRemoteSessionUsesBrowserApprovalWithoutAttachToken(t *tes
 				t.Fatalf("poll authorization secret = %q, want %q", r.Header.Get(providerdev.HeaderAuthorizationSecret), clientSecret)
 			}
 			writeJSONForProviderRemoteTest(t, w, http.StatusOK, providerdev.PollAttachAuthorizationResponse{
-				Approved:                true,
-				AttachAuthorizationCode: code,
+				Approved: true,
 			})
 		case r.Method == http.MethodPost && r.URL.Path == providerdev.PathAttachAuthorizations+"/"+authID+"/attachments":
 			if r.Header.Get(providerdev.HeaderAuthorizationSecret) != clientSecret {
@@ -205,9 +203,6 @@ func TestCreateProviderRemoteSessionUsesBrowserApprovalWithoutAttachToken(t *tes
 			var req providerdev.CreateSessionRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Fatalf("decode authorized attach request: %v", err)
-			}
-			if req.AttachAuthorizationCode != code {
-				t.Fatalf("attach authorization code = %q, want %q", req.AttachAuthorizationCode, code)
 			}
 			if len(req.Providers) != 1 || req.Providers[0].Name != "roadmap" {
 				t.Fatalf("authorized attach providers = %#v, want roadmap", req.Providers)
