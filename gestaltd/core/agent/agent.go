@@ -177,7 +177,11 @@ type GetSessionRequest struct {
 }
 
 type ListSessionsRequest struct {
-	Subject SubjectContext
+	Subject     SubjectContext
+	SessionIDs  []string
+	State       SessionState
+	Limit       int
+	SummaryOnly bool
 }
 
 type UpdateSessionRequest struct {
@@ -229,8 +233,12 @@ type GetTurnRequest struct {
 }
 
 type ListTurnsRequest struct {
-	SessionID string
-	Subject   SubjectContext
+	SessionID   string
+	Subject     SubjectContext
+	TurnIDs     []string
+	Status      ExecutionStatus
+	Limit       int
+	SummaryOnly bool
 }
 
 type CancelTurnRequest struct {
@@ -276,14 +284,15 @@ type ListTurnEventsRequest struct {
 type GetCapabilitiesRequest struct{}
 
 type ProviderCapabilities struct {
-	StreamingText      bool
-	ToolCalls          bool
-	ParallelToolCalls  bool
-	StructuredOutput   bool
-	Interactions       bool
-	ResumableTurns     bool
-	ReasoningSummaries bool
-	NativeToolSearch   bool
+	StreamingText        bool
+	ToolCalls            bool
+	ParallelToolCalls    bool
+	StructuredOutput     bool
+	Interactions         bool
+	ResumableTurns       bool
+	ReasoningSummaries   bool
+	NativeToolSearch     bool
+	BoundedListHydration bool
 }
 
 type GetInteractionRequest struct {
@@ -398,10 +407,16 @@ type ManagerCreateTurnRequest struct {
 
 type ManagerListSessionsRequest struct {
 	ProviderName string
+	State        SessionState
+	Limit        int
+	SummaryOnly  bool
 }
 
 type ManagerListTurnsRequest struct {
-	SessionID string
+	SessionID   string
+	Status      ExecutionStatus
+	Limit       int
+	SummaryOnly bool
 }
 
 type ManagerCancelTurnRequest struct {

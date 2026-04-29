@@ -39,6 +39,8 @@ var (
 	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
 	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
+	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
+	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
 )
 
 const (
@@ -49,6 +51,8 @@ const (
 	agentToolSearchMaxCandidates      = 20
 	agentToolInputSchemaMaxBytes      = 128 * 1024
 	maxAgentRouteCacheEntries         = 20_000
+	AgentListSummaryDefaultLimit      = 100
+	AgentListMaxLimit                 = 500
 )
 
 type AgentProviderNotAvailableError struct {
@@ -91,11 +95,11 @@ type Service interface {
 	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
 	GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error)
-	ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error)
+	ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
 	UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error)
 	CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
 	GetTurn(ctx context.Context, p *principal.Principal, turnID string) (*coreagent.Turn, error)
-	ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error)
+	ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
 	CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error)
 	ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) ([]*coreagent.TurnEvent, error)
 	ListInteractions(ctx context.Context, p *principal.Principal, turnID string) ([]*coreagent.Interaction, error)
@@ -453,11 +457,11 @@ func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessio
 	return owned.session, nil
 }
 
-func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) (sessions []*coreagent.Session, err error) {
+func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) (sessions []*coreagent.Session, err error) {
 	ctx, finish := startAgentOperation(ctx, "list_sessions")
 	defer func() { finish(err) }()
 
-	providerName = strings.TrimSpace(providerName)
+	providerName := strings.TrimSpace(req.ProviderName)
 	if providerName != "" {
 		observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
 	}
@@ -465,9 +469,24 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, prov
 	if err != nil {
 		return nil, err
 	}
+	limit, err := normalizeAgentListLimit(req.Limit, req.SummaryOnly)
+	if err != nil {
+		return nil, err
+	}
+	requireBounded := req.SummaryOnly || limit > 0
 	out := make([]*coreagent.Session, 0)
 	for _, candidate := range candidates {
-		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{Subject: agentSubjectFromPrincipal(p)})
+		if requireBounded {
+			if err := requireAgentProviderBoundedListHydration(ctx, candidate.name, candidate.provider); err != nil {
+				return nil, err
+			}
+		}
+		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{
+			Subject:     agentSubjectFromPrincipal(p),
+			State:       req.State,
+			Limit:       limit,
+			SummaryOnly: req.SummaryOnly,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -482,7 +501,13 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, prov
 			if err != nil {
 				return nil, err
 			}
+			if req.State != "" && normalized.State != req.State {
+				continue
+			}
 			m.rememberSessionRoute(normalized.ID, candidate.name)
+			if req.SummaryOnly {
+				normalized = summarizeAgentSession(normalized)
+			}
 			out = append(out, normalized)
 		}
 	}
@@ -496,6 +521,9 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, prov
 		}
 		return left.ID < right.ID
 	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
 }
 
@@ -626,18 +654,30 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID st
 	return owned.turn, nil
 }
 
-func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) (turns []*coreagent.Turn, err error) {
+func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) (turns []*coreagent.Turn, err error) {
 	ctx, finish := startAgentOperation(ctx, "list_turns")
 	defer func() { finish(err) }()
 
-	ownedSession, err := m.findOwnedSession(ctx, p, sessionID, "")
+	ownedSession, err := m.findOwnedSession(ctx, p, req.SessionID, "")
 	if err != nil {
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
+	limit, err := normalizeAgentListLimit(req.Limit, req.SummaryOnly)
+	if err != nil {
+		return nil, err
+	}
+	if req.SummaryOnly || limit > 0 {
+		if err := requireAgentProviderBoundedListHydration(ctx, ownedSession.providerName, ownedSession.provider); err != nil {
+			return nil, err
+		}
+	}
 	turns, err = ownedSession.provider.ListTurns(ctx, coreagent.ListTurnsRequest{
-		SessionID: ownedSession.session.ID,
-		Subject:   agentSubjectFromPrincipal(p),
+		SessionID:   ownedSession.session.ID,
+		Subject:     agentSubjectFromPrincipal(p),
+		Status:      req.Status,
+		Limit:       limit,
+		SummaryOnly: req.SummaryOnly,
 	})
 	if err != nil {
 		return nil, err
@@ -654,7 +694,13 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, session
 		if err != nil {
 			return nil, err
 		}
+		if req.Status != "" && normalized.Status != req.Status {
+			continue
+		}
 		m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
+		if req.SummaryOnly {
+			normalized = summarizeAgentTurn(normalized)
+		}
 		out = append(out, normalized)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -665,6 +711,9 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, session
 		}
 		return left.ID < right.ID
 	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
 }
 
@@ -2304,6 +2353,57 @@ func agentProviderSupportsNativeToolSearch(ctx context.Context, provider coreage
 		return false, err
 	}
 	return caps != nil && caps.NativeToolSearch, nil
+}
+
+func requireAgentProviderBoundedListHydration(ctx context.Context, providerName string, provider coreagent.Provider) error {
+	if provider == nil {
+		return ErrAgentProviderNotAvailable
+	}
+	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return err
+	}
+	if caps != nil && caps.BoundedListHydration {
+		return nil
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return ErrAgentBoundedListUnsupported
+	}
+	return fmt.Errorf("%w: provider %q", ErrAgentBoundedListUnsupported, providerName)
+}
+
+func normalizeAgentListLimit(limit int, summaryOnly bool) (int, error) {
+	if limit < 0 {
+		return 0, fmt.Errorf("%w: limit must be non-negative", ErrAgentInvalidListRequest)
+	}
+	if summaryOnly && limit == 0 {
+		return AgentListSummaryDefaultLimit, nil
+	}
+	if limit > AgentListMaxLimit {
+		return AgentListMaxLimit, nil
+	}
+	return limit, nil
+}
+
+func summarizeAgentSession(session *coreagent.Session) *coreagent.Session {
+	if session == nil {
+		return nil
+	}
+	cloned := *session
+	cloned.Metadata = nil
+	return &cloned
+}
+
+func summarizeAgentTurn(turn *coreagent.Turn) *coreagent.Turn {
+	if turn == nil {
+		return nil
+	}
+	cloned := *turn
+	cloned.Messages = nil
+	cloned.OutputText = ""
+	cloned.StructuredOutput = nil
+	return &cloned
 }
 
 func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.ConnectionMode, error) {

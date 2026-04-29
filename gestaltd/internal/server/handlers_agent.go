@@ -24,6 +24,8 @@ import (
 )
 
 const agentIdempotencyKeyHeader = "Idempotency-Key"
+const defaultAgentListSummaryLimit = agentmanager.AgentListSummaryDefaultLimit
+const maxAgentListLimit = agentmanager.AgentListMaxLimit
 const defaultAgentTurnEventLimit = 100
 const maxAgentTurnEventLimit = 1000
 const agentTurnEventStreamUntilTerminal = "terminal"
@@ -132,14 +134,15 @@ type agentProviderInfo struct {
 }
 
 type agentProviderCapabilitiesInfo struct {
-	StreamingText      bool `json:"streamingText,omitempty"`
-	ToolCalls          bool `json:"toolCalls,omitempty"`
-	ParallelToolCalls  bool `json:"parallelToolCalls,omitempty"`
-	StructuredOutput   bool `json:"structuredOutput,omitempty"`
-	Interactions       bool `json:"interactions,omitempty"`
-	ResumableTurns     bool `json:"resumableTurns,omitempty"`
-	ReasoningSummaries bool `json:"reasoningSummaries,omitempty"`
-	NativeToolSearch   bool `json:"nativeToolSearch,omitempty"`
+	StreamingText        bool `json:"streamingText,omitempty"`
+	ToolCalls            bool `json:"toolCalls,omitempty"`
+	ParallelToolCalls    bool `json:"parallelToolCalls,omitempty"`
+	StructuredOutput     bool `json:"structuredOutput,omitempty"`
+	Interactions         bool `json:"interactions,omitempty"`
+	ResumableTurns       bool `json:"resumableTurns,omitempty"`
+	ReasoningSummaries   bool `json:"reasoningSummaries,omitempty"`
+	NativeToolSearch     bool `json:"nativeToolSearch,omitempty"`
+	BoundedListHydration bool `json:"boundedListHydration,omitempty"`
 }
 
 type agentTurnInfo struct {
@@ -237,21 +240,31 @@ func (s *Server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
-	sessions, err := s.agentRuns.ListSessions(r.Context(), p, providerName)
+	state, err := agentSessionStateFromRequest(r.URL.Query().Get("state"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	summaryOnly, limit, ok := parseAgentListQuery(w, r)
+	if !ok {
+		return
+	}
+	sessions, err := s.agentRuns.ListSessions(r.Context(), p, coreagent.ManagerListSessionsRequest{
+		ProviderName: providerName,
+		State:        state,
+		Limit:        limit,
+		SummaryOnly:  summaryOnly,
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", "", nil, err)
 		return
 	}
-	stateFilter := strings.TrimSpace(r.URL.Query().Get("state"))
 	out := make([]agentSessionInfo, 0, len(sessions))
 	for _, session := range sessions {
 		if session == nil {
 			continue
 		}
-		if stateFilter != "" && strings.TrimSpace(string(session.State)) != stateFilter {
-			continue
-		}
-		out = append(out, agentSessionInfoFromCore(session))
+		out = append(out, agentSessionInfoFromCoreView(session, summaryOnly))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -391,21 +404,31 @@ func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionID := chi.URLParam(r, "sessionID")
-	turns, err := s.agentRuns.ListTurns(r.Context(), p, sessionID)
+	statusFilter, err := agentExecutionStatusFromRequest(r.URL.Query().Get("status"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	summaryOnly, limit, ok := parseAgentListQuery(w, r)
+	if !ok {
+		return
+	}
+	turns, err := s.agentRuns.ListTurns(r.Context(), p, coreagent.ManagerListTurnsRequest{
+		SessionID:   sessionID,
+		Status:      statusFilter,
+		Limit:       limit,
+		SummaryOnly: summaryOnly,
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
 		return
 	}
-	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
 	out := make([]agentTurnInfo, 0, len(turns))
 	for _, turn := range turns {
 		if turn == nil {
 			continue
 		}
-		if statusFilter != "" && strings.TrimSpace(string(turn.Status)) != statusFilter {
-			continue
-		}
-		out = append(out, agentTurnInfoFromCore(turn))
+		out = append(out, agentTurnInfoFromCoreView(turn, summaryOnly))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -641,6 +664,46 @@ func parseAgentTurnEventQuery(w http.ResponseWriter, r *http.Request) (int64, in
 	return afterSeq, limit, true
 }
 
+func parseAgentListQuery(w http.ResponseWriter, r *http.Request) (bool, int, bool) {
+	query := r.URL.Query()
+	summaryOnly := false
+	if raw := strings.TrimSpace(query.Get("summary")); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "summary must be a boolean")
+			return false, 0, false
+		}
+		summaryOnly = value
+	}
+	switch view := strings.TrimSpace(query.Get("view")); view {
+	case "":
+	case "full":
+		if summaryOnly {
+			writeError(w, http.StatusBadRequest, "view=full cannot be combined with summary=true")
+			return false, 0, false
+		}
+	case "summary":
+		summaryOnly = true
+	default:
+		writeError(w, http.StatusBadRequest, "view must be full or summary")
+		return false, 0, false
+	}
+
+	limit := 0
+	if summaryOnly {
+		limit = defaultAgentListSummaryLimit
+	}
+	if raw := strings.TrimSpace(query.Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > maxAgentListLimit {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be between 1 and %d", maxAgentListLimit))
+			return false, 0, false
+		}
+		limit = value
+	}
+	return summaryOnly, limit, true
+}
+
 func parseAgentTurnEventStreamUntil(w http.ResponseWriter, r *http.Request) (string, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get("until"))
 	switch value {
@@ -824,7 +887,32 @@ func agentSessionStateFromRequest(value string) (coreagent.SessionState, error) 
 	}
 }
 
+func agentExecutionStatusFromRequest(value string) (coreagent.ExecutionStatus, error) {
+	switch strings.TrimSpace(value) {
+	case "":
+		return "", nil
+	case string(coreagent.ExecutionStatusPending):
+		return coreagent.ExecutionStatusPending, nil
+	case string(coreagent.ExecutionStatusRunning):
+		return coreagent.ExecutionStatusRunning, nil
+	case string(coreagent.ExecutionStatusSucceeded):
+		return coreagent.ExecutionStatusSucceeded, nil
+	case string(coreagent.ExecutionStatusFailed):
+		return coreagent.ExecutionStatusFailed, nil
+	case string(coreagent.ExecutionStatusCanceled):
+		return coreagent.ExecutionStatusCanceled, nil
+	case string(coreagent.ExecutionStatusWaitingForInput):
+		return coreagent.ExecutionStatusWaitingForInput, nil
+	default:
+		return "", fmt.Errorf("unsupported agent turn status %q", value)
+	}
+}
+
 func agentSessionInfoFromCore(session *coreagent.Session) agentSessionInfo {
+	return agentSessionInfoFromCoreView(session, false)
+}
+
+func agentSessionInfoFromCoreView(session *coreagent.Session, summaryOnly bool) agentSessionInfo {
 	info := agentSessionInfo{}
 	if session == nil {
 		return info
@@ -834,11 +922,13 @@ func agentSessionInfoFromCore(session *coreagent.Session) agentSessionInfo {
 	info.Model = strings.TrimSpace(session.Model)
 	info.ClientRef = strings.TrimSpace(session.ClientRef)
 	info.State = strings.TrimSpace(string(session.State))
-	info.Metadata = maps.Clone(session.Metadata)
 	info.CreatedBy = agentActorInfoFromCore(session.CreatedBy)
 	info.CreatedAt = session.CreatedAt
 	info.UpdatedAt = session.UpdatedAt
 	info.LastTurnAt = session.LastTurnAt
+	if !summaryOnly {
+		info.Metadata = maps.Clone(session.Metadata)
+	}
 	return info
 }
 
@@ -847,18 +937,23 @@ func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities)
 		return nil
 	}
 	return &agentProviderCapabilitiesInfo{
-		StreamingText:      caps.StreamingText,
-		ToolCalls:          caps.ToolCalls,
-		ParallelToolCalls:  caps.ParallelToolCalls,
-		StructuredOutput:   caps.StructuredOutput,
-		Interactions:       caps.Interactions,
-		ResumableTurns:     caps.ResumableTurns,
-		ReasoningSummaries: caps.ReasoningSummaries,
-		NativeToolSearch:   caps.NativeToolSearch,
+		StreamingText:        caps.StreamingText,
+		ToolCalls:            caps.ToolCalls,
+		ParallelToolCalls:    caps.ParallelToolCalls,
+		StructuredOutput:     caps.StructuredOutput,
+		Interactions:         caps.Interactions,
+		ResumableTurns:       caps.ResumableTurns,
+		ReasoningSummaries:   caps.ReasoningSummaries,
+		NativeToolSearch:     caps.NativeToolSearch,
+		BoundedListHydration: caps.BoundedListHydration,
 	}
 }
 
 func agentTurnInfoFromCore(turn *coreagent.Turn) agentTurnInfo {
+	return agentTurnInfoFromCoreView(turn, false)
+}
+
+func agentTurnInfoFromCoreView(turn *coreagent.Turn, summaryOnly bool) agentTurnInfo {
 	info := agentTurnInfo{}
 	if turn == nil {
 		return info
@@ -868,15 +963,17 @@ func agentTurnInfoFromCore(turn *coreagent.Turn) agentTurnInfo {
 	info.Provider = strings.TrimSpace(turn.ProviderName)
 	info.Model = strings.TrimSpace(turn.Model)
 	info.Status = strings.TrimSpace(string(turn.Status))
-	info.Messages = agentMessageInfoFromCore(turn.Messages)
-	info.OutputText = turn.OutputText
-	info.StructuredOutput = maps.Clone(turn.StructuredOutput)
 	info.StatusMessage = turn.StatusMessage
 	info.CreatedBy = agentActorInfoFromCore(turn.CreatedBy)
 	info.CreatedAt = turn.CreatedAt
 	info.StartedAt = turn.StartedAt
 	info.CompletedAt = turn.CompletedAt
 	info.ExecutionRef = strings.TrimSpace(turn.ExecutionRef)
+	if !summaryOnly {
+		info.Messages = agentMessageInfoFromCore(turn.Messages)
+		info.OutputText = turn.OutputText
+		info.StructuredOutput = maps.Clone(turn.StructuredOutput)
+	}
 	return info
 }
 
@@ -1014,7 +1111,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
-		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured):
+		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -1022,7 +1120,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
 		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
-		errors.Is(err, agentmanager.ErrAgentInteractionRequired):
+		errors.Is(err, agentmanager.ErrAgentInteractionRequired),
+		errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound):
 		writeError(w, http.StatusNotFound, "agent interaction not found")

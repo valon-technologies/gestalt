@@ -15,6 +15,8 @@ import (
 
 type fakeAgentProviderClient struct {
 	getCapabilities func(context.Context, *proto.GetAgentProviderCapabilitiesRequest, ...grpc.CallOption) (*proto.AgentProviderCapabilities, error)
+	listSessions    func(context.Context, *proto.ListAgentProviderSessionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error)
+	listTurns       func(context.Context, *proto.ListAgentProviderTurnsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error)
 	listTurnEvents  func(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error)
 }
 
@@ -26,7 +28,10 @@ func (c *fakeAgentProviderClient) GetSession(context.Context, *proto.GetAgentPro
 	return nil, errors.New("unexpected GetSession call")
 }
 
-func (c *fakeAgentProviderClient) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error) {
+func (c *fakeAgentProviderClient) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest, opts ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error) {
+	if c.listSessions != nil {
+		return c.listSessions(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected ListSessions call")
 }
 
@@ -42,7 +47,10 @@ func (c *fakeAgentProviderClient) GetTurn(context.Context, *proto.GetAgentProvid
 	return nil, errors.New("unexpected GetTurn call")
 }
 
-func (c *fakeAgentProviderClient) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error) {
+func (c *fakeAgentProviderClient) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest, opts ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error) {
+	if c.listTurns != nil {
+		return c.listTurns(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected ListTurns call")
 }
 
@@ -141,6 +149,99 @@ func TestRemoteAgentListTurnEventsPreservesDisplay(t *testing.T) {
 	inputMap, ok := display.Input.(map[string]any)
 	if !ok || inputMap["query"] != "fixture" {
 		t.Fatalf("display input = %#v, want query fixture", display.Input)
+	}
+}
+
+func TestRemoteAgentListSessionsForwardsBoundedSummaryRequest(t *testing.T) {
+	t.Parallel()
+
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			listSessions: func(_ context.Context, req *proto.ListAgentProviderSessionsRequest, _ ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error) {
+				if got := req.GetSubject().GetSubjectId(); got != "user-1" {
+					t.Fatalf("subject_id = %q, want user-1", got)
+				}
+				if got := req.GetSessionIds(); len(got) != 2 || got[0] != "session-a" || got[1] != "session-b" {
+					t.Fatalf("session_ids = %#v", got)
+				}
+				if got := req.GetState(); got != proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE {
+					t.Fatalf("state = %v, want active", got)
+				}
+				if got := req.GetLimit(); got != 25 {
+					t.Fatalf("limit = %d, want 25", got)
+				}
+				if !req.GetSummaryOnly() {
+					t.Fatal("summary_only = false, want true")
+				}
+				return &proto.ListAgentProviderSessionsResponse{Sessions: []*proto.AgentSession{{
+					Id:    "session-a",
+					State: proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+				}}}, nil
+			},
+		},
+	}
+
+	sessions, err := agent.ListSessions(context.Background(), coreagent.ListSessionsRequest{
+		Subject:     coreagent.SubjectContext{SubjectID: "user-1"},
+		SessionIDs:  []string{"session-a", "session-b"},
+		State:       coreagent.SessionStateActive,
+		Limit:       25,
+		SummaryOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "session-a" || sessions[0].State != coreagent.SessionStateActive {
+		t.Fatalf("sessions = %#v", sessions)
+	}
+}
+
+func TestRemoteAgentListTurnsForwardsBoundedSummaryRequest(t *testing.T) {
+	t.Parallel()
+
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			listTurns: func(_ context.Context, req *proto.ListAgentProviderTurnsRequest, _ ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error) {
+				if got := req.GetSessionId(); got != "session-1" {
+					t.Fatalf("session_id = %q, want session-1", got)
+				}
+				if got := req.GetSubject().GetSubjectId(); got != "user-1" {
+					t.Fatalf("subject_id = %q, want user-1", got)
+				}
+				if got := req.GetTurnIds(); len(got) != 1 || got[0] != "turn-1" {
+					t.Fatalf("turn_ids = %#v", got)
+				}
+				if got := req.GetStatus(); got != proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED {
+					t.Fatalf("status = %v, want succeeded", got)
+				}
+				if got := req.GetLimit(); got != 10 {
+					t.Fatalf("limit = %d, want 10", got)
+				}
+				if !req.GetSummaryOnly() {
+					t.Fatal("summary_only = false, want true")
+				}
+				return &proto.ListAgentProviderTurnsResponse{Turns: []*proto.AgentTurn{{
+					Id:        "turn-1",
+					SessionId: "session-1",
+					Status:    proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
+				}}}, nil
+			},
+		},
+	}
+
+	turns, err := agent.ListTurns(context.Background(), coreagent.ListTurnsRequest{
+		SessionID:   "session-1",
+		Subject:     coreagent.SubjectContext{SubjectID: "user-1"},
+		TurnIDs:     []string{"turn-1"},
+		Status:      coreagent.ExecutionStatusSucceeded,
+		Limit:       10,
+		SummaryOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].ID != "turn-1" || turns[0].Status != coreagent.ExecutionStatusSucceeded {
+		t.Fatalf("turns = %#v", turns)
 	}
 }
 
