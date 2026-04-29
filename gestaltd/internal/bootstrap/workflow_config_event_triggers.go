@@ -48,11 +48,10 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		})
 		switch {
 		case err == nil:
-			if !isWorkflowConfigOwnedEventTrigger(existing, pluginName, desiredEntry.TriggerID) &&
-				!isAdoptableWorkflowEventTrigger(existing, trigger, desiredEntry.TriggerID) {
+			if !isWorkflowConfigOwnedEventTrigger(existing, pluginName, desiredEntry.TriggerID) {
 				return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q conflicts with existing unmanaged trigger id %q", desiredEntry.TriggerKey, pluginName, desiredEntry.TriggerID)
 			}
-			existingExecutionRef = workflowEventTriggerExecutionRef(existing, "")
+			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		case isWorkflowObjectNotFound(err):
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
@@ -167,16 +166,6 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 	return nil
 }
 
-func isAdoptableWorkflowEventTrigger(existing *coreworkflow.EventTrigger, trigger config.WorkflowEventTriggerConfig, triggerID string) bool {
-	if existing == nil {
-		return false
-	}
-	return existing.ID == triggerID &&
-		existing.Match == workflowConfigEventTriggerMatch(trigger) &&
-		existing.Paused == trigger.Paused &&
-		workflowTargetsEqual(existing.Target, workflowConfigEventTriggerTarget(trigger))
-}
-
 func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, pluginName, triggerID string) bool {
 	if existing == nil {
 		return false
@@ -212,13 +201,4 @@ func workflowConfigEventTriggerID(triggerKey string) string {
 
 func workflowConfigEventTriggerExecutionRefID(triggerID string) string {
 	return "workflow_event_trigger:" + strings.TrimSpace(triggerID) + ":" + uuid.NewString()
-}
-
-func workflowEventTriggerExecutionRef(existing *coreworkflow.EventTrigger, fallback string) string {
-	if existing != nil {
-		if refID := strings.TrimSpace(existing.ExecutionRef); refID != "" {
-			return refID
-		}
-	}
-	return strings.TrimSpace(fallback)
 }
