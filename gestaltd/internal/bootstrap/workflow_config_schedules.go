@@ -24,8 +24,6 @@ import (
 )
 
 type desiredWorkflowConfigSchedule struct {
-	ID           string
-	PluginName   string
 	ScheduleKey  string
 	ProviderName string
 	ScheduleID   string
@@ -44,12 +42,12 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[rowID]
 		schedule := desiredEntry.schedule
-		pluginName := workflowConfigTargetLabel(workflowConfigScheduleTarget(schedule))
+		target := workflowConfigTarget(schedule.Target)
+		pluginName := workflowConfigTargetLabel(target)
 		providerName, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		target := workflowConfigScheduleTarget(schedule)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
 		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
@@ -124,10 +122,8 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 		if err != nil {
 			return nil, err
 		}
-		rowID := workflowConfigScheduleStateID(scheduleKey)
+		rowID := strings.TrimSpace(scheduleKey)
 		desired[rowID] = desiredWorkflowConfigSchedule{
-			ID:           rowID,
-			PluginName:   workflowConfigTargetLabel(workflowConfigScheduleTarget(schedule)),
 			ScheduleKey:  scheduleKey,
 			ProviderName: providerName,
 			ScheduleID:   workflowConfigScheduleID(scheduleKey),
@@ -199,10 +195,6 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, 
 		existing.CreatedBy.AuthSource == actor.AuthSource
 }
 
-func workflowTargetsEqual(left, right coreworkflow.Target) bool {
-	return coreworkflow.TargetsEqual(left, right)
-}
-
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
 	if target.Agent != nil {
 		providerName := strings.TrimSpace(target.Agent.ProviderName)
@@ -215,10 +207,6 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 		return ""
 	}
 	return strings.TrimSpace(target.Plugin.PluginName)
-}
-
-func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) coreworkflow.Target {
-	return workflowConfigTarget(schedule.Target)
 }
 
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
@@ -295,10 +283,6 @@ func workflowConfigActor() coreworkflow.Actor {
 		DisplayName: "Workflow Config",
 		AuthSource:  "config",
 	}
-}
-
-func workflowConfigScheduleStateID(scheduleKey string) string {
-	return strings.TrimSpace(scheduleKey)
 }
 
 func workflowConfigScheduleID(scheduleKey string) string {
@@ -464,7 +448,7 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
 		return false
 	}
-	if !workflowTargetsEqual(existing.Target, desired.Target) {
+	if !coreworkflow.TargetsEqual(existing.Target, desired.Target) {
 		return false
 	}
 	existingJSON, existingErr := json.Marshal(existing.Permissions)

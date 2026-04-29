@@ -155,86 +155,60 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 		Tools: []coreagent.Tool{workflowTool},
 	})
 
-	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolID:       workflowTool.ID,
-		ToolGrant:    toolGrant,
-		Arguments: map[string]any{
-			"cron": "*/5 * * * *",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"prompt":   "Sync roadmap",
-					"toolRefs": []any{
-						map[string]any{
-							"plugin":         "roadmap",
-							"operation":      "sync",
-							"credentialMode": "user",
+	cases := []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{
+			name: "credential mode",
+			arguments: map[string]any{
+				"cron": "*/5 * * * *",
+				"target": map[string]any{
+					"agent": map[string]any{
+						"provider": "managed",
+						"prompt":   "Sync roadmap",
+						"toolRefs": []any{
+							map[string]any{
+								"plugin":         "roadmap",
+								"operation":      "sync",
+								"credentialMode": "user",
+							},
 						},
 					},
 				},
 			},
 		},
-	})
-	if err == nil {
-		t.Fatal("ExecuteTool succeeded, want invalid invocation")
-	}
-	if !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
-	}
-}
-
-func TestAgentRuntimeWorkflowSystemToolCreateScheduleFallsBackFromNullToolRefsToTools(t *testing.T) {
-	t.Parallel()
-
-	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
-	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
-		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
-			Operations: []string{"sync"},
-		}},
-		ToolRefs: []coreagent.ToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
-			{Plugin: "roadmap", Operation: "sync"},
-		},
-		Tools: []coreagent.Tool{workflowTool},
-	})
-
-	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolID:       workflowTool.ID,
-		ToolGrant:    toolGrant,
-		Arguments: map[string]any{
-			"cron": "*/5 * * * *",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"prompt":   "Sync roadmap",
-					"toolRefs": nil,
-					"tools": []any{
-						map[string]any{
-							"plugin":    "roadmap",
-							"operation": "sync",
+		{
+			name: "agent tools alias",
+			arguments: map[string]any{
+				"cron": "*/5 * * * *",
+				"target": map[string]any{
+					"agent": map[string]any{
+						"provider": "managed",
+						"prompt":   "Sync roadmap",
+						"tools": []any{
+							map[string]any{"plugin": "roadmap", "operation": "sync"},
 						},
 					},
 				},
 			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool: %v", err)
 	}
-	if len(workflowProvider.upsertedSchedules) != 1 {
-		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
-	}
-	target := workflowProvider.upsertedSchedules[0].Target
-	if target.Agent == nil || len(target.Agent.ToolRefs) != 1 || target.Agent.ToolRefs[0].Plugin != "roadmap" || target.Agent.ToolRefs[0].Operation != "sync" {
-		t.Fatalf("agent target tool refs = %#v", target.Agent)
+	for _, tc := range cases {
+		_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+			ProviderName: "managed",
+			SessionID:    "session-1",
+			TurnID:       "turn-1",
+			ToolID:       workflowTool.ID,
+			ToolGrant:    toolGrant,
+			Arguments:    tc.arguments,
+		})
+		if err == nil {
+			t.Fatalf("%s: ExecuteTool succeeded, want invalid invocation", tc.name)
+		}
+		if !errors.Is(err, invocation.ErrInvalidInvocation) {
+			t.Fatalf("%s: ExecuteTool error = %v, want invalid invocation", tc.name, err)
+		}
 	}
 }
 

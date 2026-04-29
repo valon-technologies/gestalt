@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -70,7 +69,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 	}
 
 	var req workflowEventTriggerUpsertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeWorkflowJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -116,7 +115,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 	triggerID := chi.URLParam(r, "triggerID")
 
 	var req workflowEventTriggerUpsertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeWorkflowJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}

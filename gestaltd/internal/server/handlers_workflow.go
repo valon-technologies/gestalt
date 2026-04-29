@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -39,7 +40,6 @@ type workflowAgentTargetRequest struct {
 	Prompt          string                `json:"prompt,omitempty"`
 	Messages        []agentMessageRequest `json:"messages,omitempty"`
 	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
-	Tools           []agentToolRefRequest `json:"tools,omitempty"`
 	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
 	Metadata        map[string]any        `json:"metadata,omitempty"`
 	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
@@ -115,7 +115,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req workflowScheduleUpsertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeWorkflowJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -158,7 +158,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	scheduleID := chi.URLParam(r, "scheduleID")
 
 	var req workflowScheduleUpsertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeWorkflowJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -252,6 +252,21 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 	}
 }
 
+func decodeWorkflowJSONBody(r *http.Request, dst any) error {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return fmt.Errorf("invalid trailing JSON body")
+		}
+		return err
+	}
+	return nil
+}
+
 func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workflowPluginTargetRequest {
 	if target == nil {
 		return workflowPluginTargetRequest{}
@@ -263,16 +278,12 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 	if target == nil {
 		return coreworkflow.AgentTarget{}
 	}
-	toolRefs := target.ToolRefs
-	if len(toolRefs) == 0 {
-		toolRefs = target.Tools
-	}
 	return coreworkflow.AgentTarget{
 		ProviderName:    strings.TrimSpace(target.ProviderName),
 		Model:           strings.TrimSpace(target.Model),
 		Prompt:          strings.TrimSpace(target.Prompt),
 		Messages:        agentMessagesFromRequest(target.Messages),
-		ToolRefs:        agentToolRefsFromRequest(toolRefs),
+		ToolRefs:        agentToolRefsFromRequest(target.ToolRefs),
 		ToolSource:      coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:  maps.Clone(target.ResponseSchema),
 		Metadata:        maps.Clone(target.Metadata),

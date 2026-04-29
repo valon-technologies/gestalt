@@ -164,10 +164,10 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedules": items})
 	case workflowSystemToolSchedulesGet:
-		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.get", "scheduleId", "id"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.get", "scheduleId"); err != nil {
 			return nil, err
 		}
-		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId", "id")
+		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId")
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
@@ -177,10 +177,10 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 	case workflowSystemToolSchedulesPause:
-		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.pause", "scheduleId", "id"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.pause", "scheduleId"); err != nil {
 			return nil, err
 		}
-		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId", "id")
+		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId")
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
@@ -190,10 +190,10 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 	case workflowSystemToolSchedulesResume:
-		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.resume", "scheduleId", "id"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.resume", "scheduleId"); err != nil {
 			return nil, err
 		}
-		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId", "id")
+		scheduleID := workflowSystemToolStringArg(req.Arguments, "scheduleId")
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
@@ -216,10 +216,10 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"runs": items})
 	case workflowSystemToolRunsGet:
-		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.get", "runId", "id"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.get", "runId"); err != nil {
 			return nil, err
 		}
-		runID := workflowSystemToolStringArg(req.Arguments, "runId", "id")
+		runID := workflowSystemToolStringArg(req.Arguments, "runId")
 		if runID == "" {
 			return nil, fmt.Errorf("%w: runId is required", invocation.ErrInvalidInvocation)
 		}
@@ -235,7 +235,7 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 
 func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
 	args := req.Arguments
-	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.create", "provider", "providerName", "cron", "timezone", "timeZone", "paused", "target"); err != nil {
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.create", "provider", "cron", "timezone", "paused", "target"); err != nil {
 		return nil, err
 	}
 	cron := workflowSystemToolStringArg(args, "cron")
@@ -259,9 +259,9 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		return nil, err
 	}
 	schedule, err := t.manager.CreateSchedule(ctx, scopedPrincipal, workflowmanager.ScheduleUpsert{
-		ProviderName: workflowSystemToolStringArg(args, "provider", "providerName"),
+		ProviderName: workflowSystemToolStringArg(args, "provider"),
 		Cron:         cron,
-		Timezone:     workflowSystemToolStringArg(args, "timezone", "timeZone"),
+		Timezone:     workflowSystemToolStringArg(args, "timezone"),
 		Target:       target,
 		Paused:       workflowSystemToolBoolArg(args, "paused"),
 	})
@@ -316,7 +316,6 @@ func workflowSystemToolCreateScheduleSchema() map[string]any {
 			"prompt":          workflowSystemToolStringSchema("Agent prompt."),
 			"messages":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			"toolRefs":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"tools":           map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
 			"responseSchema":  map[string]any{"type": "object"},
 			"metadata":        map[string]any{"type": "object"},
 			"providerOptions": map[string]any{"type": "object"},
@@ -381,10 +380,10 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 		if !ok {
 			return coreworkflow.Target{}, fmt.Errorf("%w: target.plugin must be an object", invocation.ErrInvalidInvocation)
 		}
-		if err := workflowSystemToolRejectUnknownKeys(pluginMap, "target.plugin", "name", "plugin", "operation", "connection", "instance", "input"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(pluginMap, "target.plugin", "name", "operation", "connection", "instance", "input"); err != nil {
 			return coreworkflow.Target{}, err
 		}
-		pluginName := workflowSystemToolStringArg(pluginMap, "name", "plugin")
+		pluginName := workflowSystemToolStringArg(pluginMap, "name")
 		operation := workflowSystemToolStringArg(pluginMap, "operation")
 		if pluginName == "" || operation == "" {
 			return coreworkflow.Target{}, fmt.Errorf("%w: target.plugin.name and target.plugin.operation are required", invocation.ErrInvalidInvocation)
@@ -405,14 +404,10 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 	if !ok {
 		return coreworkflow.Target{}, fmt.Errorf("%w: target.agent must be an object", invocation.ErrInvalidInvocation)
 	}
-	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "providerName", "model", "prompt", "messages", "toolRefs", "tools", "responseSchema", "metadata", "providerOptions", "timeoutSeconds"); err != nil {
+	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "model", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "providerOptions", "timeoutSeconds"); err != nil {
 		return coreworkflow.Target{}, err
 	}
-	toolRefsValue, ok := agentMap["toolRefs"]
-	if !ok || toolRefsValue == nil {
-		toolRefsValue = agentMap["tools"]
-	}
-	toolRefs, err := workflowSystemToolRefsFromValue(toolRefsValue)
+	toolRefs, err := workflowSystemToolRefsFromValue(agentMap["toolRefs"])
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
@@ -433,7 +428,7 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 		return coreworkflow.Target{}, err
 	}
 	return coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName:    workflowSystemToolStringArg(agentMap, "provider", "providerName"),
+		ProviderName:    workflowSystemToolStringArg(agentMap, "provider"),
 		Model:           workflowSystemToolStringArg(agentMap, "model"),
 		Prompt:          workflowSystemToolStringArg(agentMap, "prompt"),
 		Messages:        messages,
@@ -808,12 +803,10 @@ func workflowSystemToolPutTime(value map[string]any, key string, t *time.Time) {
 	}
 }
 
-func workflowSystemToolStringArg(args map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := args[key]; ok {
-			if s, ok := value.(string); ok {
-				return strings.TrimSpace(s)
-			}
+func workflowSystemToolStringArg(args map[string]any, key string) string {
+	if value, ok := args[key]; ok {
+		if s, ok := value.(string); ok {
+			return strings.TrimSpace(s)
 		}
 	}
 	return ""
