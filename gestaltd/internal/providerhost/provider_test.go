@@ -95,7 +95,7 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role),
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}},
+			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}, Tags: []string{"roundtrip", "session"}},
 		},
 	}, nil
 }
@@ -274,6 +274,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 			if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
 				t.Fatalf("unexpected session catalog allowedRoles: %#v", got)
+			}
+			if got := sessionCat.Operations[0].Tags; len(got) != 2 || got[0] != "roundtrip" || got[1] != "session" {
+				t.Fatalf("unexpected session catalog tags: %#v", got)
 			}
 
 			pcp := prov.(core.PostConnectCapable)

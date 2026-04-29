@@ -18,7 +18,7 @@ type agentToolSearchDocument struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Parameters  string `json:"parameters"`
-	Aliases     string `json:"aliases"`
+	Tags        string `json:"tags"`
 }
 
 func mentionedAgentToolSearchProviders(query string, providerNames []string) []string {
@@ -114,12 +114,12 @@ type agentToolSearchRankedCandidate struct {
 
 func agentToolSearchQuery(searchText string) blevequery.Query {
 	queries := []blevequery.Query{
-		agentToolSearchMatchQuery("plugin", searchText, 16),
-		agentToolSearchMatchQuery("operation", searchText, 12),
-		agentToolSearchMatchQuery("aliases", searchText, 10),
+		agentToolSearchMatchQuery("plugin", searchText, 12),
+		agentToolSearchMatchQuery("operation", searchText, 9),
 		agentToolSearchMatchQuery("title", searchText, 8),
 		agentToolSearchMatchQuery("parameters", searchText, 5),
-		agentToolSearchMatchQuery("description", searchText, 1),
+		agentToolSearchMatchQuery("description", searchText, 4),
+		agentToolSearchMatchQuery("tags", searchText, 3),
 	}
 	return bleve.NewDisjunctionQuery(queries...)
 }
@@ -142,11 +142,11 @@ func agentToolSearchDoc(candidate agentToolSearchCandidate) agentToolSearchDocum
 	}
 	return agentToolSearchDocument{
 		Plugin:      agentToolSearchText(candidate.ref.Plugin + " " + catalogName + " " + catalogDisplayName),
-		Operation:   agentToolSearchText(candidate.ref.Operation + " " + op.ID + " " + op.ProviderID + " " + op.Path + " " + strings.Join(op.Tags, " ")),
+		Operation:   agentToolSearchText(candidate.ref.Operation + " " + op.ID + " " + op.ProviderID + " " + op.Path),
 		Title:       agentToolSearchText(op.Title),
 		Description: agentToolSearchText(catalogDescription + " " + op.Description),
 		Parameters:  agentToolSearchText(agentToolSearchParameterText(op)),
-		Aliases:     agentToolSearchText(agentToolSearchAliasText(candidate.ref.Plugin, op)),
+		Tags:        agentToolSearchText(strings.Join(op.Tags, " ")),
 	}
 }
 
@@ -188,51 +188,6 @@ func agentToolSearchSchemaText(raw json.RawMessage) string {
 	return strings.Join(parts, " ")
 }
 
-func agentToolSearchAliasText(pluginName string, op catalog.CatalogOperation) string {
-	tokens := agentToolSearchTokenSet(strings.Join([]string{
-		pluginName,
-		op.ID,
-		op.ProviderID,
-		op.Title,
-		op.Description,
-		strings.Join(op.Tags, " "),
-		agentToolSearchParameterText(op),
-	}, " "))
-	aliases := make([]string, 0, len(tokens)*2)
-	for token := range tokens {
-		aliases = append(aliases, agentToolSearchAliases(token)...)
-	}
-	sort.Strings(aliases)
-	return strings.Join(aliases, " ")
-}
-
-func agentToolSearchAliases(token string) []string {
-	switch token {
-	case "ticket", "tickets":
-		return []string{"issue", "issues", "task", "tasks"}
-	case "issue", "issues":
-		return []string{"ticket", "tickets", "task", "tasks"}
-	case "assigned":
-		return []string{"assignee", "assignees"}
-	case "assignee", "assignees":
-		return []string{"assigned"}
-	case "dm", "dms":
-		return []string{"direct", "message", "messages", "conversation", "conversations"}
-	case "direct":
-		return []string{"dm", "dms"}
-	case "pr", "prs":
-		return []string{"pull", "request", "requests", "merge"}
-	case "pull":
-		return []string{"pr", "prs", "merge"}
-	case "merge":
-		return []string{"mr", "mrs", "pull", "request", "requests"}
-	case "mr", "mrs":
-		return []string{"merge", "request", "requests"}
-	default:
-		return nil
-	}
-}
-
 func sortAgentToolSearchCandidates(candidates []agentToolSearchCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return compareAgentToolSearchCandidates(candidates[i], candidates[j]) < 0
@@ -256,24 +211,7 @@ func compareAgentToolSearchCandidates(a, b agentToolSearchCandidate) int {
 }
 
 func agentToolSearchText(value string) string {
-	tokens := uniqueAgentToolSearchTokens(value)
-	if len(tokens) == 0 {
-		return ""
-	}
-	expanded := make([]string, 0, len(tokens)*2)
-	seen := make(map[string]struct{}, len(tokens)*2)
-	for _, token := range tokens {
-		for _, value := range append([]string{token}, agentToolSearchAliases(token)...) {
-			for _, normalized := range uniqueAgentToolSearchTokens(value) {
-				if _, ok := seen[normalized]; ok {
-					continue
-				}
-				seen[normalized] = struct{}{}
-				expanded = append(expanded, normalized)
-			}
-		}
-	}
-	return strings.Join(expanded, " ")
+	return strings.Join(uniqueAgentToolSearchTokens(value), " ")
 }
 
 func uniqueAgentToolSearchTokens(value string) []string {
@@ -294,15 +232,6 @@ func uniqueAgentToolSearchTokens(value string) []string {
 			seen[normalized] = struct{}{}
 			out = append(out, normalized)
 		}
-	}
-	return out
-}
-
-func agentToolSearchTokenSet(value string) map[string]bool {
-	tokens := uniqueAgentToolSearchTokens(value)
-	out := make(map[string]bool, len(tokens))
-	for _, token := range tokens {
-		out[token] = true
 	}
 	return out
 }
