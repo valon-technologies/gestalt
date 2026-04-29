@@ -30,7 +30,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/integrations` | List plugins, connection state, authentication types, instances, icons, and connection parameter hints. |
-| `DELETE` | `/api/v1/integrations/{name}` | Disconnect a plugin. Use `?_connection=...` and `?_instance=...` to target one stored connection. Legacy `connection` and `instance` selectors are accepted for compatibility. |
+| `DELETE` | `/api/v1/integrations/{name}` | Disconnect a plugin. Use `?_connection=...` and `?_instance=...` to target one stored connection. |
 | `GET` | `/api/v1/integrations/{name}/operations` | List operations for one plugin. Supports `_connection` and `_instance` selectors. |
 | `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke a plugin operation. Supports `_connection` and `_instance`. |
 

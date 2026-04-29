@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -261,13 +260,17 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query()
-
-	requestedInstance, err := selectorQueryValue(query, httpInstanceParam, "instance")
-	if err != nil {
-		auditErr = err
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+	for param := range query {
+		switch param {
+		case httpConnectionParam, httpInstanceParam:
+		default:
+			auditErr = fmt.Errorf("unsupported query parameter %q", param)
+			writeError(w, http.StatusBadRequest, auditErr.Error())
+			return
+		}
 	}
+
+	requestedInstance := query.Get(httpInstanceParam)
 	if requestedInstance != "" {
 		var ok bool
 		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
@@ -276,12 +279,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	requestedConnection, err := selectorQueryValue(query, httpConnectionParam, "connection")
-	if err != nil {
-		auditErr = err
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	requestedConnection := query.Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
 		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
@@ -370,18 +368,6 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
-}
-
-func selectorQueryValue(query url.Values, canonical, legacy string) (string, error) {
-	canonicalValue := query.Get(canonical)
-	legacyValue := query.Get(legacy)
-	if canonicalValue != "" && legacyValue != "" && canonicalValue != legacyValue {
-		return "", fmt.Errorf("conflicting %s and %s query parameters", canonical, legacy)
-	}
-	if canonicalValue != "" {
-		return canonicalValue, nil
-	}
-	return legacyValue, nil
 }
 
 func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider, bool) {

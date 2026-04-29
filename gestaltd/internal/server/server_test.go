@@ -9580,50 +9580,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy plain parameters are accepted for disconnect", func(t *testing.T) {
-		t.Parallel()
-
-		svc := coretesting.NewStubServices(t)
-		u := seedUser(t, svc, "anonymous@gestalt")
-		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
-			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
-		})
-		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-c", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
-			Connection: "default", Instance: "default", AccessToken: "test-token-2",
-		})
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.Services = svc
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion?connection=mcp&instance=MCP%20OAuth", nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-		}
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "notion")
-		if err != nil {
-			t.Fatalf("ListCredentialsForProvider: %v", err)
-		}
-		if len(tokens) != 1 {
-			t.Fatalf("expected one token to remain after legacy disconnect, got %d", len(tokens))
-		}
-		if tokens[0].Connection != "default" || tokens[0].Instance != "default" {
-			t.Fatalf("unexpected remaining token %+v", tokens[0])
-		}
-	})
-
-	t.Run("conflicting canonical and legacy parameters are rejected for disconnect", func(t *testing.T) {
+	t.Run("plain selectors are rejected for disconnect", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
@@ -9639,7 +9596,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion?_connection=default&connection=mcp", nil)
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion?connection=mcp", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("request: %v", err)
@@ -9654,8 +9611,8 @@ func TestDisconnectIntegration(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			t.Fatalf("decoding: %v", err)
 		}
-		if !strings.Contains(result["error"], "_connection") || !strings.Contains(result["error"], "connection") {
-			t.Fatalf("expected conflict error, got %q", result["error"])
+		if !strings.Contains(result["error"], "unsupported query parameter") {
+			t.Fatalf("expected unsupported query parameter error, got %q", result["error"])
 		}
 	})
 
