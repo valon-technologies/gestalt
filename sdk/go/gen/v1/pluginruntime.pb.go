@@ -380,28 +380,27 @@ func (x *PluginRuntimeSessionLifecycle) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type PluginRuntimeImagePullCredentials struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type PluginRuntimeImagePullAuth struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	DockerConfigJson string                 `protobuf:"bytes,1,opt,name=docker_config_json,json=dockerConfigJson,proto3" json:"docker_config_json,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-func (x *PluginRuntimeImagePullCredentials) Reset() {
-	*x = PluginRuntimeImagePullCredentials{}
+func (x *PluginRuntimeImagePullAuth) Reset() {
+	*x = PluginRuntimeImagePullAuth{}
 	mi := &file_v1_pluginruntime_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PluginRuntimeImagePullCredentials) String() string {
+func (x *PluginRuntimeImagePullAuth) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PluginRuntimeImagePullCredentials) ProtoMessage() {}
+func (*PluginRuntimeImagePullAuth) ProtoMessage() {}
 
-func (x *PluginRuntimeImagePullCredentials) ProtoReflect() protoreflect.Message {
+func (x *PluginRuntimeImagePullAuth) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_pluginruntime_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -413,34 +412,27 @@ func (x *PluginRuntimeImagePullCredentials) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PluginRuntimeImagePullCredentials.ProtoReflect.Descriptor instead.
-func (*PluginRuntimeImagePullCredentials) Descriptor() ([]byte, []int) {
+// Deprecated: Use PluginRuntimeImagePullAuth.ProtoReflect.Descriptor instead.
+func (*PluginRuntimeImagePullAuth) Descriptor() ([]byte, []int) {
 	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PluginRuntimeImagePullCredentials) GetUsername() string {
+func (x *PluginRuntimeImagePullAuth) GetDockerConfigJson() string {
 	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-func (x *PluginRuntimeImagePullCredentials) GetPassword() string {
-	if x != nil {
-		return x.Password
+		return x.DockerConfigJson
 	}
 	return ""
 }
 
 type StartPluginRuntimeSessionRequest struct {
-	state                protoimpl.MessageState             `protogen:"open.v1"`
-	PluginName           string                             `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Template             string                             `protobuf:"bytes,2,opt,name=template,proto3" json:"template,omitempty"`
-	Image                string                             `protobuf:"bytes,3,opt,name=image,proto3" json:"image,omitempty"`
-	Metadata             map[string]string                  `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ImagePullCredentials *PluginRuntimeImagePullCredentials `protobuf:"bytes,5,opt,name=image_pull_credentials,json=imagePullCredentials,proto3" json:"image_pull_credentials,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	PluginName    string                      `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	Template      string                      `protobuf:"bytes,2,opt,name=template,proto3" json:"template,omitempty"`
+	Image         string                      `protobuf:"bytes,3,opt,name=image,proto3" json:"image,omitempty"`
+	Metadata      map[string]string           `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ImagePullAuth *PluginRuntimeImagePullAuth `protobuf:"bytes,6,opt,name=image_pull_auth,json=imagePullAuth,proto3" json:"image_pull_auth,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartPluginRuntimeSessionRequest) Reset() {
@@ -501,9 +493,9 @@ func (x *StartPluginRuntimeSessionRequest) GetMetadata() map[string]string {
 	return nil
 }
 
-func (x *StartPluginRuntimeSessionRequest) GetImagePullCredentials() *PluginRuntimeImagePullCredentials {
+func (x *StartPluginRuntimeSessionRequest) GetImagePullAuth() *PluginRuntimeImagePullAuth {
 	if x != nil {
-		return x.ImagePullCredentials
+		return x.ImagePullAuth
 	}
 	return nil
 }
@@ -1209,20 +1201,19 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"started_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12L\n" +
 	"\x14recommended_drain_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x12recommendedDrainAt\x129\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"[\n" +
-	"!PluginRuntimeImagePullCredentials\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x81\x03\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"J\n" +
+	"\x1aPluginRuntimeImagePullAuth\x12,\n" +
+	"\x12docker_config_json\x18\x01 \x01(\tR\x10dockerConfigJson\"\x8a\x03\n" +
 	" StartPluginRuntimeSessionRequest\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x12\x1a\n" +
 	"\btemplate\x18\x02 \x01(\tR\btemplate\x12\x14\n" +
 	"\x05image\x18\x03 \x01(\tR\x05image\x12_\n" +
-	"\bmetadata\x18\x04 \x03(\v2C.gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntryR\bmetadata\x12l\n" +
-	"\x16image_pull_credentials\x18\x05 \x01(\v26.gestalt.provider.v1.PluginRuntimeImagePullCredentialsR\x14imagePullCredentials\x1a;\n" +
+	"\bmetadata\x18\x04 \x03(\v2C.gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntryR\bmetadata\x12W\n" +
+	"\x0fimage_pull_auth\x18\x06 \x01(\v2/.gestalt.provider.v1.PluginRuntimeImagePullAuthR\rimagePullAuth\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"?\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x05\x10\x06R\x16image_pull_credentials\"?\n" +
 	"\x1eGetPluginRuntimeSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\"\n" +
@@ -1333,7 +1324,7 @@ var file_v1_pluginruntime_proto_goTypes = []any{
 	(*PluginRuntimeSupport)(nil),                // 3: gestalt.provider.v1.PluginRuntimeSupport
 	(*PluginRuntimeSession)(nil),                // 4: gestalt.provider.v1.PluginRuntimeSession
 	(*PluginRuntimeSessionLifecycle)(nil),       // 5: gestalt.provider.v1.PluginRuntimeSessionLifecycle
-	(*PluginRuntimeImagePullCredentials)(nil),   // 6: gestalt.provider.v1.PluginRuntimeImagePullCredentials
+	(*PluginRuntimeImagePullAuth)(nil),          // 6: gestalt.provider.v1.PluginRuntimeImagePullAuth
 	(*StartPluginRuntimeSessionRequest)(nil),    // 7: gestalt.provider.v1.StartPluginRuntimeSessionRequest
 	(*GetPluginRuntimeSessionRequest)(nil),      // 8: gestalt.provider.v1.GetPluginRuntimeSessionRequest
 	(*ListPluginRuntimeSessionsRequest)(nil),    // 9: gestalt.provider.v1.ListPluginRuntimeSessionsRequest
@@ -1362,7 +1353,7 @@ var file_v1_pluginruntime_proto_depIdxs = []int32{
 	23, // 5: gestalt.provider.v1.PluginRuntimeSessionLifecycle.recommended_drain_at:type_name -> google.protobuf.Timestamp
 	23, // 6: gestalt.provider.v1.PluginRuntimeSessionLifecycle.expires_at:type_name -> google.protobuf.Timestamp
 	21, // 7: gestalt.provider.v1.StartPluginRuntimeSessionRequest.metadata:type_name -> gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntry
-	6,  // 8: gestalt.provider.v1.StartPluginRuntimeSessionRequest.image_pull_credentials:type_name -> gestalt.provider.v1.PluginRuntimeImagePullCredentials
+	6,  // 8: gestalt.provider.v1.StartPluginRuntimeSessionRequest.image_pull_auth:type_name -> gestalt.provider.v1.PluginRuntimeImagePullAuth
 	4,  // 9: gestalt.provider.v1.ListPluginRuntimeSessionsResponse.sessions:type_name -> gestalt.provider.v1.PluginRuntimeSession
 	12, // 10: gestalt.provider.v1.BindPluginRuntimeHostServiceRequest.relay:type_name -> gestalt.provider.v1.PluginRuntimeHostServiceRelay
 	12, // 11: gestalt.provider.v1.PluginRuntimeHostServiceBinding.relay:type_name -> gestalt.provider.v1.PluginRuntimeHostServiceRelay

@@ -214,11 +214,11 @@ func (r *capturingPluginRuntime) Support(ctx context.Context) (pluginruntime.Sup
 func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
 	r.mu.Lock()
 	r.startRequests = append(r.startRequests, pluginruntime.StartSessionRequest{
-		PluginName:           req.PluginName,
-		Template:             req.Template,
-		Image:                req.Image,
-		ImagePullCredentials: cloneImagePullCredentials(req.ImagePullCredentials),
-		Metadata:             cloneRuntimeMetadata(req.Metadata),
+		PluginName:    req.PluginName,
+		Template:      req.Template,
+		Image:         req.Image,
+		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
+		Metadata:      cloneRuntimeMetadata(req.Metadata),
 	})
 	r.startTimes = append(r.startTimes, time.Now().UTC())
 	index := len(r.startRequests)
@@ -286,23 +286,22 @@ func (r *capturingPluginRuntime) startSessionRequests() []pluginruntime.StartSes
 	out := make([]pluginruntime.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
 		out[i] = pluginruntime.StartSessionRequest{
-			PluginName:           req.PluginName,
-			Template:             req.Template,
-			Image:                req.Image,
-			ImagePullCredentials: cloneImagePullCredentials(req.ImagePullCredentials),
-			Metadata:             cloneRuntimeMetadata(req.Metadata),
+			PluginName:    req.PluginName,
+			Template:      req.Template,
+			Image:         req.Image,
+			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
+			Metadata:      cloneRuntimeMetadata(req.Metadata),
 		}
 	}
 	return out
 }
 
-func cloneImagePullCredentials(src *pluginruntime.ImagePullCredentials) *pluginruntime.ImagePullCredentials {
+func cloneImagePullAuth(src *pluginruntime.ImagePullAuth) *pluginruntime.ImagePullAuth {
 	if src == nil {
 		return nil
 	}
-	return &pluginruntime.ImagePullCredentials{
-		Username: src.Username,
-		Password: src.Password,
+	return &pluginruntime.ImagePullAuth{
+		DockerConfigJSON: src.DockerConfigJSON,
 	}
 }
 

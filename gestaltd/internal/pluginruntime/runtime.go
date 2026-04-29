@@ -64,16 +64,15 @@ type SessionLifecycle struct {
 }
 
 type StartSessionRequest struct {
-	PluginName           string
-	Template             string
-	Image                string
-	ImagePullCredentials *ImagePullCredentials
-	Metadata             map[string]string
+	PluginName    string
+	Template      string
+	Image         string
+	ImagePullAuth *ImagePullAuth
+	Metadata      map[string]string
 }
 
-type ImagePullCredentials struct {
-	Username string
-	Password string
+type ImagePullAuth struct {
+	DockerConfigJSON string
 }
 
 type GetSessionRequest struct {

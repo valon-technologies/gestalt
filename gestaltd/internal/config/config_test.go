@@ -3771,11 +3771,130 @@ server:
 		}
 	})
 
+	t.Run("accepts Docker config JSON image pull auth under agent execution runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          image: ghcr.io/example/simple-agent:latest
+          imagePullAuth:
+            dockerConfigJson: '{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}'
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: never
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		if auth == nil {
+			t.Fatal("imagePullAuth = nil")
+		}
+		if auth.DockerConfigJSON != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
+			t.Fatalf("dockerConfigJson = %q", auth.DockerConfigJSON)
+		}
+	})
+
+	t.Run("accepts secret ref Docker config JSON image pull auth under agent execution runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  secrets:
+    secrets:
+      source: env
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          image: ghcr.io/example/simple-agent:latest
+          imagePullAuth:
+            dockerConfigJson:
+              secret:
+                provider: secrets
+                name: ghcr-agent-runtime-dockerconfigjson
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: never
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		if auth == nil {
+			t.Fatal("imagePullAuth = nil")
+		}
+		if _, isSecretRef, err := ParseSecretRefTransport(auth.DockerConfigJSON); err != nil || !isSecretRef {
+			t.Fatalf("dockerConfigJson secret ref parse = %v, %v; want encoded secret ref", isSecretRef, err)
+		}
+	})
+
 	cases := []struct {
 		name string
 		yaml string
 		want string
 	}{
+		{
+			name: "rejects invalid Docker config JSON image pull auth",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          image: ghcr.io/example/simple-agent:latest
+          imagePullAuth:
+            dockerConfigJson: '{}'
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.execution.runtime.imagePullAuth.dockerConfigJson: must contain a non-empty "auths" object`,
+		},
 		{
 			name: "rejects missing runtime pool",
 			yaml: `

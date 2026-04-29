@@ -1327,23 +1327,22 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 		return config.EffectiveHostedRuntime{Enabled: entry.UsesHostedExecution()}
 	}
 	effective := config.EffectiveHostedRuntime{
-		Enabled:              entry.UsesHostedExecution(),
-		ProviderName:         strings.TrimSpace(runtimeCfg.Provider),
-		Template:             strings.TrimSpace(runtimeCfg.Template),
-		Image:                strings.TrimSpace(runtimeCfg.Image),
-		ImagePullCredentials: hostedRuntimeConfigImagePullCredentials(runtimeCfg.ImagePullCredentials),
-		Metadata:             maps.Clone(runtimeCfg.Metadata),
+		Enabled:       entry.UsesHostedExecution(),
+		ProviderName:  strings.TrimSpace(runtimeCfg.Provider),
+		Template:      strings.TrimSpace(runtimeCfg.Template),
+		Image:         strings.TrimSpace(runtimeCfg.Image),
+		ImagePullAuth: hostedRuntimeConfigImagePullAuth(runtimeCfg.ImagePullAuth),
+		Metadata:      maps.Clone(runtimeCfg.Metadata),
 	}
 	return effective
 }
 
-func hostedRuntimeConfigImagePullCredentials(creds *config.HostedRuntimeImagePullCredentials) *config.HostedRuntimeImagePullCredentials {
-	if creds == nil {
+func hostedRuntimeConfigImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *config.HostedRuntimeImagePullAuth {
+	if auth == nil {
 		return nil
 	}
-	return &config.HostedRuntimeImagePullCredentials{
-		Username: creds.Username,
-		Password: creds.Password,
+	return &config.HostedRuntimeImagePullAuth{
+		DockerConfigJSON: auth.DockerConfigJSON,
 	}
 }
 
@@ -1397,21 +1396,20 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 		metadata["provider_name"] = name
 	}
 	return pluginruntime.StartSessionRequest{
-		PluginName:           name,
-		Template:             runtimeConfig.Template,
-		Image:                runtimeConfig.Image,
-		ImagePullCredentials: hostedRuntimeImagePullCredentials(runtimeConfig.ImagePullCredentials),
-		Metadata:             metadata,
+		PluginName:    name,
+		Template:      runtimeConfig.Template,
+		Image:         runtimeConfig.Image,
+		ImagePullAuth: hostedRuntimeImagePullAuth(runtimeConfig.ImagePullAuth),
+		Metadata:      metadata,
 	}
 }
 
-func hostedRuntimeImagePullCredentials(creds *config.HostedRuntimeImagePullCredentials) *pluginruntime.ImagePullCredentials {
-	if creds == nil {
+func hostedRuntimeImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *pluginruntime.ImagePullAuth {
+	if auth == nil {
 		return nil
 	}
-	return &pluginruntime.ImagePullCredentials{
-		Username: creds.Username,
-		Password: creds.Password,
+	return &pluginruntime.ImagePullAuth{
+		DockerConfigJSON: auth.DockerConfigJSON,
 	}
 }
 

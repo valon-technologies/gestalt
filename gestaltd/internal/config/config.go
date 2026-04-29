@@ -524,17 +524,16 @@ type ExecutionConfig struct {
 }
 
 type HostedRuntimeConfig struct {
-	Provider             string                             `yaml:"provider,omitempty"`
-	Template             string                             `yaml:"template,omitempty"`
-	Image                string                             `yaml:"image,omitempty"`
-	ImagePullCredentials *HostedRuntimeImagePullCredentials `yaml:"imagePullCredentials,omitempty"`
-	Metadata             map[string]string                  `yaml:"metadata,omitempty"`
-	Pool                 *HostedRuntimePoolConfig           `yaml:"pool,omitempty"`
+	Provider      string                      `yaml:"provider,omitempty"`
+	Template      string                      `yaml:"template,omitempty"`
+	Image         string                      `yaml:"image,omitempty"`
+	ImagePullAuth *HostedRuntimeImagePullAuth `yaml:"imagePullAuth,omitempty"`
+	Metadata      map[string]string           `yaml:"metadata,omitempty"`
+	Pool          *HostedRuntimePoolConfig    `yaml:"pool,omitempty"`
 }
 
-type HostedRuntimeImagePullCredentials struct {
-	Username string `yaml:"username,omitempty"`
-	Password string `yaml:"password,omitempty"`
+type HostedRuntimeImagePullAuth struct {
+	DockerConfigJSON string `yaml:"dockerConfigJson,omitempty"`
 }
 
 type HostedRuntimePoolConfig struct {
@@ -945,22 +944,21 @@ func cloneHostedRuntimeConfig(src *HostedRuntimeConfig) *HostedRuntimeConfig {
 		return nil
 	}
 	return &HostedRuntimeConfig{
-		Provider:             src.Provider,
-		Template:             src.Template,
-		Image:                src.Image,
-		ImagePullCredentials: cloneHostedRuntimeImagePullCredentials(src.ImagePullCredentials),
-		Metadata:             maps.Clone(src.Metadata),
-		Pool:                 cloneHostedRuntimePoolConfig(src.Pool),
+		Provider:      src.Provider,
+		Template:      src.Template,
+		Image:         src.Image,
+		ImagePullAuth: cloneHostedRuntimeImagePullAuth(src.ImagePullAuth),
+		Metadata:      maps.Clone(src.Metadata),
+		Pool:          cloneHostedRuntimePoolConfig(src.Pool),
 	}
 }
 
-func cloneHostedRuntimeImagePullCredentials(src *HostedRuntimeImagePullCredentials) *HostedRuntimeImagePullCredentials {
+func cloneHostedRuntimeImagePullAuth(src *HostedRuntimeImagePullAuth) *HostedRuntimeImagePullAuth {
 	if src == nil {
 		return nil
 	}
-	return &HostedRuntimeImagePullCredentials{
-		Username: src.Username,
-		Password: src.Password,
+	return &HostedRuntimeImagePullAuth{
+		DockerConfigJSON: src.DockerConfigJSON,
 	}
 }
 
