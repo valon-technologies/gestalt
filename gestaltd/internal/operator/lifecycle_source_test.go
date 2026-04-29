@@ -737,9 +737,11 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 			}
 			if cfg.Plugins["alpha"] == nil {
 				t.Fatal(`cfg.Plugins["alpha"] = nil`)
+				return
 			}
 			if cfg.Plugins["alpha"].ResolvedManifest == nil {
 				t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest = nil`)
+				return
 			}
 			if cfg.Plugins["alpha"].ResolvedManifest.Source != packageSource {
 				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Plugins["alpha"].ResolvedManifest.Source, packageSource)
@@ -910,6 +912,7 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 	workflow := cfg.Providers.Workflow["runner"]
 	if workflow == nil || workflow.ResolvedManifest == nil {
 		t.Fatalf("workflow resolved manifest = %+v", workflow)
+		return
 	}
 	if got := workflow.ResolvedManifest.Kind; got != providermanifestv1.KindWorkflow {
 		t.Fatalf("workflow manifest kind = %q, want %q", got, providermanifestv1.KindWorkflow)
@@ -1078,6 +1081,7 @@ func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
 	externalCredentials := cfg.Providers.ExternalCredentials["runner"]
 	if externalCredentials == nil || externalCredentials.ResolvedManifest == nil {
 		t.Fatalf("external credentials resolved manifest = %+v", externalCredentials)
+		return
 	}
 	if got := externalCredentials.ResolvedManifest.Kind; got != providermanifestv1.KindExternalCredentials {
 		t.Fatalf("external credentials manifest kind = %q, want %q", got, providermanifestv1.KindExternalCredentials)
@@ -1259,6 +1263,7 @@ func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	ui := cfg.Providers.UI["roadmap"]
 	if ui == nil || ui.ResolvedManifest == nil {
 		t.Fatalf("ui resolved manifest = %+v", ui)
+		return
 	}
 	if got := ui.ResolvedManifest.Kind; got != providermanifestv1.KindUI {
 		t.Fatalf("ui manifest kind = %q, want %q", got, providermanifestv1.KindUI)
@@ -1342,6 +1347,7 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	_, err = lc.InitAtPath(configPath)
 	if err == nil {
 		t.Fatal("InitAtPath unexpectedly succeeded")
+		return
 	}
 	if !strings.Contains(err.Error(), `manifest source "github.com/acme/tools/other-gadget" does not match metadata package "github.com/acme/tools/gadget"`) {
 		t.Fatalf("InitAtPath error = %v, want manifest source mismatch", err)
@@ -1871,6 +1877,7 @@ func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	_, err := lc.InitAtPath(configPath)
 	if err == nil {
 		t.Fatal("InitAtPath unexpectedly succeeded")
+		return
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -2044,6 +2051,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	}
 	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
 		t.Fatal("resolved metadata plugin manifest missing after unlocked refresh")
+		return
 	}
 	if got := cfg.Plugins["alpha"].ResolvedManifest.Version; got != updatedVersion {
 		t.Fatalf("resolved manifest version after unlocked refresh = %q, want %q", got, updatedVersion)
@@ -2240,6 +2248,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	gotManifest := cfg.Plugins["gadget"].ResolvedManifest
 	if gotManifest == nil {
 		t.Fatal("ResolvedManifest is nil")
+		return
 	}
 	if gotManifest.Version != version {
 		t.Fatalf("ResolvedManifest.Version = %q, want %q", gotManifest.Version, version)
@@ -2401,6 +2410,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil {
 		t.Fatal("auth provider is nil after load")
+		return
 	}
 	executablePath := resolveLockPath(artifactsDir, authLockEntry.Executable)
 	if authProvider.Command != executablePath {
@@ -2612,9 +2622,11 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		entry := cfg.Providers.IndexedDB[name]
 		if entry == nil {
 			t.Fatalf("cfg.Providers.IndexedDB[%q] = nil", name)
+			return
 		}
 		if entry.ResolvedManifest == nil {
 			t.Fatalf("cfg.Providers.IndexedDB[%q].ResolvedManifest = nil", name)
+			return
 		}
 		wantCommand := resolveLockPath(artifactsDir, lock.IndexedDBs[name].Executable)
 		if entry.Command != wantCommand {
@@ -2734,9 +2746,11 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		entry := cfg.Providers.Cache[name]
 		if entry == nil {
 			t.Fatalf("cfg.Providers.Cache[%q] = nil", name)
+			return
 		}
 		if entry.ResolvedManifest == nil {
 			t.Fatalf("cfg.Providers.Cache[%q].ResolvedManifest = nil", name)
+			return
 		}
 		wantCommand := resolveLockPath(artifactsDir, lock.Caches[name].Executable)
 		if entry.Command != wantCommand {
@@ -3201,6 +3215,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil || authProvider.Source.Auth == nil {
 		t.Fatalf("auth provider source auth = %#v", authProvider)
+		return
 	}
 	if authProvider.Source.Auth.Token != "ghp_inline_auth_source_token" {
 		t.Fatalf("resolved auth source token = %q, want %q", authProvider.Source.Auth.Token, "ghp_inline_auth_source_token")
@@ -3210,9 +3225,11 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	secretsProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindSecrets)
 	if secretsProvider == nil {
 		t.Fatal("secrets provider is nil after load")
+		return
 	}
 	if secretsProvider.Source.Auth == nil {
 		t.Fatalf("secrets provider source auth = %#v", secretsProvider)
+		return
 	}
 	if secretsProvider.Source.Auth.Token != secretsSourceToken {
 		t.Fatalf("resolved secrets source token = %q, want %q", secretsProvider.Source.Auth.Token, secretsSourceToken)
@@ -3401,6 +3418,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil || authProvider.Source.Auth == nil {
 		t.Fatalf("auth provider source auth = %#v", authProvider)
+		return
 	}
 	if authProvider.Source.Auth.Token != "ghp_inline_auth_source_token" {
 		t.Fatalf("resolved auth source token = %q, want %q", authProvider.Source.Auth.Token, "ghp_inline_auth_source_token")
@@ -3516,6 +3534,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	secretsProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindSecrets)
 	if secretsProvider == nil {
 		t.Fatal("secrets provider is nil after load")
+		return
 	}
 	if secretsProvider.Command == "" {
 		t.Fatal("secrets provider command is empty after load")

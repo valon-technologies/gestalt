@@ -2,6 +2,8 @@ version: v2
 modules:
   - path: .
     name: buf.build/valon-technologies/gestalt-providerapi
+deps:
+  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD

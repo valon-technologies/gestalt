@@ -92,10 +92,11 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	resp, err := client.ExecuteTool(context.Background(), &proto.ExecuteAgentToolRequest{
-		SessionId:  "session-1",
-		TurnId:     "turn-1",
-		ToolCallId: "call-1",
-		ToolId:     "tool-1",
+		SessionId:      "session-1",
+		TurnId:         "turn-1",
+		ToolCallId:     "call-1",
+		ToolId:         "tool-1",
+		IdempotencyKey: "tool-call-key-1",
 	})
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
@@ -131,7 +132,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.toolRequests) != 1 {
 		t.Fatalf("toolRequests len = %d, want 1", len(harness.toolRequests))
 	}
-	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" {
+	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
 		t.Fatalf("tool request = %#v", harness.toolRequests[0])
 	}
 	if len(harness.searchRequests) != 1 {

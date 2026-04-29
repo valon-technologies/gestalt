@@ -12,6 +12,7 @@ import (
 
 type StubIndexedDB struct {
 	mu     sync.RWMutex
+	txMu   sync.RWMutex
 	stores map[string]*stubObjectStore
 	Err    error
 }
@@ -51,6 +52,45 @@ func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error 
 	return nil
 }
 
+func (s *StubIndexedDB) Transaction(_ context.Context, stores []string, mode indexeddb.TransactionMode, _ indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	if len(stores) == 0 {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	if mode != indexeddb.TransactionReadonly && mode != indexeddb.TransactionReadwrite {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+
+	scope := uniqueSortedStores(stores)
+	if mode == indexeddb.TransactionReadwrite {
+		s.txMu.Lock()
+	} else {
+		s.txMu.RLock()
+	}
+
+	tx := &stubTransaction{
+		db:     s,
+		mode:   mode,
+		stores: make(map[string]*stubObjectStore, len(scope)),
+	}
+	cloneDB := &StubIndexedDB{Err: s.Err}
+
+	s.mu.Lock()
+	if s.stores == nil {
+		s.stores = make(map[string]*stubObjectStore)
+	}
+	for _, name := range scope {
+		store, ok := s.stores[name]
+		if !ok {
+			store = &stubObjectStore{db: s, records: make(map[string]indexeddb.Record)}
+			s.stores[name] = store
+		}
+		tx.stores[name] = store.clone(cloneDB)
+	}
+	s.mu.Unlock()
+
+	return tx, nil
+}
+
 func (s *StubIndexedDB) Ping(context.Context) error { return s.Err }
 func (s *StubIndexedDB) Close() error               { return nil }
 
@@ -71,10 +111,67 @@ type stubObjectStore struct {
 	schema  indexeddb.ObjectStoreSchema
 }
 
+func uniqueSortedStores(stores []string) []string {
+	seen := make(map[string]struct{}, len(stores))
+	out := make([]string, 0, len(stores))
+	for _, store := range stores {
+		if _, ok := seen[store]; ok {
+			continue
+		}
+		seen[store] = struct{}{}
+		out = append(out, store)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (o *stubObjectStore) clone(db *StubIndexedDB) *stubObjectStore {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	records := make(map[string]indexeddb.Record, len(o.records))
+	for id, record := range o.records {
+		records[id] = cloneRecord(record)
+	}
+	return &stubObjectStore{
+		db:      db,
+		records: records,
+		schema:  o.schema,
+	}
+}
+
+func cloneRecord(record indexeddb.Record) indexeddb.Record {
+	if record == nil {
+		return nil
+	}
+	out := make(indexeddb.Record, len(record))
+	for k, v := range record {
+		out[k] = v
+	}
+	return out
+}
+
+func (o *stubObjectStore) readSchedule() func() {
+	if o.db == nil {
+		return func() {}
+	}
+	o.db.txMu.RLock()
+	return o.db.txMu.RUnlock
+}
+
+func (o *stubObjectStore) writeSchedule() func() {
+	if o.db == nil {
+		return func() {}
+	}
+	o.db.txMu.Lock()
+	return o.db.txMu.Unlock
+}
+
 func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	r, ok := o.records[id]
@@ -88,6 +185,8 @@ func (o *stubObjectStore) GetKey(_ context.Context, id string) (string, error) {
 	if o.db.Err != nil {
 		return "", o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if _, ok := o.records[id]; !ok {
@@ -100,28 +199,16 @@ func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error 
 	if o.db.Err != nil {
 		return o.db.Err
 	}
+	done := o.writeSchedule()
+	defer done()
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if _, ok := o.records[id]; ok {
 		return indexeddb.ErrAlreadyExists
 	}
-	for _, idx := range o.schema.Indexes {
-		if !idx.Unique {
-			continue
-		}
-		for _, existing := range o.records {
-			match := true
-			for _, field := range idx.KeyPath {
-				if existing[field] != record[field] {
-					match = false
-					break
-				}
-			}
-			if match {
-				return indexeddb.ErrAlreadyExists
-			}
-		}
+	if o.hasUniqueConflict(record, nil) {
+		return indexeddb.ErrAlreadyExists
 	}
 	o.records[id] = record
 	return nil
@@ -131,17 +218,48 @@ func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error 
 	if o.db.Err != nil {
 		return o.db.Err
 	}
+	done := o.writeSchedule()
+	defer done()
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.hasUniqueConflict(record, &id) {
+		return indexeddb.ErrAlreadyExists
+	}
 	o.records[id] = record
 	return nil
+}
+
+func (o *stubObjectStore) hasUniqueConflict(record indexeddb.Record, ignoreID *string) bool {
+	for _, idx := range o.schema.Indexes {
+		if !idx.Unique {
+			continue
+		}
+		for id, existing := range o.records {
+			if ignoreID != nil && id == *ignoreID {
+				continue
+			}
+			match := true
+			for _, field := range idx.KeyPath {
+				if existing[field] != record[field] {
+					match = false
+					break
+				}
+			}
+			if match {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (o *stubObjectStore) Delete(_ context.Context, id string) error {
 	if o.db.Err != nil {
 		return o.db.Err
 	}
+	done := o.writeSchedule()
+	defer done()
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delete(o.records, id)
@@ -152,6 +270,8 @@ func (o *stubObjectStore) Clear(_ context.Context) error {
 	if o.db.Err != nil {
 		return o.db.Err
 	}
+	done := o.writeSchedule()
+	defer done()
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.records = make(map[string]indexeddb.Record)
@@ -162,6 +282,8 @@ func (o *stubObjectStore) GetAll(_ context.Context, r *indexeddb.KeyRange) ([]in
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	c := o.newCursor(indexeddb.CursorNext, false)
 	c.applyKeyRange(r)
 	out := make([]indexeddb.Record, 0, len(c.keys))
@@ -175,6 +297,8 @@ func (o *stubObjectStore) GetAllKeys(_ context.Context, r *indexeddb.KeyRange) (
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	c := o.newCursor(indexeddb.CursorNext, true)
 	c.applyKeyRange(r)
 	return append([]string(nil), c.keys...), nil
@@ -184,6 +308,8 @@ func (o *stubObjectStore) Count(_ context.Context, r *indexeddb.KeyRange) (int64
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	c := o.newCursor(indexeddb.CursorNext, true)
 	c.applyKeyRange(r)
 	return int64(len(c.keys)), nil
@@ -193,6 +319,8 @@ func (o *stubObjectStore) DeleteRange(_ context.Context, r indexeddb.KeyRange) (
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
+	done := o.writeSchedule()
+	defer done()
 	c := o.newCursor(indexeddb.CursorNext, true)
 	c.applyKeyRange(&r)
 	o.mu.Lock()
@@ -211,6 +339,8 @@ func (o *stubObjectStore) OpenCursor(_ context.Context, r *indexeddb.KeyRange, d
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	c := o.newCursor(dir, false)
 	c.applyKeyRange(r)
 	return c, nil
@@ -220,9 +350,380 @@ func (o *stubObjectStore) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
+	done := o.readSchedule()
+	defer done()
 	c := o.newCursor(dir, true)
 	c.applyKeyRange(r)
 	return c, nil
+}
+
+type stubTransaction struct {
+	db     *StubIndexedDB
+	mode   indexeddb.TransactionMode
+	mu     sync.Mutex
+	done   bool
+	err    error
+	stores map[string]*stubObjectStore
+}
+
+func (tx *stubTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+	store := tx.stores[name]
+	if store == nil {
+		return transactionMissingObjectStore{tx: tx}
+	}
+	return &stubTransactionObjectStore{tx: tx, store: store}
+}
+
+func (tx *stubTransaction) Commit(context.Context) error {
+	if err := tx.finish(true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tx *stubTransaction) Abort(context.Context) error {
+	if err := tx.finish(false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tx *stubTransaction) finish(commit bool) error {
+	tx.mu.Lock()
+	if tx.done {
+		err := tx.err
+		tx.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		return indexeddb.ErrTransactionDone
+	}
+	tx.done = true
+	tx.mu.Unlock()
+
+	if commit && tx.mode == indexeddb.TransactionReadwrite {
+		tx.db.mu.RLock()
+		for name, clone := range tx.stores {
+			original := tx.db.stores[name]
+			if original == nil {
+				continue
+			}
+			clone.mu.RLock()
+			records := make(map[string]indexeddb.Record, len(clone.records))
+			for id, record := range clone.records {
+				records[id] = cloneRecord(record)
+			}
+			schema := clone.schema
+			clone.mu.RUnlock()
+
+			original.mu.Lock()
+			original.records = records
+			original.schema = schema
+			original.mu.Unlock()
+		}
+		tx.db.mu.RUnlock()
+	}
+	tx.unlockSchedule()
+	return nil
+}
+
+func (tx *stubTransaction) unlockSchedule() {
+	if tx.mode == indexeddb.TransactionReadwrite {
+		tx.db.txMu.Unlock()
+	} else {
+		tx.db.txMu.RUnlock()
+	}
+}
+
+func (tx *stubTransaction) ensureActive(write bool) error {
+	tx.mu.Lock()
+	if tx.done {
+		err := tx.err
+		tx.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		return indexeddb.ErrTransactionDone
+	}
+	if write && tx.mode == indexeddb.TransactionReadonly {
+		tx.done = true
+		tx.err = indexeddb.ErrReadOnly
+		tx.mu.Unlock()
+		tx.unlockSchedule()
+		return indexeddb.ErrReadOnly
+	}
+	tx.mu.Unlock()
+	return nil
+}
+
+func (tx *stubTransaction) abortWithError(err error) error {
+	if err == nil {
+		return nil
+	}
+	tx.mu.Lock()
+	if tx.done {
+		existing := tx.err
+		tx.mu.Unlock()
+		if existing != nil {
+			return existing
+		}
+		return indexeddb.ErrTransactionDone
+	}
+	tx.done = true
+	tx.err = err
+	tx.mu.Unlock()
+	tx.unlockSchedule()
+	return err
+}
+
+type stubTransactionObjectStore struct {
+	tx    *stubTransaction
+	store *stubObjectStore
+}
+
+func (s *stubTransactionObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+	if err := s.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	record, err := s.store.Get(ctx, id)
+	if err != nil {
+		return nil, s.tx.abortWithError(err)
+	}
+	return record, nil
+}
+
+func (s *stubTransactionObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+	if err := s.tx.ensureActive(false); err != nil {
+		return "", err
+	}
+	key, err := s.store.GetKey(ctx, id)
+	if err != nil {
+		return "", s.tx.abortWithError(err)
+	}
+	return key, nil
+}
+
+func (s *stubTransactionObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+	if err := s.tx.ensureActive(true); err != nil {
+		return err
+	}
+	return s.tx.abortWithError(s.store.Add(ctx, record))
+}
+
+func (s *stubTransactionObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	if err := s.tx.ensureActive(true); err != nil {
+		return err
+	}
+	return s.tx.abortWithError(s.store.Put(ctx, record))
+}
+
+func (s *stubTransactionObjectStore) Delete(ctx context.Context, id string) error {
+	if err := s.tx.ensureActive(true); err != nil {
+		return err
+	}
+	return s.tx.abortWithError(s.store.Delete(ctx, id))
+}
+
+func (s *stubTransactionObjectStore) Clear(ctx context.Context) error {
+	if err := s.tx.ensureActive(true); err != nil {
+		return err
+	}
+	return s.tx.abortWithError(s.store.Clear(ctx))
+}
+
+func (s *stubTransactionObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	if err := s.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	records, err := s.store.GetAll(ctx, r)
+	if err != nil {
+		return nil, s.tx.abortWithError(err)
+	}
+	return records, nil
+}
+
+func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+	if err := s.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	keys, err := s.store.GetAllKeys(ctx, r)
+	if err != nil {
+		return nil, s.tx.abortWithError(err)
+	}
+	return keys, nil
+}
+
+func (s *stubTransactionObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+	if err := s.tx.ensureActive(false); err != nil {
+		return 0, err
+	}
+	count, err := s.store.Count(ctx, r)
+	if err != nil {
+		return 0, s.tx.abortWithError(err)
+	}
+	return count, nil
+}
+
+func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+	if err := s.tx.ensureActive(true); err != nil {
+		return 0, err
+	}
+	deleted, err := s.store.DeleteRange(ctx, r)
+	if err != nil {
+		return 0, s.tx.abortWithError(err)
+	}
+	return deleted, nil
+}
+
+func (s *stubTransactionObjectStore) Index(name string) indexeddb.TransactionIndex {
+	return &stubTransactionIndex{tx: s.tx, index: s.store.Index(name)}
+}
+
+type stubTransactionIndex struct {
+	tx    *stubTransaction
+	index indexeddb.Index
+}
+
+func (i *stubTransactionIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+	if err := i.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	record, err := i.index.Get(ctx, values...)
+	if err != nil {
+		return nil, i.tx.abortWithError(err)
+	}
+	return record, nil
+}
+
+func (i *stubTransactionIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+	if err := i.tx.ensureActive(false); err != nil {
+		return "", err
+	}
+	key, err := i.index.GetKey(ctx, values...)
+	if err != nil {
+		return "", i.tx.abortWithError(err)
+	}
+	return key, nil
+}
+
+func (i *stubTransactionIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+	if err := i.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	records, err := i.index.GetAll(ctx, r, values...)
+	if err != nil {
+		return nil, i.tx.abortWithError(err)
+	}
+	return records, nil
+}
+
+func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+	if err := i.tx.ensureActive(false); err != nil {
+		return nil, err
+	}
+	keys, err := i.index.GetAllKeys(ctx, r, values...)
+	if err != nil {
+		return nil, i.tx.abortWithError(err)
+	}
+	return keys, nil
+}
+
+func (i *stubTransactionIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	if err := i.tx.ensureActive(false); err != nil {
+		return 0, err
+	}
+	count, err := i.index.Count(ctx, r, values...)
+	if err != nil {
+		return 0, i.tx.abortWithError(err)
+	}
+	return count, nil
+}
+
+func (i *stubTransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	if err := i.tx.ensureActive(true); err != nil {
+		return 0, err
+	}
+	deleted, err := i.index.Delete(ctx, values...)
+	if err != nil {
+		return 0, i.tx.abortWithError(err)
+	}
+	return deleted, nil
+}
+
+type transactionMissingObjectStore struct {
+	tx *stubTransaction
+}
+
+func (s transactionMissingObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
+	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) GetKey(context.Context, string) (string, error) {
+	return "", s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Add(context.Context, indexeddb.Record) error {
+	return s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Put(context.Context, indexeddb.Record) error {
+	return s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Delete(context.Context, string) error {
+	return s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Clear(context.Context) error {
+	return s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) GetAll(context.Context, *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]string, error) {
+	return nil, s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
+	return 0, s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) DeleteRange(context.Context, indexeddb.KeyRange) (int64, error) {
+	return 0, s.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (s transactionMissingObjectStore) Index(string) indexeddb.TransactionIndex {
+	return transactionMissingIndex(s)
+}
+
+type transactionMissingIndex struct {
+	tx *stubTransaction
+}
+
+func (i transactionMissingIndex) Get(context.Context, ...any) (indexeddb.Record, error) {
+	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) GetKey(context.Context, ...any) (string, error) {
+	return "", i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) GetAll(context.Context, *indexeddb.KeyRange, ...any) ([]indexeddb.Record, error) {
+	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) GetAllKeys(context.Context, *indexeddb.KeyRange, ...any) ([]string, error) {
+	return nil, i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) Count(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
+	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) Delete(context.Context, ...any) (int64, error) {
+	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
 }
 
 func (o *stubObjectStore) newCursor(dir indexeddb.CursorDirection, keysOnly bool) *stubCursor {
@@ -325,6 +826,8 @@ func (idx *stubIndex) GetAll(_ context.Context, r *indexeddb.KeyRange, values ..
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
+	done := idx.store.readSchedule()
+	defer done()
 	c := idx.newCursor(indexeddb.CursorNext, r, false, values...)
 	out := make([]indexeddb.Record, 0, len(c.keys))
 	for _, key := range c.keys {
@@ -352,6 +855,8 @@ func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values .
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
+	done := idx.store.readSchedule()
+	defer done()
 	c := idx.newCursor(indexeddb.CursorNext, r, true, values...)
 	return int64(len(c.keys)), nil
 }
@@ -360,6 +865,8 @@ func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
+	done := idx.store.writeSchedule()
+	defer done()
 	idx.store.mu.Lock()
 	defer idx.store.mu.Unlock()
 	var toDelete []string
@@ -378,6 +885,8 @@ func (idx *stubIndex) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir i
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
+	done := idx.store.readSchedule()
+	defer done()
 	return idx.newCursor(dir, r, false, values...), nil
 }
 
@@ -385,6 +894,8 @@ func (idx *stubIndex) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange, di
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
+	done := idx.store.readSchedule()
+	defer done()
 	return idx.newCursor(dir, r, true, values...), nil
 }
 
@@ -727,25 +1238,8 @@ func (c *stubCursor) Update(value indexeddb.Record) error {
 	curID := c.keys[c.pos]
 	c.store.mu.Lock()
 	defer c.store.mu.Unlock()
-	for _, idx := range c.store.schema.Indexes {
-		if !idx.Unique {
-			continue
-		}
-		for id, existing := range c.store.records {
-			if id == curID {
-				continue
-			}
-			match := true
-			for _, field := range idx.KeyPath {
-				if existing[field] != value[field] {
-					match = false
-					break
-				}
-			}
-			if match {
-				return indexeddb.ErrAlreadyExists
-			}
-		}
+	if c.store.hasUniqueConflict(value, &curID) {
+		return indexeddb.ErrAlreadyExists
 	}
 	c.store.records[curID] = value
 	c.snapshot[curID] = value

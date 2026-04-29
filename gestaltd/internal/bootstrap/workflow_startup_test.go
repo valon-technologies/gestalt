@@ -247,6 +247,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 	pluginTarget := target.Plugin
 	if pluginTarget == nil {
 		t.Fatalf("workflow target plugin is nil: %#v", target)
+		return ""
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {

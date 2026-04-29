@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -396,6 +397,204 @@ func TestTransport_NestedJSON(t *testing.T) {
 	}
 	if len(tags) != 2 || tags[0] != "rust" {
 		t.Errorf("tags = %v, want [rust go]", tags)
+	}
+}
+
+func TestTransport_TransactionReadCheckWriteCommit(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_commit_" + t.Name()
+	if err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	s := testClient.ObjectStore(store)
+	if err := s.Put(ctx, gestalt.Record{
+		"id":      "lease-1",
+		"owner":   "worker-a",
+		"version": int64(1),
+	}); err != nil {
+		t.Fatalf("Put seed: %v", err)
+	}
+
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	defer tx.Abort(ctx)
+	current, err := tx.ObjectStore(store).Get(ctx, "lease-1")
+	if err != nil {
+		t.Fatalf("tx Get current: %v", err)
+	}
+	if current["owner"] == "worker-a" {
+		current["owner"] = "worker-b"
+		current["version"] = int64(2)
+		if err := tx.ObjectStore(store).Put(ctx, current); err != nil {
+			t.Fatalf("tx Put replacement: %v", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	got, err := s.Get(ctx, "lease-1")
+	if err != nil {
+		t.Fatalf("Get replacement: %v", err)
+	}
+	if got["owner"] != "worker-b" {
+		t.Fatalf("owner = %v, want worker-b", got["owner"])
+	}
+}
+
+func TestTransport_TransactionAbortRollsBack(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_abort_" + t.Name()
+	if err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	if err := tx.ObjectStore(store).Put(ctx, gestalt.Record{"id": "row-1", "value": "uncommitted"}); err != nil {
+		t.Fatalf("tx Put: %v", err)
+	}
+	if err := tx.Abort(ctx); err != nil {
+		t.Fatalf("Abort: %v", err)
+	}
+	if _, err := testClient.ObjectStore(store).Get(ctx, "row-1"); !errors.Is(err, gestalt.ErrNotFound) {
+		t.Fatalf("Get aborted row = %v, want ErrNotFound", err)
+	}
+}
+
+func TestTransport_TransactionReadonlyRejectsWrite(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_readonly_" + t.Name()
+	if err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	if err := tx.ObjectStore(store).Put(ctx, gestalt.Record{"id": "row-1"}); !errors.Is(err, gestalt.ErrReadOnly) {
+		t.Fatalf("readonly tx Put error = %v, want ErrReadOnly", err)
+	}
+	if err := tx.Commit(ctx); !errors.Is(err, gestalt.ErrReadOnly) {
+		t.Fatalf("Commit after failed readonly write error = %v, want ErrReadOnly", err)
+	}
+}
+
+func TestTransport_TransactionOperationErrorRollsBack(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_op_error_" + t.Name()
+	if err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	if err := tx.ObjectStore(store).Put(ctx, gestalt.Record{"id": "row-1", "value": "before-error"}); err != nil {
+		t.Fatalf("tx Put before error: %v", err)
+	}
+	if err := tx.ObjectStore(store+"_outside_scope").Put(ctx, gestalt.Record{"id": "row-2"}); err == nil {
+		t.Fatal("outside-scope Put succeeded, want error")
+	}
+	if err := tx.Commit(ctx); err == nil {
+		t.Fatal("Commit after operation error succeeded, want local transaction error")
+	}
+	if _, err := testClient.ObjectStore(store).Get(ctx, "row-1"); !errors.Is(err, gestalt.ErrNotFound) {
+		t.Fatalf("Get rolled-back row = %v, want ErrNotFound", err)
+	}
+}
+
+func TestTransport_TransactionIndexAndBulkRollback(t *testing.T) {
+	ctx := context.Background()
+	store := seedStore(t)
+	s := testClient.ObjectStore(store)
+
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	txs := tx.ObjectStore(store)
+	active, err := txs.Index("by_status").GetAll(ctx, nil, "active")
+	if err != nil {
+		t.Fatalf("tx index GetAll active: %v", err)
+	}
+	if len(active) != 3 {
+		t.Fatalf("active len = %d, want 3", len(active))
+	}
+	keys, err := txs.Index("by_status").GetAllKeys(ctx, nil, "active")
+	if err != nil {
+		t.Fatalf("tx index GetAllKeys active: %v", err)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("active keys len = %d, want 3", len(keys))
+	}
+	deletedRange, err := txs.DeleteRange(ctx, gestalt.KeyRange{Lower: "b", Upper: "c"})
+	if err != nil {
+		t.Fatalf("tx DeleteRange: %v", err)
+	}
+	if deletedRange != 2 {
+		t.Fatalf("DeleteRange deleted = %d, want 2", deletedRange)
+	}
+	deletedIndex, err := txs.Index("by_status").Delete(ctx, "active")
+	if err != nil {
+		t.Fatalf("tx index Delete active: %v", err)
+	}
+	if deletedIndex != 2 {
+		t.Fatalf("index Delete deleted = %d, want 2", deletedIndex)
+	}
+	if err := txs.Clear(ctx); err != nil {
+		t.Fatalf("tx Clear: %v", err)
+	}
+	if count, err := txs.Count(ctx, nil); err != nil || count != 0 {
+		t.Fatalf("tx Count after Clear = %d, %v; want 0, nil", count, err)
+	}
+	if err := tx.Abort(ctx); err != nil {
+		t.Fatalf("Abort: %v", err)
+	}
+	if count, err := s.Count(ctx, nil); err != nil || count != 4 {
+		t.Fatalf("public Count after abort = %d, %v; want 4, nil", count, err)
+	}
+	if inactive, err := s.Index("by_status").Count(ctx, nil, "inactive"); err != nil || inactive != 1 {
+		t.Fatalf("public inactive count after abort = %d, %v; want 1, nil", inactive, err)
+	}
+}
+
+func TestTransport_TransactionReadwriteSerializesScope(t *testing.T) {
+	ctx := context.Background()
+	store := "tx_serialize_" + t.Name()
+	if err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	tx1, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction tx1: %v", err)
+	}
+	defer tx1.Abort(ctx)
+
+	acquired := make(chan error, 1)
+	go func() {
+		tx2, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+		if err == nil {
+			err = tx2.Abort(ctx)
+		}
+		acquired <- err
+	}()
+
+	select {
+	case err := <-acquired:
+		t.Fatalf("second transaction acquired overlapping readwrite scope before first finished: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if err := tx1.Commit(ctx); err != nil {
+		t.Fatalf("Commit tx1: %v", err)
+	}
+	if err := <-acquired; err != nil && !errors.Is(err, gestalt.ErrTransactionDone) {
+		t.Fatalf("second transaction after first commit: %v", err)
 	}
 }
 

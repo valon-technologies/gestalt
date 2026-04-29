@@ -303,13 +303,14 @@ type ResolveInteractionRequest struct {
 }
 
 type ExecuteToolRequest struct {
-	ProviderName string
-	SessionID    string
-	TurnID       string
-	ToolCallID   string
-	ToolID       string
-	Arguments    map[string]any
-	ToolGrant    string
+	ProviderName   string
+	SessionID      string
+	TurnID         string
+	ToolCallID     string
+	ToolID         string
+	Arguments      map[string]any
+	ToolGrant      string
+	IdempotencyKey string
 }
 
 type ExecuteToolResponse struct {

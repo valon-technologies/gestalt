@@ -42,6 +42,7 @@ const (
 )
 
 type connectionCtxKey struct{}
+type idempotencyKeyCtxKey struct{}
 
 func withResolvedPrincipal(ctx context.Context, p *principal.Principal) context.Context {
 	if p == nil {
@@ -57,6 +58,22 @@ func WithConnection(ctx context.Context, connection string) context.Context {
 func ConnectionFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(connectionCtxKey{}).(string)
 	return v
+}
+
+// WithIdempotencyKey carries a caller-supplied key to code that can claim it
+// before side effects. This context value is not an exactly-once primitive by
+// itself.
+func WithIdempotencyKey(ctx context.Context, key string) context.Context {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, idempotencyKeyCtxKey{}, key)
+}
+
+func IdempotencyKeyFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(idempotencyKeyCtxKey{}).(string)
+	return strings.TrimSpace(v)
 }
 
 type Invoker interface {

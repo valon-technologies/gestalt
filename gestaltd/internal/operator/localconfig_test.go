@@ -27,6 +27,7 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	rootUI := cfg.Providers.UI["root"]
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
+		return
 	}
 	wantURL := config.DefaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion)
 	if got := rootUI.SourceMetadataURL(); got != wantURL {
@@ -39,6 +40,7 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	indexedDB := cfg.Providers.IndexedDB["main"]
 	if indexedDB == nil {
 		t.Fatal(`Providers.IndexedDB["main"] = nil`)
+		return
 	}
 	wantIndexedDBURL := config.DefaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion)
 	if got := indexedDB.SourceMetadataURL(); got != wantIndexedDBURL {
@@ -66,6 +68,7 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 	rootUI := cfg.Providers.UI["root"]
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
+		return
 	}
 	wantPath := filepath.Join(providersDir, "ui", "default", "manifest.yaml")
 	if got := rootUI.SourcePath(); got != wantPath {
@@ -78,6 +81,7 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 	externalCredentials := cfg.Providers.ExternalCredentials[config.DefaultProviderInstance]
 	if externalCredentials == nil {
 		t.Fatal(`Providers.ExternalCredentials["default"] = nil`)
+		return
 	}
 	wantExternalCredentialsPath := filepath.Join(providersDir, "external_credentials", "default", "manifest.yaml")
 	if got := externalCredentials.SourcePath(); got != wantExternalCredentialsPath {

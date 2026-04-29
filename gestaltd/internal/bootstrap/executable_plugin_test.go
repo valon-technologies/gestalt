@@ -7573,6 +7573,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	scheduleTarget := schedules[0].Schedule.Target.Plugin
 	if scheduleTarget == nil {
 		t.Fatalf("stored target plugin is nil: %#v", schedules[0].Schedule.Target)
+		return
 	}
 	if got := scheduleTarget.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")

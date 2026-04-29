@@ -20,6 +20,7 @@ pub const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const INDEXEDDB_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 const CURSOR_CHANNEL_BUFFER: usize = 1;
+const TRANSACTION_CHANNEL_BUFFER: usize = 1;
 
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by the IndexedDB transport client.
@@ -30,6 +31,8 @@ pub enum IndexedDBError {
     AlreadyExists,
     #[error("cursor is keys-only; value not available")]
     KeysOnly,
+    #[error("{0}")]
+    Transaction(String),
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
     #[error("{0}")]
@@ -79,6 +82,47 @@ impl CursorDirection {
             Self::PrevUnique => pb::CursorDirection::CursorPrevUnique as i32,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Controls whether an explicit transaction may mutate scoped stores.
+pub enum TransactionMode {
+    Readonly,
+    Readwrite,
+}
+
+impl TransactionMode {
+    fn to_proto(self) -> i32 {
+        match self {
+            Self::Readonly => pb::TransactionMode::TransactionReadonly as i32,
+            Self::Readwrite => pb::TransactionMode::TransactionReadwrite as i32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Provider durability hint for explicit transactions.
+pub enum TransactionDurabilityHint {
+    #[default]
+    Default,
+    Strict,
+    Relaxed,
+}
+
+impl TransactionDurabilityHint {
+    fn to_proto(self) -> i32 {
+        match self {
+            Self::Default => pb::TransactionDurabilityHint::TransactionDurabilityDefault as i32,
+            Self::Strict => pb::TransactionDurabilityHint::TransactionDurabilityStrict as i32,
+            Self::Relaxed => pb::TransactionDurabilityHint::TransactionDurabilityRelaxed as i32,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Options for an explicit transaction.
+pub struct TransactionOptions {
+    pub durability_hint: TransactionDurabilityHint,
 }
 
 /// Streaming cursor over object store or secondary index rows.
@@ -408,6 +452,520 @@ impl IndexedDB {
         ObjectStore {
             client: self.client.clone(),
             store: name.to_string(),
+        }
+    }
+
+    /// Opens an explicit transaction over a fixed object-store scope.
+    pub async fn transaction(
+        &self,
+        stores: &[&str],
+        mode: TransactionMode,
+        options: TransactionOptions,
+    ) -> Result<Transaction, IndexedDBError> {
+        let (tx, rx) = mpsc::channel::<pb::TransactionClientMessage>(TRANSACTION_CHANNEL_BUFFER);
+        tx.send(pb::TransactionClientMessage {
+            msg: Some(pb::transaction_client_message::Msg::Begin(
+                pb::BeginTransactionRequest {
+                    stores: stores.iter().map(|store| store.to_string()).collect(),
+                    mode: mode.to_proto(),
+                    durability_hint: options.durability_hint.to_proto(),
+                },
+            )),
+        })
+        .await
+        .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+
+        let receiver_stream = ReceiverStream::new(rx);
+        let mut client = self.client.clone();
+        let mut stream = client
+            .transaction(receiver_stream)
+            .await
+            .map_err(map_status)?
+            .into_inner();
+
+        let ack = stream.message().await.map_err(map_status)?.ok_or_else(|| {
+            IndexedDBError::Transaction("transaction stream ended during begin".to_string())
+        })?;
+        match ack.msg {
+            Some(pb::transaction_server_message::Msg::Begin(_)) => {}
+            _ => {
+                return Err(IndexedDBError::Transaction(
+                    "expected transaction begin response".to_string(),
+                ));
+            }
+        }
+
+        Ok(Transaction {
+            tx: Some(tx),
+            stream,
+            request_id: 0,
+            closed: false,
+        })
+    }
+}
+
+/// Explicit transaction over one or more object stores.
+pub struct Transaction {
+    tx: Option<mpsc::Sender<pb::TransactionClientMessage>>,
+    stream: tonic::Streaming<pb::TransactionServerMessage>,
+    request_id: u64,
+    closed: bool,
+}
+
+impl Transaction {
+    /// Returns a transaction-scoped object store.
+    pub fn object_store<'a>(&'a mut self, name: &str) -> TransactionObjectStore<'a> {
+        TransactionObjectStore {
+            tx: self,
+            store: name.to_string(),
+        }
+    }
+
+    /// Commits the transaction.
+    pub async fn commit(&mut self) -> Result<(), IndexedDBError> {
+        self.ensure_open()?;
+        let tx = self.tx.as_ref().ok_or_else(|| {
+            IndexedDBError::Transaction("transaction is already finished".to_string())
+        })?;
+        tx.send(pb::TransactionClientMessage {
+            msg: Some(pb::transaction_client_message::Msg::Commit(
+                pb::TransactionCommitRequest {},
+            )),
+        })
+        .await
+        .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+        self.closed = true;
+        self.tx.take();
+
+        let resp = self
+            .stream
+            .message()
+            .await
+            .map_err(map_status)?
+            .ok_or_else(|| {
+                IndexedDBError::Transaction("transaction stream ended during commit".to_string())
+            })?;
+        match resp.msg {
+            Some(pb::transaction_server_message::Msg::Commit(commit)) => {
+                map_rpc_status(commit.error)
+            }
+            _ => Err(IndexedDBError::Transaction(
+                "expected transaction commit response".to_string(),
+            )),
+        }
+    }
+
+    /// Aborts the transaction. Aborting an already finished transaction is a no-op.
+    pub async fn abort(&mut self, reason: &str) -> Result<(), IndexedDBError> {
+        if self.closed {
+            return Ok(());
+        }
+        let tx = self.tx.as_ref().ok_or_else(|| {
+            IndexedDBError::Transaction("transaction is already finished".to_string())
+        })?;
+        tx.send(pb::TransactionClientMessage {
+            msg: Some(pb::transaction_client_message::Msg::Abort(
+                pb::TransactionAbortRequest {
+                    reason: reason.to_string(),
+                },
+            )),
+        })
+        .await
+        .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+        self.closed = true;
+        self.tx.take();
+
+        let resp = self
+            .stream
+            .message()
+            .await
+            .map_err(map_status)?
+            .ok_or_else(|| {
+                IndexedDBError::Transaction("transaction stream ended during abort".to_string())
+            })?;
+        match resp.msg {
+            Some(pb::transaction_server_message::Msg::Abort(abort)) => map_rpc_status(abort.error),
+            _ => Err(IndexedDBError::Transaction(
+                "expected transaction abort response".to_string(),
+            )),
+        }
+    }
+
+    async fn send_operation(
+        &mut self,
+        operation: pb::transaction_operation::Operation,
+    ) -> Result<pb::TransactionOperationResponse, IndexedDBError> {
+        self.ensure_open()?;
+        self.request_id += 1;
+        let request_id = self.request_id;
+        let tx = self.tx.as_ref().ok_or_else(|| {
+            IndexedDBError::Transaction("transaction is already finished".to_string())
+        })?;
+        tx.send(pb::TransactionClientMessage {
+            msg: Some(pb::transaction_client_message::Msg::Operation(
+                pb::TransactionOperation {
+                    request_id,
+                    operation: Some(operation),
+                },
+            )),
+        })
+        .await
+        .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+
+        let resp = self
+            .stream
+            .message()
+            .await
+            .map_err(map_status)?
+            .ok_or_else(|| {
+                IndexedDBError::Transaction("transaction stream ended during operation".to_string())
+            })?;
+        let op = match resp.msg {
+            Some(pb::transaction_server_message::Msg::Operation(op)) => op,
+            _ => {
+                self.close_locally();
+                return Err(IndexedDBError::Transaction(
+                    "expected transaction operation response".to_string(),
+                ));
+            }
+        };
+        if op.request_id != request_id {
+            self.close_locally();
+            return Err(IndexedDBError::Transaction(
+                "transaction response request id mismatch".to_string(),
+            ));
+        }
+        if let Err(err) = map_rpc_status(op.error.clone()) {
+            self.close_locally();
+            return Err(err);
+        }
+        Ok(op)
+    }
+
+    fn ensure_open(&self) -> Result<(), IndexedDBError> {
+        if self.closed {
+            return Err(IndexedDBError::Transaction(
+                "transaction is already finished".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn close_locally(&mut self) {
+        self.closed = true;
+        self.tx.take();
+    }
+}
+
+/// Object-store operations scoped to an explicit transaction.
+pub struct TransactionObjectStore<'a> {
+    tx: &'a mut Transaction,
+    store: String,
+}
+
+impl TransactionObjectStore<'_> {
+    /// Loads one record by primary key inside the transaction.
+    pub async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::Get(
+                pb::ObjectStoreRequest {
+                    store: self.store.clone(),
+                    id: id.to_string(),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Record(record)) => Ok(record
+                .record
+                .as_ref()
+                .map(pb_record_to_record)
+                .unwrap_or_default()),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Resolves the primary key for id inside the transaction.
+    pub async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::GetKey(
+                pb::ObjectStoreRequest {
+                    store: self.store.clone(),
+                    id: id.to_string(),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Key(key)) => Ok(key.key),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Inserts a new row inside the transaction.
+    pub async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        self.tx
+            .send_operation(pb::transaction_operation::Operation::Add(
+                pb::RecordRequest {
+                    store: self.store.clone(),
+                    record: Some(record_to_pb_record(record)),
+                },
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Upserts a row inside the transaction.
+    pub async fn put(&mut self, record: Record) -> Result<(), IndexedDBError> {
+        self.tx
+            .send_operation(pb::transaction_operation::Operation::Put(
+                pb::RecordRequest {
+                    store: self.store.clone(),
+                    record: Some(record_to_pb_record(record)),
+                },
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Deletes one row inside the transaction.
+    pub async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError> {
+        self.tx
+            .send_operation(pb::transaction_operation::Operation::Delete(
+                pb::ObjectStoreRequest {
+                    store: self.store.clone(),
+                    id: id.to_string(),
+                },
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Deletes every row in the object store inside the transaction.
+    pub async fn clear(&mut self) -> Result<(), IndexedDBError> {
+        self.tx
+            .send_operation(pb::transaction_operation::Operation::Clear(
+                pb::ObjectStoreNameRequest {
+                    store: self.store.clone(),
+                },
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Loads every row that matches range inside the transaction.
+    pub async fn get_all(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::GetAll(
+                pb::ObjectStoreRangeRequest {
+                    store: self.store.clone(),
+                    range: range.map(key_range_to_pb),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Records(records)) => {
+                Ok(records.records.iter().map(pb_record_to_record).collect())
+            }
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Loads every primary key that matches range inside the transaction.
+    pub async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::GetAllKeys(
+                pb::ObjectStoreRangeRequest {
+                    store: self.store.clone(),
+                    range: range.map(key_range_to_pb),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Keys(keys)) => Ok(keys.keys),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Counts rows that match range inside the transaction.
+    pub async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::Count(
+                pb::ObjectStoreRangeRequest {
+                    store: self.store.clone(),
+                    range: range.map(key_range_to_pb),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Count(count)) => Ok(count.count),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Deletes rows that match range inside the transaction.
+    pub async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::DeleteRange(
+                pb::ObjectStoreRangeRequest {
+                    store: self.store.clone(),
+                    range: Some(key_range_to_pb(range)),
+                },
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Delete(deleted)) => {
+                Ok(deleted.deleted)
+            }
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Returns a transaction-scoped secondary index.
+    pub fn index<'a>(&'a mut self, name: &str) -> TransactionIndexClient<'a> {
+        TransactionIndexClient {
+            tx: &mut *self.tx,
+            store: self.store.clone(),
+            index: name.to_string(),
+        }
+    }
+}
+
+/// Secondary-index operations scoped to an explicit transaction.
+pub struct TransactionIndexClient<'a> {
+    tx: &'a mut Transaction,
+    store: String,
+    index: String,
+}
+
+impl TransactionIndexClient<'_> {
+    /// Loads the first row that matches values inside the transaction.
+    pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexGet(
+                self.index_request(values, None),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Record(record)) => Ok(record
+                .record
+                .as_ref()
+                .map(pb_record_to_record)
+                .unwrap_or_default()),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Resolves the primary key for the first matching row inside the transaction.
+    pub async fn get_key(
+        &mut self,
+        values: &[serde_json::Value],
+    ) -> Result<String, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexGetKey(
+                self.index_request(values, None),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Key(key)) => Ok(key.key),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Loads every row that matches values and range inside the transaction.
+    pub async fn get_all(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexGetAll(
+                self.index_request(values, range),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Records(records)) => {
+                Ok(records.records.iter().map(pb_record_to_record).collect())
+            }
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Loads every primary key that matches values and range inside the transaction.
+    pub async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexGetAllKeys(
+                self.index_request(values, range),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Keys(keys)) => Ok(keys.keys),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Counts rows that match values and range inside the transaction.
+    pub async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexCount(
+                self.index_request(values, range),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Count(count)) => Ok(count.count),
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    /// Deletes rows that match values inside the transaction.
+    pub async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .tx
+            .send_operation(pb::transaction_operation::Operation::IndexDelete(
+                self.index_request(values, None),
+            ))
+            .await?;
+        match resp.result {
+            Some(pb::transaction_operation_response::Result::Delete(deleted)) => {
+                Ok(deleted.deleted)
+            }
+            _ => Err(unexpected_transaction_result()),
+        }
+    }
+
+    fn index_request(
+        &self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> pb::IndexQueryRequest {
+        pb::IndexQueryRequest {
+            store: self.store.clone(),
+            index: self.index.clone(),
+            values: values.iter().map(json_to_typed_value).collect(),
+            range: range.map(key_range_to_pb),
         }
     }
 }
@@ -819,6 +1377,25 @@ fn map_status(err: tonic::Status) -> IndexedDBError {
         tonic::Code::AlreadyExists => IndexedDBError::AlreadyExists,
         _ => IndexedDBError::Status(err),
     }
+}
+
+fn map_rpc_status(
+    status: Option<crate::generated::google::rpc::Status>,
+) -> Result<(), IndexedDBError> {
+    let Some(status) = status else {
+        return Ok(());
+    };
+    match status.code {
+        0 => Ok(()),
+        5 => Err(IndexedDBError::NotFound),
+        6 => Err(IndexedDBError::AlreadyExists),
+        3 | 9 => Err(IndexedDBError::Transaction(status.message)),
+        _ => Err(IndexedDBError::Transaction(status.message)),
+    }
+}
+
+fn unexpected_transaction_result() -> IndexedDBError {
+    IndexedDBError::Transaction("unexpected transaction operation result".to_string())
 }
 
 fn record_to_pb_record(record: Record) -> pb::Record {

@@ -59,6 +59,7 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 	pluginTarget := target.Plugin
 	if pluginTarget == nil {
 		t.Fatalf("workflow target plugin is nil: %#v", target)
+		return ""
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
@@ -5222,6 +5223,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
@@ -7762,6 +7764,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if auth.DockerConfigJSON != dockerConfigJSON {
 			t.Fatalf("imagePullAuth.dockerConfigJson = %q, want resolved Docker config JSON", auth.DockerConfigJSON)

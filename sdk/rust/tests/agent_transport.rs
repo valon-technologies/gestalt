@@ -692,6 +692,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             tool_call_id: "call-7".to_string(),
             tool_id: "lookup".to_string(),
+            idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
             arguments: Some(helpers::struct_from_json(serde_json::json!({
                 "query": "Ada Lovelace"
             }))),

@@ -435,6 +435,8 @@ pub struct ExecuteAgentToolRequest {
     pub arguments: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "6")]
     pub tool_grant: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
@@ -6999,6 +7001,163 @@ pub struct KeyResponse {
     #[prost(string, tag = "1")]
     pub key: ::prost::alloc::string::String,
 }
+/// BeginTransactionRequest starts an IndexedDB transaction stream.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BeginTransactionRequest {
+    #[prost(string, repeated, tag = "1")]
+    pub stores: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "TransactionMode", tag = "2")]
+    pub mode: i32,
+    #[prost(enumeration = "TransactionDurabilityHint", tag = "3")]
+    pub durability_hint: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TransactionBeginResponse {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TransactionCommitRequest {}
+/// TransactionCommitResponse carries a non-OK status when commit failed after
+/// the provider accepted the commit frame and rolled the transaction back.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionCommitResponse {
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<crate::generated::google::rpc::Status>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TransactionAbortRequest {
+    #[prost(string, tag = "1")]
+    pub reason: ::prost::alloc::string::String,
+}
+/// TransactionAbortResponse acknowledges abort or reports an abort failure.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionAbortResponse {
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<crate::generated::google::rpc::Status>,
+}
+/// TransactionOperation is one ordered transaction-scoped object store or index
+/// operation. Cursor operations are intentionally excluded from the initial
+/// transaction contract.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionOperation {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(
+        oneof = "transaction_operation::Operation",
+        tags = "10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25"
+    )]
+    pub operation: ::core::option::Option<transaction_operation::Operation>,
+}
+/// Nested message and enum types in `TransactionOperation`.
+pub mod transaction_operation {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Operation {
+        #[prost(message, tag = "10")]
+        Get(super::ObjectStoreRequest),
+        #[prost(message, tag = "11")]
+        GetKey(super::ObjectStoreRequest),
+        #[prost(message, tag = "12")]
+        Add(super::RecordRequest),
+        #[prost(message, tag = "13")]
+        Put(super::RecordRequest),
+        #[prost(message, tag = "14")]
+        Delete(super::ObjectStoreRequest),
+        #[prost(message, tag = "15")]
+        Clear(super::ObjectStoreNameRequest),
+        #[prost(message, tag = "16")]
+        GetAll(super::ObjectStoreRangeRequest),
+        #[prost(message, tag = "17")]
+        GetAllKeys(super::ObjectStoreRangeRequest),
+        #[prost(message, tag = "18")]
+        Count(super::ObjectStoreRangeRequest),
+        #[prost(message, tag = "19")]
+        DeleteRange(super::ObjectStoreRangeRequest),
+        #[prost(message, tag = "20")]
+        IndexGet(super::IndexQueryRequest),
+        #[prost(message, tag = "21")]
+        IndexGetKey(super::IndexQueryRequest),
+        #[prost(message, tag = "22")]
+        IndexGetAll(super::IndexQueryRequest),
+        #[prost(message, tag = "23")]
+        IndexGetAllKeys(super::IndexQueryRequest),
+        #[prost(message, tag = "24")]
+        IndexCount(super::IndexQueryRequest),
+        #[prost(message, tag = "25")]
+        IndexDelete(super::IndexQueryRequest),
+    }
+}
+/// TransactionOperationResponse is the ordered response to one operation.
+/// Non-OK error marks the transaction failed and causes rollback in phase 1.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionOperationResponse {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub error: ::core::option::Option<crate::generated::google::rpc::Status>,
+    #[prost(
+        oneof = "transaction_operation_response::Result",
+        tags = "10, 11, 12, 13, 14, 15, 16"
+    )]
+    pub result: ::core::option::Option<transaction_operation_response::Result>,
+}
+/// Nested message and enum types in `TransactionOperationResponse`.
+pub mod transaction_operation_response {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "10")]
+        Empty(()),
+        #[prost(message, tag = "11")]
+        Record(super::RecordResponse),
+        #[prost(message, tag = "12")]
+        Records(super::RecordsResponse),
+        #[prost(message, tag = "13")]
+        Key(super::KeyResponse),
+        #[prost(message, tag = "14")]
+        Keys(super::KeysResponse),
+        #[prost(message, tag = "15")]
+        Count(super::CountResponse),
+        #[prost(message, tag = "16")]
+        Delete(super::DeleteResponse),
+    }
+}
+/// TransactionClientMessage is one client frame in the transaction stream. The
+/// first frame must be BeginTransactionRequest.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionClientMessage {
+    #[prost(oneof = "transaction_client_message::Msg", tags = "1, 2, 3, 4")]
+    pub msg: ::core::option::Option<transaction_client_message::Msg>,
+}
+/// Nested message and enum types in `TransactionClientMessage`.
+pub mod transaction_client_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Begin(super::BeginTransactionRequest),
+        #[prost(message, tag = "2")]
+        Operation(super::TransactionOperation),
+        #[prost(message, tag = "3")]
+        Commit(super::TransactionCommitRequest),
+        #[prost(message, tag = "4")]
+        Abort(super::TransactionAbortRequest),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionServerMessage {
+    #[prost(oneof = "transaction_server_message::Msg", tags = "1, 2, 3, 4")]
+    pub msg: ::core::option::Option<transaction_server_message::Msg>,
+}
+/// Nested message and enum types in `TransactionServerMessage`.
+pub mod transaction_server_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Begin(super::TransactionBeginResponse),
+        #[prost(message, tag = "2")]
+        Operation(super::TransactionOperationResponse),
+        #[prost(message, tag = "3")]
+        Commit(super::TransactionCommitResponse),
+        #[prost(message, tag = "4")]
+        Abort(super::TransactionAbortResponse),
+    }
+}
 /// CursorDirection controls IndexedDB cursor traversal order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -7028,6 +7187,64 @@ impl CursorDirection {
             "CURSOR_NEXT_UNIQUE" => Some(Self::CursorNextUnique),
             "CURSOR_PREV" => Some(Self::CursorPrev),
             "CURSOR_PREV_UNIQUE" => Some(Self::CursorPrevUnique),
+            _ => None,
+        }
+    }
+}
+/// TransactionMode controls whether a transaction may mutate scoped stores.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum TransactionMode {
+    TransactionReadonly = 0,
+    TransactionReadwrite = 1,
+}
+impl TransactionMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::TransactionReadonly => "TRANSACTION_READONLY",
+            Self::TransactionReadwrite => "TRANSACTION_READWRITE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TRANSACTION_READONLY" => Some(Self::TransactionReadonly),
+            "TRANSACTION_READWRITE" => Some(Self::TransactionReadwrite),
+            _ => None,
+        }
+    }
+}
+/// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+/// provider hint. It is not a portable durability guarantee.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum TransactionDurabilityHint {
+    TransactionDurabilityDefault = 0,
+    TransactionDurabilityStrict = 1,
+    TransactionDurabilityRelaxed = 2,
+}
+impl TransactionDurabilityHint {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::TransactionDurabilityDefault => "TRANSACTION_DURABILITY_DEFAULT",
+            Self::TransactionDurabilityStrict => "TRANSACTION_DURABILITY_STRICT",
+            Self::TransactionDurabilityRelaxed => "TRANSACTION_DURABILITY_RELAXED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "TRANSACTION_DURABILITY_DEFAULT" => Some(Self::TransactionDurabilityDefault),
+            "TRANSACTION_DURABILITY_STRICT" => Some(Self::TransactionDurabilityStrict),
+            "TRANSACTION_DURABILITY_RELAXED" => Some(Self::TransactionDurabilityRelaxed),
             _ => None,
         }
     }
@@ -7434,6 +7651,28 @@ pub mod indexed_db_client {
             ));
             self.inner.streaming(req, path, codec).await
         }
+        /// Transaction stream. The first client message must be
+        /// BeginTransactionRequest. Stream close before commit aborts the transaction.
+        pub async fn transaction(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = super::TransactionClientMessage>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::TransactionServerMessage>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Transaction");
+            let mut req = request.into_streaming_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "Transaction",
+            ));
+            self.inner.streaming(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -7535,6 +7774,17 @@ pub mod indexed_db_server {
             &self,
             request: tonic::Request<tonic::Streaming<super::CursorClientMessage>>,
         ) -> std::result::Result<tonic::Response<Self::OpenCursorStream>, tonic::Status>;
+        /// Server streaming response type for the Transaction method.
+        type TransactionStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::TransactionServerMessage, tonic::Status>,
+            > + std::marker::Send
+            + 'static;
+        /// Transaction stream. The first client message must be
+        /// BeginTransactionRequest. Stream close before commit aborts the transaction.
+        async fn transaction(
+            &self,
+            request: tonic::Request<tonic::Streaming<super::TransactionClientMessage>>,
+        ) -> std::result::Result<tonic::Response<Self::TransactionStream>, tonic::Status>;
     }
     /// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
     #[derive(Debug)]
@@ -8332,6 +8582,51 @@ pub mod indexed_db_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = OpenCursorSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/Transaction" => {
+                    #[allow(non_camel_case_types)]
+                    struct TransactionSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb>
+                        tonic::server::StreamingService<super::TransactionClientMessage>
+                        for TransactionSvc<T>
+                    {
+                        type Response = super::TransactionServerMessage;
+                        type ResponseStream = T::TransactionStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                tonic::Streaming<super::TransactionClientMessage>,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as IndexedDb>::transaction(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = TransactionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

@@ -7,7 +7,8 @@ use std::process::{Command, Stdio};
 
 use gestalt::indexeddb::{
     CursorDirection, ENV_INDEXEDDB_SOCKET, IndexSchema, IndexedDB, IndexedDBError, KeyRange,
-    ObjectStoreSchema, Record, indexeddb_socket_env, indexeddb_socket_token_env,
+    ObjectStoreSchema, Record, TransactionMode, TransactionOptions, indexeddb_socket_env,
+    indexeddb_socket_token_env,
 };
 
 struct Harness {
@@ -290,6 +291,281 @@ async fn object_store_bulk_helpers() {
     assert_eq!(
         store.get_all_keys(None).await.expect("remaining keys"),
         vec!["a", "d"]
+    );
+}
+
+#[tokio::test]
+async fn transaction_readwrite_commits_and_reads_own_writes() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-transaction-commit.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store("transaction_commit", ObjectStoreSchema { indexes: vec![] })
+        .await
+        .expect("create store");
+
+    let mut tx = db
+        .transaction(
+            &["transaction_commit"],
+            TransactionMode::Readwrite,
+            TransactionOptions::default(),
+        )
+        .await
+        .expect("open transaction");
+    {
+        let mut tx_store = tx.object_store("transaction_commit");
+        tx_store
+            .put(make_record(&[
+                ("id", serde_json::json!("row-1")),
+                ("value", serde_json::json!("initial")),
+            ]))
+            .await
+            .expect("transaction put");
+        let got = tx_store.get("row-1").await.expect("transaction get");
+        assert_eq!(got["value"], serde_json::json!("initial"));
+        tx_store
+            .put(make_record(&[
+                ("id", serde_json::json!("row-1")),
+                ("value", serde_json::json!("updated")),
+            ]))
+            .await
+            .expect("transaction update");
+        assert_eq!(tx_store.count(None).await.expect("transaction count"), 1);
+    }
+    tx.commit().await.expect("commit");
+
+    let mut store = db.object_store("transaction_commit");
+    let got = store.get("row-1").await.expect("get row");
+    assert_eq!(got["value"], serde_json::json!("updated"));
+}
+
+#[tokio::test]
+async fn transaction_abort_rolls_back() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-transaction-abort.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store("transaction_abort", ObjectStoreSchema { indexes: vec![] })
+        .await
+        .expect("create store");
+
+    let mut tx = db
+        .transaction(
+            &["transaction_abort"],
+            TransactionMode::Readwrite,
+            TransactionOptions::default(),
+        )
+        .await
+        .expect("open transaction");
+    {
+        let mut tx_store = tx.object_store("transaction_abort");
+        tx_store
+            .put(make_record(&[
+                ("id", serde_json::json!("row-1")),
+                ("value", serde_json::json!("pending")),
+            ]))
+            .await
+            .expect("transaction put");
+    }
+    tx.abort("test rollback").await.expect("abort");
+
+    let mut store = db.object_store("transaction_abort");
+    assert!(matches!(
+        store.get("row-1").await,
+        Err(IndexedDBError::NotFound)
+    ));
+}
+
+#[tokio::test]
+async fn readonly_transaction_rejects_writes() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-transaction-readonly.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "transaction_readonly",
+        ObjectStoreSchema { indexes: vec![] },
+    )
+    .await
+    .expect("create store");
+    let mut store = db.object_store("transaction_readonly");
+    store
+        .put(make_record(&[
+            ("id", serde_json::json!("row-1")),
+            ("value", serde_json::json!("kept")),
+        ]))
+        .await
+        .expect("put");
+
+    let mut tx = db
+        .transaction(
+            &["transaction_readonly"],
+            TransactionMode::Readonly,
+            TransactionOptions::default(),
+        )
+        .await
+        .expect("open transaction");
+    {
+        let mut tx_store = tx.object_store("transaction_readonly");
+        let got = tx_store.get("row-1").await.expect("transaction get");
+        assert_eq!(got["value"], serde_json::json!("kept"));
+        let err = tx_store
+            .put(make_record(&[
+                ("id", serde_json::json!("row-2")),
+                ("value", serde_json::json!("blocked")),
+            ]))
+            .await
+            .expect_err("readonly put should fail");
+        assert!(matches!(err, IndexedDBError::Transaction(_)));
+    }
+
+    assert!(matches!(
+        store.get("row-2").await,
+        Err(IndexedDBError::NotFound)
+    ));
+}
+
+#[tokio::test]
+async fn transaction_operation_error_rolls_back() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-transaction-error.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "transaction_error_rollback",
+        ObjectStoreSchema { indexes: vec![] },
+    )
+    .await
+    .expect("create store");
+
+    let mut tx = db
+        .transaction(
+            &["transaction_error_rollback"],
+            TransactionMode::Readwrite,
+            TransactionOptions::default(),
+        )
+        .await
+        .expect("open transaction");
+    {
+        let mut tx_store = tx.object_store("transaction_error_rollback");
+        tx_store
+            .add(make_record(&[
+                ("id", serde_json::json!("row-1")),
+                ("value", serde_json::json!("pending")),
+            ]))
+            .await
+            .expect("transaction add");
+        let err = tx_store
+            .add(make_record(&[
+                ("id", serde_json::json!("row-1")),
+                ("value", serde_json::json!("duplicate")),
+            ]))
+            .await
+            .expect_err("duplicate add should fail");
+        assert!(matches!(err, IndexedDBError::AlreadyExists));
+    }
+
+    let mut store = db.object_store("transaction_error_rollback");
+    assert!(matches!(
+        store.get("row-1").await,
+        Err(IndexedDBError::NotFound)
+    ));
+}
+
+#[tokio::test]
+async fn transaction_index_operations_and_bulk_deletes_roll_back() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-transaction-index-bulk.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "transaction_index_bulk_rollback",
+        ObjectStoreSchema {
+            indexes: vec![IndexSchema {
+                name: "by_status".to_string(),
+                key_path: vec!["status".to_string()],
+                unique: false,
+            }],
+        },
+    )
+    .await
+    .expect("create store");
+    let mut store = db.object_store("transaction_index_bulk_rollback");
+    for (id, status) in [
+        ("a", "active"),
+        ("b", "active"),
+        ("c", "inactive"),
+        ("d", "active"),
+    ] {
+        store
+            .add(make_record(&[
+                ("id", serde_json::json!(id)),
+                ("status", serde_json::json!(status)),
+            ]))
+            .await
+            .expect("seed row");
+    }
+
+    let mut tx = db
+        .transaction(
+            &["transaction_index_bulk_rollback"],
+            TransactionMode::Readwrite,
+            TransactionOptions::default(),
+        )
+        .await
+        .expect("open transaction");
+    {
+        let mut tx_store = tx.object_store("transaction_index_bulk_rollback");
+        {
+            let mut idx = tx_store.index("by_status");
+            assert_eq!(
+                idx.count(&[serde_json::json!("active")], None)
+                    .await
+                    .expect("index count"),
+                3
+            );
+            assert_eq!(
+                idx.get_all_keys(&[serde_json::json!("active")], None)
+                    .await
+                    .expect("index keys")
+                    .len(),
+                3
+            );
+        }
+        assert_eq!(
+            tx_store
+                .delete_range(KeyRange {
+                    lower: Some(serde_json::json!("b")),
+                    upper: Some(serde_json::json!("c")),
+                    lower_open: false,
+                    upper_open: false,
+                })
+                .await
+                .expect("delete range"),
+            2
+        );
+        {
+            let mut idx = tx_store.index("by_status");
+            assert_eq!(
+                idx.delete(&[serde_json::json!("active")])
+                    .await
+                    .expect("index delete"),
+                2
+            );
+        }
+        tx_store.clear().await.expect("clear");
+        assert_eq!(tx_store.count(None).await.expect("count after clear"), 0);
+    }
+    tx.abort("rollback").await.expect("abort");
+
+    assert_eq!(store.count(None).await.expect("public count"), 4);
+    assert_eq!(
+        store
+            .index("by_status")
+            .count(&[serde_json::json!("inactive")], None)
+            .await
+            .expect("public inactive count"),
+        1
     );
 }
 

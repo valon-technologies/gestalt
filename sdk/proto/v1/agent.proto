@@ -324,6 +324,7 @@ message ExecuteAgentToolRequest {
   string tool_id = 4;
   google.protobuf.Struct arguments = 5;
   string tool_grant = 6;
+  string idempotency_key = 7;
 }
 
 message ExecuteAgentToolResponse {

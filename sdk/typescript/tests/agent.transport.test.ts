@@ -194,7 +194,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-host-"));
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
-  const calls: Array<{ turnId: string; toolCallId: string; toolId: string }> = [];
+  const calls: Array<{ turnId: string; toolCallId: string; toolId: string; idempotencyKey: string }> = [];
   const searches: Array<{
     turnId: string;
     query: string;
@@ -219,6 +219,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             toolCallId: input.toolCallId,
             toolId: input.toolId,
+            idempotencyKey: input.idempotencyKey,
           });
           return create(ExecuteAgentToolResponseSchema, {
             status: 207,
@@ -293,6 +294,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         arguments: {
           deployment: "blue",
         },
+        idempotencyKey: "tool-call-key-123",
       }),
     );
 
@@ -309,6 +311,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         toolCallId: "call-123",
         toolId: "lookup-status",
+        idempotencyKey: "tool-call-key-123",
       },
     ]);
 

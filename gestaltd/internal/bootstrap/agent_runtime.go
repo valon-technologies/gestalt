@@ -313,6 +313,13 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if mode := resolvedTool.Target.CredentialMode; mode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, mode)
 	}
+	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
+		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
+	}
+	// TODO(agent-durable-tools): Enforce this key with a pre-side-effect
+	// invocation claim before replaying durable tool calls. Do not add a
+	// post-side-effect response cache here; it would not protect external
+	// systems from duplicate writes.
 	params := maps.Clone(req.Arguments)
 	result, err := invoker.Invoke(ctx, principalValue, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {

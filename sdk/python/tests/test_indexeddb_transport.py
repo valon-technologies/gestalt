@@ -1,4 +1,5 @@
 """Transport-backed IndexedDB SDK tests over a real Unix socket."""
+
 from __future__ import annotations
 
 import os
@@ -15,8 +16,10 @@ from gestalt import (
     AlreadyExistsError,
     IndexedDB,
     IndexSchema,
+    KeyRange,
     NotFoundError,
     ObjectStoreSchema,
+    TransactionError,
     indexeddb_socket_env,
     indexeddb_socket_token_env,
 )
@@ -104,7 +107,9 @@ Jpp6kBddjP+CvphxEnoP0AQY71BBvW25NYxecd16Mhk5/g2/h/etwpnyE/XCXbOS
 def setUpModule() -> None:
     global _harness_bin, _harness_proc, _socket_path
     _harness_bin = _build_harness()
-    _socket_path = os.path.join(tempfile.gettempdir(), f"py-idb-test-{os.getpid()}.sock")
+    _socket_path = os.path.join(
+        tempfile.gettempdir(), f"py-idb-test-{os.getpid()}.sock"
+    )
     _harness_proc = subprocess.Popen(
         [_harness_bin, "--socket", _socket_path],
         stdout=subprocess.PIPE,
@@ -193,6 +198,19 @@ def _client() -> IndexedDB:
     return IndexedDB()
 
 
+def _set_env(testcase: unittest.TestCase, name: str, value: str) -> None:
+    previous = os.environ.get(name)
+    os.environ[name] = value
+
+    def restore() -> None:
+        if previous is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = previous
+
+    testcase.addCleanup(restore)
+
+
 def _seed_store(client: IndexedDB, name: str) -> None:
     schema = ObjectStoreSchema(
         indexes=[
@@ -202,9 +220,13 @@ def _seed_store(client: IndexedDB, name: str) -> None:
     )
     client.create_object_store(name, schema)
     store = client.object_store(name)
-    store.add({"id": "a", "name": "Alice", "status": "active", "email": "alice@test.com"})
+    store.add(
+        {"id": "a", "name": "Alice", "status": "active", "email": "alice@test.com"}
+    )
     store.add({"id": "b", "name": "Bob", "status": "active", "email": "bob@test.com"})
-    store.add({"id": "c", "name": "Carol", "status": "inactive", "email": "carol@test.com"})
+    store.add(
+        {"id": "c", "name": "Carol", "status": "inactive", "email": "carol@test.com"}
+    )
     store.add({"id": "d", "name": "Dave", "status": "active", "email": "dave@test.com"})
 
 
@@ -213,12 +235,109 @@ class TestNestedJSON(unittest.TestCase):
         c = _client()
         c.create_object_store("nested_json")
         s = c.object_store("nested_json")
-        s.put({"id": "r1", "meta": {"role": "admin", "level": 5}, "tags": ["rust", "go"]})
+        s.put(
+            {"id": "r1", "meta": {"role": "admin", "level": 5}, "tags": ["rust", "go"]}
+        )
         got = s.get("r1")
         self.assertIsInstance(got["meta"], dict)
         self.assertEqual(got["meta"]["role"], "admin")
         self.assertIsInstance(got["tags"], list)
         self.assertEqual(got["tags"][0], "rust")
+        c.close()
+
+
+class TestTransaction(unittest.TestCase):
+    def test_readwrite_commits_and_reads_own_writes(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_commit")
+        s = c.object_store("transaction_commit")
+
+        with c.transaction(["transaction_commit"], "readwrite") as tx:
+            txs = tx.object_store("transaction_commit")
+            txs.put({"id": "lease-1", "owner": "worker-a", "version": 1})
+            self.assertEqual(txs.get("lease-1")["owner"], "worker-a")
+            txs.put({"id": "lease-1", "owner": "worker-b", "version": 2})
+            self.assertEqual(txs.count(), 1)
+
+        self.assertEqual(s.get("lease-1")["owner"], "worker-b")
+        c.close()
+
+    def test_abort_rolls_back(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_abort")
+        s = c.object_store("transaction_abort")
+
+        tx = c.transaction(["transaction_abort"], "readwrite")
+        tx.object_store("transaction_abort").put({"id": "row-1", "value": "pending"})
+        tx.abort()
+
+        with self.assertRaises(NotFoundError):
+            s.get("row-1")
+        c.close()
+
+    def test_readonly_rejects_writes(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_readonly")
+        s = c.object_store("transaction_readonly")
+        s.put({"id": "row-1", "value": "kept"})
+
+        tx = c.transaction(["transaction_readonly"], "readonly")
+        self.assertEqual(
+            tx.object_store("transaction_readonly").get("row-1")["value"], "kept"
+        )
+        with self.assertRaises(TransactionError):
+            tx.object_store("transaction_readonly").put(
+                {"id": "row-2", "value": "blocked"}
+            )
+
+        with self.assertRaises(NotFoundError):
+            s.get("row-2")
+        c.close()
+
+    def test_operation_error_rolls_back(self) -> None:
+        c = _client()
+        c.create_object_store("transaction_error_rollback")
+        s = c.object_store("transaction_error_rollback")
+
+        with self.assertRaises(AlreadyExistsError):
+            with c.transaction(["transaction_error_rollback"], "readwrite") as tx:
+                txs = tx.object_store("transaction_error_rollback")
+                txs.add({"id": "row-1", "value": "pending"})
+                txs.add({"id": "row-1", "value": "duplicate"})
+
+        with self.assertRaises(NotFoundError):
+            s.get("row-1")
+        c.close()
+
+    def test_index_operations_and_bulk_deletes_roll_back(self) -> None:
+        c = _client()
+        c.create_object_store(
+            "transaction_index_bulk_rollback",
+            ObjectStoreSchema(
+                indexes=[IndexSchema(name="by_status", key_path=["status"])]
+            ),
+        )
+        s = c.object_store("transaction_index_bulk_rollback")
+        for id, status in [
+            ("a", "active"),
+            ("b", "active"),
+            ("c", "inactive"),
+            ("d", "active"),
+        ]:
+            s.add({"id": id, "status": status})
+
+        tx = c.transaction(["transaction_index_bulk_rollback"], "readwrite")
+        txs = tx.object_store("transaction_index_bulk_rollback")
+        self.assertEqual(txs.index("by_status").count("active"), 3)
+        self.assertEqual(len(txs.index("by_status").get_all_keys("active")), 3)
+        self.assertEqual(txs.delete_range(KeyRange(lower="b", upper="c")), 2)
+        self.assertEqual(txs.index("by_status").delete("active"), 2)
+        txs.clear()
+        self.assertEqual(txs.count(), 0)
+        tx.abort()
+
+        self.assertEqual(s.count(), 4)
+        self.assertEqual(s.index("by_status").count("inactive"), 1)
         c.close()
 
 
@@ -238,8 +357,7 @@ class TestTCPTarget(unittest.TestCase):
         proc, target = _start_tcp_harness()
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
-        os.environ["GESTALT_INDEXEDDB_SOCKET"] = target
-        self.addCleanup(os.environ.pop, "GESTALT_INDEXEDDB_SOCKET", None)
+        _set_env(self, "GESTALT_INDEXEDDB_SOCKET", target)
 
         c = _client()
         c.create_object_store("tcp_target_env")
@@ -254,10 +372,8 @@ class TestTCPTarget(unittest.TestCase):
         proc, target = _start_tcp_harness(expect_token=token)
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
-        os.environ["GESTALT_INDEXEDDB_SOCKET"] = target
-        os.environ[indexeddb_socket_token_env()] = token
-        self.addCleanup(os.environ.pop, "GESTALT_INDEXEDDB_SOCKET", None)
-        self.addCleanup(os.environ.pop, indexeddb_socket_token_env(), None)
+        _set_env(self, "GESTALT_INDEXEDDB_SOCKET", target)
+        _set_env(self, indexeddb_socket_token_env(), token)
 
         c = _client()
         c.create_object_store("tcp_target_token_env")
@@ -316,7 +432,9 @@ class TestTCPTarget(unittest.TestCase):
 class TestTLSRelayTarget(unittest.TestCase):
     def test_tls_relay_target_token_roundtrip_ignores_proxy_env(self) -> None:
         token = "relay-token-python"
-        proc, target, cert_path, _, temp_dir = _start_tls_relay_harness(expect_token=token)
+        proc, target, cert_path, _, temp_dir = _start_tls_relay_harness(
+            expect_token=token
+        )
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
         self.addCleanup(shutil.rmtree, temp_dir, True)
@@ -473,7 +591,9 @@ class TestIndexCursor(unittest.TestCase):
         c = _client()
         _seed_store(c, "index_cursor")
         s = c.object_store("index_cursor")
-        with s.index("by_status").open_cursor("active", direction=CURSOR_NEXT) as cursor:
+        with s.index("by_status").open_cursor(
+            "active", direction=CURSOR_NEXT
+        ) as cursor:
             count = 0
             while cursor.continue_():
                 self.assertEqual(cursor.value["status"], "active")
@@ -487,7 +607,9 @@ class TestIndexContinueToKey(unittest.TestCase):
         c = _client()
         c.create_object_store(
             "index_seek",
-            ObjectStoreSchema(indexes=[IndexSchema(name="by_num", key_path=["n"], unique=False)]),
+            ObjectStoreSchema(
+                indexes=[IndexSchema(name="by_num", key_path=["n"], unique=False)]
+            ),
         )
         s = c.object_store("index_seek")
         s.add({"id": "a", "n": 1})

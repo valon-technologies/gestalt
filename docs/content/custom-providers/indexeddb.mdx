@@ -30,6 +30,9 @@ IndexedDB's vocabulary maps naturally onto SQL tables, document collections, and
 | `IndexGetAllKeys` | [`IDBIndex.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getallkeys) |
 | `IndexCount` | [`IDBIndex.count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
 | `IndexDelete` | [`IDBIndex.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-delete) |
+| `Transaction` | [`IDBDatabase.transaction`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-transaction) |
+
+`Transaction` is the explicit atomic boundary. A transaction declares its object-store scope, mode (`readonly` or `readwrite`), and optional durability hint (`default`, `strict`, or `relaxed`) before any operation runs. Operations inside the stream execute in order with read-your-writes semantics; commit applies the readwrite transaction atomically, abort rolls it back, and operation-level errors abort the transaction.
 
 The examples on this page use the first-party RelationalDB provider, which supports PostgreSQL, MySQL, SQLite, and SQL Server through a single `dsn` config value.
 
@@ -279,6 +282,21 @@ can also allowlist logical stores so the host rejects stores outside that set.
 
     // Key range queries
     recent, err := tasks.GetAll(ctx, gestalt.LowerBound("2024-01-01", false))
+
+    // Atomic read-modify-write
+    tx, err := db.Transaction(ctx, []string{"tasks"}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer tx.Abort(ctx)
+
+    txTasks := tx.ObjectStore("tasks")
+    task, err = txTasks.Get(ctx, "t1")
+    task["status"] = "done"
+    err = txTasks.Put(ctx, task)
+    if err == nil {
+        err = tx.Commit(ctx)
+    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -308,6 +326,13 @@ can also allowlist logical stores so the host rejects stores outside that set.
 
     # Atomic delete by index
     deleted = tasks.index("by_user").delete("u1")
+
+    # Atomic read-modify-write
+    with db.transaction(["tasks"], "readwrite") as tx:
+        tx_tasks = tx.object_store("tasks")
+        task = tx_tasks.get("t1")
+        task["status"] = "done"
+        tx_tasks.put(task)
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -335,6 +360,16 @@ can also allowlist logical stores so the host rejects stores outside that set.
     let mut idx = tasks.index("by_user");
     let user_tasks = idx.get_all(&[json!("u1")]).await?;
     let deleted = idx.delete(&[json!("u1")]).await?;
+
+    // Atomic read-modify-write
+    let mut tx = db.transaction(&["tasks"], gestalt::TransactionMode::Readwrite, gestalt::TransactionOptions::default()).await?;
+    {
+        let mut tx_tasks = tx.object_store("tasks");
+        let mut task = tx_tasks.get("t1").await?;
+        task.insert("status".into(), json!("done"));
+        tx_tasks.put(task).await?;
+    }
+    tx.commit().await?;
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -370,6 +405,13 @@ can also allowlist logical stores so the host rejects stores outside that set.
 
     // Atomic delete by index
     const deleted = await tasks.index("by_user").delete("u1");
+
+    // Atomic read-modify-write
+    const tx = await db.transaction(["tasks"], "readwrite");
+    const txTasks = tx.objectStore("tasks");
+    const current = await txTasks.get("t1");
+    await txTasks.put({ ...current, status: "done" });
+    await tx.commit();
     ```
   </Tabs.Tab>
 </Tabs>
