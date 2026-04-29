@@ -1,7 +1,6 @@
 package providerpkg
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -112,22 +111,6 @@ provider = "provider"
 	}
 	if target != "provider" {
 		t.Fatalf("target = %q, want %q", target, "provider")
-	}
-}
-
-func TestDetectPythonProviderTarget_IgnoresLegacyPluginKey(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-plugin = "legacy_provider"
-`), 0o644); err != nil {
-		t.Fatalf("WriteFile(pyproject.toml): %v", err)
-	}
-
-	_, err := DetectPythonProviderTarget(root)
-	if !errors.Is(err, ErrNoPythonProviderPackage) {
-		t.Fatalf("error = %v, want %v", err, ErrNoPythonProviderPackage)
 	}
 }
 

@@ -835,7 +835,7 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     );
     assert!(
         !output.contains("**hello**"),
-        "TTY legacy assistant fallback did not preserve markdown rendering:\n{output}"
+        "TTY assistant rendering did not preserve markdown semantics:\n{output}"
     );
     assert!(
         output.contains("managed/gpt-5.4")
@@ -849,7 +849,7 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
             && !output.contains("Assistant")
             && !output.contains("you>")
             && !output.contains("assistant>"),
-        "TTY transcript still rendered legacy prompt labels:\n{output}"
+        "TTY transcript rendered prompt labels:\n{output}"
     );
     server.assert_finished();
 }

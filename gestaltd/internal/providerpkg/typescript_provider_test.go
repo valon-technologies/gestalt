@@ -158,12 +158,12 @@ func TestDetectTypeScriptProviderTarget_RejectsEmptyKindPrefix(t *testing.T) {
 	}
 }
 
-func TestDetectTypeScriptProviderTarget_RejectsLegacyIntegrationPrefix(t *testing.T) {
+func TestDetectTypeScriptProviderTarget_RejectsUnsupportedKindPrefix(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	mustWriteTypeScriptPackageConfig(t, root, map[string]string{
-		typeScriptProviderKey: "integration:./provider.ts#plugin",
+		typeScriptProviderKey: "widget:./provider.ts#plugin",
 	})
 	mustWriteTypeScriptTargetModule(t, root, typeScriptTestPluginTarget)
 
@@ -171,7 +171,7 @@ func TestDetectTypeScriptProviderTarget_RejectsLegacyIntegrationPrefix(t *testin
 	if err == nil {
 		t.Fatal("expected unsupported TypeScript provider kind error")
 	}
-	if want := `unsupported provider kind "integration"`; !containsString(err.Error(), want) {
+	if want := `unsupported provider kind "widget"`; !containsString(err.Error(), want) {
 		t.Fatalf("error = %q, want mention of %q", err, want)
 	}
 }

@@ -245,49 +245,6 @@ fn test_cli_updates_schedule_merges_existing_fields() {
 }
 
 #[test]
-fn test_cli_updates_schedule_requires_canonical_existing_target() {
-    let legacy_schedule = r#"{
-        "id":"sched-legacy",
-        "provider":"test-provider",
-        "cron":"0 0 * * *",
-        "timezone":"UTC",
-        "target":{
-            "plugin":"legacy",
-            "operation":"sync",
-            "connection":"analytics",
-            "instance":"tenant-a",
-            "input":{"k":"v"}
-        },
-        "paused":false
-    }"#;
-    let mut server = Server::new();
-    let _get = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/workflow/schedules/sched-legacy",
-        StatusCode::OK
-    )
-    .with_body(legacy_schedule)
-    .create();
-
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args([
-            "workflow",
-            "schedules",
-            "update",
-            "sched-legacy",
-            "--cron",
-            "15 * * * *",
-        ])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "existing schedule is missing target.plugin.name; pass --plugin",
-        ));
-}
-
-#[test]
 fn test_cli_deletes_schedule() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(

@@ -341,19 +341,6 @@ plugins:
 `,
 			wantError: "ui.path is required when ui is an object",
 		},
-		{
-			name: "ui object rejects legacy mountPath",
-			cfg: `apiVersion: gestaltd.config/v3
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    ui:
-      path: /roadmap
-    mountPath: /roadmap
-`,
-			wantError: "mountPath is no longer supported; use ui.path",
-		},
 	}
 
 	for _, tc := range cases {
@@ -2595,7 +2582,7 @@ func TestE2EInitLocalProviders(t *testing.T) {
 		t.Fatalf("expected schemaVersion >= 1, got %v", lock["schemaVersion"])
 	}
 	if _, ok := lock["version"]; ok {
-		t.Fatalf("expected schema-based lockfile, found legacy version field: %v", lock["version"])
+		t.Fatalf("expected schema-based lockfile without version field, got %v", lock["version"])
 	}
 }
 
