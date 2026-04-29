@@ -77,8 +77,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 		},
 		RuntimeEnv: func(string) (RuntimeEnv, error) {
 			return RuntimeEnv{
-				Env:          map[string]string{"GESTALT_PLUGIN_INVOKER_SOCKET": "tls://gestalt.example.test:443"},
-				AllowedHosts: []string{"gestalt.example.test"},
+				Env: map[string]string{"GESTALT_PLUGIN_INVOKER_SOCKET": "tls://gestalt.example.test:443"},
 			}, nil
 		},
 	}})
@@ -461,8 +460,7 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 		UIPath: "/roadmap",
 		RuntimeEnv: func(string) (RuntimeEnv, error) {
 			return RuntimeEnv{
-				Env:          map[string]string{"SECRET": "do-not-return"},
-				AllowedHosts: []string{"example.test"},
+				Env: map[string]string{"SECRET": "do-not-return"},
 			}, nil
 		},
 	}})

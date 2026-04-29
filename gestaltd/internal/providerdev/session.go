@@ -47,9 +47,8 @@ const (
 )
 
 type RuntimeEnv struct {
-	Env          map[string]string
-	AllowedHosts []string
-	Cleanup      func()
+	Env     map[string]string
+	Cleanup func()
 }
 
 type RuntimeEnvBuilder func(sessionID string) (RuntimeEnv, error)
@@ -90,12 +89,11 @@ type CreateSessionResponse struct {
 }
 
 type CreateSessionProvider struct {
-	Name         string            `json:"name"`
-	Env          map[string]string `json:"env,omitempty"`
-	AllowedHosts []string          `json:"allowedHosts,omitempty"`
-	Source       string            `json:"source,omitempty"`
-	UI           bool              `json:"ui,omitempty"`
-	UIPath       string            `json:"uiPath,omitempty"`
+	Name   string            `json:"name"`
+	Env    map[string]string `json:"env,omitempty"`
+	Source string            `json:"source,omitempty"`
+	UI     bool              `json:"ui,omitempty"`
+	UIPath string            `json:"uiPath,omitempty"`
 }
 
 type CreateAttachAuthorizationResponse struct {
@@ -316,12 +314,11 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			env:    runtimeEnv,
 		}
 		resp.Providers = append(resp.Providers, CreateSessionProvider{
-			Name:         target.Name,
-			Env:          cloneStringMap(runtimeEnv.Env),
-			AllowedHosts: slices.Clone(runtimeEnv.AllowedHosts),
-			Source:       target.Source,
-			UI:           target.UI != nil,
-			UIPath:       target.UIPath,
+			Name:   target.Name,
+			Env:    cloneStringMap(runtimeEnv.Env),
+			Source: target.Source,
+			UI:     target.UI != nil,
+			UIPath: target.UIPath,
 		})
 	}
 

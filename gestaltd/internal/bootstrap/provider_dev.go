@@ -166,7 +166,6 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 	}
 
 	env := map[string]string{}
-	var allowedHosts []string
 	startedHostServices, err := providerhost.StartHostServices(
 		hostServices,
 		providerhost.WithHostServicesProviderName(name),
@@ -181,7 +180,7 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 		})
 	}
 	for _, hostService := range startedHostServices.Bindings() {
-		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, false)
+		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, false)
 		if err != nil {
 			return providerdev.RuntimeEnv{}, err
 		}
@@ -189,7 +188,6 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			env[bindingReq.EnvVar] = bindingReq.Relay.DialTarget
 		}
 		maps.Copy(env, bindingEnv)
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 	if deps.Egress.DefaultAction == egress.PolicyDeny {
 		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.EffectiveAllowedHosts(), deps.Egress.DefaultAction, deps)
@@ -197,15 +195,11 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			return providerdev.RuntimeEnv{}, err
 		}
 		maps.Copy(env, proxyEnv)
-		if _, proxyHost, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL); err == nil {
-			allowedHosts = appendAllowedHost(allowedHosts, proxyHost)
-		}
 	}
 
 	cleanupOnError = false
 	return providerdev.RuntimeEnv{
-		Env:          env,
-		AllowedHosts: slices.Clone(allowedHosts),
-		Cleanup:      cleanup,
+		Env:     env,
+		Cleanup: cleanup,
 	}, nil
 }
