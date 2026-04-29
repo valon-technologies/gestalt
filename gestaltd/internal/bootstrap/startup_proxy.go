@@ -556,11 +556,7 @@ func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context
 			return nil, fmt.Errorf("workflow execution reference id is required")
 		}
 		if strings.TrimSpace(stored.TargetFingerprint) == "" {
-			fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
-			if err != nil {
-				return nil, fmt.Errorf("workflow execution reference target fingerprint: %w", err)
-			}
-			stored.TargetFingerprint = fingerprint
+			return nil, fmt.Errorf("workflow execution reference target fingerprint is required")
 		}
 		p.mu.Lock()
 		p.pendingExecutionRefs[stored.ID] = stored
