@@ -1001,6 +1001,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		ProviderName:    "managed",
 		Cron:            "*/5 * * * *",
 		Timezone:        "UTC",
+		IdempotencyKey:  "workflow-manager-roundtrip",
 		Target: &proto.BoundWorkflowTarget{
 			Kind: &proto.BoundWorkflowTarget_Plugin{
 				Plugin: &proto.BoundWorkflowPluginTarget{
@@ -1491,6 +1492,8 @@ type stubWorkflowManager struct {
 	schedules       map[string]*workflowmanager.ManagedSchedule
 	triggers        map[string]*workflowmanager.ManagedEventTrigger
 	publishedEvents []coreworkflow.Event
+	scheduleKeys    []string
+	triggerKeys     []string
 }
 
 func newStubWorkflowManager() *stubWorkflowManager {
@@ -1516,6 +1519,7 @@ func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Pri
 	m.nextScheduleID++
 	id := fmt.Sprintf("sched-%d", m.nextScheduleID)
 	now := time.Now().UTC().Truncate(time.Second)
+	m.scheduleKeys = append(m.scheduleKeys, strings.TrimSpace(req.IdempotencyKey))
 	value := &workflowmanager.ManagedSchedule{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Schedule: &coreworkflow.Schedule{
@@ -1617,6 +1621,7 @@ func (m *stubWorkflowManager) CreateEventTrigger(_ context.Context, p *principal
 	m.nextTriggerID++
 	id := fmt.Sprintf("trg-%d", m.nextTriggerID)
 	now := time.Now().UTC().Truncate(time.Second)
+	m.triggerKeys = append(m.triggerKeys, strings.TrimSpace(req.IdempotencyKey))
 	value := &workflowmanager.ManagedEventTrigger{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
 		Trigger: &coreworkflow.EventTrigger{
@@ -1739,6 +1744,12 @@ func (m *stubWorkflowManager) Subjects() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]string(nil), m.subjects...)
+}
+
+func (m *stubWorkflowManager) ScheduleIdempotencyKeys() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.scheduleKeys)
 }
 
 type stubAgentTurnManagerProvider struct {
@@ -7585,6 +7596,9 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	}
 	if got := manager.Subjects(); !slices.Equal(got, []string{"user:user-123", "user:user-123"}) {
 		t.Fatalf("manager subjects = %v, want two user:user-123 entries", got)
+	}
+	if got := manager.ScheduleIdempotencyKeys(); !slices.Equal(got, []string{"workflow-manager-roundtrip"}) {
+		t.Fatalf("manager schedule idempotency keys = %v, want [workflow-manager-roundtrip]", got)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()

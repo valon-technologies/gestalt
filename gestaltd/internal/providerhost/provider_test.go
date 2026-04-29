@@ -56,9 +56,10 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
 	access := invocation.AccessContextFromContext(ctx)
+	idempotencyKey := invocation.IdempotencyKeyFromContext(ctx)
 	return &core.OperationResult{
 		Status: 201,
-		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role),
+		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role, idempotencyKey),
 	}, nil
 }
 
@@ -216,7 +217,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin|tool-call-123",
 			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin",
 		},
 		{
@@ -227,7 +228,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin|tool-call-123",
 			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|roadmap|admin",
 		},
 	}
@@ -249,6 +250,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Policy: "roadmap",
 				Role:   "admin",
 			})
+			ctx = invocation.WithIdempotencyKey(ctx, " tool-call-123 ")
 
 			result, err := prov.Execute(ctx, "echo", map[string]any{"message": "hi"}, "secret-token")
 			if err != nil {

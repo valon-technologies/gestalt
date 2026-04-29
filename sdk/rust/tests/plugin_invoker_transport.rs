@@ -31,6 +31,7 @@ struct SeenRequest {
     params: Option<Struct>,
     connection: String,
     instance: String,
+    idempotency_key: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -41,6 +42,7 @@ struct SeenGraphQlRequest {
     variables: Option<Struct>,
     connection: String,
     instance: String,
+    idempotency_key: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -105,6 +107,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 params: request.params.clone(),
                 connection: request.connection.clone(),
                 instance: request.instance.clone(),
+                idempotency_key: request.idempotency_key.clone(),
             });
 
         Ok(GrpcResponse::new(OperationResult {
@@ -116,6 +119,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 "params": request.params.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
                 "connection": request.connection,
                 "instance": request.instance,
+                "idempotency_key": request.idempotency_key,
             })
             .to_string(),
         }))
@@ -136,6 +140,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 variables: request.variables.clone(),
                 connection: request.connection.clone(),
                 instance: request.instance.clone(),
+                idempotency_key: request.idempotency_key.clone(),
             });
 
         Ok(GrpcResponse::new(OperationResult {
@@ -147,6 +152,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 "variables": request.variables.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
                 "connection": request.connection,
                 "instance": request.instance,
+                "idempotency_key": request.idempotency_key,
             })
             .to_string(),
         }))
@@ -181,6 +187,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
             Some(InvokeOptions {
                 connection: "work".to_string(),
                 instance: "secondary".to_string(),
+                idempotency_key: " issue-42-create ".to_string(),
             }),
         )
         .await
@@ -196,6 +203,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
             "params": { "issue": 42.0, "labels": ["bug"] },
             "connection": "work",
             "instance": "secondary",
+            "idempotency_key": "issue-42-create",
         })
     );
 
@@ -216,6 +224,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
             )),
             connection: "work".to_string(),
             instance: "secondary".to_string(),
+            idempotency_key: "issue-42-create".to_string(),
         }
     );
 
@@ -337,6 +346,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
             Some(InvokeOptions {
                 connection: "workspace".to_string(),
                 instance: "secondary".to_string(),
+                idempotency_key: " graphql-call-42 ".to_string(),
             }),
         )
         .await
@@ -352,6 +362,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
             "variables": { "team": "eng" },
             "connection": "workspace",
             "instance": "secondary",
+            "idempotency_key": "graphql-call-42",
         })
     );
 
@@ -372,6 +383,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
             )),
             connection: "workspace".to_string(),
             instance: "secondary".to_string(),
+            idempotency_key: "graphql-call-42".to_string(),
         }
     );
 

@@ -50,6 +50,7 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 		return nil, err
 	}
 	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
+	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	managed, err := s.manager.CreateSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -285,6 +286,7 @@ func (s *WorkflowManagerServer) CreateEventTrigger(ctx context.Context, req *pro
 		return nil, err
 	}
 	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
+	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	managed, err := s.manager.CreateEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)

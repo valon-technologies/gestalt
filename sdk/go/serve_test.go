@@ -31,6 +31,7 @@ type stubOutput struct {
 	CredentialSubjectID string `json:"credential_subject_id"`
 	AccessPolicy        string `json:"access_policy"`
 	AccessRole          string `json:"access_role"`
+	IdempotencyKey      string `json:"idempotency_key"`
 }
 
 type decodeInput struct {
@@ -94,6 +95,7 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		CredentialSubjectID: req.Credential.SubjectID,
 		AccessPolicy:        req.Access.Policy,
 		AccessRole:          req.Access.Role,
+		IdempotencyKey:      req.IdempotencyKey,
 	}), nil
 }
 
@@ -382,7 +384,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__","access_policy":"roadmap","access_role":"admin"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__","access_policy":"roadmap","access_role":"admin","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -404,6 +406,7 @@ func TestProviderServerExecute(t *testing.T) {
 						Role:   "admin",
 					},
 				},
+				IdempotencyKey: " tool-call-123 ",
 			},
 		},
 		{

@@ -41,7 +41,7 @@ class WorkflowHost:
 
 
 class WorkflowManager:
-    def __init__(self, invocation_token: str) -> None:
+    def __init__(self, invocation_token: str, *, idempotency_key: str = "") -> None:
         trimmed_token = invocation_token.strip()
         if not trimmed_token:
             raise RuntimeError("workflow manager: invocation token is not available")
@@ -58,6 +58,7 @@ class WorkflowManager:
         )
         self._stub = pb_grpc.WorkflowManagerHostStub(self._channel)
         self._invocation_token = trimmed_token
+        self._idempotency_key = idempotency_key.strip()
 
     def close(self) -> None:
         self._channel.close()
@@ -76,6 +77,8 @@ class WorkflowManager:
 
     def create_schedule(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
+        if not getattr(request, "idempotency_key", "").strip():
+            request.idempotency_key = self._idempotency_key
         return _grpc_call(self._stub.CreateSchedule, request)
 
     def get_schedule(self, request: Any) -> Any:
@@ -100,6 +103,8 @@ class WorkflowManager:
 
     def create_trigger(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
+        if not getattr(request, "idempotency_key", "").strip():
+            request.idempotency_key = self._idempotency_key
         return _grpc_call(self._stub.CreateEventTrigger, request)
 
     def get_trigger(self, request: Any) -> Any:

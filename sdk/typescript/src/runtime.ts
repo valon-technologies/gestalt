@@ -542,6 +542,7 @@ export function createProviderService(
             request.connectionParams,
             request.context,
             request.invocationToken,
+            request.idempotencyKey,
           ),
         ),
       );
@@ -795,6 +796,7 @@ function providerRequest(
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
   invocationToken = "",
+  idempotencyKey = "",
 ): Request {
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
@@ -824,6 +826,7 @@ function providerRequest(
       ...(requestContext?.workflow ?? {}),
     },
     invocationToken,
+    idempotencyKey: idempotencyKey.trim(),
   };
 }
 

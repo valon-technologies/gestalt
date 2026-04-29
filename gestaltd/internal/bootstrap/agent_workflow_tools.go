@@ -259,16 +259,26 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		return nil, err
 	}
 	schedule, err := t.manager.CreateSchedule(ctx, scopedPrincipal, workflowmanager.ScheduleUpsert{
-		ProviderName: workflowSystemToolStringArg(args, "provider"),
-		Cron:         cron,
-		Timezone:     workflowSystemToolStringArg(args, "timezone"),
-		Target:       target,
-		Paused:       workflowSystemToolBoolArg(args, "paused"),
+		ProviderName:     workflowSystemToolStringArg(args, "provider"),
+		Cron:             cron,
+		Timezone:         workflowSystemToolStringArg(args, "timezone"),
+		Target:           target,
+		Paused:           workflowSystemToolBoolArg(args, "paused"),
+		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
+		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
+}
+
+func workflowSystemToolCallerScope(providerName string) string {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return "agent"
+	}
+	return "agent:" + providerName
 }
 
 func workflowSystemToolFromRef(ref coreagent.ToolRef) (coreagent.Tool, error) {

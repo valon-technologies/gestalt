@@ -114,6 +114,7 @@ type ScheduleUpsert struct {
 	Timezone         string
 	Target           coreworkflow.Target
 	Paused           bool
+	IdempotencyKey   string
 	CallerPluginName string
 }
 
@@ -122,6 +123,7 @@ type EventTriggerUpsert struct {
 	Match            coreworkflow.EventMatch
 	Target           coreworkflow.Target
 	Paused           bool
+	IdempotencyKey   string
 	CallerPluginName string
 }
 
@@ -524,8 +526,22 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return nil, err
 	}
 
-	scheduleID := uuid.NewString()
-	executionRefID := scheduleExecutionRefID(scheduleID)
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
+	scheduleID := newScheduleID(idempotencyScope)
+	if idempotencyKey != "" {
+		existing, err := m.requireOwnedSchedule(ctx, scheduleID, p)
+		if err == nil {
+			if !managedScheduleMatchesUpsert(existing, providerName, target, req) {
+				return nil, fmt.Errorf("%w: workflow schedule idempotency key reused with different request", invocation.ErrInvalidInvocation)
+			}
+			return existing, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+	}
+	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
 	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
@@ -549,6 +565,25 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		ExecutionRef: ref,
 		provider:     provider,
 	}, nil
+}
+
+func managedScheduleMatchesUpsert(existing *ManagedSchedule, providerName string, target coreworkflow.Target, req ScheduleUpsert) bool {
+	if existing == nil || existing.Schedule == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(providerName) {
+		return false
+	}
+	if strings.TrimSpace(existing.Schedule.Cron) != strings.TrimSpace(req.Cron) {
+		return false
+	}
+	if strings.TrimSpace(existing.Schedule.Timezone) != strings.TrimSpace(req.Timezone) {
+		return false
+	}
+	if existing.Schedule.Paused != req.Paused {
+		return false
+	}
+	return coreworkflow.TargetsEqual(existing.Schedule.Target, target)
 }
 
 func (m *Manager) GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error) {
@@ -729,8 +764,22 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, ErrWorkflowEventMatchRequired
 	}
 
-	triggerID := uuid.NewString()
-	executionRefID := eventTriggerExecutionRefID(triggerID)
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
+	triggerID := newEventTriggerID(idempotencyScope)
+	if idempotencyKey != "" {
+		existing, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+		if err == nil {
+			if !managedEventTriggerMatchesUpsert(existing, providerName, target, match, req) {
+				return nil, fmt.Errorf("%w: workflow trigger idempotency key reused with different request", invocation.ErrInvalidInvocation)
+			}
+			return existing, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+	}
+	executionRefID := newEventTriggerExecutionRefID(triggerID, idempotencyScope)
 	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
@@ -753,6 +802,22 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		ExecutionRef: ref,
 		provider:     provider,
 	}, nil
+}
+
+func managedEventTriggerMatchesUpsert(existing *ManagedEventTrigger, providerName string, target coreworkflow.Target, match coreworkflow.EventMatch, req EventTriggerUpsert) bool {
+	if existing == nil || existing.Trigger == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(providerName) {
+		return false
+	}
+	if existing.Trigger.Paused != req.Paused {
+		return false
+	}
+	if normalizeEventMatch(existing.Trigger.Match) != match {
+		return false
+	}
+	return coreworkflow.TargetsEqual(existing.Trigger.Target, target)
 }
 
 func (m *Manager) GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error) {
@@ -1542,6 +1607,30 @@ func scheduleExecutionRefID(scheduleID string) string {
 	return scheduleExecutionRefPrefix(scheduleID) + uuid.NewString()
 }
 
+func newScheduleID(idempotencyScope string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return uuid.NewString()
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.schedule:"+idempotencyScope)).String()
+}
+
+func workflowCreateIdempotencyScope(p *principal.Principal, callerPluginName, idempotencyKey string) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if idempotencyKey == "" {
+		return ""
+	}
+	return strings.Join([]string{strings.TrimSpace(principalSubjectID(p)), strings.TrimSpace(callerPluginName), idempotencyKey}, "\x00")
+}
+
+func newScheduleExecutionRefID(scheduleID, idempotencyScope string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return scheduleExecutionRefID(scheduleID)
+	}
+	return scheduleExecutionRefPrefix(scheduleID) + uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.schedule.ref:"+strings.TrimSpace(scheduleID)+":"+idempotencyScope)).String()
+}
+
 func scheduleExecutionRefPrefix(scheduleID string) string {
 	return workflowScheduleExecutionRefBasePrefix + strings.TrimSpace(scheduleID) + ":"
 }
@@ -1561,6 +1650,22 @@ func scheduleIDFromExecutionRefID(executionRefID string) string {
 
 func eventTriggerExecutionRefID(triggerID string) string {
 	return eventTriggerExecutionRefPrefix(triggerID) + uuid.NewString()
+}
+
+func newEventTriggerID(idempotencyScope string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return uuid.NewString()
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.event-trigger:"+idempotencyScope)).String()
+}
+
+func newEventTriggerExecutionRefID(triggerID, idempotencyScope string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return eventTriggerExecutionRefID(triggerID)
+	}
+	return eventTriggerExecutionRefPrefix(triggerID) + uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.event-trigger.ref:"+strings.TrimSpace(triggerID)+":"+idempotencyScope)).String()
 }
 
 func eventTriggerExecutionRefPrefix(triggerID string) string {

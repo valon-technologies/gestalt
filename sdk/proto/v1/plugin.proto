@@ -130,6 +130,7 @@ message PluginInvokeRequest {
   string connection = 5;
   string instance = 6;
   string invocation_token = 7;
+  string idempotency_key = 8;
 }
 
 // PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -141,6 +142,7 @@ message PluginInvokeGraphQLRequest {
   string connection = 4;
   string instance = 5;
   string invocation_token = 6;
+  string idempotency_key = 7;
 }
 
 // PostConnectCredential is the host-managed credential payload passed into
@@ -245,6 +247,7 @@ message ExecuteRequest {
   reserved 7;
   reserved "request_handle";
   string invocation_token = 8;
+  string idempotency_key = 9;
 }
 
 // GetSessionCatalogRequest asks a provider for request-scoped catalog

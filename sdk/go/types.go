@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -147,6 +148,7 @@ type connectionParamsKey struct{}
 type subjectKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
+type idempotencyKeyKey struct{}
 type invocationTokenKey struct{}
 type workflowKey struct{}
 
@@ -197,6 +199,23 @@ func WithAccess(ctx context.Context, access Access) context.Context {
 func AccessFromContext(ctx context.Context) Access {
 	access, _ := ctx.Value(accessKey{}).(Access)
 	return access
+}
+
+// WithIdempotencyKey returns a child context carrying a caller-supplied
+// idempotency key for the current operation.
+func WithIdempotencyKey(ctx context.Context, key string) context.Context {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, idempotencyKeyKey{}, key)
+}
+
+// IdempotencyKeyFromContext extracts the current operation idempotency key from
+// ctx. It returns an empty string when the caller did not supply one.
+func IdempotencyKeyFromContext(ctx context.Context) string {
+	key, _ := ctx.Value(idempotencyKeyKey{}).(string)
+	return strings.TrimSpace(key)
 }
 
 func withInvocationToken(ctx context.Context, token string) context.Context {

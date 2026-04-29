@@ -23,8 +23,9 @@ const EnvPluginInvokerSocket = proto.EnvPluginInvokerSocket
 const EnvPluginInvokerSocketToken = EnvPluginInvokerSocket + "_TOKEN"
 
 type InvokeOptions struct {
-	Connection string
-	Instance   string
+	Connection     string
+	Instance       string
+	IdempotencyKey string
 }
 
 type InvocationGrant struct {
@@ -232,6 +233,7 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 	if opts != nil {
 		req.Connection = opts.Connection
 		req.Instance = opts.Instance
+		req.IdempotencyKey = strings.TrimSpace(opts.IdempotencyKey)
 	}
 
 	resp, err := c.client.Invoke(ctx, req)
@@ -271,6 +273,7 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document stri
 	if opts != nil {
 		req.Connection = opts.Connection
 		req.Instance = opts.Instance
+		req.IdempotencyKey = strings.TrimSpace(opts.IdempotencyKey)
 	}
 
 	resp, err := c.client.InvokeGraphQL(ctx, req)

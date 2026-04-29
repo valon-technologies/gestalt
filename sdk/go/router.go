@@ -21,6 +21,7 @@ type Request struct {
 	Subject          Subject
 	Credential       Credential
 	Access           Access
+	IdempotencyKey   string
 	invocationToken  string
 }
 
@@ -43,7 +44,12 @@ func (r Request) Invoker() (*InvokerClient, error) {
 }
 
 func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
-	return WorkflowManager(r.invocationToken)
+	client, err := WorkflowManager(r.invocationToken)
+	if err != nil {
+		return nil, err
+	}
+	client.idempotencyKey = r.IdempotencyKey
+	return client, nil
 }
 
 func (r Request) AgentManager() (*AgentManagerClient, error) {
@@ -222,6 +228,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
 			Access:           AccessFromContext(ctx),
+			IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 			invocationToken:  invocationTokenFromContext(ctx),
 		})
 	})

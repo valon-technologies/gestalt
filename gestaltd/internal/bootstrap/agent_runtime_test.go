@@ -1931,6 +1931,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
+		ToolCallID:   "call-1",
 		ToolID:       exactTools[0].ID,
 		ToolGrant:    exactGrant,
 		Arguments:    map[string]any{"eventId": "evt-1"},
@@ -1944,6 +1945,9 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	calls := invoker.Calls()
 	if len(calls) != 1 || calls[0].providerName != "slack" || calls[0].operation != "events.reply" {
 		t.Fatalf("invoker calls = %#v, want slack events.reply once", calls)
+	}
+	if calls[0].idempotencyKey != "agent-tool:turn-1:call-1" {
+		t.Fatalf("invoker idempotency key = %q, want agent-tool:turn-1:call-1", calls[0].idempotencyKey)
 	}
 
 	mixedGrant, err := toolGrants.Mint(agentgrant.Grant{

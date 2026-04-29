@@ -958,6 +958,7 @@ def _plugin_request(request: Any) -> Request:
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
         workflow=_workflow_from_proto(getattr(request, "context", None)),
+        idempotency_key=getattr(request, "idempotency_key", "").strip(),
         invocation_token=getattr(request, "invocation_token", ""),
     )
 

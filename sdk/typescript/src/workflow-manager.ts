@@ -78,11 +78,13 @@ export type WorkflowManagerPublishEventInput = MessageInitShape<
 export class WorkflowManager {
   private readonly client: Client<typeof WorkflowManagerHostService>;
   private readonly invocationToken: string;
+  private readonly idempotencyKey: string;
 
   constructor(request: Request);
   constructor(invocationToken: string);
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
+    this.idempotencyKey = normalizeIdempotencyKey(requestOrToken);
 
     const target = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
     if (!target) {
@@ -107,6 +109,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.createSchedule({
       ...request,
+      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
       invocationToken: this.invocationToken,
     });
   }
@@ -161,6 +164,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowEventTriggerMessage> {
     return await this.client.createEventTrigger({
       ...request,
+      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
       invocationToken: this.invocationToken,
     });
   }
@@ -230,6 +234,13 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
     throw new Error("workflow manager: invocation token is not available");
   }
   return trimmed;
+}
+
+function normalizeIdempotencyKey(requestOrToken: Request | string): string {
+  if (typeof requestOrToken === "string") {
+    return "";
+  }
+  return requestOrToken.idempotencyKey.trim();
 }
 
 function workflowManagerTransportOptions(rawTarget: string): {

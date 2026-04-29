@@ -35,6 +35,7 @@ export interface Request {
   subject: Subject;
   credential: Credential;
   access: Access;
+  idempotencyKey: string;
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
   // runId, target.plugin.pluginName, trigger.scheduleId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
@@ -104,6 +105,7 @@ export function request(
   access: Partial<Access> = {},
   workflow: Record<string, unknown> = {},
   invocationToken = "",
+  idempotencyKey = "",
 ): Request {
   return {
     token,
@@ -130,6 +132,7 @@ export function request(
       ...workflow,
     },
     invocationToken,
+    idempotencyKey: idempotencyKey.trim(),
   };
 }
 

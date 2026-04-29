@@ -39,6 +39,7 @@ pub struct Request {
     pub subject: Subject,
     pub credential: Credential,
     pub access: Access,
+    pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
     /// such as `runId`, `target.plugin.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.
@@ -65,7 +66,11 @@ impl Request {
     pub async fn workflow_manager(
         &self,
     ) -> std::result::Result<crate::WorkflowManager, crate::WorkflowManagerError> {
-        crate::WorkflowManager::connect(self.invocation_token()).await
+        crate::WorkflowManager::connect_with_idempotency_key(
+            self.invocation_token(),
+            self.idempotency_key.trim(),
+        )
+        .await
     }
 
     pub async fn agent_manager(

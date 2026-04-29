@@ -12,6 +12,7 @@ const PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 export interface PluginInvokeOptions {
   connection?: string;
   instance?: string;
+  idempotencyKey?: string;
 }
 
 export interface PluginInvocationGrant {
@@ -60,6 +61,7 @@ export class PluginInvoker {
       params: toJsonObject(params),
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
+      idempotencyKey: options?.idempotencyKey?.trim() ?? "",
     });
     return {
       status: response.status,
@@ -86,6 +88,7 @@ export class PluginInvoker {
         : {}),
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
+      idempotencyKey: options?.idempotencyKey?.trim() ?? "",
     });
     return {
       status: response.status,

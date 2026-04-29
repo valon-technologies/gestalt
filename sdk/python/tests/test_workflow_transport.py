@@ -43,6 +43,27 @@ class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
 
 
 class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
+    def CreateSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_manager_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "create_schedule",
+                "invocation_token": request.invocation_token,
+                "idempotency_key": request.idempotency_key,
+                "cron": request.cron,
+            }
+        )
+        return workflow_pb2.ManagedWorkflowSchedule(
+            provider_name=request.provider_name or "basic",
+            schedule=workflow_pb2.BoundWorkflowSchedule(
+                id="sched-1",
+                cron=request.cron,
+                timezone=request.timezone,
+                target=request.target,
+                paused=request.paused,
+            ),
+        )
+
     def PublishEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         event = workflow_pb2.WorkflowEvent()
@@ -167,9 +188,19 @@ class WorkflowTransportTests(unittest.TestCase):
         )
 
     def test_request_workflow_manager_roundtrip(self) -> None:
-        request = Request(invocation_token="token-embedded")
+        request = Request(
+            invocation_token="token-embedded",
+            idempotency_key="workflow-request-key-py",
+        )
 
         with request.workflow_manager() as manager:
+            created = manager.create_schedule(
+                workflow_pb2.WorkflowManagerCreateScheduleRequest(
+                    provider_name="managed",
+                    cron="*/5 * * * *",
+                    timezone="UTC",
+                )
+            )
             published = manager.publish_event(
                 workflow_pb2.WorkflowManagerPublishEventRequest(
                     event=workflow_pb2.WorkflowEvent(
@@ -180,11 +211,18 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
+        self.assertEqual(created.schedule.id, "sched-1")
         self.assertEqual(published.id, "published-event-1")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
+        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
         self.assertEqual(
             _manager_requests,
             [
+                {
+                    "method": "create_schedule",
+                    "invocation_token": "token-embedded",
+                    "idempotency_key": "workflow-request-key-py",
+                    "cron": "*/5 * * * *",
+                },
                 {
                     "method": "publish_event",
                     "invocation_token": "token-embedded",

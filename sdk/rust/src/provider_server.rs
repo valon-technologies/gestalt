@@ -115,6 +115,7 @@ where
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
+                    idempotency_key: request.idempotency_key.trim().to_string(),
                     workflow: request_workflow(request.context.as_ref()),
                     invocation_token: request.invocation_token,
                 },
@@ -145,6 +146,7 @@ where
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
             workflow: request_workflow(request.context.as_ref()),
+            idempotency_key: String::new(),
             invocation_token: String::new(),
         };
         let catalog = self

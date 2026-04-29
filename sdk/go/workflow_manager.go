@@ -17,6 +17,7 @@ const EnvWorkflowManagerSocketToken = EnvWorkflowManagerSocket + "_TOKEN"
 type WorkflowManagerClient struct {
 	client          proto.WorkflowManagerHostClient
 	invocationToken string
+	idempotencyKey  string
 }
 
 var sharedWorkflowManagerTransport sharedManagerTransport[proto.WorkflowManagerHostClient]
@@ -43,7 +44,12 @@ func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
 }
 
 func WorkflowManagerFromContext(ctx context.Context) (*WorkflowManagerClient, error) {
-	return WorkflowManager(InvocationTokenFromContext(ctx))
+	client, err := WorkflowManager(InvocationTokenFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	client.idempotencyKey = IdempotencyKeyFromContext(ctx)
+	return client, nil
 }
 
 func (c *WorkflowManagerClient) Close() error {
@@ -95,6 +101,9 @@ func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, req *proto.W
 		value = gproto.Clone(req).(*proto.WorkflowManagerCreateScheduleRequest)
 	}
 	value.InvocationToken = c.invocationToken
+	if value.IdempotencyKey == "" {
+		value.IdempotencyKey = c.idempotencyKey
+	}
 	return c.client.CreateSchedule(ctx, value)
 }
 
@@ -168,6 +177,9 @@ func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, req *proto.Wo
 		value = gproto.Clone(req).(*proto.WorkflowManagerCreateEventTriggerRequest)
 	}
 	value.InvocationToken = c.invocationToken
+	if value.IdempotencyKey == "" {
+		value.IdempotencyKey = c.idempotencyKey
+	}
 	return c.client.CreateEventTrigger(ctx, value)
 }
 

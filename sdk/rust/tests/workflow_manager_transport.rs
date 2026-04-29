@@ -43,6 +43,7 @@ struct SeenRequest {
 struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
+    idempotency_keys: Arc<Mutex<Vec<String>>>,
 }
 
 fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
@@ -159,6 +160,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
                 .push(token.to_str().expect("relay token ascii").to_string());
         }
         let request = request.into_inner();
+        self.idempotency_keys
+            .lock()
+            .expect("lock idempotency keys")
+            .push(request.idempotency_key.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -297,6 +302,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         request: GrpcRequest<WorkflowManagerCreateEventTriggerRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
         let request = request.into_inner();
+        self.idempotency_keys
+            .lock()
+            .expect("lock idempotency keys")
+            .push(request.idempotency_key.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create-trigger".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -473,9 +482,10 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
             .expect("serve workflow manager");
     });
 
-    let mut manager = WorkflowManager::connect("token-123")
-        .await
-        .expect("connect workflow manager");
+    let mut manager =
+        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+            .await
+            .expect("connect workflow manager");
     let created = manager
         .create_schedule(WorkflowManagerCreateScheduleRequest {
             provider_name: "managed".to_string(),
@@ -516,9 +526,10 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = WorkflowManager::connect("token-123")
-        .await
-        .expect("connect workflow manager");
+    let mut manager =
+        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+            .await
+            .expect("connect workflow manager");
     let started_run = manager
         .start_run(WorkflowManagerStartRunRequest {
             provider_name: "basic".to_string(),
@@ -701,6 +712,18 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert_eq!(published_event.r#type, "roadmap.item.updated");
 
     let seen = server.seen.lock().expect("lock seen").clone();
+    let idempotency_keys = server
+        .idempotency_keys
+        .lock()
+        .expect("lock idempotency keys")
+        .clone();
+    assert_eq!(
+        idempotency_keys,
+        vec![
+            "workflow-request-key-rust".to_string(),
+            "workflow-request-key-rust".to_string(),
+        ]
+    );
     assert_eq!(
         seen,
         vec![

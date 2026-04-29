@@ -54,6 +54,7 @@ class PluginInvoker:
         *,
         connection: str = "",
         instance: str = "",
+        idempotency_key: str = "",
     ) -> Response[str]:
         request = pb.PluginInvokeRequest(
             invocation_token=self._invocation_token,
@@ -61,6 +62,7 @@ class PluginInvoker:
             operation=operation,
             connection=connection,
             instance=instance,
+            idempotency_key=idempotency_key.strip(),
         )
         message = _struct_from_dict(params)
         if message is not None:
@@ -77,6 +79,7 @@ class PluginInvoker:
         *,
         connection: str = "",
         instance: str = "",
+        idempotency_key: str = "",
     ) -> Response[str]:
         trimmed_document = document.strip()
         if not trimmed_document:
@@ -88,6 +91,7 @@ class PluginInvoker:
             document=trimmed_document,
             connection=connection,
             instance=instance,
+            idempotency_key=idempotency_key.strip(),
         )
         message = _struct_from_dict_optional(variables, preserve_empty=False)
         if message is not None:
