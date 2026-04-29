@@ -1,0 +1,488 @@
+package bootstrap
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
+)
+
+func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
+	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
+		ID:                  "turn-1",
+		SessionID:           "session-1",
+		ProviderName:        "managed",
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	}); err != nil {
+		t.Fatalf("put agent execution ref: %v", err)
+	}
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       workflowTool.ID,
+		Arguments: map[string]any{
+			"cron":     "*/5 * * * *",
+			"timezone": "UTC",
+			"target": map[string]any{
+				"plugin": map[string]any{
+					"name":      "roadmap",
+					"operation": "sync",
+					"input": map[string]any{
+						"source": "agent",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("response = %#v, want 201", resp)
+	}
+	var body struct {
+		Schedule struct {
+			ID       string `json:"id"`
+			Cron     string `json:"cron"`
+			Timezone string `json:"timezone"`
+			Target   struct {
+				Plugin struct {
+					Name      string         `json:"name"`
+					Operation string         `json:"operation"`
+					Input     map[string]any `json:"input"`
+				} `json:"plugin"`
+			} `json:"target"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || body.Schedule.Target.Plugin.Name != "roadmap" || body.Schedule.Target.Plugin.Operation != "sync" {
+		t.Fatalf("schedule response = %#v", body.Schedule)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	upsert := workflowProvider.upsertedSchedules[0]
+	if upsert.Target.Plugin == nil || upsert.Target.Plugin.PluginName != "roadmap" || upsert.Target.Plugin.Operation != "sync" {
+		t.Fatalf("upsert target = %#v", upsert.Target)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference: %v", err)
+	}
+	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+		t.Fatalf("execution ref permissions = %#v", ref.Permissions)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testing.T) {
+	t.Parallel()
+
+	runtime, _ := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
+	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
+		ID:                  "turn-1",
+		SessionID:           "session-1",
+		ProviderName:        "managed",
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	}); err != nil {
+		t.Fatalf("put agent execution ref: %v", err)
+	}
+
+	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       workflowTool.ID,
+		Arguments: map[string]any{
+			"cron": "*/5 * * * *",
+			"target": map[string]any{
+				"plugin": map[string]any{
+					"name":      "roadmap",
+					"operation": "sync",
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want scope denial")
+	}
+	if !errors.Is(err, invocation.ErrScopeDenied) {
+		t.Fatalf("ExecuteTool error = %v, want scope denied", err)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t *testing.T) {
+	t.Parallel()
+
+	runtime, _ := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
+	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
+		ID:                  "turn-1",
+		SessionID:           "session-1",
+		ProviderName:        "managed",
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	}); err != nil {
+		t.Fatalf("put agent execution ref: %v", err)
+	}
+
+	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       workflowTool.ID,
+		Arguments: map[string]any{
+			"cron": "*/5 * * * *",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync roadmap",
+					"toolRefs": []any{
+						map[string]any{
+							"plugin":         "roadmap",
+							"operation":      "sync",
+							"credentialMode": "user",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolCreateScheduleFallsBackFromNullToolRefsToTools(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesCreate)
+	if _, err := runtime.runMetadata.Put(context.Background(), &coreagent.ExecutionReference{
+		ID:                  "turn-1",
+		SessionID:           "session-1",
+		ProviderName:        "managed",
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	}); err != nil {
+		t.Fatalf("put agent execution ref: %v", err)
+	}
+
+	_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       workflowTool.ID,
+		Arguments: map[string]any{
+			"cron": "*/5 * * * *",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync roadmap",
+					"toolRefs": nil,
+					"tools": []any{
+						map[string]any{
+							"plugin":    "roadmap",
+							"operation": "sync",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	target := workflowProvider.upsertedSchedules[0].Target
+	if target.Agent == nil || len(target.Agent.ToolRefs) != 1 || target.Agent.ToolRefs[0].Plugin != "roadmap" || target.Agent.ToolRefs[0].Operation != "sync" {
+		t.Fatalf("agent target tool refs = %#v", target.Agent)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
+	t.Parallel()
+
+	runtime, _ := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, workflowSystemToolSchedulesList)
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("ada"),
+		Kind:      principal.KindUser,
+	})
+
+	if err := runtime.TrackTurn(ctx, "managed", coreagent.CreateTurnRequest{
+		TurnID:    "turn-1",
+		SessionID: "session-1",
+		ToolRefs: []coreagent.ToolRef{{
+			System:    coreagent.SystemToolWorkflow,
+			Operation: workflowSystemToolSchedulesList,
+		}},
+		Tools: []coreagent.Tool{workflowTool},
+	}); err != nil {
+		t.Fatalf("TrackTurn: %v", err)
+	}
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       workflowTool.ID,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusOK {
+		t.Fatalf("response = %#v, want 200", resp)
+	}
+	var body struct {
+		Schedules []any `json:"schedules"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	if len(body.Schedules) != 0 {
+		t.Fatalf("schedules = %#v, want empty", body.Schedules)
+	}
+}
+
+func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemToolRecordingProvider) {
+	t.Helper()
+
+	services := coretesting.NewStubServices(t)
+	reg := registry.New()
+	if err := reg.Providers.Register("roadmap", &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "sync",
+				Method: http.MethodPost,
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("Register roadmap: %v", err)
+	}
+	workflowProvider := &workflowSystemToolRecordingProvider{}
+	workflowRuntime := &workflowRuntime{
+		defaultProviderName: "temporal",
+		providers: map[string]coreworkflow.Provider{
+			"temporal": workflowProvider,
+		},
+	}
+	runtime := &agentRuntime{
+		defaultProviderName: "managed",
+		providers: map[string]coreagent.Provider{
+			"managed": coreagent.UnimplementedProvider{},
+		},
+	}
+	agentManager := workflowSystemToolAgentManagerStub{}
+	workflowRuntime.SetAgentManager(agentManager)
+	workflowManager := workflowmanager.New(workflowmanager.Config{
+		Providers:    &reg.Providers,
+		Workflow:     workflowRuntime,
+		Agent:        runtime,
+		AgentManager: agentManager,
+	})
+	runtime.SetRunMetadata(services.AgentRunMetadata)
+	runtime.SetSystemToolExecutor(newWorkflowSystemTools(workflowManager, workflowRuntime))
+	return runtime, workflowProvider
+}
+
+type workflowSystemToolAgentManagerStub struct {
+	unavailableAgentManager
+}
+
+func (workflowSystemToolAgentManagerStub) Available() bool {
+	return true
+}
+
+type workflowSystemToolRecordingProvider struct {
+	upsertedSchedules []coreworkflow.UpsertScheduleRequest
+	schedules         map[string]*coreworkflow.Schedule
+	executionRefs     map[string]*coreworkflow.ExecutionReference
+}
+
+func (p *workflowSystemToolRecordingProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	return nil, nil
+}
+func (p *workflowSystemToolRecordingProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+func (p *workflowSystemToolRecordingProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+	p.upsertedSchedules = append(p.upsertedSchedules, req)
+	schedule := &coreworkflow.Schedule{
+		ID:           req.ScheduleID,
+		Cron:         req.Cron,
+		Timezone:     req.Timezone,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.RequestedBy,
+	}
+	if p.schedules == nil {
+		p.schedules = map[string]*coreworkflow.Schedule{}
+	}
+	p.schedules[req.ScheduleID] = schedule
+	return schedule, nil
+}
+func (p *workflowSystemToolRecordingProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	if schedule := p.schedules[req.ScheduleID]; schedule != nil {
+		value := *schedule
+		return &value, nil
+	}
+	return nil, core.ErrNotFound
+}
+func (p *workflowSystemToolRecordingProvider) ListSchedules(context.Context, coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	out := make([]*coreworkflow.Schedule, 0, len(p.schedules))
+	for _, schedule := range p.schedules {
+		value := *schedule
+		out = append(out, &value)
+	}
+	return out, nil
+}
+func (p *workflowSystemToolRecordingProvider) DeleteSchedule(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
+	delete(p.schedules, req.ScheduleID)
+	return nil
+}
+func (p *workflowSystemToolRecordingProvider) PauseSchedule(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return nil, core.ErrNotFound
+}
+func (p *workflowSystemToolRecordingProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	return nil, nil
+}
+func (p *workflowSystemToolRecordingProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+	return nil
+}
+func (p *workflowSystemToolRecordingProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *workflowSystemToolRecordingProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
+	return nil
+}
+func (p *workflowSystemToolRecordingProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if p.executionRefs == nil {
+		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	value := *ref
+	p.executionRefs[value.ID] = &value
+	return &value, nil
+}
+func (p *workflowSystemToolRecordingProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	if ref := p.executionRefs[id]; ref != nil {
+		value := *ref
+		return &value, nil
+	}
+	return nil, core.ErrNotFound
+}
+func (p *workflowSystemToolRecordingProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
+	for _, ref := range p.executionRefs {
+		if ref.SubjectID != subjectID {
+			continue
+		}
+		value := *ref
+		out = append(out, &value)
+	}
+	return out, nil
+}
+func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { return nil }
+func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
+
+func mustWorkflowSystemTool(t *testing.T, operation string) coreagent.Tool {
+	t.Helper()
+
+	tool, err := workflowSystemToolFromRef(coreagent.ToolRef{
+		System:    coreagent.SystemToolWorkflow,
+		Operation: operation,
+	})
+	if err != nil {
+		t.Fatalf("workflowSystemToolFromRef: %v", err)
+	}
+	return tool
+}

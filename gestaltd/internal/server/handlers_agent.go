@@ -64,6 +64,7 @@ type agentMessagePartImageRefRequest struct {
 }
 
 type agentToolRefRequest struct {
+	System         string `json:"system,omitempty"`
 	Plugin         string `json:"plugin,omitempty"`
 	Operation      string `json:"operation,omitempty"`
 	Connection     string `json:"connection,omitempty"`
@@ -728,8 +729,10 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 		return nil
 	}
 	out := make([]coreagent.ToolRef, 0, len(refs))
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
 		out = append(out, coreagent.ToolRef{
+			System:         strings.TrimSpace(ref.System),
 			Plugin:         strings.TrimSpace(ref.Plugin),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
@@ -747,8 +750,10 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 		return nil
 	}
 	out := make([]agentToolRefRequest, 0, len(refs))
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
 		out = append(out, agentToolRefRequest{
+			System:         strings.TrimSpace(ref.System),
 			Plugin:         strings.TrimSpace(ref.Plugin),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
@@ -762,9 +767,26 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 }
 
 func validateAgentToolRefs(refs []agentToolRefRequest) error {
-	for idx, ref := range refs {
-		if strings.TrimSpace(ref.Plugin) == "" {
-			return fmt.Errorf("toolRefs[%d].plugin is required", idx)
+	for idx := range refs {
+		ref := refs[idx]
+		system := strings.TrimSpace(ref.System)
+		plugin := strings.TrimSpace(ref.Plugin)
+		if system == "" && plugin == "" {
+			return fmt.Errorf("toolRefs[%d].plugin or system is required", idx)
+		}
+		if system != "" && plugin != "" {
+			return fmt.Errorf("toolRefs[%d] must set exactly one of plugin or system", idx)
+		}
+		if system != "" {
+			if system != coreagent.SystemToolWorkflow {
+				return fmt.Errorf("toolRefs[%d].system %q is not supported", idx, system)
+			}
+			if strings.TrimSpace(ref.Operation) == "" {
+				return fmt.Errorf("toolRefs[%d].operation is required for system tool refs", idx)
+			}
+			if strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" {
+				return fmt.Errorf("toolRefs[%d] system refs cannot include connection or instance", idx)
+			}
 		}
 		switch strings.ToLower(strings.TrimSpace(ref.CredentialMode)) {
 		case "":
@@ -987,7 +1009,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
 		errors.Is(err, agentmanager.ErrAgentSessionMetadataNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentTurnMetadataNotConfigured):
+		errors.Is(err, agentmanager.ErrAgentTurnMetadataNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -1011,6 +1034,7 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
 		errors.Is(err, invocation.ErrUserResolution),
+		errors.Is(err, invocation.ErrInvalidInvocation),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
 		s.writeAgentTargetError(w, r, pluginName, operation, err)
@@ -1032,6 +1056,7 @@ func (s *Server) writeAgentTargetError(w http.ResponseWriter, r *http.Request, p
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
 		errors.Is(err, invocation.ErrUserResolution),
+		errors.Is(err, invocation.ErrInvalidInvocation),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
 		s.writeInvocationError(w, r, pluginName, operation, err)
@@ -1057,7 +1082,11 @@ func (s *Server) writeAgentProviderError(ctx context.Context, w http.ResponseWri
 }
 
 func firstAgentToolTarget(refs []agentToolRefRequest) (string, string) {
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
+		if systemName := strings.TrimSpace(ref.System); systemName != "" {
+			return systemName, strings.TrimSpace(ref.Operation)
+		}
 		pluginName := strings.TrimSpace(ref.Plugin)
 		operation := strings.TrimSpace(ref.Operation)
 		if pluginName == "" && operation == "" {

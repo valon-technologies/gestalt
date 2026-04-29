@@ -279,6 +279,7 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 	tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
 	for _, tool := range agent.Tools {
 		tools = append(tools, coreagent.ToolRef{
+			System:      strings.TrimSpace(tool.System),
 			Plugin:      strings.TrimSpace(tool.Plugin),
 			Operation:   strings.TrimSpace(tool.Operation),
 			Connection:  strings.TrimSpace(tool.Connection),
@@ -372,7 +373,8 @@ func workflowEnsureConfigExecutionRef(
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
 	if target.Agent != nil {
 		out := make([]core.AccessPermission, 0, len(target.Agent.ToolRefs))
-		for _, tool := range target.Agent.ToolRefs {
+		for i := range target.Agent.ToolRefs {
+			tool := target.Agent.ToolRefs[i]
 			pluginName := strings.TrimSpace(tool.Plugin)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" || operation == "" {
@@ -417,7 +419,11 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 	}
 	ref.TargetFingerprint = fingerprint
 	if target.Agent != nil {
-		for _, tool := range target.Agent.ToolRefs {
+		for i := range target.Agent.ToolRefs {
+			tool := target.Agent.ToolRefs[i]
+			if strings.TrimSpace(tool.System) != "" {
+				continue
+			}
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, tool.Plugin); err != nil {
 				return nil, err
 			}

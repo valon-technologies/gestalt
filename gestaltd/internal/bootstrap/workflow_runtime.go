@@ -585,8 +585,12 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		}
 		if len(agentTarget.ToolRefs) > 0 {
 			tools := make([]map[string]any, 0, len(agentTarget.ToolRefs))
-			for _, ref := range agentTarget.ToolRefs {
+			for i := range agentTarget.ToolRefs {
+				ref := agentTarget.ToolRefs[i]
 				tool := map[string]any{}
+				if systemName := strings.TrimSpace(ref.System); systemName != "" {
+					tool["system"] = systemName
+				}
 				if pluginName := strings.TrimSpace(ref.Plugin); pluginName != "" {
 					tool["plugin"] = pluginName
 				}

@@ -39,6 +39,7 @@ var (
 	ErrAgentTurnCreationInProgress       = errors.New("agent turn creation is already in progress for this idempotency key")
 	ErrAgentInteractionRequired          = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound          = errors.New("agent interaction is not found")
+	ErrAgentWorkflowToolsNotConfigured   = errors.New("agent workflow tools are not configured")
 )
 
 const (
@@ -78,6 +79,13 @@ type AgentControl interface {
 	ProviderNames() []string
 }
 
+type WorkflowSystemTools interface {
+	Available() bool
+	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
+	SearchTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error)
+	AllowTool(ctx context.Context, p *principal.Principal, tool coreagent.Tool) bool
+}
+
 type Service interface {
 	Available() bool
 	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
@@ -98,6 +106,7 @@ type Service interface {
 type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
+	WorkflowTools     WorkflowSystemTools
 	SessionMetadata   *coredata.AgentSessionMetadataService
 	RunMetadata       *coredata.AgentRunMetadataService
 	Invoker           invocation.Invoker
@@ -111,6 +120,7 @@ type Config struct {
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
+	workflowTools     WorkflowSystemTools
 	sessionMetadata   *coredata.AgentSessionMetadataService
 	runMetadata       *coredata.AgentRunMetadataService
 	invoker           invocation.Invoker
@@ -133,6 +143,7 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
+		workflowTools:     cfg.WorkflowTools,
 		sessionMetadata:   cfg.SessionMetadata,
 		runMetadata:       cfg.RunMetadata,
 		invoker:           cfg.Invoker,
@@ -186,14 +197,20 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
+	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
+	if err != nil {
+		return nil, err
+	}
 	candidates, err := m.searchToolCandidates(ctx, p, refs, "", false)
 	if err != nil {
 		return nil, err
 	}
-	tools, _, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
+	pluginTools, _, err := m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
 	if err != nil {
 		return nil, err
 	}
+	tools = append([]coreagent.Tool(nil), systemTools...)
+	tools = append(tools, pluginTools...)
 	observability.SetSpanAttributes(ctx, observability.AttrAgentToolSource.String(string(toolSource)))
 	return tools, nil
 }
@@ -459,9 +476,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if _, err := agentProviderSupportsNativeToolSearch(ctx, provider); err != nil {
 		return nil, err
 	}
-	exactToolRefs := exactAgentToolRefs(toolRefs)
-	if len(exactToolRefs) > 0 {
-		tools, err = m.resolveExactAgentToolRefs(ctx, p, exactToolRefs)
+	resolvableToolRefs := resolvableAgentToolRefs(toolRefs)
+	if len(resolvableToolRefs) > 0 {
+		tools, err = m.resolveExactAgentToolRefs(ctx, p, resolvableToolRefs)
 		if err != nil {
 			return nil, err
 		}
@@ -923,6 +940,10 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if err != nil {
 		return nil, err
 	}
+	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
+	if err != nil {
+		return nil, err
+	}
 	exactLoad := len(loadRefs) > 0
 	var candidates []agentToolSearchCandidate
 	if exactLoad {
@@ -934,9 +955,23 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 		return nil, err
 	}
 	maxResults := effectiveAgentToolSearchMaxResults(req.MaxResults, req.CandidateLimit, exactLoad)
-	tools, loadedCandidateKeys, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, len(refs) > 0 || exactLoad)
-	if err != nil {
-		return nil, err
+	pluginMaxResults := maxResults
+	if len(systemTools) >= pluginMaxResults {
+		pluginMaxResults = 0
+	} else {
+		pluginMaxResults -= len(systemTools)
+	}
+	var tools []coreagent.Tool
+	var loadedCandidateKeys []agentToolTargetKey
+	if pluginMaxResults > 0 {
+		failIfOnlyUnavailable := (len(refs) > 0 || exactLoad) && len(systemTools) == 0
+		tools, loadedCandidateKeys, err = m.resolveAgentToolCandidates(ctx, p, candidates, pluginMaxResults, failIfOnlyUnavailable)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(systemTools) > 0 {
+		tools = append(systemTools, tools...)
 	}
 	candidateLimit := effectiveAgentToolSearchCandidateLimit(req.CandidateLimit)
 	compactCandidates, hasMore := agentToolCandidates(candidates, tools, loadedCandidateKeys, candidateLimit)
@@ -945,6 +980,25 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 		Candidates: compactCandidates,
 		HasMore:    hasMore,
 	}, nil
+}
+
+func (m *Manager) searchWorkflowSystemTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	systemRefs := make([]coreagent.ToolRef, 0)
+	for i := range refs {
+		if strings.TrimSpace(refs[i].System) != "" {
+			systemRefs = append(systemRefs, refs[i])
+		}
+	}
+	if len(systemRefs) == 0 {
+		return nil, nil
+	}
+	if m == nil || m.workflowTools == nil || !m.workflowTools.Available() {
+		return nil, ErrAgentWorkflowToolsNotConfigured
+	}
+	return m.workflowTools.SearchTools(ctx, p, systemRefs)
 }
 
 func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, failIfOnlyUnavailable bool) ([]coreagent.Tool, []agentToolTargetKey, error) {
@@ -1112,6 +1166,12 @@ func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Pr
 }
 
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	if strings.TrimSpace(ref.System) != "" {
+		if m == nil || m.workflowTools == nil || !m.workflowTools.Available() {
+			return coreagent.Tool{}, ErrAgentWorkflowToolsNotConfigured
+		}
+		return m.workflowTools.ResolveTool(ctx, p, ref)
+	}
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
 	}
@@ -1299,7 +1359,9 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		if !m.allowProvider(ctx, p, pluginName) {
 			continue
 		}
-		for _, searchRef := range scope.refsForProvider(pluginName) {
+		searchRefs := scope.refsForProvider(pluginName)
+		for i := range searchRefs {
+			searchRef := searchRefs[i]
 			searchCatalogs, err := m.catalogsForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
 			if err != nil {
 				refSkipsUnavailable := skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)
@@ -1311,7 +1373,8 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				}
 				return nil, err
 			}
-			for _, searchCatalog := range searchCatalogs {
+			for j := range searchCatalogs {
+				searchCatalog := searchCatalogs[j]
 				cat := searchCatalog.catalog
 				if cat == nil {
 					continue
@@ -1410,7 +1473,9 @@ func configuredExactAgentLoadRef(loadRef coreagent.ToolRef, refs []coreagent.Too
 	loadOperation := strings.TrimSpace(loadRef.Operation)
 	loadConnection := config.ResolveConnectionAlias(strings.TrimSpace(loadRef.Connection))
 	loadInstance := strings.TrimSpace(loadRef.Instance)
-	for _, ref := range exactAgentToolRefs(refs) {
+	exactRefs := exactAgentToolRefs(refs)
+	for i := range exactRefs {
+		ref := exactRefs[i]
 		if strings.TrimSpace(ref.Plugin) != loadPlugin || strings.TrimSpace(ref.Operation) != loadOperation {
 			continue
 		}
@@ -1572,7 +1637,11 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		plugins:  map[string][]coreagent.ToolRef{},
 		exactOps: map[string]map[string][]coreagent.ToolRef{},
 	}
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.System) != "" {
+			continue
+		}
 		pluginName := strings.TrimSpace(ref.Plugin)
 		if pluginName == "" {
 			continue
@@ -1644,7 +1713,14 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 	if len(refs) == 0 {
 		return nil
 	}
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.System) != "" {
+			if _, err := m.resolveTool(ctx, p, ref); err != nil {
+				return err
+			}
+			continue
+		}
 		pluginName := strings.TrimSpace(ref.Plugin)
 		if pluginName == "" {
 			continue
@@ -1720,6 +1796,9 @@ func (m *Manager) allowRun(ctx context.Context, p *principal.Principal, ref *cor
 }
 
 func (m *Manager) allowTool(ctx context.Context, p *principal.Principal, tool coreagent.Tool) bool {
+	if strings.TrimSpace(tool.Target.System) != "" {
+		return m != nil && m.workflowTools != nil && m.workflowTools.AllowTool(ctx, p, tool)
+	}
 	pluginName := strings.TrimSpace(tool.Target.Plugin)
 	operation := strings.TrimSpace(tool.Target.Operation)
 	if pluginName == "" || operation == "" {
@@ -2031,8 +2110,8 @@ func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal,
 	if p == nil || p.Kind != principal.KindUser || p.Source == principal.SourceAPIToken {
 		return false
 	}
-	for _, ref := range refs {
-		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin && strings.TrimSpace(ref.Operation) == "" {
+	for i := range refs {
+		if strings.TrimSpace(refs[i].Plugin) == agentToolSearchAllPlugin && strings.TrimSpace(refs[i].Operation) == "" {
 			return true
 		}
 	}
@@ -2051,7 +2130,9 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		return nil, nil
 	}
 	out := make([]coreagent.ToolRef, 0, len(refs))
-	for idx, ref := range refs {
+	for idx := range refs {
+		ref := refs[idx]
+		ref.System = strings.TrimSpace(ref.System)
 		ref.Plugin = strings.TrimSpace(ref.Plugin)
 		ref.Operation = strings.TrimSpace(ref.Operation)
 		ref.Connection = strings.TrimSpace(ref.Connection)
@@ -2063,6 +2144,22 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			return nil, err
 		}
 		ref.CredentialMode = credentialMode
+		if ref.System != "" {
+			if ref.Plugin != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] must set exactly one of plugin or system", invocation.ErrInvalidInvocation, idx)
+			}
+			if ref.System != coreagent.SystemToolWorkflow {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].system %q is not supported", invocation.ErrInvalidInvocation, idx, ref.System)
+			}
+			if ref.Operation == "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, idx)
+			}
+			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, or credential mode", invocation.ErrInvalidInvocation, idx)
+			}
+			out = append(out, ref)
+			continue
+		}
 		if ref.Plugin == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
 		}
@@ -2076,12 +2173,41 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
+func resolvableAgentToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ToolRef, 0, len(refs))
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.System) != "" {
+			if strings.TrimSpace(ref.Operation) == "" {
+				continue
+			}
+			out = append(out, ref)
+			continue
+		}
+		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) == "" {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
 func exactAgentToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
 	if len(refs) == 0 {
 		return nil
 	}
 	out := make([]coreagent.ToolRef, 0, len(refs))
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.System) != "" {
+			continue
+		}
 		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin {
 			continue
 		}
