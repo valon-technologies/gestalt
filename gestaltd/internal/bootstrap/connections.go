@@ -93,17 +93,57 @@ func connectionRuntimeInfo(integration, connection string, conn *config.Connecti
 	if mode != core.ConnectionModePlatform {
 		return info, nil
 	}
-	if conn.Auth.Type != providermanifestv1.AuthTypeBearer {
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer", integration, connection)
-	}
-	if strings.TrimSpace(conn.Auth.Token) == "" {
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.token in deployment config", integration, connection)
-	}
-	if len(conn.Auth.Credentials) > 0 || conn.Auth.AuthMapping != nil {
+	if len(conn.Auth.Credentials) > 0 {
 		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform does not support user credential fields", integration, connection)
 	}
-	info.Token = strings.TrimSpace(conn.Auth.Token)
-	return info, nil
+	switch conn.Auth.Type {
+	case providermanifestv1.AuthTypeBearer:
+		if strings.TrimSpace(conn.Auth.Token) == "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.token in deployment config", integration, connection)
+		}
+		if conn.Auth.AuthMapping != nil {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform bearer auth does not support authMapping", integration, connection)
+		}
+		info.Token = strings.TrimSpace(conn.Auth.Token)
+		return info, nil
+	case providermanifestv1.AuthTypeManual:
+		token := strings.TrimSpace(conn.Auth.Token)
+		if token == "" {
+			if authMappingNeedsToken(conn.Auth.AuthMapping) {
+				return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform manual auth with credential refs requires auth.token in deployment config", integration, connection)
+			}
+			token = "{}"
+		}
+		info.Token = token
+		return info, nil
+	default:
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer or manual", integration, connection)
+	}
+}
+
+func authMappingNeedsToken(mapping *config.AuthMappingDef) bool {
+	if mapping == nil {
+		return true
+	}
+	hasMaterialization := len(mapping.Headers) > 0 || mapping.Basic != nil
+	if !hasMaterialization {
+		return true
+	}
+	for _, value := range mapping.Headers {
+		if authValueNeedsToken(value) {
+			return true
+		}
+	}
+	if mapping.Basic != nil {
+		if authValueNeedsToken(mapping.Basic.Username) || authValueNeedsToken(mapping.Basic.Password) {
+			return true
+		}
+	}
+	return false
+}
+
+func authValueNeedsToken(value config.AuthValueDef) bool {
+	return value.ValueFrom != nil
 }
 
 func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
