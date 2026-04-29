@@ -26,6 +26,7 @@ var (
 	AttrCredentialProvider     = attribute.Key("gestalt.credential.provider")
 	AttrCredentialOperation    = attribute.Key("gestalt.credential.operation")
 	AttrCatalogSource          = attribute.Key("gestalt.catalog.source")
+	AttrMCPCatalogCacheResult  = attribute.Key("gestalt.mcp.catalog.cache.result")
 )
 
 type metricSet struct {
@@ -57,6 +58,9 @@ var (
 	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
 	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
 	credentialProviderOperationMetrics   metricutil.MeterCache[metricSet]
+	mcpCatalogCacheHitMetrics            metricutil.MeterCache[countMetricSet]
+	mcpCatalogCacheMissMetrics           metricutil.MeterCache[countMetricSet]
+	mcpCatalogDiscoverMetrics            metricutil.MeterCache[metricSet]
 )
 
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
@@ -157,6 +161,18 @@ func RecordCatalogOperationResolve(ctx context.Context, startedAt time.Time, fai
 
 func RecordCredentialProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &credentialProviderOperationMetrics, "gestaltd.credential.provider.operation", "gestaltd credential provider operations", startedAt, failed, attrs...)
+}
+
+func RecordMCPCatalogCacheHit(ctx context.Context, attrs ...attribute.KeyValue) {
+	recordCount(ctx, &mcpCatalogCacheHitMetrics, "gestaltd.mcp.catalog.cache.hit", "gestaltd MCP catalog cache hits", false, attrs...)
+}
+
+func RecordMCPCatalogCacheMiss(ctx context.Context, attrs ...attribute.KeyValue) {
+	recordCount(ctx, &mcpCatalogCacheMissMetrics, "gestaltd.mcp.catalog.cache.miss", "gestaltd MCP catalog cache misses", false, attrs...)
+}
+
+func RecordMCPCatalogDiscover(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
+	record(ctx, &mcpCatalogDiscoverMetrics, "gestaltd.mcp.catalog.discover", "gestaltd MCP catalog discoveries", startedAt, failed, attrs...)
 }
 
 func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix, desc string, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
