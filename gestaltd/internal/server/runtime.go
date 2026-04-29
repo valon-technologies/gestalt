@@ -14,9 +14,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )

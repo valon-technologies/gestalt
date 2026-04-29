@@ -13,10 +13,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 // Validate loads daemon dependencies and integration factories without

@@ -25,8 +25,8 @@ import (
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	workflowprovider "github.com/valon-technologies/gestalt/server/internal/drivers/workflow/provider"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type bootstrapEnv struct {
