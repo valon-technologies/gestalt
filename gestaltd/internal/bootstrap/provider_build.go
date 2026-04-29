@@ -1327,13 +1327,24 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 		return config.EffectiveHostedRuntime{Enabled: entry.UsesHostedExecution()}
 	}
 	effective := config.EffectiveHostedRuntime{
-		Enabled:      entry.UsesHostedExecution(),
-		ProviderName: strings.TrimSpace(runtimeCfg.Provider),
-		Template:     strings.TrimSpace(runtimeCfg.Template),
-		Image:        strings.TrimSpace(runtimeCfg.Image),
-		Metadata:     maps.Clone(runtimeCfg.Metadata),
+		Enabled:              entry.UsesHostedExecution(),
+		ProviderName:         strings.TrimSpace(runtimeCfg.Provider),
+		Template:             strings.TrimSpace(runtimeCfg.Template),
+		Image:                strings.TrimSpace(runtimeCfg.Image),
+		ImagePullCredentials: hostedRuntimeConfigImagePullCredentials(runtimeCfg.ImagePullCredentials),
+		Metadata:             maps.Clone(runtimeCfg.Metadata),
 	}
 	return effective
+}
+
+func hostedRuntimeConfigImagePullCredentials(creds *config.HostedRuntimeImagePullCredentials) *config.HostedRuntimeImagePullCredentials {
+	if creds == nil {
+		return nil
+	}
+	return &config.HostedRuntimeImagePullCredentials{
+		Username: creds.Username,
+		Password: creds.Password,
+	}
 }
 
 func localHostedRuntimeConfig(runtimeConfig config.EffectiveHostedRuntime) config.EffectiveHostedRuntime {
@@ -1386,10 +1397,21 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 		metadata["provider_name"] = name
 	}
 	return pluginruntime.StartSessionRequest{
-		PluginName: name,
-		Template:   runtimeConfig.Template,
-		Image:      runtimeConfig.Image,
-		Metadata:   metadata,
+		PluginName:           name,
+		Template:             runtimeConfig.Template,
+		Image:                runtimeConfig.Image,
+		ImagePullCredentials: hostedRuntimeImagePullCredentials(runtimeConfig.ImagePullCredentials),
+		Metadata:             metadata,
+	}
+}
+
+func hostedRuntimeImagePullCredentials(creds *config.HostedRuntimeImagePullCredentials) *pluginruntime.ImagePullCredentials {
+	if creds == nil {
+		return nil
+	}
+	return &pluginruntime.ImagePullCredentials{
+		Username: creds.Username,
+		Password: creds.Password,
 	}
 }
 

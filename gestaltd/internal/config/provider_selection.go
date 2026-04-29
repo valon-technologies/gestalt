@@ -121,12 +121,13 @@ type EffectiveHostIndexedDBBinding struct {
 }
 
 type EffectiveHostedRuntime struct {
-	Enabled      bool
-	ProviderName string
-	Provider     *RuntimeProviderEntry
-	Template     string
-	Image        string
-	Metadata     map[string]string
+	Enabled              bool
+	ProviderName         string
+	Provider             *RuntimeProviderEntry
+	Template             string
+	Image                string
+	ImagePullCredentials *HostedRuntimeImagePullCredentials
+	Metadata             map[string]string
 }
 
 type EffectiveExecution struct {
@@ -352,12 +353,13 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 	}
 
 	runtime := EffectiveHostedRuntime{
-		Enabled:      true,
-		ProviderName: providerName,
-		Provider:     provider,
-		Template:     strings.TrimSpace(runtimeCfg.Template),
-		Image:        strings.TrimSpace(runtimeCfg.Image),
-		Metadata:     maps.Clone(runtimeCfg.Metadata),
+		Enabled:              true,
+		ProviderName:         providerName,
+		Provider:             provider,
+		Template:             strings.TrimSpace(runtimeCfg.Template),
+		Image:                strings.TrimSpace(runtimeCfg.Image),
+		ImagePullCredentials: cloneHostedRuntimeImagePullCredentials(runtimeCfg.ImagePullCredentials),
+		Metadata:             maps.Clone(runtimeCfg.Metadata),
 	}
 	return EffectiveExecution{Mode: ExecutionModeHosted, Hosted: runtime}, nil
 }

@@ -237,6 +237,10 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Template = "python-dev"
 	runtimeConfig.Image = "ghcr.io/valon/gestalt-python-runtime:latest"
+	runtimeConfig.ImagePullCredentials = &config.HostedRuntimeImagePullCredentials{
+		Username: "ghcr-user",
+		Password: "ghcr-token",
+	}
 	runtimeConfig.Metadata = map[string]string{"tenant": "eng"}
 	imageEntrypointDir, err := os.MkdirTemp(".", "agent-image-entrypoint-")
 	if err != nil {
@@ -305,6 +309,15 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	}
 	if req.Image != "ghcr.io/valon/gestalt-python-runtime:latest" {
 		t.Fatalf("StartSession Image = %q", req.Image)
+	}
+	if req.ImagePullCredentials == nil {
+		t.Fatal("StartSession ImagePullCredentials is nil")
+	}
+	if req.ImagePullCredentials.Username != "ghcr-user" {
+		t.Fatalf("StartSession ImagePullCredentials.Username = %q, want ghcr-user", req.ImagePullCredentials.Username)
+	}
+	if req.ImagePullCredentials.Password != "ghcr-token" {
+		t.Fatalf("StartSession ImagePullCredentials.Password = %q, want ghcr-token", req.ImagePullCredentials.Password)
 	}
 	if req.Metadata["tenant"] != "eng" {
 		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.Metadata["tenant"])
@@ -1650,6 +1663,10 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 			Mode: config.ExecutionModeHosted,
 			Runtime: &config.HostedRuntimeConfig{
 				Image: "ghcr.io/example/simple-agent@sha256:abc123",
+				ImagePullCredentials: &config.HostedRuntimeImagePullCredentials{
+					Username: "ghcr-user",
+					Password: " ghcr-token ",
+				},
 			},
 		},
 	}
@@ -1667,6 +1684,39 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 	if !slices.Equal(launch.launch.args, []string{"--serve"}) {
 		t.Fatalf("agent args = %#v, want manifest image args", launch.launch.args)
+	}
+}
+
+func TestAgentRuntimeProviderEntryHostedRuntimeConfigIncludesImagePullCredentials(t *testing.T) {
+	t.Parallel()
+
+	entry := &config.ProviderEntry{
+		Execution: &config.ExecutionConfig{
+			Mode: config.ExecutionModeHosted,
+			Runtime: &config.HostedRuntimeConfig{
+				Image: "ghcr.io/example/simple-agent@sha256:abc123",
+				ImagePullCredentials: &config.HostedRuntimeImagePullCredentials{
+					Username: "ghcr-user",
+					Password: " ghcr-token ",
+				},
+			},
+		},
+	}
+
+	runtimeConfig := providerEntryHostedRuntimeConfig(entry)
+	if runtimeConfig.ImagePullCredentials == nil {
+		t.Fatal("ImagePullCredentials = nil")
+	}
+	if runtimeConfig.ImagePullCredentials.Username != "ghcr-user" {
+		t.Fatalf("ImagePullCredentials.Username = %q, want ghcr-user", runtimeConfig.ImagePullCredentials.Username)
+	}
+	if runtimeConfig.ImagePullCredentials.Password != " ghcr-token " {
+		t.Fatalf("ImagePullCredentials.Password = %q, want opaque password preserved", runtimeConfig.ImagePullCredentials.Password)
+	}
+
+	entry.Execution.Runtime.ImagePullCredentials.Password = "mutated"
+	if runtimeConfig.ImagePullCredentials.Password != " ghcr-token " {
+		t.Fatalf("ImagePullCredentials.Password aliasing original config = %q, want opaque password preserved", runtimeConfig.ImagePullCredentials.Password)
 	}
 }
 

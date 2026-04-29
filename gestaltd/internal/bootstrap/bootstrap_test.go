@@ -7677,6 +7677,45 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves config secret ref in agent runtime image pull credentials", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"ghcr-token": "resolved-ghcr-token"},
+			}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Providers.Agent = map[string]*config.ProviderEntry{
+			"simple": {
+				Execution: &config.ExecutionConfig{
+					Mode: config.ExecutionModeHosted,
+					Runtime: &config.HostedRuntimeConfig{
+						Image: "ghcr.io/example/simple-agent:latest",
+						ImagePullCredentials: &config.HostedRuntimeImagePullCredentials{
+							Username: "ghcr-user",
+							Password: transportSecretRef("ghcr-token"),
+						},
+					},
+				},
+			},
+		}
+
+		if err := bootstrap.ResolveConfigSecrets(ctx, cfg, factories); err != nil {
+			t.Fatalf("ResolveConfigSecrets: %v", err)
+		}
+
+		creds := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullCredentials
+		if creds == nil {
+			t.Fatal("imagePullCredentials = nil")
+		}
+		if creds.Password != "resolved-ghcr-token" {
+			t.Fatalf("imagePullCredentials.password = %q, want resolved-ghcr-token", creds.Password)
+		}
+	})
+
 	t.Run("authorization provider backs subject access decisions", func(t *testing.T) {
 		t.Parallel()
 

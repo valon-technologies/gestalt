@@ -142,11 +142,11 @@ plugins:
         image: ghcr.io/example/support-plugin@sha256:...
 ```
 
-This is why `plugins.<name>.execution.runtime.image`, `template`, and
-`metadata` are forwarded to the runtime backend: they are runtime-specific
-session hints, not universal plugin semantics. Keep the manifest release and
-image digest in sync; Gestalt does not inspect the image to prove that the
-manifest entrypoint exists inside it.
+This is why `plugins.<name>.execution.runtime.image`, `template`,
+`imagePullCredentials`, and `metadata` are forwarded to the runtime backend:
+they are runtime-specific session hints, not universal plugin semantics. Keep
+the manifest release and image digest in sync; Gestalt does not inspect the
+image to prove that the manifest entrypoint exists inside it.
 
 ## What to read next
 

@@ -544,7 +544,7 @@ longer accepted; use `providers.agent.<name>.execution.runtime`.
 | `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `metadata`, and `pool`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
+| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullCredentials`, `metadata`, and `pool`. `imagePullCredentials` contains registry `username` and `password` values used by runtime providers when pulling private images. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `workflows`

@@ -94,10 +94,11 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
 	resp, err := p.runtime.StartSession(ctx, &proto.StartPluginRuntimeSessionRequest{
-		PluginName: req.PluginName,
-		Template:   req.Template,
-		Image:      req.Image,
-		Metadata:   cloneStringMap(req.Metadata),
+		PluginName:           req.PluginName,
+		Template:             req.Template,
+		Image:                req.Image,
+		ImagePullCredentials: imagePullCredentialsToProto(req.ImagePullCredentials),
+		Metadata:             cloneStringMap(req.Metadata),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start runtime session: %w", err)
@@ -118,6 +119,16 @@ func (p *executableProvider) StartSession(ctx context.Context, req StartSessionR
 		}
 	}
 	return session, nil
+}
+
+func imagePullCredentialsToProto(creds *ImagePullCredentials) *proto.PluginRuntimeImagePullCredentials {
+	if creds == nil {
+		return nil
+	}
+	return &proto.PluginRuntimeImagePullCredentials{
+		Username: creds.Username,
+		Password: creds.Password,
+	}
 }
 
 func (p *executableProvider) ListSessions(ctx context.Context) ([]Session, error) {
