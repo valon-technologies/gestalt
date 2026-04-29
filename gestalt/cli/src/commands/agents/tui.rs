@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::crossterm::terminal;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui_textarea::{CursorMove, TextArea};
@@ -67,17 +66,14 @@ pub(super) fn run_shell(
 struct TerminalGuard {
     terminal: ratatui::DefaultTerminal,
     restored: bool,
-    viewport_height: u16,
 }
 
 impl TerminalGuard {
     fn start() -> Result<Self> {
-        let viewport_height = current_terminal_height()?;
-        let terminal = inline_terminal(viewport_height)?;
+        let terminal = ratatui::try_init().context("failed to initialize terminal UI")?;
         Ok(Self {
             terminal,
             restored: false,
-            viewport_height,
         })
     }
 
@@ -94,20 +90,10 @@ impl TerminalGuard {
         Ok(())
     }
 
-    fn resize_inline_viewport(&mut self, height: u16) -> Result<()> {
-        let height = height.max(1);
-        if height != self.viewport_height {
-            let backend = ratatui::backend::CrosstermBackend::new(io::stdout());
-            self.terminal = ratatui::Terminal::with_options(
-                backend,
-                ratatui::TerminalOptions {
-                    viewport: ratatui::Viewport::Inline(height),
-                },
-            )
-            .context("failed to resize terminal UI")?;
-            self.viewport_height = height;
-        }
-        Ok(())
+    fn resize(&mut self) -> Result<()> {
+        self.terminal
+            .autoresize()
+            .context("failed to resize terminal UI")
     }
 }
 
@@ -118,19 +104,6 @@ impl Drop for TerminalGuard {
             self.restored = true;
         }
     }
-}
-
-fn current_terminal_height() -> Result<u16> {
-    terminal::size()
-        .map(|(_, height)| height.max(1))
-        .context("failed to detect terminal size")
-}
-
-fn inline_terminal(viewport_height: u16) -> Result<ratatui::DefaultTerminal> {
-    ratatui::try_init_with_options(ratatui::TerminalOptions {
-        viewport: ratatui::Viewport::Inline(viewport_height),
-    })
-    .context("failed to initialize terminal UI")
 }
 
 struct TuiApp {
@@ -195,7 +168,7 @@ impl TuiApp {
             if event::poll(TICK_RATE).context("failed to poll terminal events")? {
                 match event::read().context("failed to read terminal event")? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key),
-                    Event::Resize(_, height) => terminal.resize_inline_viewport(height)?,
+                    Event::Resize(_, _) => terminal.resize()?,
                     _ => {}
                 }
             }
