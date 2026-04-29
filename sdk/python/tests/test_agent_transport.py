@@ -275,6 +275,15 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                         instance="primary",
                         credential_mode="user",
                     ),
+                ),
+                agent_pb2.ResolvedAgentTool(
+                    id="system.workflow.schedules.list",
+                    name="List workflow schedules",
+                    description="List schedules owned by the caller",
+                    target=agent_pb2.BoundAgentToolTarget(
+                        system="workflow",
+                        operation="schedules.list",
+                    ),
                 )
             ],
             candidates=[
@@ -816,7 +825,7 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(len(search_response.tools), 1)
+        self.assertEqual(len(search_response.tools), 2)
         self.assertEqual(search_response.tools[0].target.plugin, "slack")
         self.assertEqual(search_response.tools[0].target.operation, "send_message")
         self.assertEqual(search_response.tools[0].target.credential_mode, "user")
@@ -824,6 +833,8 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(search_response.candidates[0].ref.operation, "search_messages")
         self.assertEqual(search_response.candidates[0].ref.credential_mode, "user")
         self.assertTrue(search_response.has_more)
+        self.assertEqual(search_response.tools[1].target.system, "workflow")
+        self.assertEqual(search_response.tools[1].target.operation, "schedules.list")
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
         self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])

@@ -748,6 +748,7 @@ type BoundAgentToolTarget struct {
 	Connection     string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance       string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
 	CredentialMode string                 `protobuf:"bytes,5,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
+	System         string                 `protobuf:"bytes,6,opt,name=system,proto3" json:"system,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -813,6 +814,13 @@ func (x *BoundAgentToolTarget) GetInstance() string {
 func (x *BoundAgentToolTarget) GetCredentialMode() string {
 	if x != nil {
 		return x.CredentialMode
+	}
+	return ""
+}
+
+func (x *BoundAgentToolTarget) GetSystem() string {
+	if x != nil {
+		return x.System
 	}
 	return ""
 }
@@ -902,6 +910,7 @@ type AgentToolRef struct {
 	Title          string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
 	Description    string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
 	CredentialMode string                 `protobuf:"bytes,7,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
+	System         string                 `protobuf:"bytes,8,opt,name=system,proto3" json:"system,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -981,6 +990,13 @@ func (x *AgentToolRef) GetDescription() string {
 func (x *AgentToolRef) GetCredentialMode() string {
 	if x != nil {
 		return x.CredentialMode
+	}
+	return ""
+}
+
+func (x *AgentToolRef) GetSystem() string {
+	if x != nil {
+		return x.System
 	}
 	return ""
 }
@@ -3931,7 +3947,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\fsubject_kind\x18\x02 \x01(\tR\vsubjectKind\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vauth_source\x18\x04 \x01(\tR\n" +
-	"authSource\"\xb1\x01\n" +
+	"authSource\"\xc9\x01\n" +
 	"\x14BoundAgentToolTarget\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
@@ -3939,13 +3955,14 @@ const file_v1_agent_proto_rawDesc = "" +
 	"connection\x18\x03 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12'\n" +
-	"\x0fcredential_mode\x18\x05 \x01(\tR\x0ecredentialMode\"\xe2\x01\n" +
+	"\x0fcredential_mode\x18\x05 \x01(\tR\x0ecredentialMode\x12\x16\n" +
+	"\x06system\x18\x06 \x01(\tR\x06system\"\xe2\x01\n" +
 	"\x11ResolvedAgentTool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12A\n" +
 	"\x06target\x18\x04 \x01(\v2).gestalt.provider.v1.BoundAgentToolTargetR\x06target\x12D\n" +
-	"\x11parameters_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x10parametersSchema\"\xe1\x01\n" +
+	"\x11parameters_schema\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x10parametersSchema\"\xf9\x01\n" +
 	"\fAgentToolRef\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
@@ -3955,7 +3972,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x06 \x01(\tR\vdescription\x12'\n" +
-	"\x0fcredential_mode\x18\a \x01(\tR\x0ecredentialMode\"\xc5\x01\n" +
+	"\x0fcredential_mode\x18\a \x01(\tR\x0ecredentialMode\x12\x16\n" +
+	"\x06system\x18\b \x01(\tR\x06system\"\xc5\x01\n" +
 	"\x12AgentToolCandidate\x123\n" +
 	"\x03ref\x18\x01 \x01(\v2!.gestalt.provider.v1.AgentToolRefR\x03ref\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +

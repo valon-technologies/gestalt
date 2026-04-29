@@ -68,6 +68,8 @@ type ImageRefPart struct {
 	MIMEType string
 }
 
+const SystemToolWorkflow = "workflow"
+
 type MessagePart struct {
 	Type       MessagePartType
 	Text       string
@@ -78,6 +80,7 @@ type MessagePart struct {
 }
 
 type ToolTarget struct {
+	System         string `json:",omitempty"`
 	Plugin         string
 	Operation      string
 	Connection     string
@@ -94,6 +97,7 @@ type Tool struct {
 }
 
 type ToolRef struct {
+	System         string `json:",omitempty"`
 	Plugin         string
 	Operation      string
 	Connection     string

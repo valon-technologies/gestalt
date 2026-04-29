@@ -1273,20 +1273,46 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	if agent.Prompt == "" && len(agent.Messages) == 0 {
 		return fmt.Errorf("config validation: %s.prompt or messages is required", path)
 	}
+	hasSystemTool := false
+	for i := range agent.Tools {
+		if strings.TrimSpace(agent.Tools[i].System) != "" {
+			hasSystemTool = true
+			break
+		}
+	}
 	for i := range agent.Tools {
 		tool := &agent.Tools[i]
+		tool.System = strings.TrimSpace(tool.System)
 		tool.Plugin = strings.TrimSpace(tool.Plugin)
-		if tool.Plugin == "" {
-			return fmt.Errorf("config validation: %s.tools[%d].plugin is required", path, i)
+		if tool.System == "" && tool.Plugin == "" {
+			return fmt.Errorf("config validation: %s.tools[%d].plugin or system is required", path, i)
 		}
-		if _, ok := cfg.Plugins[tool.Plugin]; !ok {
-			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.Plugin)
+		if tool.System != "" && tool.Plugin != "" {
+			return fmt.Errorf("config validation: %s.tools[%d] must set exactly one of plugin or system", path, i)
 		}
 		tool.Operation = strings.TrimSpace(tool.Operation)
 		tool.Connection = strings.TrimSpace(tool.Connection)
 		tool.Instance = strings.TrimSpace(tool.Instance)
 		tool.Title = strings.TrimSpace(tool.Title)
 		tool.Description = strings.TrimSpace(tool.Description)
+		if tool.System != "" {
+			if tool.System != "workflow" {
+				return fmt.Errorf("config validation: %s.tools[%d].system references unknown system %q", path, i, tool.System)
+			}
+			if tool.Operation == "" {
+				return fmt.Errorf("config validation: %s.tools[%d].operation is required for system tool refs", path, i)
+			}
+			if tool.Connection != "" || tool.Instance != "" {
+				return fmt.Errorf("config validation: %s.tools[%d] system refs cannot include connection or instance", path, i)
+			}
+			continue
+		}
+		if _, ok := cfg.Plugins[tool.Plugin]; !ok {
+			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.Plugin)
+		}
+		if hasSystemTool && tool.Operation == "" {
+			return fmt.Errorf("config validation: %s.tools[%d].operation is required when workflow system tools are delegated", path, i)
+		}
 	}
 	agent.Timeout = strings.TrimSpace(agent.Timeout)
 	if agent.Timeout != "" {

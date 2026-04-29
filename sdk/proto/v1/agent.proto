@@ -63,6 +63,7 @@ message BoundAgentToolTarget {
   string connection = 3;
   string instance = 4;
   string credential_mode = 5;
+  string system = 6;
 }
 
 message ResolvedAgentTool {
@@ -81,6 +82,7 @@ message AgentToolRef {
   string title = 5;
   string description = 6;
   string credential_mode = 7;
+  string system = 8;
 }
 
 message AgentToolCandidate {

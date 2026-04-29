@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -127,6 +128,10 @@ func agentHostErrorCode(err error) codes.Code {
 	case errors.Is(err, invocation.ErrNotAuthenticated), errors.Is(err, invocation.ErrNoCredential):
 		return codes.Unauthenticated
 	case errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+		return codes.FailedPrecondition
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		return codes.InvalidArgument
+	case errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured):
 		return codes.FailedPrecondition
 	case errors.Is(err, invocation.ErrInternal):
 		return codes.Internal

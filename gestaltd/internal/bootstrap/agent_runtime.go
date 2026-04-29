@@ -31,11 +31,24 @@ type agentRuntime struct {
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
 	toolSearcher        agentToolSearcher
+	systemTools         agentSystemToolExecutor
 	toolMergeMu         sync.Mutex
 }
 
 type agentToolSearcher interface {
 	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
+}
+
+type agentSystemToolExecutionRequest struct {
+	Principal *principal.Principal
+	Tool      coreagent.Tool
+	Arguments map[string]any
+	ToolRefs  []coreagent.ToolRef
+	Tools     []coreagent.Tool
+}
+
+type agentSystemToolExecutor interface {
+	ExecuteSystemTool(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error)
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
@@ -116,6 +129,15 @@ func (r *agentRuntime) SetToolSearcher(searcher agentToolSearcher) {
 	r.toolSearcher = searcher
 }
 
+func (r *agentRuntime) SetSystemToolExecutor(executor agentSystemToolExecutor) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.systemTools = executor
+}
+
 func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req coreagent.CreateTurnRequest) error {
 	if r == nil {
 		return nil
@@ -162,6 +184,9 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 	}
 	if permissions == nil && len(req.Tools) > 0 {
 		permissions = permissionsForAgentTools(req.Tools)
+		if permissions == nil && agentToolsContainPlugin(req.Tools) {
+			return fmt.Errorf("%w: agent plugin tools require explicit execution permissions", invocation.ErrAuthorizationDenied)
+		}
 	}
 	if existingRef != nil {
 		permissions = append([]core.AccessPermission(nil), existingRef.Permissions...)
@@ -340,10 +365,8 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	r.mu.RLock()
 	invoker := r.invoker
 	runMetadata := r.runMetadata
+	systemTools := r.systemTools
 	r.mu.RUnlock()
-	if invoker == nil {
-		return nil, fmt.Errorf("%w: agent runtime invoker is not configured", invocation.ErrInternal)
-	}
 	if runMetadata == nil {
 		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
 	}
@@ -381,6 +404,21 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	principalValue := executionReferencePrincipal(ref.SubjectID, ref.CredentialSubjectID, ref.Permissions)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	if strings.TrimSpace(tool.Target.System) != "" {
+		if systemTools == nil {
+			return nil, agentmanager.ErrAgentWorkflowToolsNotConfigured
+		}
+		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
+			Principal: principalValue,
+			Tool:      tool,
+			Arguments: maps.Clone(req.Arguments),
+			ToolRefs:  append([]coreagent.ToolRef(nil), ref.ToolRefs...),
+			Tools:     append([]coreagent.Tool(nil), ref.Tools...),
+		})
+	}
+	if invoker == nil {
+		return nil, fmt.Errorf("%w: agent runtime invoker is not configured", invocation.ErrInternal)
 	}
 	if connection := strings.TrimSpace(tool.Target.Connection); connection != "" {
 		ctx = invocation.WithConnection(ctx, connection)
@@ -570,6 +608,15 @@ func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.Too
 			return fmt.Errorf("%w: searched agent tool id is required", invocation.ErrAuthorizationDenied)
 		}
 		target := tools[i].Target
+		if systemName := strings.TrimSpace(target.System); systemName != "" {
+			if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(target.Operation) == "" {
+				return fmt.Errorf("%w: searched agent system tool target is incomplete", invocation.ErrAuthorizationDenied)
+			}
+			if !agentToolMatchesRefs(target, refs) {
+				return fmt.Errorf("%w: searched agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ID)
+			}
+			continue
+		}
 		pluginName := strings.TrimSpace(target.Plugin)
 		operation := strings.TrimSpace(target.Operation)
 		if pluginName == "" || operation == "" {
@@ -607,8 +654,23 @@ func validateAgentToolSearchCandidates(p *principal.Principal, refs []coreagent.
 }
 
 func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef) bool {
+	if systemName := strings.TrimSpace(target.System); systemName != "" {
+		targetOperation := strings.TrimSpace(target.Operation)
+		for i := range refs {
+			if strings.TrimSpace(refs[i].System) != systemName {
+				continue
+			}
+			if strings.TrimSpace(refs[i].Operation) != targetOperation {
+				continue
+			}
+			return true
+		}
+		return false
+	}
+
 	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
-	for _, ref := range refs {
+	for i := range refs {
+		ref := refs[i]
 		if strings.TrimSpace(ref.Plugin) == "*" && strings.TrimSpace(ref.Operation) == "" {
 			return true
 		}
@@ -682,4 +744,13 @@ func permissionsForAgentTools(tools []coreagent.Tool) []core.AccessPermission {
 		})
 	}
 	return permissions
+}
+
+func agentToolsContainPlugin(tools []coreagent.Tool) bool {
+	for i := range tools {
+		if strings.TrimSpace(tools[i].Target.Plugin) != "" {
+			return true
+		}
+	}
+	return false
 }

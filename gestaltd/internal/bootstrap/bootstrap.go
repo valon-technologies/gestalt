@@ -956,6 +956,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
+	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
 	publicHostServices := providerhost.NewPublicHostServiceRegistry()
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
@@ -1020,6 +1021,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
+	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
 		Workflow:          prepared.Deps.WorkflowRuntime,
@@ -1034,6 +1036,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
+		WorkflowTools:     workflowTools,
 		SessionMetadata:   prepared.Services.AgentSessions,
 		RunMetadata:       prepared.Services.AgentRunMetadata,
 		Invoker:           sharedInvoker,

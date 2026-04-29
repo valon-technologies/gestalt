@@ -5313,6 +5313,95 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	}
 }
 
+func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	agentTarget := &config.WorkflowTargetConfig{Agent: &config.WorkflowAgentConfig{
+		Provider: "managed",
+		Prompt:   "Inspect the workflow and sync the roadmap",
+		Tools: []config.WorkflowAgentToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: "schedules.list"},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+	}}
+	cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{
+		"agent_schedule": {
+			Provider: "temporal",
+			Cron:     "*/10 * * * *",
+			Timezone: "UTC",
+			Target:   agentTarget,
+		},
+	}
+	cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{
+		"agent_event": {
+			Provider: "temporal",
+			Match: config.WorkflowEventMatch{
+				Type: "roadmap.updated",
+			},
+			Target: agentTarget,
+		},
+	}
+
+	factories := validFactories()
+	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+		return newRecordingAgentProvider(), nil
+	}
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
+	}
+	if len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
+	}
+	for label, target := range map[string]coreworkflow.Target{
+		"schedule":      recorder.upsertedSchedules[0].Target,
+		"event trigger": recorder.upsertedEventTriggers[0].Target,
+	} {
+		if target.Agent == nil || len(target.Agent.ToolRefs) != 2 {
+			t.Fatalf("%s target = %#v", label, target)
+		}
+		if target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Agent.ToolRefs[0].Operation != "schedules.list" {
+			t.Fatalf("%s workflow tool ref = %#v", label, target.Agent.ToolRefs[0])
+		}
+		if target.Agent.ToolRefs[1].Plugin != "roadmap" || target.Agent.ToolRefs[1].Operation != "sync" {
+			t.Fatalf("%s plugin tool ref = %#v", label, target.Agent.ToolRefs[1])
+		}
+	}
+	for _, executionRef := range []string{
+		recorder.upsertedSchedules[0].ExecutionRef,
+		recorder.upsertedEventTriggers[0].ExecutionRef,
+	} {
+		ref, err := recorder.GetExecutionReference(context.Background(), executionRef)
+		if err != nil {
+			t.Fatalf("Get execution ref %q: %v", executionRef, err)
+		}
+		if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+			t.Fatalf("permissions = %#v", ref.Permissions)
+		}
+	}
+}
+
 func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
 	t.Parallel()
 

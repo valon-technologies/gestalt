@@ -114,6 +114,7 @@ func agentToolTargetToProto(target coreagent.ToolTarget) *proto.BoundAgentToolTa
 		return nil
 	}
 	return &proto.BoundAgentToolTarget{
+		System:         target.System,
 		Plugin:         target.Plugin,
 		Operation:      target.Operation,
 		Connection:     target.Connection,
@@ -178,6 +179,7 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		return coreagent.ToolRef{}
 	}
 	return coreagent.ToolRef{
+		System:         ref.GetSystem(),
 		Plugin:         ref.GetPlugin(),
 		Operation:      ref.GetOperation(),
 		Connection:     ref.GetConnection(),
@@ -190,6 +192,7 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 
 func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
+		System:         ref.System,
 		Plugin:         ref.Plugin,
 		Operation:      ref.Operation,
 		Connection:     ref.Connection,
@@ -216,8 +219,8 @@ func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 		return nil
 	}
 	out := make([]*proto.AgentToolRef, 0, len(refs))
-	for _, ref := range refs {
-		out = append(out, agentToolRefToProto(ref))
+	for i := range refs {
+		out = append(out, agentToolRefToProto(refs[i]))
 	}
 	return out
 }

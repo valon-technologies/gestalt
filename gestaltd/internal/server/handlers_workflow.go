@@ -406,6 +406,7 @@ func (s *Server) writeWorkflowScheduleManagerError(w http.ResponseWriter, r *htt
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
 		errors.Is(err, invocation.ErrUserResolution),
+		errors.Is(err, invocation.ErrInvalidInvocation),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
 		s.writeWorkflowScheduleTargetError(w, r, pluginName, operation, err)
@@ -427,6 +428,7 @@ func (s *Server) writeWorkflowScheduleTargetError(w http.ResponseWriter, r *http
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
 		errors.Is(err, invocation.ErrUserResolution),
+		errors.Is(err, invocation.ErrInvalidInvocation),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
 		s.writeInvocationError(w, r, pluginName, operation, err)

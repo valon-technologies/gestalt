@@ -585,6 +585,7 @@ type workflowAgentTargetResponse struct {
 	Prompt         string `json:"prompt"`
 	TimeoutSeconds int    `json:"timeoutSeconds"`
 	ToolRefs       []struct {
+		System    string `json:"system"`
 		Plugin    string `json:"plugin"`
 		Operation string `json:"operation"`
 	} `json:"toolRefs"`
@@ -913,6 +914,92 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].Target.Agent == nil || listed[0].Target.Agent.Prompt != "Send the status summary" {
 		t.Fatalf("listed schedules = %#v", listed)
+	}
+}
+
+func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada-agent-system@example.test")
+	provider := newMemoryWorkflowProvider()
+	agentProvider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Providers: cfg.Providers,
+			Agent:     cfg.Agent,
+			Invoker:   cfg.Invoker,
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Manage schedules","toolRefs":[{"system":"workflow","operation":"schedules.list"},{"plugin":"roadmap","operation":"sync"}]}}}`)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var created workflowScheduleResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Target.Agent == nil || len(created.Target.Agent.ToolRefs) != 2 {
+		t.Fatalf("created agent target = %#v", created.Target.Agent)
+	}
+	if created.Target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || created.Target.Agent.ToolRefs[0].Operation != "schedules.list" {
+		t.Fatalf("created system tool ref = %#v", created.Target.Agent.ToolRefs[0])
+	}
+	if created.Target.Agent.ToolRefs[1].Plugin != "roadmap" || created.Target.Agent.ToolRefs[1].Operation != "sync" {
+		t.Fatalf("created plugin tool ref = %#v", created.Target.Agent.ToolRefs[1])
+	}
+	if len(provider.upsertReqs) != 1 {
+		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
+	}
+	storedTarget := provider.upsertReqs[0].Target
+	if storedTarget.Agent == nil || len(storedTarget.Agent.ToolRefs) != 2 {
+		t.Fatalf("stored agent target = %#v", storedTarget)
+	}
+	if storedTarget.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || storedTarget.Agent.ToolRefs[0].Operation != "schedules.list" {
+		t.Fatalf("stored system tool ref = %#v", storedTarget.Agent.ToolRefs[0])
+	}
+	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.Target.Agent == nil || len(ref.Target.Agent.ToolRefs) != 2 || ref.Target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow {
+		t.Fatalf("execution ref target = %#v", ref.Target)
 	}
 }
 

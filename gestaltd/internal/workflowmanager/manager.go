@@ -1000,6 +1000,9 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.Metadata = maps.Clone(target.Metadata)
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
+	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
+		return coreworkflow.Target{}, err
+	}
 	return coreworkflow.Target{Agent: &target}, nil
 }
 
@@ -1179,7 +1182,8 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 	}
 	permissions := cloneWorkflowPermissionSet(p.TokenPermissions)
 	if target.Agent != nil {
-		for _, tool := range target.Agent.ToolRefs {
+		for i := range target.Agent.ToolRefs {
+			tool := target.Agent.ToolRefs[i]
 			pluginName := strings.TrimSpace(tool.Plugin)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" || pluginName == "*" || operation == "" {
@@ -1322,10 +1326,24 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 
 func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
 	if target.Agent != nil {
-		for _, tool := range target.Agent.ToolRefs {
+		hasSystemTools := workflowAgentToolRefsContainSystem(target.Agent.ToolRefs)
+		for i := range target.Agent.ToolRefs {
+			tool := target.Agent.ToolRefs[i]
+			if systemName := strings.TrimSpace(tool.System); systemName != "" {
+				if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(tool.Operation) == "" {
+					return false
+				}
+				if strings.TrimSpace(tool.Plugin) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
+					return false
+				}
+				continue
+			}
 			pluginName := strings.TrimSpace(tool.Plugin)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" {
+				return false
+			}
+			if hasSystemTools && (pluginName == "*" || operation == "") {
 				return false
 			}
 			if operation == "" {
@@ -1356,6 +1374,49 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 		return false
 	}
 	return principal.AllowsOperationPermission(p, pluginName, operation)
+}
+
+func workflowAgentToolRefsContainSystem(refs []coreagent.ToolRef) bool {
+	for i := range refs {
+		if strings.TrimSpace(refs[i].System) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
+	hasSystemTools := workflowAgentToolRefsContainSystem(refs)
+	for i := range refs {
+		ref := refs[i]
+		systemName := strings.TrimSpace(ref.System)
+		pluginName := strings.TrimSpace(ref.Plugin)
+		operation := strings.TrimSpace(ref.Operation)
+		connection := strings.TrimSpace(ref.Connection)
+		instance := strings.TrimSpace(ref.Instance)
+		if systemName != "" {
+			if pluginName != "" {
+				return fmt.Errorf("%w: workflow agent tool_refs[%d] must set exactly one of plugin or system", invocation.ErrInvalidInvocation, i)
+			}
+			if systemName != coreagent.SystemToolWorkflow {
+				return fmt.Errorf("%w: workflow agent tool_refs[%d].system %q is not supported", invocation.ErrInvalidInvocation, i, systemName)
+			}
+			if operation == "" {
+				return fmt.Errorf("%w: workflow agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, i)
+			}
+			if connection != "" || instance != "" || ref.CredentialMode != "" {
+				return fmt.Errorf("%w: workflow agent tool_refs[%d] system refs cannot include connection, instance, or credential mode", invocation.ErrInvalidInvocation, i)
+			}
+			continue
+		}
+		if !hasSystemTools {
+			continue
+		}
+		if pluginName == "" || pluginName == "*" || operation == "" {
+			return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact plugin operation when workflow system tools are delegated", invocation.ErrInvalidInvocation, i)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {

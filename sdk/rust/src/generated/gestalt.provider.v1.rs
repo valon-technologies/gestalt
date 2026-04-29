@@ -75,6 +75,8 @@ pub struct BoundAgentToolTarget {
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub credential_mode: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub system: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentTool {
@@ -105,6 +107,8 @@ pub struct AgentToolRef {
     pub description: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub credential_mode: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub system: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentToolCandidate {
