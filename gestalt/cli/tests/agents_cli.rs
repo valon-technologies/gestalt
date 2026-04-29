@@ -251,7 +251,7 @@ fn test_cli_creates_agent_turn_from_input() {
     let request_json = r#"{
         "model":"gpt-5.4",
         "toolSource":"native_search",
-        "metadata":{"ticket":"AIT-123"},
+        "metadata":{"ticket":"TASK-123"},
         "providerOptions":{"temperature":0.2},
         "responseSchema":{
             "type":"object",
@@ -590,7 +590,7 @@ fn test_cli_runs_interactive_agent_session() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"plugin":"linear","operation":"searchIssues"}]}"#.to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"plugin":"tracker","operation":"searchItems"}]}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -631,7 +631,7 @@ fn test_cli_runs_interactive_agent_session() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
-        .args(["--tool", "linear:searchIssues"])
+        .args(["--tool", "tracker:searchItems"])
         .write_stdin("hello\\\nthere\n")
         .assert()
         .success()
@@ -1111,7 +1111,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
             && output.contains("contact admin")
             && !output.contains("policycontact")
             && !output.contains("Tool"),
-        "TTY tool transcript did not render Claude-style activity rows:\n{output}"
+        "TTY tool transcript did not render structured activity rows:\n{output}"
     );
     server.assert_finished();
 }
