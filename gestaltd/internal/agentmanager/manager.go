@@ -15,6 +15,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -44,6 +45,7 @@ const (
 	agentSessionCreationWaitTimeout  = 5 * time.Second
 	agentSessionCreationPollInterval = 100 * time.Millisecond
 	agentToolSearchAllPlugin         = "*"
+	agentToolInputSchemaMaxBytes     = 128 * 1024
 )
 
 type AgentProviderNotAvailableError struct {
@@ -1724,14 +1726,25 @@ func sessionSortTime(session *coreagent.Session) *time.Time {
 }
 
 func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {
-	if len(op.InputSchema) == 0 {
+	raw := agentToolInputSchema(op)
+	if len(raw) == 0 {
 		return nil, nil
 	}
 	var out map[string]any
-	if err := json.Unmarshal(op.InputSchema, &out); err != nil {
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("decode %s input schema: %w", op.ID, err)
 	}
 	return out, nil
+}
+
+func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
+	if len(op.InputSchema) <= agentToolInputSchemaMaxBytes {
+		return op.InputSchema
+	}
+	if synthesized := integration.SynthesizeInputSchema(op.Parameters); len(synthesized) > 0 {
+		return synthesized
+	}
+	return json.RawMessage(`{"type":"object","additionalProperties":true}`)
 }
 
 func agentToolID(pluginName, operation, connection, instance string, credentialMode core.ConnectionMode) string {
