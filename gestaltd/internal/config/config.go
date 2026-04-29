@@ -194,23 +194,6 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 	if value.Kind == yaml.MappingNode {
-		hasRef := false
-		hasVersion := false
-		for i := 0; i+1 < len(value.Content); i += 2 {
-			key := strings.TrimSpace(value.Content[i].Value)
-			switch key {
-			case "ref":
-				hasRef = true
-			case "version":
-				hasVersion = true
-			}
-		}
-		if hasRef {
-			return fmt.Errorf("source.ref/source.version are no longer supported; use source: <provider-release.yaml URL>")
-		}
-		if hasVersion {
-			return fmt.Errorf("source.version is no longer supported; use source: <provider-release.yaml URL>")
-		}
 		var raw providerSourceYAML
 		if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
 			return err
@@ -692,13 +675,8 @@ func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.SequenceNode:
 		return fmt.Errorf("indexeddb must be a mapping or scalar provider name")
 	default:
-		for i := 0; i+1 < len(value.Content); i += 2 {
-			if key := value.Content[i]; key != nil && key.Value == "disabled" {
-				return fmt.Errorf("field disabled not found in type config.raw")
-			}
-		}
 		type raw HostIndexedDBBindingConfig
-		return value.Decode((*raw)(c))
+		return decodeYAMLNodeKnownFields(value, (*raw)(c))
 	}
 }
 
@@ -1800,10 +1778,10 @@ func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
 }
 
-func NormalizeCompatibility(cfg *Config) error {
+func normalizeConfigShape(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
-	normalizeProviderEntryCompatibility(cfg)
-	normalizeServerRuntimeCompatibility(cfg)
+	normalizeProviderEntries(cfg)
+	normalizeServerRuntimeConfig(cfg)
 	if err := normalizeAuthorizationConfig(cfg); err != nil {
 		return err
 	}
@@ -1813,14 +1791,14 @@ func NormalizeCompatibility(cfg *Config) error {
 	return applyPluginMountBindings(cfg)
 }
 
-func normalizeServerRuntimeCompatibility(cfg *Config) {
+func normalizeServerRuntimeConfig(cfg *Config) {
 	if cfg == nil {
 		return
 	}
 	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
 }
 
-func normalizeProviderEntryCompatibility(cfg *Config) {
+func normalizeProviderEntries(cfg *Config) {
 	if cfg == nil {
 		return
 	}
@@ -2021,9 +1999,6 @@ func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, 
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectRemovedDisabledFields(&root); err != nil {
-		return nil, err
-	}
 	if err := NormalizeConfigSecretRefs(&root); err != nil {
 		return nil, err
 	}
@@ -2193,9 +2168,6 @@ func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mo
 	if err := normalizeConfigRoot(&root); err != nil {
 		return yaml.Node{}, err
 	}
-	if err := rejectRemovedDisabledFields(&root); err != nil {
-		return yaml.Node{}, err
-	}
 
 	validationRoot, err := cloneConfigRoot(root)
 	if err != nil {
@@ -2345,42 +2317,6 @@ func cloneConfigValue(value any) any {
 	default:
 		return current
 	}
-}
-
-func rejectRemovedDisabledFields(root *yaml.Node) error {
-	if err := rejectRemovedDisabledEntryFields(mappingValueNode(root, "plugins"), "plugins"); err != nil {
-		return err
-	}
-	providersNode := mappingValueNode(root, "providers")
-	for _, section := range []string{"authentication", "secrets", "telemetry", "audit", "indexeddb", "cache", "s3", "ui"} {
-		if err := rejectRemovedDisabledEntryFields(mappingValueNode(providersNode, section), "providers."+section); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func rejectRemovedDisabledEntryFields(node *yaml.Node, prefix string) error {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		keyNode := node.Content[i]
-		entryNode := node.Content[i+1]
-		if keyNode == nil || entryNode == nil {
-			continue
-		}
-		if mappingValueNode(entryNode, "disabled") != nil {
-			return fmt.Errorf("parsing config YAML: %s.%s.disabled: field disabled not found; omit the entry instead", prefix, keyNode.Value)
-		}
-		if prefix == "plugins" {
-			if indexedDBNode := mappingValueNode(entryNode, "indexeddb"); indexedDBNode != nil && mappingValueNode(indexedDBNode, "disabled") != nil {
-				return fmt.Errorf("parsing config YAML: %s.%s.indexeddb.disabled: field disabled not found; omit indexeddb to inherit the host provider", prefix, keyNode.Value)
-			}
-		}
-	}
-	return nil
 }
 
 const (

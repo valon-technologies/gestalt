@@ -1703,96 +1703,6 @@ server:
 		}
 	})
 
-	t.Run("ui entry rejects disabled field", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    roadmap:
-      disabled: true
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("ui disabled field rejects YAML boolean variants", func(t *testing.T) {
-		t.Parallel()
-
-		for _, variant := range []string{"true", "True", "TRUE"} {
-			variant := variant
-			t.Run(variant, func(t *testing.T) {
-				t.Parallel()
-
-				path := mustWriteConfigFile(t, fmt.Sprintf(`
-providers:
-  ui:
-    roadmap:
-      disabled: %s
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`, variant))
-
-				_, err := Load(path)
-				if err == nil {
-					t.Fatal("Load: expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), `field disabled not found`) {
-					t.Fatalf("disabled: %s unexpected error: %v", variant, err)
-				}
-			})
-		}
-	})
-
-	t.Run("ui config is rejected when disabled field is present", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    roadmap:
-      disabled: true
-      config:
-        brand_name: Acme
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("relative ui provider path resolves from config directory", func(t *testing.T) {
 		t.Parallel()
 
@@ -2318,36 +2228,6 @@ server:
 		}
 	})
 
-	t.Run("plugin rejects disabled indexeddb config", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    indexeddb:
-      disabled: true
-providers:
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("rejects indexeddb bindings outside plugins", func(t *testing.T) {
 		t.Parallel()
 
@@ -2643,37 +2523,6 @@ server:
 		}
 	})
 
-	t.Run("rejects indexeddb disabled field", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    indexeddb:
-      disabled: true
-      provider: main-db
-providers:
-  indexeddb:
-    main-db:
-      source:
-        path: ./providers/datastore/main-db
-server:
-  providers:
-    indexeddb: main-db
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("rejects duplicate indexeddb object stores", func(t *testing.T) {
 		t.Parallel()
 
@@ -2772,72 +2621,6 @@ server:
 		}
 		if got := cfg.Plugins["roadmap"].S3; !reflect.DeepEqual(got, []string{"assets"}) {
 			t.Fatalf("Plugins[roadmap].S3 = %#v, want %#v", got, []string{"assets"})
-		}
-	})
-
-	t.Run("rejects s3 disabled field", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    s3:
-      - assets
-providers:
-  s3:
-    assets:
-      disabled: true
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects cache disabled field", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-    cache:
-      - session
-providers:
-  cache:
-    session:
-      disabled: true
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `field disabled not found`) {
-			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -4059,19 +3842,6 @@ providers:
 `,
 			wantErr: `field builtin not found`,
 		},
-		{
-			name: "disabled field wins over missing env",
-			yaml: `
-providers:
-  ui:
-    roadmap:
-      disabled: true
-      source:
-        path: ${MISSING_UI_PATH}
-      path: /roadmap
-`,
-			wantErr: `field disabled not found`,
-		},
 	}
 
 	for _, tc := range cases {
@@ -4467,19 +4237,6 @@ plugins:
 `,
 		},
 		{
-			name: "plugin source ref/version is rejected even when path is present",
-			yaml: `
-providers:
-plugins:
-    external:
-      source:
-        path: ./plugins/dummy/manifest.yaml
-        ref: github.com/acme-corp/tools/widget
-        version: 1.2.3
-`,
-			wantErr: "source.ref/source.version are no longer supported",
-		},
-		{
 			name: "plugin env with local source is valid",
 			yaml: `
 providers:
@@ -4512,30 +4269,6 @@ plugins:
       {}
 `,
 			wantErr: "source.path or metadata URL is required",
-		},
-		{
-			name: "plugin source path with version is rejected",
-			yaml: `
-providers:
-plugins:
-    external:
-      source:
-        path: ./plugins/dummy/manifest.yaml
-        version: 1.0.0
-`,
-			wantErr: "source.version is no longer supported",
-		},
-		{
-			name: "plugin source ref/version is rejected",
-			yaml: `
-providers:
-plugins:
-    external:
-      source:
-        ref: github.com/acme-corp/tools/widget
-        version: 1.2.3
-`,
-			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "apiVersion route auth override is valid",
@@ -4807,17 +4540,6 @@ plugins:
       base_url: https://api.example.com
 `,
 			wantErr: "field base_url not found",
-		},
-		{
-			name: "plugin source ref without version is rejected",
-			yaml: `
-providers:
-plugins:
-    external:
-      source:
-        ref: github.com/acme-corp/tools/widget
-`,
-			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "non-default connection params are accepted",

@@ -293,7 +293,7 @@ func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Validation always stages source-backed providers in a temporary scratch dir.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
 	writeUsageLine(w, "The --lockfile path follows normal CLI path resolution; --artifacts-dir keeps")
-	writeUsageLine(w, "its existing config-relative behavior on init/serve for backward compatibility.")
+	writeUsageLine(w, "its existing config-relative behavior on init/serve.")
 }
 
 func writeUsageLine(w io.Writer, line string) {
