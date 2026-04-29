@@ -2352,7 +2352,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestGlobalWorkflowFlatTargetsAreRejected(t *testing.T) {
+func TestGlobalWorkflowLegacyTargetShapesAreRejected(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -2401,9 +2401,27 @@ func TestGlobalWorkflowFlatTargetsAreRejected(t *testing.T) {
 			want: `invalid JSON body`,
 		},
 		{
+			name: "schedule providerName alias",
+			path: "/api/v1/workflow/schedules/",
+			body: `{"providerName":"basic","cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync"}}}`,
+			want: `invalid JSON body`,
+		},
+		{
 			name: "event trigger",
 			path: "/api/v1/workflow/event-triggers/",
 			body: `{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
+			want: `invalid JSON body`,
+		},
+		{
+			name: "schedule agent tools alias",
+			path: "/api/v1/workflow/schedules/",
+			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","prompt":"Sync roadmap","tools":[{"plugin":"roadmap","operation":"sync"}]}}}`,
+			want: `invalid JSON body`,
+		},
+		{
+			name: "trailing JSON",
+			path: "/api/v1/workflow/schedules/",
+			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync"}}} {"timeZone":"UTC"}`,
 			want: `invalid JSON body`,
 		},
 	}

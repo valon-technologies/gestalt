@@ -16,8 +16,6 @@ import (
 )
 
 type desiredWorkflowConfigEventTrigger struct {
-	ID           string
-	PluginName   string
 	TriggerKey   string
 	ProviderName string
 	TriggerID    string
@@ -36,7 +34,8 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[rowID]
 		trigger := desiredEntry.trigger
-		pluginName := workflowConfigTargetLabel(workflowConfigEventTriggerTarget(trigger))
+		target := workflowConfigTarget(trigger.Target)
+		pluginName := workflowConfigTargetLabel(target)
 		providerName, provider, err := runtime.ResolveProviderSelection(trigger.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
@@ -56,7 +55,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, workflowConfigEventTriggerTarget(trigger))
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
@@ -77,7 +76,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
 			TriggerID:    desiredEntry.TriggerID,
 			Match:        workflowConfigEventTriggerMatch(trigger),
-			Target:       workflowConfigEventTriggerTarget(trigger),
+			Target:       target,
 			Paused:       trigger.Paused,
 			RequestedBy:  workflowConfigActor(),
 			ExecutionRef: executionRefID,
@@ -111,10 +110,8 @@ func desiredWorkflowConfigEventTriggers(cfg *config.Config) (map[string]desiredW
 		if err != nil {
 			return nil, err
 		}
-		rowID := workflowConfigEventTriggerStateID(triggerKey)
+		rowID := strings.TrimSpace(triggerKey)
 		desired[rowID] = desiredWorkflowConfigEventTrigger{
-			ID:           rowID,
-			PluginName:   workflowConfigTargetLabel(workflowConfigEventTriggerTarget(trigger)),
 			TriggerKey:   triggerKey,
 			ProviderName: providerName,
 			TriggerID:    workflowConfigEventTriggerID(triggerKey),
@@ -184,14 +181,6 @@ func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) 
 		Source:  trigger.Match.Source,
 		Subject: trigger.Match.Subject,
 	}
-}
-
-func workflowConfigEventTriggerTarget(trigger config.WorkflowEventTriggerConfig) coreworkflow.Target {
-	return workflowConfigTarget(trigger.Target)
-}
-
-func workflowConfigEventTriggerStateID(triggerKey string) string {
-	return strings.TrimSpace(triggerKey)
 }
 
 func workflowConfigEventTriggerID(triggerKey string) string {
