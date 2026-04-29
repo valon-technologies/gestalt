@@ -109,7 +109,6 @@ type AttachAuthorizationInfo struct {
 	AuthorizationID string    `json:"authorizationId"`
 	Providers       []string  `json:"providers"`
 	ExpiresAt       time.Time `json:"expiresAt"`
-	Approved        bool      `json:"approved"`
 }
 
 type PollAttachAuthorizationResponse struct {
@@ -141,9 +140,7 @@ type AttachAuthorization struct {
 	verificationHash string
 	requestHash      string
 	providers        []string
-	createdAt        time.Time
 	expiresAt        time.Time
-	approvedAt       time.Time
 	approvedBy       *principal.Principal
 	used             bool
 }
@@ -432,7 +429,6 @@ func (m *Manager) CreateAttachAuthorization(req CreateSessionRequest, now time.T
 		verificationHash: verificationHash,
 		requestHash:      requestHash,
 		providers:        slices.Clone(names),
-		createdAt:        now,
 		expiresAt:        now.Add(5 * time.Minute),
 	}
 	m.mu.Lock()
@@ -477,13 +473,12 @@ func (m *Manager) ApproveAttachAuthorization(id string, p *principal.Principal, 
 	if subtle.ConstantTimeCompare([]byte(hashAttachAuthorizationSecret(verificationCode)), []byte(auth.verificationHash)) != 1 {
 		return status.Error(codes.PermissionDenied, "provider dev attach verification code is invalid")
 	}
-	if auth.approvedBy != nil || !auth.approvedAt.IsZero() {
+	if auth.approvedBy != nil {
 		if principalSubjectID(auth.approvedBy) == owner {
 			return nil
 		}
 		return status.Error(codes.FailedPrecondition, "provider dev attach authorization is already approved")
 	}
-	auth.approvedAt = time.Now()
 	auth.approvedBy = clonePrincipal(p)
 	return nil
 }
@@ -496,7 +491,7 @@ func (m *Manager) PollAttachAuthorization(id, clientSecret string) (*PollAttachA
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return &PollAttachAuthorizationResponse{
-		Approved: !auth.approvedAt.IsZero(),
+		Approved: auth.approvedBy != nil,
 	}, nil
 }
 
@@ -1054,7 +1049,6 @@ func (a *AttachAuthorization) info() AttachAuthorizationInfo {
 		AuthorizationID: a.id,
 		Providers:       slices.Clone(a.providers),
 		ExpiresAt:       a.expiresAt,
-		Approved:        !a.approvedAt.IsZero(),
 	}
 }
 
