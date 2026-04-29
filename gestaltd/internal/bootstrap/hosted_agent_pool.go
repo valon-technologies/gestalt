@@ -19,7 +19,10 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
+const (
+	hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
+	hostedAgentRuntimeReplacementLeadCap    = 2 * time.Minute
+)
 
 type hostedAgentProviderPool struct {
 	name         string
@@ -32,30 +35,32 @@ type hostedAgentProviderPool struct {
 	cancel      context.CancelFunc
 	lifecycleWG sync.WaitGroup
 
-	mu                  sync.Mutex
-	nextID              int
-	nextPick            int
-	starting            int
-	closed              bool
-	backends            []*hostedAgentPoolBackend
-	sessionBackends     map[string]*hostedAgentPoolBackend
-	turnBackends        map[string]*hostedAgentPoolBackend
-	interactionBackends map[string]*hostedAgentPoolBackend
+	mu                          sync.Mutex
+	nextID                      int
+	nextPick                    int
+	starting                    int
+	lifecycleReplacementsActive int
+	closed                      bool
+	backends                    []*hostedAgentPoolBackend
+	sessionBackends             map[string]*hostedAgentPoolBackend
+	turnBackends                map[string]*hostedAgentPoolBackend
+	interactionBackends         map[string]*hostedAgentPoolBackend
 }
 
 type hostedAgentPoolBackend struct {
-	id               int
-	provider         coreagent.Provider
-	runtimeProvider  pluginruntime.Provider
-	runtimeSessionID string
-	runtimeSession   *pluginruntime.Session
-	runtimeDrainAt   *time.Time
-	forceCloseAt     *time.Time
-	active           int
-	liveTurns        map[string]struct{}
-	draining         bool
-	closing          bool
-	closed           bool
+	id                  int
+	provider            coreagent.Provider
+	runtimeProvider     pluginruntime.Provider
+	runtimeSessionID    string
+	runtimeSession      *pluginruntime.Session
+	runtimeDrainAt      *time.Time
+	forceCloseAt        *time.Time
+	active              int
+	liveTurns           map[string]struct{}
+	draining            bool
+	replacementStarting bool
+	closing             bool
+	closed              bool
 }
 
 func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreagent.Provider, error) {
@@ -883,7 +888,13 @@ func (p *hostedAgentProviderPool) backendAvailableLocked(backend *hostedAgentPoo
 }
 
 func (p *hostedAgentProviderPool) backendAcceptsNewWorkLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
-	return p.backendAvailableLocked(backend, false) && !p.backendRuntimeDrainDueLocked(backend, now)
+	if !p.backendAvailableLocked(backend, false) {
+		return false
+	}
+	if !p.backendRuntimeDrainDueLocked(backend, now) {
+		return true
+	}
+	return backend.replacementStarting && !p.backendRuntimeForceCloseDueLocked(backend, now)
 }
 
 func (p *hostedAgentProviderPool) backendRuntimeDrainDueLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
@@ -895,6 +906,17 @@ func (p *hostedAgentProviderPool) backendRuntimeDrainDueLocked(backend *hostedAg
 		now = time.Now().UTC()
 	}
 	return !now.Before(drainAt)
+}
+
+func (p *hostedAgentProviderPool) backendRuntimeForceCloseDueLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
+	if backend == nil || backend.forceCloseAt == nil {
+		return false
+	}
+	forceCloseAt := backend.forceCloseAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return !now.Before(forceCloseAt)
 }
 
 func (p *hostedAgentProviderPool) readyBackends() []*hostedAgentPoolBackend {
@@ -940,12 +962,12 @@ func (p *hostedAgentProviderPool) instanceCountsLocked() (ready, starting, drain
 		if backend == nil || backend.closed {
 			continue
 		}
-		if backend.draining || backend.closing || p.backendRuntimeDrainDueLocked(backend, now) {
-			draining++
+		if p.backendAcceptsNewWorkLocked(backend, now) {
+			ready++
 			continue
 		}
-		if backend.provider != nil {
-			ready++
+		if backend.draining || backend.closing || p.backendRuntimeDrainDueLocked(backend, now) {
+			draining++
 		}
 	}
 	return ready, starting, draining
@@ -1141,7 +1163,6 @@ func (p *hostedAgentProviderPool) healthLoop() {
 			return
 		case <-ticker.C:
 		}
-		_ = p.ensureMinReady(p.ctx)
 		for _, backend := range p.readyBackends() {
 			session, drainAt, err := p.refreshBackendRuntimeSession(backend)
 			if err != nil {
@@ -1149,7 +1170,14 @@ func (p *hostedAgentProviderPool) healthLoop() {
 				p.replaceBackend(backend)
 				continue
 			}
-			if reason := p.runtimeSessionRetirementReason(session, drainAt, time.Now().UTC()); reason != "" {
+			now := time.Now().UTC()
+			if p.maybeStartLifecycleReplacementBeforeDrain(backend, drainAt, now) {
+				slog.Info("starting proactive hosted agent runtime replacement", "provider", p.name, "instance", backend.id, "drain_at", drainAt)
+			}
+			if reason := p.runtimeSessionRetirementReason(session, drainAt, now); reason != "" {
+				if p.shouldDeferRuntimeDrainRetirement(backend, session, drainAt, now) {
+					continue
+				}
 				slog.Info("retiring hosted agent runtime instance", "provider", p.name, "instance", backend.id, "reason", reason)
 				p.replaceBackend(backend)
 				continue
@@ -1159,6 +1187,7 @@ func (p *hostedAgentProviderPool) healthLoop() {
 				p.replaceBackend(backend)
 			}
 		}
+		_ = p.ensureMinReady(p.ctx)
 	}
 }
 
@@ -1212,6 +1241,61 @@ func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *plugin
 		return fmt.Sprintf("runtime session expired at %s", expiresAt.Format(time.RFC3339Nano))
 	}
 	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
+}
+
+func (p *hostedAgentProviderPool) maybeStartLifecycleReplacementBeforeDrain(backend *hostedAgentPoolBackend, drainAt *time.Time, now time.Time) bool {
+	if p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever || backend == nil || drainAt == nil {
+		return false
+	}
+	drainAtUTC := drainAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if now.Before(p.runtimeSessionReplacementStartAt(drainAtUTC)) {
+		return false
+	}
+	if !now.Before(drainAtUTC) {
+		p.mu.Lock()
+		canReplace := p.backendAvailableLocked(backend, true) && !p.backendRuntimeForceCloseDueLocked(backend, now)
+		p.mu.Unlock()
+		if !canReplace {
+			return false
+		}
+	}
+	return p.startLifecycleReplacementBeforeDrain(backend)
+}
+
+func (p *hostedAgentProviderPool) shouldDeferRuntimeDrainRetirement(backend *hostedAgentPoolBackend, session *pluginruntime.Session, drainAt *time.Time, now time.Time) bool {
+	if session == nil || drainAt == nil {
+		return false
+	}
+	switch session.State {
+	case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if now.Before(drainAt.UTC()) {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.backendAvailableLocked(backend, true) && backend.replacementStarting && !p.backendRuntimeForceCloseDueLocked(backend, now)
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionReplacementStartAt(drainAt time.Time) time.Time {
+	lead := p.policy.StartupTimeout + p.policy.HealthCheckInterval
+	if lead <= 0 {
+		lead = p.policy.HealthCheckInterval
+	}
+	if lead <= 0 {
+		lead = hostedAgentRuntimeReplacementLeadCap
+	}
+	if lead > hostedAgentRuntimeReplacementLeadCap {
+		lead = hostedAgentRuntimeReplacementLeadCap
+	}
+	return drainAt.UTC().Add(-lead)
 }
 
 func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *pluginruntime.Session, now time.Time) *time.Time {
@@ -1318,6 +1402,79 @@ func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend
 			slog.Warn("failed to close unhealthy hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", err)
 		}
 	}()
+}
+
+func (p *hostedAgentProviderPool) startLifecycleReplacementBeforeDrain(backend *hostedAgentPoolBackend) bool {
+	p.mu.Lock()
+	if p.closed || backend == nil || backend.draining || backend.closing || backend.closed || p.lifecycleReplacementsActive > 0 {
+		p.mu.Unlock()
+		return false
+	}
+	backend.replacementStarting = true
+	p.lifecycleReplacementsActive++
+	p.starting++
+	ready, starting, draining := p.instanceCountsLocked()
+	p.lifecycleWG.Add(1)
+	p.mu.Unlock()
+	p.recordInstanceCounts(p.ctx, ready, starting, draining)
+
+	go func() {
+		defer p.lifecycleWG.Done()
+		startErr := p.startProactiveLifecycleReplacement(backend)
+		recordHostedAgentRuntimeReplacement(p.ctx, p.name, startErr)
+		if startErr != nil && !errors.Is(startErr, context.Canceled) {
+			slog.Warn("failed to proactively replace hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", startErr)
+		}
+	}()
+	return true
+}
+
+func (p *hostedAgentProviderPool) startProactiveLifecycleReplacement(backend *hostedAgentPoolBackend) error {
+	started, startErr := p.startBackend(p.ctx)
+	p.mu.Lock()
+	p.starting--
+	if startErr != nil {
+		if p.lifecycleReplacementsActive > 0 {
+			p.lifecycleReplacementsActive--
+		}
+		ready, starting, draining := p.instanceCountsLocked()
+		p.mu.Unlock()
+		p.recordInstanceCounts(p.ctx, ready, starting, draining)
+		return startErr
+	}
+	if p.backendAvailableLocked(backend, true) {
+		backend.replacementStarting = false
+	}
+	ready, starting, draining := p.instanceCountsLocked()
+	p.mu.Unlock()
+	p.recordInstanceCounts(p.ctx, ready, starting, draining)
+
+	if started == nil {
+		p.finishProactiveLifecycleReplacement(backend)
+		return fmt.Errorf("replacement runtime instance did not start")
+	}
+	if !p.markBackendDraining(backend) {
+		p.finishProactiveLifecycleReplacement(backend)
+		return nil
+	}
+	if err := p.drainAndCloseBackend(backend); err != nil {
+		slog.Warn("failed to close replaced hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", err)
+	}
+	p.finishProactiveLifecycleReplacement(backend)
+	return nil
+}
+
+func (p *hostedAgentProviderPool) finishProactiveLifecycleReplacement(backend *hostedAgentPoolBackend) {
+	p.mu.Lock()
+	if p.lifecycleReplacementsActive > 0 {
+		p.lifecycleReplacementsActive--
+	}
+	if p.backendAvailableLocked(backend, true) {
+		backend.replacementStarting = false
+	}
+	ready, starting, draining := p.instanceCountsLocked()
+	p.mu.Unlock()
+	p.recordInstanceCounts(p.ctx, ready, starting, draining)
 }
 
 func (p *hostedAgentProviderPool) addLifecycleWork() bool {
