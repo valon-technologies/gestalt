@@ -137,7 +137,6 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 		Prompt:          target.Prompt,
 		Messages:        messages,
 		ToolRefs:        agentToolRefsToProto(target.ToolRefs),
-		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH,
 		ResponseSchema:  responseSchema,
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,

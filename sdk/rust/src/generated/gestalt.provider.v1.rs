@@ -9938,8 +9938,6 @@ pub struct BoundWorkflowAgentTarget {
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
     #[prost(message, repeated, tag = "5")]
     pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(enumeration = "AgentToolSourceMode", tag = "6")]
-    pub tool_source: i32,
     #[prost(message, optional, tag = "7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
