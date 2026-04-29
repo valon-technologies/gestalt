@@ -455,6 +455,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		services := coretesting.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
 			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
@@ -465,8 +466,9 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 			},
 		}
 		cfg.Services = services
+		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent: &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Agent: agentControl,
 			Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 				N:        "docs",
 				ConnMode: core.ConnectionModeNone,
@@ -515,6 +517,41 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 	if len(sessions) != 1 || sessions[0]["id"] != sessionID {
 		t.Fatalf("sessions = %#v, want %q", sessions, sessionID)
+	}
+
+	providersReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/providers", nil)
+	providersReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	providersResp, err := http.DefaultClient.Do(providersReq)
+	if err != nil {
+		t.Fatalf("list providers: %v", err)
+	}
+	defer func() { _ = providersResp.Body.Close() }()
+	if providersResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(providersResp.Body)
+		t.Fatalf("list providers status = %d body=%s", providersResp.StatusCode, body)
+	}
+	var providers struct {
+		Providers []struct {
+			Name         string `json:"name"`
+			Default      bool   `json:"default"`
+			Capabilities struct {
+				StreamingText    bool `json:"streamingText"`
+				NativeToolSearch bool `json:"nativeToolSearch"`
+			} `json:"capabilities"`
+		} `json:"providers"`
+	}
+	if err := json.NewDecoder(providersResp.Body).Decode(&providers); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(providers.Providers) != 1 {
+		t.Fatalf("providers = %#v, want one provider", providers.Providers)
+	}
+	gotProvider := providers.Providers[0]
+	if gotProvider.Name != "managed" || !gotProvider.Default {
+		t.Fatalf("provider = %#v, want managed default", gotProvider)
+	}
+	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.NativeToolSearch {
+		t.Fatalf("provider capabilities = %#v, want streaming text and native tool search", gotProvider.Capabilities)
 	}
 
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))

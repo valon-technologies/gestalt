@@ -221,15 +221,7 @@ pub struct AgentArgs {
     #[command(subcommand)]
     pub command: Option<AgentCommands>,
 
-    /// Resume an existing agent session
-    #[arg(long)]
-    pub session: Option<String>,
-
-    /// Resume the most recently updated active agent session
-    #[arg(long, visible_alias = "continue", conflicts_with = "session")]
-    pub resume: bool,
-
-    /// Agent provider name for a new session, or provider filter when resuming
+    /// Agent provider name for a new session
     #[arg(long)]
     pub provider: Option<String>,
 
@@ -252,6 +244,8 @@ pub struct AgentArgs {
 
 #[derive(Subcommand)]
 pub enum AgentCommands {
+    /// Resume an interactive agent session
+    Resume(AgentResumeArgs),
     /// Inspect and control agent sessions
     Sessions {
         #[command(subcommand)]
@@ -262,6 +256,32 @@ pub enum AgentCommands {
         #[command(subcommand)]
         command: AgentTurnCommands,
     },
+}
+
+#[derive(Args)]
+pub struct AgentResumeArgs {
+    /// Session ID to resume. Omit to resume the most recently updated active session.
+    pub session_id: Option<String>,
+
+    /// Provider filter when resuming the most recently updated active session
+    #[arg(long, conflicts_with = "session_id")]
+    pub provider: Option<String>,
+
+    /// Model name override for future turns
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Add a system message to the first turn created in this CLI session
+    #[arg(long = "system")]
+    pub system: Vec<String>,
+
+    /// Start with one or more user messages before entering the prompt loop
+    #[arg(long = "message")]
+    pub messages: Vec<String>,
+
+    /// Add a tool in plugin:operation form to each turn
+    #[arg(long = "tool", value_parser = AgentToolArg::parse)]
+    pub tools: Vec<AgentToolArg>,
 }
 
 #[derive(Subcommand)]

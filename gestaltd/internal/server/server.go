@@ -87,6 +87,7 @@ type Server struct {
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
 	apiTokens              *coredata.APITokenService
+	agent                  bootstrap.AgentControl
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	authorizationProvider  core.AuthorizationProvider
@@ -319,6 +320,7 @@ func New(cfg Config) (*Server, error) {
 		users:                  users,
 		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
+		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
