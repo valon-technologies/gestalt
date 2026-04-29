@@ -41,7 +41,7 @@ func mustCreateUser(t *testing.T, svc *coredata.Services, email string) *core.Us
 	return user
 }
 
-func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
+func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()
 	rec := indexeddb.Record{
@@ -53,7 +53,7 @@ func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string
 		"updated_at":       createdAt,
 	}
 	if err := svc.DB.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
-		t.Fatalf("seedLegacyUserRecord: %v", err)
+		t.Fatalf("seedUserRecord: %v", err)
 	}
 	return &core.User{
 		ID:          id,
@@ -253,37 +253,6 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("backfills_normalized_email_for_legacy_users", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		ctx := context.Background()
-		createdAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-		legacy := indexeddb.Record{
-			"id":           "legacy-user",
-			"email":        "User@Example.com",
-			"display_name": "",
-			"created_at":   createdAt,
-			"updated_at":   createdAt,
-		}
-		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, legacy); err != nil {
-			t.Fatalf("seed legacy user: %v", err)
-		}
-
-		svc, err := coredata.New(db)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		raw, err := svc.DB.ObjectStore(coredata.StoreUsers).Get(ctx, "legacy-user")
-		if err != nil {
-			t.Fatalf("Get legacy user: %v", err)
-		}
-		if got := raw["normalized_email"]; got != "user@example.com" {
-			t.Fatalf("normalized_email = %v, want %q", got, "user@example.com")
-		}
-	})
-
 }
 
 func TestUserService(t *testing.T) {
@@ -377,42 +346,17 @@ func TestUserService(t *testing.T) {
 		}
 	})
 
-	t.Run("FindOrCreateUser_prefers_canonical_row_over_raw_case_duplicate", func(t *testing.T) {
+	t.Run("FindOrCreateUser_rejects_duplicate_normalized_email_rows", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
 
-		canonical := seedLegacyUserRecord(t, svc, "user-canonical", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-		seedLegacyUserRecord(t, svc, "user-duplicate", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
+		seedUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+		seedUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
 
-		user, err := svc.Users.FindOrCreateUser(ctx, "USER@example.com")
-		if err != nil {
-			t.Fatalf("FindOrCreateUser: %v", err)
-		}
-		if user.ID != canonical.ID {
-			t.Fatalf("ID = %q, want canonical %q", user.ID, canonical.ID)
-		}
-		if user.Email != canonical.Email {
-			t.Fatalf("Email = %q, want canonical %q", user.Email, canonical.Email)
-		}
-	})
-
-	t.Run("FindOrCreateUser_canonicalizes_single_legacy_mixed_case_row", func(t *testing.T) {
-		t.Parallel()
-		svc := newTestServices(t)
-		ctx := context.Background()
-
-		legacy := seedLegacyUserRecord(t, svc, "user-legacy", "USER@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
-
-		user, err := svc.Users.FindOrCreateUser(ctx, "USER@example.com")
-		if err != nil {
-			t.Fatalf("FindOrCreateUser: %v", err)
-		}
-		if user.ID != legacy.ID {
-			t.Fatalf("ID = %q, want legacy %q", user.ID, legacy.ID)
-		}
-		if user.Email != "user@example.com" {
-			t.Fatalf("Email = %q, want canonical %q", user.Email, "user@example.com")
+		_, err := svc.Users.FindOrCreateUser(ctx, "USER@example.com")
+		if err == nil {
+			t.Fatal("expected duplicate normalized email error, got nil")
 		}
 	})
 
