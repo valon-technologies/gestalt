@@ -1432,8 +1432,13 @@ type ServerConfig struct {
 }
 
 type ProviderDevConfig struct {
-	RemoteAttach bool `yaml:"remoteAttach,omitempty"`
+	RemoteAttach    bool                       `yaml:"remoteAttach,omitempty"`
+	AttachmentState ProviderDevAttachmentState `yaml:"attachmentState,omitempty"`
 }
+
+type ProviderDevAttachmentState string
+
+const ProviderDevAttachmentStateProcessLocal ProviderDevAttachmentState = "processLocal"
 
 type ServerRuntimeConfig struct {
 	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`

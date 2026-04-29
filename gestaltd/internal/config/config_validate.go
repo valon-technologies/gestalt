@@ -61,6 +61,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAdminConfig(cfg); err != nil {
 		return err
 	}
+	if err := validateProviderDevConfig(cfg); err != nil {
+		return err
+	}
 	if cfg.Server.APITokenTTL != "" {
 		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
 			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
@@ -145,6 +148,29 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		}
 	}
 	return validateWorkflowsConfig(cfg)
+}
+
+func validateProviderDevConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	providerDev := cfg.Server.ProviderDev
+	state := ProviderDevAttachmentState(strings.TrimSpace(string(providerDev.AttachmentState)))
+	cfg.Server.ProviderDev.AttachmentState = state
+	if !providerDev.RemoteAttach {
+		if state != "" {
+			return fmt.Errorf("config validation: server.providerDev.attachmentState requires server.providerDev.remoteAttach")
+		}
+		return nil
+	}
+	switch state {
+	case ProviderDevAttachmentStateProcessLocal:
+		return nil
+	case "":
+		return fmt.Errorf("config validation: server.providerDev.remoteAttach requires server.providerDev.attachmentState: %q because remote attach v1 stores attachments in process memory; enable only on single-replica deployments or deployments with sticky routing for provider-dev traffic", ProviderDevAttachmentStateProcessLocal)
+	default:
+		return fmt.Errorf("config validation: server.providerDev.attachmentState %q is not supported; use %q", state, ProviderDevAttachmentStateProcessLocal)
+	}
 }
 
 func validateAPIVersion(cfg *Config) error {
