@@ -176,7 +176,7 @@ const TURN_TRANSCRIPT_EVENTS_PAGE_2_JSON: &str = r#"[
         "source":"managed",
         "visibility":"public",
         "data":{"text":"RAW_TRANSCRIPT_TEXT"},
-        "display":{"kind":"text","phase":"completed","text":"historical answer"},
+        "display":{"kind":"text","phase":"completed","format":"markdown","text":"**Historical Answer**\nUse `lookupItems` with _active_ filters and [Reference](https://example.test).\n```json\n{\"ok\":true}\n```\nKeep record_id and __init__ literal."},
         "createdAt":"2026-04-22T00:00:03Z"
     },
     {
@@ -529,10 +529,20 @@ fn test_cli_renders_agent_turn_transcript_from_display_events() {
         .stdout(predicate::str::contains(
             r#"tool> lookup completed (200) {"ok":true}"#,
         ))
-        .stdout(predicate::str::contains("assistant> historical answer"))
+        .stdout(predicate::str::contains("assistant> Historical Answer"))
+        .stdout(predicate::str::contains("Use lookupItems"))
+        .stdout(predicate::str::contains("Reference (https://example.test)"))
+        .stdout(predicate::str::contains(r#"{"ok":true}"#))
+        .stdout(predicate::str::contains("record_id"))
+        .stdout(predicate::str::contains("__init__"))
         .stdout(predicate::str::contains("turn> completed (done)"))
         .stdout(predicate::str::contains("structured>"))
         .stdout(predicate::str::contains(r#""summary": "done""#))
+        .stdout(predicate::str::contains("**Historical Answer**").not())
+        .stdout(predicate::str::contains("`lookupItems`").not())
+        .stdout(predicate::str::contains("_active_").not())
+        .stdout(predicate::str::contains("[Reference]").not())
+        .stdout(predicate::str::contains("```").not())
         .stdout(predicate::str::contains("RAW_TRANSCRIPT_INPUT").not())
         .stdout(predicate::str::contains("RAW_TRANSCRIPT_OUTPUT").not())
         .stdout(predicate::str::contains("RAW_TRANSCRIPT_TEXT").not())
@@ -689,14 +699,15 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
              data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"ok\":true}}}\n\n\
              data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_INPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"label\":\"redacted\",\"ref\":\"call-redacted\"}}\n\n\
              data: {\"seq\":5,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_OUTPUT_SENTINEL\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"label\":\"redacted\",\"ref\":\"call-redacted\",\"text\":\"done\"}}\n\n\
-             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"hello\"}}\n\n\
-             data: {\"seq\":7,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"\\n  display\"}}\n\n\
-             data: {\"seq\":8,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"hello\\n  display\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
+             data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"format\":\"markdown\",\"text\":\"**hello\"}}\n\n\
+             data: {\"seq\":7,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"format\":\"markdown\",\"text\":\"**\\n  display\"}}\n\n\
+             data: {\"seq\":8,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"**hello**\\n  display\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\",\"format\":\"markdown\",\"text\":\"**hello**\\n  display\"}}\n\n\
              data: {\"seq\":9,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"raw fallback\"},\"display\":{\"kind\":123,\"text\":42}}\n\n\
              data: {\"seq\":10,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"missing display text fallback\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
-             data: {\"seq\":11,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"tools synced\"}}\n\n\
-             data: {\"seq\":12,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"error\",\"phase\":\"failed\",\"text\":\"hidden secret\"}}\n\n\
-             data: {\"seq\":13,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+             data: {\"seq\":11,\"type\":\"provider.reasoning\",\"visibility\":\"public\",\"display\":{\"kind\":\"reasoning\",\"phase\":\"completed\",\"format\":\"markdown\",\"text\":\"**thinking**\"}}\n\n\
+             data: {\"seq\":12,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"tools synced\"}}\n\n\
+             data: {\"seq\":13,\"type\":\"provider.secret\",\"visibility\":\"private\",\"display\":{\"kind\":\"error\",\"phase\":\"failed\",\"text\":\"hidden secret\"}}\n\n\
+             data: {\"seq\":14,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         )
         .create();
     let _get_turn = authed_json_mock!(
@@ -712,7 +723,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
             "provider":"managed",
             "model":"gpt-5.4",
             "status":"succeeded",
-            "outputText":"hello\n  display"
+            "outputText":"**hello**\n  display"
         }"#,
     )
     .create();
@@ -732,11 +743,12 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
         ))
         .stdout(predicate::str::contains("tool> redacted started"))
         .stdout(predicate::str::contains("tool> redacted completed (done)"))
-        .stdout(predicate::str::contains("assistant> hello\n  display"))
+        .stdout(predicate::str::contains("assistant> **hello**\n  display"))
         .stdout(predicate::str::contains("assistant> raw fallback"))
         .stdout(predicate::str::contains(
             "assistant> missing display text fallback",
         ))
+        .stdout(predicate::str::contains("reasoning> **thinking**"))
         .stdout(predicate::str::contains("turn> completed (tools synced)"))
         .stdout(predicate::str::contains("RAW_INPUT_SENTINEL").not())
         .stdout(predicate::str::contains("RAW_OUTPUT_SENTINEL").not())

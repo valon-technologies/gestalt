@@ -27,7 +27,7 @@ use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 
 use super::{
     AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_help_lines, agent_model_lines,
-    agent_session_lines, cancel_turn_silent, compact_json,
+    agent_session_lines, cancel_turn_silent, compact_json, display_markdown,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -1059,18 +1059,14 @@ fn push_assistant_item_lines(
     let bullet_style = Style::default()
         .fg(Color::Green)
         .add_modifier(Modifier::BOLD);
-    let format = item
-        .format
-        .as_deref()
-        .unwrap_or(if item.language.is_some() {
-            "code"
-        } else {
-            "plain"
-        });
+    let format =
+        display_markdown::effective_format(item.format.as_deref(), item.language.as_deref());
     let mut in_markdown_code_block = false;
     let mut visible_line_index = 0usize;
     for text_line in item.text.split('\n') {
-        if is_markdown_format(format) && markdown_code_fence_language(text_line).is_some() {
+        if display_markdown::is_markdown_format(format)
+            && display_markdown::code_fence_language(text_line).is_some()
+        {
             in_markdown_code_block = !in_markdown_code_block;
             continue;
         }
@@ -1106,28 +1102,16 @@ fn assistant_segments_for_format(
     body_style: Style,
     in_markdown_code_block: bool,
 ) -> Vec<StyledSegment> {
-    if in_markdown_code_block || is_code_like_format(format) {
+    if in_markdown_code_block || display_markdown::is_code_like_format(format) {
         return vec![StyledSegment::new(
             text.to_string(),
             body_style.fg(Color::Cyan),
         )];
     }
-    if is_markdown_format(format) {
+    if display_markdown::is_markdown_format(format) {
         return markdown_segments(text, body_style);
     }
     vec![StyledSegment::new(text.to_string(), body_style)]
-}
-
-fn is_markdown_format(format: &str) -> bool {
-    matches!(format.trim(), "markdown" | "md")
-}
-
-fn is_code_like_format(format: &str) -> bool {
-    matches!(format.trim(), "code" | "json" | "diff")
-}
-
-fn markdown_code_fence_language(text: &str) -> Option<&str> {
-    text.trim_start().strip_prefix("```").map(str::trim)
 }
 
 fn push_meta_item_lines(
@@ -1259,7 +1243,7 @@ fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> 
     while index < text.len() {
         let rest = &text[index..];
 
-        if let Some((label, url, consumed)) = markdown_link(rest) {
+        if let Some((label, url, consumed)) = display_markdown::markdown_link(rest) {
             let link_style = base_style
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::UNDERLINED);
@@ -1274,7 +1258,7 @@ fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> 
             continue;
         }
 
-        if let Some((url, consumed)) = raw_url(rest) {
+        if let Some((url, consumed)) = display_markdown::raw_url(rest) {
             push_segment(
                 &mut segments,
                 url,
@@ -1286,7 +1270,7 @@ fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> 
             continue;
         }
 
-        if let Some((inner, consumed)) = delimited(text, index, "`") {
+        if let Some((inner, consumed)) = display_markdown::delimited(text, index, "`") {
             push_segment(
                 &mut segments,
                 inner,
@@ -1296,7 +1280,7 @@ fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> 
             continue;
         }
 
-        if let Some((inner, consumed)) = delimited(text, index, "**") {
+        if let Some((inner, consumed)) = display_markdown::delimited(text, index, "**") {
             append_segments(
                 &mut segments,
                 markdown_segments_with_depth(
@@ -1309,8 +1293,8 @@ fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> 
             continue;
         }
 
-        if let Some((inner, consumed)) =
-            delimited(text, index, "*").or_else(|| delimited(text, index, "_"))
+        if let Some((inner, consumed)) = display_markdown::delimited(text, index, "*")
+            .or_else(|| display_markdown::delimited(text, index, "_"))
         {
             append_segments(
                 &mut segments,
@@ -1350,80 +1334,6 @@ fn push_segment(segments: &mut Vec<StyledSegment>, text: &str, style: Style) {
         return;
     }
     segments.push(StyledSegment::new(text.to_string(), style));
-}
-
-fn markdown_link(rest: &str) -> Option<(&str, &str, usize)> {
-    if !rest.starts_with('[') {
-        return None;
-    }
-    let label_end = 1 + rest[1..].find("](")?;
-    let url_start = label_end + 2;
-    let url_end = url_start + rest[url_start..].find(')')?;
-    let label = &rest[1..label_end];
-    if label.is_empty() {
-        return None;
-    }
-    let url = &rest[url_start..url_end];
-    if url.is_empty() {
-        return None;
-    }
-    Some((label, url, url_end + 1))
-}
-
-fn raw_url(rest: &str) -> Option<(&str, usize)> {
-    if !(rest.starts_with("https://") || rest.starts_with("http://")) {
-        return None;
-    }
-    let end = rest
-        .char_indices()
-        .find_map(|(index, ch)| ch.is_whitespace().then_some(index))
-        .unwrap_or(rest.len());
-    Some((&rest[..end], end))
-}
-
-fn delimited<'a>(text: &'a str, index: usize, delimiter: &str) -> Option<(&'a str, usize)> {
-    let rest = &text[index..];
-    if !rest.starts_with(delimiter) {
-        return None;
-    }
-    if delimiter != "`" && !delimiter_boundary_before(text, index) {
-        return None;
-    }
-    let after_open = &rest[delimiter.len()..];
-    if after_open.chars().next().is_none_or(char::is_whitespace) {
-        return None;
-    }
-    let close = after_open.find(delimiter)?;
-    if close == 0 {
-        return None;
-    }
-    let inner = &after_open[..close];
-    if inner.chars().last().is_none_or(char::is_whitespace) {
-        return None;
-    }
-    let consumed = delimiter.len() + close + delimiter.len();
-    if delimiter != "`" && !delimiter_boundary_after(text, index + consumed) {
-        return None;
-    }
-    Some((inner, consumed))
-}
-
-fn delimiter_boundary_before(text: &str, index: usize) -> bool {
-    text[..index]
-        .chars()
-        .next_back()
-        .is_none_or(|ch| !is_identifier_char(ch))
-}
-
-fn delimiter_boundary_after(text: &str, index: usize) -> bool {
-    text[index..]
-        .chars()
-        .next()
-        .is_none_or(|ch| !is_identifier_char(ch))
-}
-
-fn is_identifier_char(ch: char) -> bool {
-    ch.is_alphanumeric() || ch == '_'
 }
 
 fn textarea_with_text(title: &'static str, text: &str) -> TextArea<'static> {
