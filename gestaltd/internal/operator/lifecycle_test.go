@@ -1731,7 +1731,6 @@ server:
 	}
 	paths := initPathsForConfig(cfgPath)
 	staleLock := &Lockfile{
-		Version: LockVersion,
 		Providers: map[string]LockEntry{
 			"roadmap": {
 				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
@@ -3114,7 +3113,6 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	}
 
 	lock := &Lockfile{
-		Version: LockVersion,
 		S3: map[string]LockEntry{
 			"assets": lockEntry,
 		},
@@ -3289,7 +3287,7 @@ func TestProviderFingerprint_ChangesWithName(t *testing.T) {
 	}
 }
 
-func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
+func TestReadLockfile_RejectsLockfileWithoutSchema(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3300,39 +3298,11 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 
 	_, err := ReadLockfile(lockPath)
 	if err == nil {
-		t.Fatal("expected error for unsupported lockfile version")
+		t.Fatal("expected error for lockfile without schema")
 		return
 	}
-	if !strings.Contains(err.Error(), "unsupported lockfile version") {
+	if !strings.Contains(err.Error(), "unsupported lockfile schema") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestReadLockfile_AllowsRuntimeProviderNamedAuth(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, InitLockfileName)
-	if err := os.WriteFile(lockPath, []byte(`{
-  "version": 10,
-  "providers": {
-    "auth": {
-      "fingerprint": "plugin-fp",
-      "source": "github.com/example/auth-plugin",
-      "manifest": ".gestaltd/providers/auth/manifest.yaml"
-    }
-  }
-}
-`), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	lock, err := ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	if got := lock.Providers["auth"].Source; got != "github.com/example/auth-plugin" {
-		t.Fatalf("provider auth source = %q, want %q", got, "github.com/example/auth-plugin")
 	}
 }
 
@@ -3433,7 +3403,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, InitLockfileName)
 	want := &Lockfile{
-		Version: LockVersion,
 		Providers: map[string]LockEntry{
 			"example": {
 				Fingerprint: "provider-fp",
@@ -3634,9 +3603,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	got, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
-	}
-	if got.Version != want.Version {
-		t.Fatalf("Version = %d, want %d", got.Version, want.Version)
 	}
 	if got.Providers["example"].Fingerprint != want.Providers["example"].Fingerprint {
 		t.Fatal("provider fingerprint mismatch")

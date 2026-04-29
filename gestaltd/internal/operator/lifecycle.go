@@ -40,13 +40,11 @@ const (
 	PreparedAgentDir               = ".gestaltd/agent"
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
-	LockVersion                    = 10
 
 	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
-	Version             int                  `json:"version"`
 	Providers           map[string]LockEntry `json:"providers"`
 	Authentication      map[string]LockEntry `json:"authentication,omitempty"`
 	Authorization       map[string]LockEntry `json:"authorization,omitempty"`
@@ -1064,35 +1062,14 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	var header struct {
-		Schema        string `json:"schema"`
-		SchemaVersion int    `json:"schemaVersion"`
-		Version       int    `json:"version"`
-	}
-	if err := json.Unmarshal(data, &header); err != nil {
-		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
-	}
-
-	if header.Schema != "" {
-		var lock providerLockfile
-		if err := json.Unmarshal(data, &lock); err != nil {
-			return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
-		}
-		if err := validateProviderLockfile(&lock); err != nil {
-			return nil, err
-		}
-		return lock.toLockfile(), nil
-	}
-
-	if header.Version != LockVersion {
-		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", header.Version)
-	}
-
-	var lock Lockfile
+	var lock providerLockfile
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	return normalizeLockfile(&lock), nil
+	if err := validateProviderLockfile(&lock); err != nil {
+		return nil, err
+	}
+	return lock.toLockfile(), nil
 }
 
 func WriteLockfile(path string, lock *Lockfile) error {
@@ -1106,7 +1083,7 @@ func WriteLockfile(path string, lock *Lockfile) error {
 }
 
 func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool {
-	if lock == nil || lock.Version != LockVersion {
+	if lock == nil {
 		return false
 	}
 	for name, entry := range cfg.Plugins {
