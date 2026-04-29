@@ -120,6 +120,7 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), ref.Permissions[i].Operations...)
+		clone.Permissions[i].Actions = append([]string(nil), ref.Permissions[i].Actions...)
 	}
 	if ref.CreatedAt != nil {
 		createdAt := ref.CreatedAt.UTC()

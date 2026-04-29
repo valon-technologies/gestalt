@@ -1004,6 +1004,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
+| `providerDev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
 | `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
@@ -1080,6 +1081,22 @@ on shared remotes:
 server:
   providerDev:
     remoteAttach: true
+
+authorization:
+  policies:
+    provider_devs:
+      default: deny
+      members:
+        - subjectID: user:usr_123
+          role: developer
+
+plugins:
+  slack:
+    authorizationPolicy: provider_devs
+    providerDev:
+      attach:
+        allowedRoles:
+          - developer
 ```
 
 The attach transport is private to the authenticated owner. The create response
@@ -1095,9 +1112,14 @@ sticky routing for attach creation, poll/complete traffic, provider invocations,
 and provider-owned UI requests as a hard prerequisite before enabling
 `remoteAttach`.
 
-Attach creation currently uses the same provider access checks as normal
-provider use. A dedicated `provider_dev.attach` action permission is planned
-separately and is not part of this transport contract.
+Attach creation requires both a plugin runtime grant and, for API-token
+callers, a token action grant. The runtime grant comes from
+`plugins.<name>.providerDev.attach.allowedRoles` on a plugin with an
+`authorizationPolicy`, or from a runtime authorizer that explicitly grants the
+same action. API tokens must carry `permissions[].actions:
+["provider_dev.attach"]` for every attached plugin; normal provider scopes and
+operation permissions do not grant attach, and the attach action does not grant
+operation invocation.
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider`.
 

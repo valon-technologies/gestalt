@@ -834,27 +834,69 @@ a path-only attach is enough:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
-gestalt auth login --url "$GESTALT_URL"
+export GESTALT_API_KEY=<token-with-provider_dev.attach>
 
 gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
 
 The remote URL is environment-agnostic; it can point at any `gestaltd` instance
 that exposes provider-dev attach targets and has opted in with
-`server.providerDev.remoteAttach: true`. The local command replaces only the
-source plugin attached by your authenticated session. Providers that are not
-attached locally continue to run through the remote server and its existing
-configuration.
+`server.providerDev.remoteAttach: true`. The target plugin must also opt into
+private remote attach with `providerDev.attach.allowedRoles`, and API-token
+callers must use a token with the `provider_dev.attach` action for that plugin.
+The local command replaces only the source plugin attached by your
+authenticated session. Providers that are not attached locally continue to run
+through the remote server and its existing configuration.
+
+```yaml
+server:
+  providerDev:
+    remoteAttach: true
+
+authorization:
+  policies:
+    provider_devs:
+      default: deny
+      members:
+        - subjectID: user:usr_123
+          role: developer
+
+plugins:
+  slack:
+    authorizationPolicy: provider_devs
+    providerDev:
+      attach:
+        allowedRoles:
+          - developer
+```
+
+For non-interactive attach, create or supply an API token with an action
+permission. Provider scopes and operation permissions are intentionally not
+enough, and this action does not grant normal invocation access:
+
+```json
+{
+  "name": "slack local dev",
+  "permissions": [
+    {
+      "plugin": "slack",
+      "actions": ["provider_dev.attach"]
+    }
+  ]
+}
+```
 Remote attach v1 is process-local. On a load-balanced remote, enable it only
 when the deployment is single-replica or sticky-routes attach creation, CLI
 poll/complete traffic, provider invocations, and provider-owned UI requests for
 the same authenticated owner to the same `gestaltd` process.
 Remote provider dev authenticates with `--remote-token` first, then
-`GESTALT_API_KEY`, then the stored CLI token from `gestalt auth login` when the
-stored credential's server base URL matches `--remote`. A stored credential for
-a different server URL, including a different path prefix on the same host, is
-not sent; the command exits with the stored credential's server and file path
-plus commands to log in for the requested server or pass an explicit token. Use
+`GESTALT_API_KEY`, then a stored CLI token when the stored credential's server
+base URL matches `--remote`. The token must include `permissions[].actions:
+["provider_dev.attach"]` for every attached plugin. Plain `gestalt auth login`
+credentials are not enough unless the stored API token was minted with that
+action. A stored credential for a different server URL, including a different
+path prefix on the same host, is not sent; the command exits with the stored
+credential's server and file path plus commands to pass an explicit token. Use
 `--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
 
 Remote attach creates an owner-scoped attachment. The server returns an
@@ -863,8 +905,6 @@ poll/complete traffic. Other users keep seeing the deployed provider and UI.
 Owner cleanup can detach a stuck attachment by `attachId`, but diagnostic
 list/get responses never expose dispatcher secrets, host-service env, plugin
 config, access tokens, or browser binding URLs.
-Attach creation currently uses the same provider access checks as normal
-provider use. A dedicated `provider_dev.attach` capability is planned separately.
 
 For `--remote --path` without `--config`, Gestalt matches the local manifest
 `source` to a configured plugin on the remote server. The remote plugin's

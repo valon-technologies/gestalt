@@ -407,6 +407,7 @@ func cloneWorkflowExecutionReference(ref *coreworkflow.ExecutionReference) *core
 	cloned.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range cloned.Permissions {
 		cloned.Permissions[i].Operations = append([]string(nil), cloned.Permissions[i].Operations...)
+		cloned.Permissions[i].Actions = append([]string(nil), cloned.Permissions[i].Actions...)
 	}
 	if ref.CreatedAt != nil {
 		value := *ref.CreatedAt

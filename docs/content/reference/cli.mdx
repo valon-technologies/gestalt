@@ -58,7 +58,7 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-gestalt auth login --url https://gestalt.example.com
+export GESTALT_API_KEY=<token-with-provider_dev.attach>
 gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
 gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
 gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
@@ -83,11 +83,13 @@ server or behind sticky routing that keeps attach creation, CLI poll/complete
 traffic, provider invocations, and provider-owned UI requests for the same
 authenticated owner on the same `gestaltd` process.
 Authentication resolves in this order: `--remote-token`, `GESTALT_API_KEY`, then
-the stored CLI token from `gestalt auth login` when its recorded server base URL
-matches `--remote`. Stored CLI tokens are not sent to a different remote URL,
-including a different path prefix on the same host; if the stored credential
-points elsewhere, the command fails with a remediation message instead of
-prompting.
+the stored CLI token when its recorded server base URL matches `--remote`. The
+token used for remote attach must include `permissions[].actions:
+["provider_dev.attach"]` for every attached plugin. Plain `gestalt auth login`
+credentials are not enough unless the stored API token was minted with that
+action. Stored CLI tokens are not sent to a different remote URL, including a
+different path prefix on the same host; if the stored credential points
+elsewhere, the command fails with a remediation message instead of prompting.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
 the configured plugin with the same manifest `source` and preserves that
@@ -99,9 +101,24 @@ remote instance.
 After the remote creates an attachment, the CLI uses the returned `attachId` plus
 a one-time dispatcher secret for poll/complete traffic. The dispatcher secret is
 not shown by list/get diagnostics and is not needed for owner cleanup detach.
-This version authorizes attach creation with the same provider access checks used
-by the remote server for the target plugin. A narrower `provider_dev.attach`
-capability is not implemented yet.
+Attach creation requires a provider-dev attach grant on the remote plugin and,
+when authenticating with an API token, an explicit token action permission:
+
+```json
+{
+  "name": "slack local dev",
+  "permissions": [
+    {
+      "plugin": "slack",
+      "actions": ["provider_dev.attach"]
+    }
+  ]
+}
+```
+
+Normal provider scopes and operation permissions do not grant remote attach, and
+`provider_dev.attach` does not grant normal invocation access. Subject-owned API
+tokens are not accepted for remote attach v1.
 
 When `--config` is present, source-backed plugin entries in the layered local
 config are treated as explicit local overrides. Their plugin config is sent to

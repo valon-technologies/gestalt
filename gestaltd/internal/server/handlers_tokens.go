@@ -15,8 +15,9 @@ import (
 )
 
 type createTokenRequest struct {
-	Name   string `json:"name"`
-	Scopes string `json:"scopes"`
+	Name        string                  `json:"name"`
+	Scopes      string                  `json:"scopes"`
+	Permissions []core.AccessPermission `json:"permissions,omitempty"`
 }
 
 type createTokenResponse struct {
@@ -55,6 +56,11 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	auditTarget = apiTokenAuditTarget("", req.Name)
 
+	if req.Scopes != "" && len(req.Permissions) > 0 {
+		auditErr = errors.New("scopes and permissions are mutually exclusive")
+		writeError(w, http.StatusBadRequest, "scopes and permissions are mutually exclusive")
+		return
+	}
 	if req.Scopes != "" {
 		for _, scope := range strings.Fields(req.Scopes) {
 			if _, err := s.providers.Get(scope); err != nil {
@@ -64,8 +70,14 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	permissions, err := s.normalizeAPITokenPermissions(req.Permissions)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	apiToken, plaintext, err := s.issueAPIToken(r.Context(), userID, req.Name, req.Scopes, false)
+	apiToken, plaintext, err := s.issueAPITokenWithPermissions(r.Context(), userID, req.Name, req.Scopes, permissions, false)
 	if err != nil {
 		auditErr = errors.New("failed to generate token")
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
@@ -79,9 +91,66 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		ID:          apiToken.ID,
 		Name:        apiToken.Name,
 		Token:       plaintext,
-		Permissions: append([]core.AccessPermission(nil), apiToken.Permissions...),
+		Permissions: cloneAccessPermissions(apiToken.Permissions),
 		ExpiresAt:   apiToken.ExpiresAt,
 	})
+}
+
+func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([]core.AccessPermission, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]core.AccessPermission, 0, len(values))
+	for i, value := range values {
+		plugin := strings.TrimSpace(value.Plugin)
+		if plugin == "" {
+			return nil, fmt.Errorf("permissions[%d].plugin is required", i)
+		}
+		if _, err := s.providers.Get(plugin); err != nil {
+			return nil, fmt.Errorf("unknown permission plugin %q", plugin)
+		}
+		operations, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].operations", i), value.Operations, nil)
+		if err != nil {
+			return nil, err
+		}
+		actions, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].actions", i), value.Actions, map[string]struct{}{
+			core.ProviderActionDevAttach: {},
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, core.AccessPermission{
+			Plugin:     plugin,
+			Operations: operations,
+			Actions:    actions,
+		})
+	}
+	return out, nil
+}
+
+func normalizeAPITokenPermissionNames(label string, values []string, allowed map[string]struct{}) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := values[:0]
+	seen := make(map[string]struct{}, len(values))
+	for i, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, fmt.Errorf("%s[%d] is required", label, i)
+		}
+		if allowed != nil {
+			if _, ok := allowed[value]; !ok {
+				return nil, fmt.Errorf("%s[%d] has unsupported action %q", label, i, value)
+			}
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out, nil
 }
 
 type apiTokenInfo struct {
