@@ -705,13 +705,13 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 
 			metadataBefore := metadataCount.Load()
 			currentBefore := currentArchiveCount.Load()
-			cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+			err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 			if tc.tamperLocalArchive {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
 				if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
-					t.Fatalf("LoadForExecutionAtPath(locked=true) error = %v, want digest mismatch", err)
+					t.Fatalf("SyncAtPathsWithStatePaths error = %v, want digest mismatch", err)
 				}
 				return
 			}
@@ -719,21 +719,25 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 				if handlerErr := nextHandlerErr(); handlerErr != nil {
 					t.Fatal(handlerErr)
 				}
-				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+				t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 			}
 			if handlerErr := nextHandlerErr(); handlerErr != nil {
 				t.Fatal(handlerErr)
 			}
 			if !tc.localSource || tc.remoteArchives {
 				if got := metadataCount.Load(); got != metadataBefore {
-					t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+					t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 				}
 				if got := currentArchiveCount.Load() - currentBefore; got != 1 {
-					t.Fatalf("current archive request count during locked load = %d, want 1", got)
+					t.Fatalf("current archive request count during sync = %d, want 1", got)
 				}
 				if got := extraArchiveCount.Load(); got != 0 {
-					t.Fatalf("extra archive request count after locked load = %d, want 0", got)
+					t.Fatalf("extra archive request count after sync = %d, want 0", got)
 				}
+			}
+			cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+			if err != nil {
+				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}
 			if cfg.Plugins["alpha"] == nil {
 				t.Fatal(`cfg.Plugins["alpha"] = nil`)
@@ -891,23 +895,22 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 	}
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
-		t.Fatalf("archive request count during locked load = %d, want 1", got)
+		t.Fatalf("archive request count during sync = %d, want 1", got)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 	workflow := cfg.Providers.Workflow["runner"]
 	if workflow == nil || workflow.ResolvedManifest == nil {
@@ -1060,23 +1063,22 @@ func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 	}
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
-		t.Fatalf("archive request count during locked load = %d, want 1", got)
+		t.Fatalf("archive request count during sync = %d, want 1", got)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 	externalCredentials := cfg.Providers.ExternalCredentials["runner"]
 	if externalCredentials == nil || externalCredentials.ResolvedManifest == nil {
@@ -1242,23 +1244,22 @@ func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 	}
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
-		t.Fatalf("archive request count during locked load = %d, want 1", got)
+		t.Fatalf("archive request count during sync = %d, want 1", got)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 	ui := cfg.Providers.UI["roadmap"]
 	if ui == nil || ui.ResolvedManifest == nil {
@@ -1505,23 +1506,22 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 
 	metadataBefore := metadataCount.Load()
 	archiveBefore := archiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 	}
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
-		t.Fatalf("archive request count during locked load = %d, want 1", got)
+		t.Fatalf("archive request count during sync = %d, want 1", got)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
 		t.Fatal("resolved metadata plugin manifest missing after locked load")
@@ -2121,7 +2121,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
-			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir, true); err != nil {
+			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
 			}
 			install, err := inspectPreparedInstall(destDir)
@@ -2237,12 +2237,15 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	}
 
 	downloadsBefore := downloadCount.Load()
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 	if got := downloadCount.Load() - downloadsBefore; got != 1 {
-		t.Fatalf("download count during locked rehydration = %d, want 1", got)
+		t.Fatalf("download count during sync = %d, want 1", got)
 	}
 
 	gotManifest := cfg.Plugins["gadget"].ResolvedManifest
@@ -2396,15 +2399,19 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 
 	downloadsBefore := downloadCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath after cache removal: %v", err)
+		t.Fatalf("SyncAtPathsWithStatePaths after cache removal: %v", err)
 	}
 	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked rehydration = %d, want %d", got, metadataBefore)
+		t.Fatalf("metadata request count during sync = %d, want %d", got, metadataBefore)
 	}
 	if got := downloadCount.Load() - downloadsBefore; got != 1 {
-		t.Fatalf("download count during locked rehydration = %d, want 1", got)
+		t.Fatalf("download count during sync = %d, want 1", got)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath after sync: %v", err)
 	}
 
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
@@ -3196,21 +3203,25 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authMetadataBefore := authMetadataCount.Load()
 	secretsDownloadsBefore := secretsDownloads.Load()
 	authDownloadsBefore := authDownloads.Load()
+	err = lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if got := secretsMetadataCount.Load(); got != secretsMetadataBefore {
+		t.Fatalf("secrets metadata requests during sync = %d, want %d", got, secretsMetadataBefore)
+	}
+	if got := authMetadataCount.Load(); got != authMetadataBefore {
+		t.Fatalf("auth metadata requests during sync = %d, want %d", got, authMetadataBefore)
+	}
+	if got := secretsDownloads.Load() - secretsDownloadsBefore; got != 1 {
+		t.Fatalf("secrets download count during sync = %d, want 1", got)
+	}
+	if got := authDownloads.Load() - authDownloadsBefore; got != 1 {
+		t.Fatalf("auth download count during sync = %d, want 1", got)
+	}
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
-	}
-	if got := secretsMetadataCount.Load(); got != secretsMetadataBefore {
-		t.Fatalf("secrets metadata requests during locked load = %d, want %d", got, secretsMetadataBefore)
-	}
-	if got := authMetadataCount.Load(); got != authMetadataBefore {
-		t.Fatalf("auth metadata requests during locked load = %d, want %d", got, authMetadataBefore)
-	}
-	if got := secretsDownloads.Load() - secretsDownloadsBefore; got != 1 {
-		t.Fatalf("secrets download count during locked load = %d, want 1", got)
-	}
-	if got := authDownloads.Load() - authDownloadsBefore; got != 1 {
-		t.Fatalf("auth download count during locked load = %d, want 1", got)
 	}
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil || authProvider.Source.Auth == nil {

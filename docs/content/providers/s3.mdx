@@ -207,8 +207,9 @@ limit instead of exposing provider-specific multipart controls through the
 portable provider contract. Browser uploads that need direct client transport
 should use hosted object access URLs; product-specific multipart state still
 belongs in the plugin that owns that workflow. Published S3 provider packages
-can still be prepared with `gestaltd init`, just like auth, indexeddb, cache,
-and secrets providers.
+can still be locked and prepared with `gestaltd lock` and
+`gestaltd sync --locked`, just like auth, indexeddb, cache, and secrets
+providers.
 
 ## Building your own S3 provider
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -2584,6 +2585,200 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	if _, ok := lock["version"]; ok {
 		t.Fatalf("expected schema-based lockfile without version field, got %v", lock["version"])
 	}
+	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
+		t.Fatalf("init is a lock-only alias and should not prepare artifacts, got err=%v", err)
+	}
+}
+
+func TestE2ELockSyncLocalProviders(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E lock/sync test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock failed: %v\noutput: %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
+		t.Fatalf("lock should not prepare final artifacts, got err=%v", err)
+	}
+	out, err = exec.Command(gestaltdBin, "lock", "--check", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock --check failed: %v\noutput: %s", err, out)
+	}
+
+	staleCfgPath := filepath.Join(dir, "config-stale.yaml")
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	staleCfg := strings.Replace(string(cfgBytes), "  example:\n    source:", "  renamed:\n    source:", 1)
+	if staleCfg == string(cfgBytes) {
+		t.Fatal("failed to create stale config")
+	}
+	if err := os.WriteFile(staleCfgPath, []byte(staleCfg), 0o644); err != nil {
+		t.Fatalf("write stale config: %v", err)
+	}
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(string(out), "gestaltd lock") {
+		t.Fatalf("stale lock output should point at lock, got: %s", out)
+	}
+	if strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	}
+	if strings.Contains(string(out), "--lockfile") {
+		t.Fatalf("lock remediation should not include default --lockfile, got: %s", out)
+	}
+	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd sync with stale lock unexpectedly succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(string(out), "lockfile is out of date") || !strings.Contains(string(out), "gestaltd lock") {
+		t.Fatalf("stale lock materialize output should point at lock, got: %s", out)
+	}
+	if strings.Contains(string(out), "lock entry for provider") {
+		t.Fatalf("stale lock materialize should fail before per-provider materialization, got: %s", out)
+	}
+	if _, err := os.Stat(staleArtifactsDir); !os.IsNotExist(err) {
+		t.Fatalf("stale sync should not create artifacts dir, stat err=%v", err)
+	}
+
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(string(out), "--lockfile "+lockPath) {
+		t.Fatalf("lock remediation should preserve explicit --lockfile, got: %s", out)
+	}
+	if strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	}
+
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd sync --check before sync unexpectedly succeeded\noutput: %s", out)
+	}
+	if !strings.Contains(string(out), "gestaltd sync --locked") {
+		t.Fatalf("sync --check output should point at sync, got: %s", out)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err = exec.CommandContext(ctx, gestaltdBin, "serve", "--locked", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd serve --locked before sync unexpectedly succeeded\noutput: %s", out)
+	}
+	if ctx.Err() != nil {
+		t.Fatalf("gestaltd serve --locked before sync timed out\noutput: %s", out)
+	}
+	if !strings.Contains(string(out), "gestaltd sync --locked") {
+		t.Fatalf("locked serve output should point at sync, got: %s", out)
+	}
+
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync failed: %v\noutput: %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("expected synced plugin artifact: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "indexeddb", "inmem")); err != nil {
+		t.Fatalf("expected synced indexeddb artifact: %v", err)
+	}
+
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync --check after sync failed: %v\noutput: %s", err, out)
+	}
+
+	baseURL := startGestaltdWithConfigs(t, []string{cfgPath}, true)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestE2ELockSyncPluginOwnedUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E lock/sync plugin-owned UI test in short mode")
+	}
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	pluginDir := setupPrebuiltPluginDir(t, dir)
+	mountedUI := setupMountedUIDirWithRoutes(t, dir, []providermanifestv1.UIRoute{{
+		Path:         "/*",
+		AllowedRoles: []string{"viewer"},
+	}})
+	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	pluginManifest, err := providerpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
+	}
+
+	cfgPath := filepath.Join(dir, "config-owned-ui-lock-sync.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+server:
+  public:
+    port: 0
+  encryptionKey: test-lock-sync-owned-ui-key
+  providers:
+    indexeddb: inmem
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      path: %s
+    ui:
+      path: /roadmap
+`, indexedDBManifest, pluginManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write owned-ui lock/sync config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock failed: %v\noutput: %s", err, out)
+	}
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync failed: %v\noutput: %s", err, out)
+	}
+
+	baseURL := startGestaltdWithConfigs(t, []string{cfgPath}, true)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/roadmap/sync")
+	if err != nil {
+		t.Fatalf("GET /roadmap/sync: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /roadmap/sync 200, got %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "Roadmap Review UI") {
+		t.Fatalf("expected mounted ui body to contain marker, got: %s", body)
+	}
 }
 
 func TestE2EInitWritesOverrideLockfile(t *testing.T) {
@@ -2619,12 +2814,16 @@ func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
 	dir := t.TempDir()
 	basePath, overridePath, lockPath, _ := writeLayeredE2EConfigs(t, dir, 0)
 
-	out, err := exec.Command(gestaltdBin, "init", "--config", basePath, "--config", overridePath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "lock", "--config", basePath, "--config", overridePath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init with layered configs failed: %v\noutput: %s", err, out)
+		t.Fatalf("gestaltd lock with layered configs failed: %v\noutput: %s", err, out)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected lock file at %s: %v", lockPath, err)
+	}
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", basePath, "--config", overridePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync with layered configs failed: %v\noutput: %s", err, out)
 	}
 
 	baseURL := startGestaltdWithConfigs(t, []string{basePath, overridePath}, true)
@@ -2651,11 +2850,11 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 		name       string
 		lockDir    string
 		args       func(lockPath string) []string
-		preInit    bool
+		preSync    bool
 		waitForNew bool
 	}{
 		{
-			name:    "serve auto init",
+			name:    "serve auto prepare",
 			lockDir: "serve",
 			args: func(lockPath string) []string {
 				return []string{"serve", "--lockfile", lockPath}
@@ -2663,7 +2862,7 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 			waitForNew: true,
 		},
 		{
-			name:    "default serve auto init",
+			name:    "default serve auto prepare",
 			lockDir: "default-serve",
 			args: func(lockPath string) []string {
 				return []string{"--lockfile", lockPath}
@@ -2676,7 +2875,7 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 			args: func(lockPath string) []string {
 				return []string{"serve", "--locked", "--lockfile", lockPath}
 			},
-			preInit: true,
+			preSync: true,
 		},
 	}
 
@@ -2688,10 +2887,14 @@ func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 			dir := t.TempDir()
 			cfgPath := writeServeConfig(t, dir, 0, nil)
 			lockPath := filepath.Join(dir, "state", tc.lockDir, "gestalt.lock.json")
-			if tc.preInit {
-				out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+			if tc.preSync {
+				out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 				if err != nil {
-					t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
+					t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
+				}
+				out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+				if err != nil {
+					t.Fatalf("gestaltd sync with --lockfile failed: %v\noutput: %s", err, out)
 				}
 			}
 

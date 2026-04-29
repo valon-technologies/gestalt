@@ -180,7 +180,7 @@ spec:
   configSchemaPath: schemas/ui-config.schema.json
 ```
 
-`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at whatever public path the deployment config binds for that UI bundle. Omit `providers.ui` to run headless with no public UI bundles. The built-in admin UI remains available at `/admin` regardless.
+`gestaltd lock` records the released UI in `gestalt.lock.json`, and `gestaltd sync --locked` prepares its assets. `gestaltd serve --locked` then serves the prepared asset root at whatever public path the deployment config binds for that UI bundle. Omit `providers.ui` to run headless with no public UI bundles. The built-in admin UI remains available at `/admin` regardless.
 
 ## Build a release
 
@@ -287,13 +287,14 @@ providers:
         brand_name: Acme
 ```
 
-When a config references published releases, run `gestaltd init` to resolve and prepare them:
+When a config references published releases, lock and sync them before locked runtime:
 
 ```sh
-gestaltd init --config ./config.yaml
+gestaltd lock --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml
 ```
 
-This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server from that lock state. If the prepared files are already present, Gestalt uses them directly. If they are missing, Gestalt can materialize them from the lockfile at runtime. See [Configuration](/configuration) for the full startup model and the tradeoffs between vendored artifacts and lockfile-only startup.
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After sync, `gestaltd serve --locked` starts the server from that prepared state without resolving or writing artifacts at runtime. See [Configuration](/configuration) for the full startup model.
 
 ## Release archive layout
 
@@ -321,4 +322,4 @@ reference.
 
 - [Provider Manifests](/reference/plugin-manifests): full manifest field reference
 - [Helm Deployment](/deploy/helm): deploying with Helm and referencing published releases
-- [Configuration](/configuration): `gestaltd init`, lock state, and the full startup model
+- [Configuration](/configuration): `gestaltd lock`, `gestaltd sync --locked`, lock state, and the full startup model

@@ -4,7 +4,7 @@ import { Tabs } from "nextra/components";
 
 ## Startup
 
-When `gestaltd serve --locked` reports that prepared artifacts are missing or stale, the lock state has drifted from the current config. Run `gestaltd init --config ./config.yaml` to re-resolve and re-prepare all references, then start the server again with `gestaltd serve --locked --config ./config.yaml`.
+When `gestaltd serve --locked` reports that lock metadata is missing or stale, run `gestaltd lock --config ./config.yaml` and commit or bake the updated lockfile. When it reports that prepared artifacts are missing or stale, run `gestaltd sync --locked --config ./config.yaml`, then start the server again with `gestaltd serve --locked --config ./config.yaml`.
 
 The validation error `server.encryptionKey is required` means the config is missing its root deployment secret. Set `server.encryptionKey` to a structured secret ref or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 

@@ -183,7 +183,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 | `url`        | string | URL of the upstream GraphQL endpoint.   |
 | `connection` | string | Connection name used for GraphQL calls. |
 
-GraphQL surfaces expose a raw GraphQL passthrough immediately. Generated GraphQL operation catalogs are resolved lazily from the upstream schema when a real request runs under that surface's connection. Gestalt does not introspect GraphQL endpoints during package build, `gestaltd init`, or config validation.
+GraphQL surfaces expose a raw GraphQL passthrough immediately. Generated GraphQL operation catalogs are resolved lazily from the upstream schema when a real request runs under that surface's connection. Gestalt does not introspect GraphQL endpoints during package build, `gestaltd lock`, or config validation.
 
 #### `spec.surfaces.mcp`
 

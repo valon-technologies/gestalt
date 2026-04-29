@@ -8,7 +8,8 @@ regardless of whether public UI bundles are configured.
 ## How UI providers work
 
 Unlike executable providers, a UI provider is just a packaged asset root.
-`gestaltd` resolves the bundle, prepares it during `gestaltd init`, and then
+`gestaltd` resolves the bundle during `gestaltd lock`, prepares it during
+`gestaltd sync --locked`, and then
 serves the pinned assets from the configured public path prefix when the server
 starts.
 
@@ -114,7 +115,8 @@ associated static assets.
 When a published UI bundle is referenced from `providers.ui`, run:
 
 ```sh
-gestaltd init --config ./config.yaml
+gestaltd lock --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml
 ```
 
 That writes `gestalt.lock.json` and prepares the bundle under `.gestaltd/`.

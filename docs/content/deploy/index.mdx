@@ -16,51 +16,57 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 
 **TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.baseUrl` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
 
-**Startup workflows.** `gestaltd serve` resolves providers on first boot and is suitable for development and single-instance deployments. For deterministic, reproducible deployments, split startup into two phases:
+**Startup workflows.** `gestaltd serve` resolves providers on first boot and is suitable for development and single-instance deployments. For deterministic, reproducible deployments, split startup into three phases:
 
-1. **Prepare** -- run `gestaltd init` locally (or in CI) to resolve every provider and write a lock file.
-2. **Serve** -- run `gestaltd serve --locked` in production. The server reads the lock file and refuses to start if any provider is missing or has drifted.
+1. **Lock** -- run `gestaltd lock` locally or in CI to resolve every provider and write a lock file.
+2. **Sync** -- run `gestaltd sync --locked` during image build or release preparation to materialize prepared artifacts from the lock file.
+3. **Serve** -- run `gestaltd serve --locked` in production. The server reads the lock file and prepared artifacts and refuses to start if either is missing or stale.
 
 This guarantees that the image you test is byte-for-byte the image you deploy.
 
 <Callout type="warning">
-  For production, strongly prefer `gestaltd init` plus
-  `gestaltd serve --locked`. Without a lockfile, startup can resolve newly
-  published provider artifacts or changed registry metadata, which weakens
-  reproducibility and integrity checks. Lockfiles pin the resolved artifacts and
-  verified hashes that the deployment was tested with.
+  For production, strongly prefer `gestaltd lock`, `gestaltd sync --locked`,
+  and then `gestaltd serve --locked`. Without a lockfile, startup can resolve
+  newly published provider artifacts or changed registry metadata, which weakens
+  reproducibility and integrity checks. Locked serve is read-only and will not
+  repair missing artifacts at runtime.
 </Callout>
 
-**Prepared state and lockfiles.** `gestaltd init` writes a `deploy/` directory next to your config file:
+**Prepared state and lockfiles.** `gestaltd lock` writes `gestalt.lock.json`; `gestaltd sync --locked` writes prepared artifacts under `.gestaltd/`:
 
 ```
 deploy/
   gestalt.lock.json    # pinned provider refs and checksums
-  .gestaltd/providers/ # vendored provider artifacts (optional)
-  .gestaltd/ui/        # vendored UI assets (optional)
+  .gestaltd/providers/ # prepared provider artifacts
+  .gestaltd/ui/        # prepared UI assets
 ```
 
 The lock file is a JSON document that records resolved plugins and host-scoped providers in separate maps:
 
 ```json
 {
-  "version": 1,
-  "indexeddbs": {
-    "main": {
-      "fingerprint": "ab12cd...",
-      "source": "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
-      "version": "0.0.1-alpha.1",
-      "manifest": ".gestaltd/providers/main/manifest.json",
-      "executable": ".gestaltd/providers/main/artifacts/linux/amd64/provider"
+  "schema": "gestaltd-provider-lock",
+  "schemaVersion": 5,
+  "revision": 0,
+  "providers": {
+    "indexeddb": {
+      "main": {
+        "inputDigest": "ab12cd...",
+        "package": "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
+        "kind": "indexeddb",
+        "runtime": "executable",
+        "source": "https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml",
+        "version": "0.0.1-alpha.4"
+      }
     }
   }
 }
 ```
 
-You can choose between two patterns:
-
-- **Vendored** -- commit the full `deploy/` directory (including `providers/`). The server loads artifacts directly with no network calls at boot. Best for air-gapped or latency-sensitive environments.
-- **Lockfile-only** -- commit only `gestalt.lock.json`. The server fetches providers on first boot but verifies each artifact against the recorded checksum. Keeps your repo lightweight while still guaranteeing integrity.
+For production, bake or mount both the lockfile and the prepared `.gestaltd/`
+directory before starting with `serve --locked`. For development and local
+single-instance deployments, omit `--locked` and let `gestaltd serve` resolve
+and prepare providers at startup.
 
 See [Configuration](/configuration) for the config model and [Docker](/deploy/docker) for the recommended production image pattern.
 

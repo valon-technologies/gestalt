@@ -221,8 +221,9 @@ providers:
 ## Operational notes
 
 Gestalt needs exactly one active datastore selected by
-`server.providers.indexeddb`. Published datastore packages can be prepared with
-`gestaltd init` just like other provider types. Plugins still go through the
+`server.providers.indexeddb`. Published datastore packages can be locked and
+prepared with `gestaltd lock` and `gestaltd sync --locked` just like other
+provider types. Plugins still go through the
 host's request and auth model, so they do not talk to the datastore provider
 directly.
 

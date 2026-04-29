@@ -140,7 +140,7 @@ authorization:
 
 `encryptionKey` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
 
-`apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
+`apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
@@ -164,7 +164,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
-| `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
+| `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `providerDev.remoteAttach` | `false` | Enables private remote provider-dev attach routes. Requires `providerDev.attachmentState: processLocal`. |
 | `providerDev.attachmentState` | | Required when `providerDev.remoteAttach` is true. Use `processLocal` to acknowledge that remote attach v1 stores attachment state in this `gestaltd` process and therefore requires single-replica operation or sticky routing for provider-dev traffic. |

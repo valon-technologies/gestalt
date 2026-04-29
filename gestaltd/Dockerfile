@@ -39,7 +39,7 @@ LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.created="${GESTALT_CREATED}"
 EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
+CMD ["serve", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
 
 # --- Alpine ---
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS alpine
@@ -63,4 +63,4 @@ LABEL org.opencontainers.image.title="gestaltd" \
 USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
+CMD ["serve", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]

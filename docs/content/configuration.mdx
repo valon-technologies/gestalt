@@ -137,7 +137,7 @@ plugins:
       bundle: github_console
 ```
 
-For published providers, `source` usually points at a `provider-release.yaml` metadata URL. When the release is hosted in GitHub and you want checked-in config to stay readable, use `source.githubRelease` instead. Gestalt resolves the matching platform archive during `init` and records the exact release in the lockfile. First-party providers are published from `github.com/valon-technologies/gestalt-providers/`.
+For published providers, `source` usually points at a `provider-release.yaml` metadata URL. When the release is hosted in GitHub and you want checked-in config to stay readable, use `source.githubRelease` instead. Gestalt resolves the matching platform archive during `gestaltd lock` and records the exact release in the lockfile. First-party providers are published from `github.com/valon-technologies/gestalt-providers/`.
 
 For a private GitHub release, pair `source.githubRelease` with inline source auth:
 
