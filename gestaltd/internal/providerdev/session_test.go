@@ -115,7 +115,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	defer dispatchCancel()
 	dispatchDone := make(chan error, 1)
 	go func() {
-		dispatchDone <- client.RunDispatcher(dispatchCtx, session.ID, map[string]proto.IntegrationProviderClient{
+		dispatchDone <- client.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.IntegrationProviderClient{
 			"roadmap": local,
 		}, WithUIHandlers(map[string]http.Handler{"roadmap": localUI}))
 	}()
@@ -353,10 +353,10 @@ func TestHTTPTransportCreateSessionExplicitConfigOverridesRemoteConfig(t *testin
 	}
 
 	manager.mu.RLock()
-	session := manager.sessions[resp.ID]
+	session := manager.sessions[resp.AttachID]
 	manager.mu.RUnlock()
 	if session == nil {
-		t.Fatalf("session %q was not recorded", resp.ID)
+		t.Fatalf("session %q was not recorded", resp.AttachID)
 	}
 	target := session.targets["roadmap"]
 	if target == nil {
@@ -390,7 +390,7 @@ func TestHTTPTransportRequiresDispatcherSecretForDispatcherTraffic(t *testing.T)
 		t.Fatal("DispatcherSecret is empty")
 	}
 
-	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+PathAttachments+"/"+session.ID+"/poll", nil)
+	pollReq, err := http.NewRequest(http.MethodGet, ts.URL+PathAttachments+"/"+session.AttachID+"/poll", nil)
 	if err != nil {
 		t.Fatalf("build poll request: %v", err)
 	}
@@ -403,7 +403,7 @@ func TestHTTPTransportRequiresDispatcherSecretForDispatcherTraffic(t *testing.T)
 		t.Fatalf("poll status = %d, want 401", pollResp.StatusCode)
 	}
 
-	completeReq, err := http.NewRequest(http.MethodPost, ts.URL+PathAttachments+"/"+session.ID+"/calls/call-1", strings.NewReader(`{}`))
+	completeReq, err := http.NewRequest(http.MethodPost, ts.URL+PathAttachments+"/"+session.AttachID+"/calls/call-1", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatalf("build complete request: %v", err)
 	}
@@ -417,7 +417,7 @@ func TestHTTPTransportRequiresDispatcherSecretForDispatcherTraffic(t *testing.T)
 		t.Fatalf("complete status = %d, want 401", completeResp.StatusCode)
 	}
 
-	closeReq, err := http.NewRequest(http.MethodDelete, ts.URL+PathAttachments+"/"+session.ID, nil)
+	closeReq, err := http.NewRequest(http.MethodDelete, ts.URL+PathAttachments+"/"+session.AttachID, nil)
 	if err != nil {
 		t.Fatalf("build close request: %v", err)
 	}
@@ -481,7 +481,7 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	for _, path := range []string{PathAttachments, PathAttachments + "/" + session.ID} {
+	for _, path := range []string{PathAttachments, PathAttachments + "/" + session.AttachID} {
 		resp, err := ts.Client().Get(ts.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
@@ -500,8 +500,8 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 				t.Fatalf("GET %s leaked %q in %s", path, forbidden, body)
 			}
 		}
-		if !strings.Contains(body, `"attachId":"`+session.ID+`"`) {
-			t.Fatalf("GET %s body missing attachId %q: %s", path, session.ID, body)
+		if !strings.Contains(body, `"attachId":"`+session.AttachID+`"`) {
+			t.Fatalf("GET %s body missing attachId %q: %s", path, session.AttachID, body)
 		}
 	}
 }
@@ -653,7 +653,6 @@ func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Princip
 		}
 		writeProviderDevTestJSON(w, http.StatusCreated, resp)
 	}
-	mux.HandleFunc(PathSessions, handleCreate)
 	mux.HandleFunc(PathAttachments, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
@@ -685,7 +684,7 @@ func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Princip
 			if len(parts) == 2 && parts[1] == "poll" && r.Method == http.MethodGet {
 				ctx, cancel := context.WithTimeout(r.Context(), DefaultPollTimeout)
 				defer cancel()
-				resp, ok, err := manager.PollSessionWithDispatcherSecret(ctx, p, parts[0], r.Header.Get(HeaderDispatcherSecret))
+				resp, ok, err := manager.PollSessionWithDispatcherSecretOnly(ctx, parts[0], r.Header.Get(HeaderDispatcherSecret))
 				if err != nil {
 					writeProviderDevTestError(w, err)
 					return
@@ -703,7 +702,7 @@ func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Princip
 					http.Error(w, err.Error(), http.StatusBadRequest)
 					return
 				}
-				if err := manager.CompleteCallWithDispatcherSecret(p, parts[0], parts[2], r.Header.Get(HeaderDispatcherSecret), req); err != nil {
+				if err := manager.CompleteCallWithDispatcherSecretOnly(parts[0], parts[2], r.Header.Get(HeaderDispatcherSecret), req); err != nil {
 					writeProviderDevTestError(w, err)
 					return
 				}
@@ -721,7 +720,6 @@ func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Princip
 			http.NotFound(w, r)
 		}
 	}
-	mux.HandleFunc(PathSessions+"/", handleAttachment(PathSessions))
 	mux.HandleFunc(PathAttachments+"/", handleAttachment(PathAttachments))
 	return mux
 }

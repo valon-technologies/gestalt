@@ -284,25 +284,6 @@ func (s *Server) resolvePublicURLPreserveBasePath(r *http.Request, raw string) (
 	return baseURL.String(), nil
 }
 
-func (s *Server) pollProviderDevSession(w http.ResponseWriter, r *http.Request) {
-	if !s.providerDevAvailable(w) {
-		return
-	}
-	sessionID := providerDevAttachmentID(r)
-	ctx, cancel := context.WithTimeout(r.Context(), providerdev.DefaultPollTimeout)
-	defer cancel()
-	resp, ok, err := s.providerDevSessions.PollSessionWithDispatcherSecret(ctx, PrincipalFromContext(r.Context()), sessionID, providerDevDispatcherSecret(r))
-	if err != nil {
-		writeProviderDevError(w, err)
-		return
-	}
-	if !ok {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
 func (s *Server) pollProviderDevSessionByDispatcher(w http.ResponseWriter, r *http.Request) {
 	if !s.providerDevAvailable(w) {
 		return
@@ -320,35 +301,6 @@ func (s *Server) pollProviderDevSessionByDispatcher(w http.ResponseWriter, r *ht
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *Server) completeProviderDevCall(w http.ResponseWriter, r *http.Request) {
-	if !s.providerDevAvailable(w) {
-		return
-	}
-	p := PrincipalFromContext(r.Context())
-	sessionID := providerDevAttachmentID(r)
-	dispatcherSecret := providerDevDispatcherSecret(r)
-	if err := s.providerDevSessions.VerifyDispatcherSecret(p, sessionID, dispatcherSecret); err != nil {
-		writeProviderDevError(w, err)
-		return
-	}
-	var req providerdev.CompleteCallRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid provider dev call response")
-		return
-	}
-	err := s.providerDevSessions.CompleteCall(
-		p,
-		sessionID,
-		providerDevCallID(r),
-		req,
-	)
-	if err != nil {
-		writeProviderDevError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) completeProviderDevCallByDispatcher(w http.ResponseWriter, r *http.Request) {
@@ -375,18 +327,6 @@ func (s *Server) completeProviderDevCallByDispatcher(w http.ResponseWriter, r *h
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (s *Server) closeProviderDevSession(w http.ResponseWriter, r *http.Request) {
-	if !s.providerDevAvailable(w) {
-		return
-	}
-	err := s.providerDevSessions.CloseSession(PrincipalFromContext(r.Context()), providerDevAttachmentID(r))
-	if err != nil {
-		writeProviderDevError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "closed"})
 }
 
 func (s *Server) closeProviderDevSessionByDispatcherOrOwner(w http.ResponseWriter, r *http.Request) {
@@ -440,17 +380,11 @@ func providerDevAuthorizationSecret(r *http.Request) string {
 }
 
 func providerDevAttachmentID(r *http.Request) string {
-	if id := chi.URLParam(r, "attachmentID"); id != "" {
-		return id
-	}
-	return chi.URLParam(r, "sessionID")
+	return chi.URLParam(r, "attachmentID")
 }
 
 func providerDevCallID(r *http.Request) string {
-	if id := chi.URLParam(r, "callID"); id != "" {
-		return id
-	}
-	return chi.URLParam(r, "call")
+	return chi.URLParam(r, "callID")
 }
 
 func providerDevDispatcherSecret(r *http.Request) string {

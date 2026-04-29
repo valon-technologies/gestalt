@@ -256,9 +256,6 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	}
 	attachID := strings.TrimSpace(session.AttachID)
 	if attachID == "" {
-		attachID = strings.TrimSpace(session.ID)
-	}
-	if attachID == "" {
 		return fmt.Errorf("remote provider dev did not return attachId")
 	}
 	defer func() { _ = client.CloseSession(context.Background(), attachID) }()

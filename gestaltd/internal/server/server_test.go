@@ -6236,20 +6236,6 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 		t.Fatalf("complete without dispatcher secret status = %d, want 401", completeResp.StatusCode)
 	}
 
-	legacyCompleteReq, err := http.NewRequest(http.MethodPost, enabledTS.URL+providerdev.PathSessions+"/"+created.AttachID+"/calls/call-1", strings.NewReader("not-json"))
-	if err != nil {
-		t.Fatalf("new legacy complete request: %v", err)
-	}
-	legacyCompleteReq.Header.Set("Authorization", "Bearer owner-session")
-	legacyCompleteResp, err := enabledTS.Client().Do(legacyCompleteReq)
-	if err != nil {
-		t.Fatalf("legacy complete without dispatcher secret: %v", err)
-	}
-	_ = legacyCompleteResp.Body.Close()
-	if legacyCompleteResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("legacy complete without dispatcher secret status = %d, want 401", legacyCompleteResp.StatusCode)
-	}
-
 	pollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
 	if err != nil {
 		t.Fatalf("new poll request: %v", err)
@@ -6262,20 +6248,6 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 	_ = pollResp.Body.Close()
 	if pollResp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("poll without dispatcher secret status = %d, want 401", pollResp.StatusCode)
-	}
-
-	legacyPollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathSessions+"/"+created.AttachID+"/poll", nil)
-	if err != nil {
-		t.Fatalf("new legacy poll request: %v", err)
-	}
-	legacyPollReq.Header.Set("Authorization", "Bearer owner-session")
-	legacyPollResp, err := enabledTS.Client().Do(legacyPollReq)
-	if err != nil {
-		t.Fatalf("legacy poll without dispatcher secret: %v", err)
-	}
-	_ = legacyPollResp.Body.Close()
-	if legacyPollResp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("legacy poll without dispatcher secret status = %d, want 401", legacyPollResp.StatusCode)
 	}
 
 	invalidPollReq, err := http.NewRequest(http.MethodGet, enabledTS.URL+providerdev.PathAttachments+"/"+created.AttachID+"/poll", nil)
