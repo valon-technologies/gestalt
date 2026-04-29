@@ -181,6 +181,9 @@ type agentTurnDisplayInfo struct {
 	Input     any    `json:"input,omitempty"`
 	Output    any    `json:"output,omitempty"`
 	Error     any    `json:"error,omitempty"`
+	Action    string `json:"action,omitempty"`
+	Format    string `json:"format,omitempty"`
+	Language  string `json:"language,omitempty"`
 }
 
 type agentInteractionInfo struct {
@@ -912,6 +915,9 @@ func agentTurnDisplayInfoFromCore(display *coreagent.TurnDisplay) *agentTurnDisp
 		Input:     display.Input,
 		Output:    display.Output,
 		Error:     display.Error,
+		Action:    strings.TrimSpace(display.Action),
+		Format:    strings.TrimSpace(display.Format),
+		Language:  strings.TrimSpace(display.Language),
 	}
 }
 

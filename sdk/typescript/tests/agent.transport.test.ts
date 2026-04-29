@@ -42,10 +42,13 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
           display: {
             kind: "tool",
             phase: "started",
-            label: "Search docs",
+            label: "Lookup fixture",
             ref: "call-1",
+            action: "Running",
+            format: "json",
+            language: "json",
             input: {
-              query: "docs",
+              query: "fixture",
             },
             output: ["hit-1"],
             error: "none",
@@ -77,10 +80,13 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
     display: {
       kind: "tool",
       phase: "started",
-      label: "Search docs",
+      label: "Lookup fixture",
       ref: "call-1",
+      action: "Running",
+      format: "json",
+      language: "json",
       input: {
-        query: "docs",
+        query: "fixture",
       },
       output: ["hit-1"],
       error: "none",

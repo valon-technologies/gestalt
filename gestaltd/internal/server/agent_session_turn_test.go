@@ -602,6 +602,10 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 	assertHTTPAgentEventDisplay(t, events[0], "status", "started", "turn", "")
 	assertHTTPAgentEventDisplay(t, events[1], "text", "completed", "", "turn completed")
+	assistantDisplay := events[1]["display"].(map[string]any)
+	if assistantDisplay["format"] != "markdown" {
+		t.Fatalf("assistant display format = %#v, want markdown", assistantDisplay["format"])
+	}
 	if _, ok := events[2]["display"]; ok {
 		t.Fatalf("turn.completed display = %#v, want omitted", events[2]["display"])
 	}
@@ -686,6 +690,9 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	started := findHTTPAgentEvent(t, events, "tool.started")
 	assertHTTPAgentEventDisplay(t, started, "tool", "started", "lookup", "")
 	startedDisplay := started["display"].(map[string]any)
+	if startedDisplay["action"] != "Running" {
+		t.Fatalf("tool.started display action = %#v, want Running", startedDisplay["action"])
+	}
 	if startedDisplay["ref"] != "call-1" {
 		t.Fatalf("tool.started display ref = %#v, want call-1", startedDisplay["ref"])
 	}
@@ -697,6 +704,9 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	completed := findHTTPAgentEvent(t, events, "tool.completed")
 	assertHTTPAgentEventDisplay(t, completed, "tool", "completed", "lookup", "")
 	completedDisplay := completed["display"].(map[string]any)
+	if completedDisplay["action"] != "Ran" {
+		t.Fatalf("tool.completed display action = %#v, want Ran", completedDisplay["action"])
+	}
 	completedOutput, ok := completedDisplay["output"].(map[string]any)
 	if !ok || completedOutput["hits"] != float64(2) {
 		t.Fatalf("tool.completed display output = %#v, want hits 2", completedDisplay["output"])
@@ -705,6 +715,9 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	failed := findHTTPAgentEvent(t, events, "tool.failed")
 	assertHTTPAgentEventDisplay(t, failed, "tool", "failed", "lookup", "denied")
 	failedDisplay := failed["display"].(map[string]any)
+	if failedDisplay["action"] != "Failed" {
+		t.Fatalf("tool.failed display action = %#v, want Failed", failedDisplay["action"])
+	}
 	if failedDisplay["error"] != "denied" {
 		t.Fatalf("tool.failed display error = %#v, want denied", failedDisplay["error"])
 	}

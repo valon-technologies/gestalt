@@ -288,6 +288,12 @@ pub struct AgentTurnDisplay {
     pub output: ::core::option::Option<::prost_types::Value>,
     #[prost(message, optional, tag = "9")]
     pub error: ::core::option::Option<::prost_types::Value>,
+    #[prost(string, tag = "10")]
+    pub action: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub format: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub language: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderTurnRequest {

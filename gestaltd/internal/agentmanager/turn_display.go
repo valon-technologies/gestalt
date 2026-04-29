@@ -20,6 +20,8 @@ func normalizeTurnEventsForDisplay(events []*coreagent.TurnEvent) []*coreagent.T
 		next := cloneTurnEventForDisplay(event)
 		if next.Display == nil {
 			next.Display = synthesizeTurnDisplay(next)
+		} else {
+			normalizeTurnDisplay(next)
 		}
 		out = append(out, next)
 	}
@@ -46,17 +48,19 @@ func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
 		if text == "" {
 			return nil
 		}
-		return &coreagent.TurnDisplay{Kind: "text", Phase: "delta", Text: text}
+		return &coreagent.TurnDisplay{Kind: "text", Phase: "delta", Text: text, Format: "markdown"}
 	case "assistant.completed":
 		return &coreagent.TurnDisplay{
-			Kind:  "text",
-			Phase: "completed",
-			Text:  displayStringField(event.Data, "text"),
+			Kind:   "text",
+			Phase:  "completed",
+			Text:   displayStringField(event.Data, "text"),
+			Format: "markdown",
 		}
 	case "tool.started":
 		return &coreagent.TurnDisplay{
 			Kind:      "tool",
 			Phase:     "started",
+			Action:    "Running",
 			Label:     displayToolLabel(event.Data),
 			Ref:       displayToolRef(event.Data),
 			ParentRef: displayStringField(event.Data, "parent_ref", "parentRef", "parent_call_id", "parentCallId"),
@@ -66,6 +70,7 @@ func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
 		return &coreagent.TurnDisplay{
 			Kind:      "tool",
 			Phase:     "completed",
+			Action:    "Ran",
 			Text:      displayStatusText(event.Data),
 			Label:     displayToolLabel(event.Data),
 			Ref:       displayToolRef(event.Data),
@@ -78,6 +83,7 @@ func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
 		return &coreagent.TurnDisplay{
 			Kind:      "tool",
 			Phase:     "failed",
+			Action:    "Failed",
 			Text:      displayErrorText(err),
 			Label:     displayToolLabel(event.Data),
 			Ref:       displayToolRef(event.Data),
@@ -100,6 +106,48 @@ func synthesizeTurnDisplay(event *coreagent.TurnEvent) *coreagent.TurnDisplay {
 		return &coreagent.TurnDisplay{Kind: "status", Phase: "canceled", Label: "turn", Text: text}
 	default:
 		return nil
+	}
+}
+
+func normalizeTurnDisplay(event *coreagent.TurnEvent) {
+	if event == nil || event.Display == nil {
+		return
+	}
+	display := event.Display
+	display.Kind = strings.TrimSpace(display.Kind)
+	display.Phase = strings.TrimSpace(display.Phase)
+	display.Action = strings.TrimSpace(display.Action)
+	display.Format = strings.TrimSpace(display.Format)
+	display.Language = strings.TrimSpace(display.Language)
+	if display.Action == "" && display.Kind == "tool" {
+		display.Action = displayToolAction(display.Phase)
+	}
+	if display.Format == "" && display.Kind == "text" && knownAssistantTextEvent(event.Type) {
+		display.Format = "markdown"
+	}
+}
+
+func displayToolAction(phase string) string {
+	switch strings.TrimSpace(phase) {
+	case "started", "progress":
+		return "Running"
+	case "completed":
+		return "Ran"
+	case "failed":
+		return "Failed"
+	case "canceled":
+		return "Canceled"
+	default:
+		return ""
+	}
+}
+
+func knownAssistantTextEvent(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "agent.message.delta", "assistant.delta", "assistant.completed":
+		return true
+	default:
+		return false
 	}
 }
 
