@@ -68,7 +68,6 @@ type Manager struct {
 	mu             sync.RWMutex
 	targets        map[string]Target
 	sessions       map[string]*Session
-	ownerIndex     map[string][]string
 	authorizations map[string]*AttachAuthorization
 }
 
@@ -171,14 +170,13 @@ type UIAssetResponse struct {
 }
 
 type PollResponse struct {
-	CallID   string `json:"callId"`
-	Provider string `json:"provider"`
-	Method   string `json:"method"`
-	Request  string `json:"request"`
+	CallID        string `json:"callId"`
+	Provider      string `json:"provider"`
+	Method        string `json:"method"`
+	RequestBase64 string `json:"requestBase64"`
 }
 
 type CompleteCallRequest struct {
-	Response       string    `json:"response,omitempty"`
 	ResponseBase64 string    `json:"responseBase64,omitempty"`
 	Error          *RPCError `json:"error,omitempty"`
 }
@@ -232,7 +230,6 @@ func NewManager(targets []Target) (*Manager, error) {
 	m := &Manager{
 		targets:        make(map[string]Target, len(targets)),
 		sessions:       map[string]*Session{},
-		ownerIndex:     map[string][]string{},
 		authorizations: map[string]*AttachAuthorization{},
 	}
 	for i := range targets {
@@ -287,7 +284,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create provider dev dispatcher secret: %v", err)
 	}
-	now := time.Now()
 	session := &Session{
 		id:                   sessionID,
 		dispatcherSecretHash: dispatcherSecretHash,
@@ -297,8 +293,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		pending:              map[string]*rpcCall{},
 		done:                 make(chan struct{}),
 		closeDone:            make(chan struct{}),
-		createdAt:            now,
-		lastSeen:             now,
 	}
 	resp := &CreateSessionResponse{
 		AttachID:         sessionID,
@@ -336,20 +330,14 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	}
 
 	m.mu.Lock()
+	insertedAt := time.Now()
+	session.createdAt = insertedAt
+	session.lastSeen = insertedAt
 	m.sessions[sessionID] = session
-	m.ownerIndex[owner] = append(m.ownerIndex[owner], sessionID)
 	m.mu.Unlock()
 	cleanupOnError = false
 
 	return resp, nil
-}
-
-func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessionID string) (*PollResponse, bool, error) {
-	session, err := m.sessionForPrincipal(p, sessionID)
-	if err != nil {
-		return nil, false, err
-	}
-	return session.poll(ctx)
 }
 
 func (m *Manager) PollSessionWithDispatcherSecretOnly(ctx context.Context, sessionID, dispatcherSecret string) (*PollResponse, bool, error) {
@@ -380,10 +368,10 @@ func (s *Session) poll(ctx context.Context) (*PollResponse, bool, error) {
 			s.lastSeen = call.deliveredAt
 			s.mu.Unlock()
 			return &PollResponse{
-				CallID:   call.id,
-				Provider: call.provider,
-				Method:   call.method,
-				Request:  hex.EncodeToString(call.request),
+				CallID:        call.id,
+				Provider:      call.provider,
+				Method:        call.method,
+				RequestBase64: base64.StdEncoding.EncodeToString(call.request),
 			}, true, nil
 		case <-s.done:
 			return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
@@ -616,14 +604,6 @@ func (m *Manager) resolveAttachTargetLocked(requested AttachProvider) (Target, e
 	return matches[0], nil
 }
 
-func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string, req CompleteCallRequest) error {
-	session, err := m.sessionForPrincipal(p, sessionID)
-	if err != nil {
-		return err
-	}
-	return session.completeCall(callID, req)
-}
-
 func (m *Manager) CompleteCallWithDispatcherSecretOnly(sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
 	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	if err != nil {
@@ -645,7 +625,7 @@ func (m *Manager) CloseSessionWithDispatcherSecret(sessionID, dispatcherSecret s
 	if err := session.Close(); err != nil {
 		return status.Errorf(codes.Internal, "close provider dev session: %v", err)
 	}
-	m.removeSession(sessionID, session.owner)
+	m.removeSession(sessionID)
 	return nil
 }
 
@@ -680,13 +660,6 @@ func (s *Session) completeCall(callID string, req CompleteCallRequest) error {
 		} else {
 			resp.payload = payload
 		}
-	case req.Response != "":
-		payload, err := hex.DecodeString(req.Response)
-		if err != nil {
-			resp.err = status.Errorf(codes.InvalidArgument, "decode provider dev response: %v", err)
-		} else {
-			resp.payload = payload
-		}
 	}
 
 	select {
@@ -709,15 +682,7 @@ func (m *Manager) ListSessions(p *principal.Principal) ([]AttachmentInfo, error)
 		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
 	}
 	m.closeIdleSessions(time.Now())
-	m.mu.RLock()
-	sessionIDs := append([]string(nil), m.ownerIndex[owner]...)
-	sessions := make([]*Session, 0, len(sessionIDs))
-	for _, id := range sessionIDs {
-		if session := m.sessions[id]; session != nil {
-			sessions = append(sessions, session)
-		}
-	}
-	m.mu.RUnlock()
+	sessions := m.sessionsForOwner(owner)
 	out := make([]AttachmentInfo, 0, len(sessions))
 	for _, session := range sessions {
 		if session == nil || session.isClosed() {
@@ -745,7 +710,7 @@ func (m *Manager) CloseSession(p *principal.Principal, sessionID string) error {
 	if err := session.Close(); err != nil {
 		return status.Errorf(codes.Internal, "close provider dev session: %v", err)
 	}
-	m.removeSession(sessionID, session.owner)
+	m.removeSession(sessionID)
 	return nil
 }
 
@@ -763,16 +728,10 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 		return nil, false, nil
 	}
 
-	m.mu.RLock()
-	sessionIDs := append([]string(nil), m.ownerIndex[owner]...)
-	sessions := make(map[string]*Session, len(sessionIDs))
-	for _, id := range sessionIDs {
-		sessions[id] = m.sessions[id]
-	}
-	m.mu.RUnlock()
+	sessions := m.sessionsForOwner(owner)
 
-	for i := len(sessionIDs) - 1; i >= 0; i-- {
-		session := sessions[sessionIDs[i]]
+	for i := len(sessions) - 1; i >= 0; i-- {
+		session := sessions[i]
 		if session == nil || session.isClosed() {
 			continue
 		}
@@ -803,16 +762,10 @@ func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, prov
 		return nil, false, nil
 	}
 
-	m.mu.RLock()
-	sessionIDs := append([]string(nil), m.ownerIndex[owner]...)
-	sessions := make(map[string]*Session, len(sessionIDs))
-	for _, id := range sessionIDs {
-		sessions[id] = m.sessions[id]
-	}
-	m.mu.RUnlock()
+	sessions := m.sessionsForOwner(owner)
 
-	for i := len(sessionIDs) - 1; i >= 0; i-- {
-		session := sessions[sessionIDs[i]]
+	for i := len(sessions) - 1; i >= 0; i-- {
+		session := sessions[i]
 		if session == nil || session.isClosed() {
 			continue
 		}
@@ -839,7 +792,6 @@ func (m *Manager) Close() error {
 		sessions = append(sessions, session)
 	}
 	m.sessions = map[string]*Session{}
-	m.ownerIndex = map[string][]string{}
 	m.authorizations = map[string]*AttachAuthorization{}
 	m.mu.Unlock()
 
@@ -864,7 +816,7 @@ func (m *Manager) closeIdleSessions(now time.Time) {
 	m.mu.RUnlock()
 	for _, session := range expired {
 		_ = session.Close()
-		m.removeSession(session.id, session.owner)
+		m.removeSession(session.id)
 	}
 }
 
@@ -962,26 +914,42 @@ func (m *Manager) sessionForDispatcherSecret(sessionID, dispatcherSecret string)
 	return session, nil
 }
 
-func (m *Manager) removeSession(sessionID, owner string) {
+func (m *Manager) sessionsForOwner(owner string) []*Session {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	sessions := make([]*Session, 0, len(m.sessions))
+	for _, session := range m.sessions {
+		if session != nil && session.owner == owner {
+			sessions = append(sessions, session)
+		}
+	}
+	m.mu.RUnlock()
+	slices.SortFunc(sessions, func(a, b *Session) int {
+		switch {
+		case a.createdAt.Before(b.createdAt):
+			return -1
+		case a.createdAt.After(b.createdAt):
+			return 1
+		case a.id < b.id:
+			return -1
+		case a.id > b.id:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return sessions
+}
+
+func (m *Manager) removeSession(sessionID string) {
 	if m == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.sessions, sessionID)
-	ids := m.ownerIndex[owner]
-	for i, id := range ids {
-		if id != sessionID {
-			continue
-		}
-		ids = append(ids[:i], ids[i+1:]...)
-		break
-	}
-	if len(ids) == 0 {
-		delete(m.ownerIndex, owner)
-		return
-	}
-	m.ownerIndex[owner] = ids
 }
 
 func (s *Session) Close() error {
@@ -1506,7 +1474,7 @@ func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers 
 	if client == nil {
 		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.NotFound, "local provider %q is not running", call.Provider))}
 	}
-	payload, err := hex.DecodeString(call.Request)
+	payload, err := base64.StdEncoding.DecodeString(call.RequestBase64)
 	if err != nil {
 		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.InvalidArgument, "decode request: %v", err))}
 	}
@@ -1522,7 +1490,7 @@ func dispatchProviderDevUI(ctx context.Context, call *PollResponse, handlers map
 	if handler == nil {
 		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.NotFound, "local ui for provider %q is not running", call.Provider))}
 	}
-	payload, err := hex.DecodeString(call.Request)
+	payload, err := base64.StdEncoding.DecodeString(call.RequestBase64)
 	if err != nil {
 		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.InvalidArgument, "decode ui request: %v", err))}
 	}

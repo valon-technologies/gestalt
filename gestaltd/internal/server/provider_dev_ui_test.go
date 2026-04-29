@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -40,13 +39,13 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 	defer cancel()
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(dispatchCtx, p, session.AttachID)
+		call, ok, err := manager.PollSessionWithDispatcherSecretOnly(dispatchCtx, session.AttachID, session.DispatcherSecret)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
 		}
 		var assetReq providerdev.UIAssetRequest
-		payload, err := hex.DecodeString(call.Request)
+		payload, err := base64.StdEncoding.DecodeString(call.RequestBase64)
 		if err == nil {
 			err = json.Unmarshal(payload, &assetReq)
 		}
@@ -66,8 +65,8 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
-			Response: hex.EncodeToString(respPayload),
+		dispatchDone <- manager.CompleteCallWithDispatcherSecretOnly(session.AttachID, call.CallID, session.DispatcherSecret, providerdev.CompleteCallRequest{
+			ResponseBase64: base64.StdEncoding.EncodeToString(respPayload),
 		})
 	}()
 
@@ -179,7 +178,7 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(context.Background(), p, session.AttachID)
+		call, ok, err := manager.PollSessionWithDispatcherSecretOnly(context.Background(), session.AttachID, session.DispatcherSecret)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
@@ -193,8 +192,8 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
-			Response: hex.EncodeToString(respPayload),
+		dispatchDone <- manager.CompleteCallWithDispatcherSecretOnly(session.AttachID, call.CallID, session.DispatcherSecret, providerdev.CompleteCallRequest{
+			ResponseBase64: base64.StdEncoding.EncodeToString(respPayload),
 		})
 	}()
 
@@ -271,7 +270,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 
 	dispatchDone := make(chan error, 1)
 	go func() {
-		call, ok, err := manager.PollSession(context.Background(), p, session.AttachID)
+		call, ok, err := manager.PollSessionWithDispatcherSecretOnly(context.Background(), session.AttachID, session.DispatcherSecret)
 		if err != nil || !ok {
 			dispatchDone <- err
 			return
@@ -284,8 +283,8 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 			dispatchDone <- err
 			return
 		}
-		dispatchDone <- manager.CompleteCall(p, session.AttachID, call.CallID, providerdev.CompleteCallRequest{
-			Response: hex.EncodeToString(respPayload),
+		dispatchDone <- manager.CompleteCallWithDispatcherSecretOnly(session.AttachID, call.CallID, session.DispatcherSecret, providerdev.CompleteCallRequest{
+			ResponseBase64: base64.StdEncoding.EncodeToString(respPayload),
 		})
 	}()
 
