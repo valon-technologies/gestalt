@@ -359,3 +359,113 @@ var S3_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "v1/s3.proto",
 }
+
+const (
+	S3ObjectAccess_CreateObjectAccessURL_FullMethodName = "/gestalt.provider.v1.S3ObjectAccess/CreateObjectAccessURL"
+)
+
+// S3ObjectAccessClient is the client API for S3ObjectAccess service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// S3ObjectAccess models host-mediated object access for plugin-scoped S3
+// bindings. It is registered by gestaltd for plugins and is not implemented by
+// S3 providers.
+type S3ObjectAccessClient interface {
+	CreateObjectAccessURL(ctx context.Context, in *CreateObjectAccessURLRequest, opts ...grpc.CallOption) (*CreateObjectAccessURLResponse, error)
+}
+
+type s3ObjectAccessClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewS3ObjectAccessClient(cc grpc.ClientConnInterface) S3ObjectAccessClient {
+	return &s3ObjectAccessClient{cc}
+}
+
+func (c *s3ObjectAccessClient) CreateObjectAccessURL(ctx context.Context, in *CreateObjectAccessURLRequest, opts ...grpc.CallOption) (*CreateObjectAccessURLResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateObjectAccessURLResponse)
+	err := c.cc.Invoke(ctx, S3ObjectAccess_CreateObjectAccessURL_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// S3ObjectAccessServer is the server API for S3ObjectAccess service.
+// All implementations must embed UnimplementedS3ObjectAccessServer
+// for forward compatibility.
+//
+// S3ObjectAccess models host-mediated object access for plugin-scoped S3
+// bindings. It is registered by gestaltd for plugins and is not implemented by
+// S3 providers.
+type S3ObjectAccessServer interface {
+	CreateObjectAccessURL(context.Context, *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error)
+	mustEmbedUnimplementedS3ObjectAccessServer()
+}
+
+// UnimplementedS3ObjectAccessServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedS3ObjectAccessServer struct{}
+
+func (UnimplementedS3ObjectAccessServer) CreateObjectAccessURL(context.Context, *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateObjectAccessURL not implemented")
+}
+func (UnimplementedS3ObjectAccessServer) mustEmbedUnimplementedS3ObjectAccessServer() {}
+func (UnimplementedS3ObjectAccessServer) testEmbeddedByValue()                        {}
+
+// UnsafeS3ObjectAccessServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to S3ObjectAccessServer will
+// result in compilation errors.
+type UnsafeS3ObjectAccessServer interface {
+	mustEmbedUnimplementedS3ObjectAccessServer()
+}
+
+func RegisterS3ObjectAccessServer(s grpc.ServiceRegistrar, srv S3ObjectAccessServer) {
+	// If the following call panics, it indicates UnimplementedS3ObjectAccessServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&S3ObjectAccess_ServiceDesc, srv)
+}
+
+func _S3ObjectAccess_CreateObjectAccessURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateObjectAccessURLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(S3ObjectAccessServer).CreateObjectAccessURL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: S3ObjectAccess_CreateObjectAccessURL_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(S3ObjectAccessServer).CreateObjectAccessURL(ctx, req.(*CreateObjectAccessURLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// S3ObjectAccess_ServiceDesc is the grpc.ServiceDesc for S3ObjectAccess service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var S3ObjectAccess_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.S3ObjectAccess",
+	HandlerType: (*S3ObjectAccessServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateObjectAccessURL",
+			Handler:    _S3ObjectAccess_CreateObjectAccessURL_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/s3.proto",
+}

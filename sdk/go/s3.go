@@ -166,10 +166,17 @@ type PresignResult struct {
 	Headers   map[string]string
 }
 
+// ObjectAccessURLOptions configures host-mediated object-access URL creation.
+type ObjectAccessURLOptions = PresignOptions
+
+// ObjectAccessURL is a hosted URL plus any required headers.
+type ObjectAccessURL = PresignResult
+
 // S3Client speaks to a running S3 provider over a transport target.
 type S3Client struct {
-	client proto.S3Client
-	conn   *grpc.ClientConn
+	client             proto.S3Client
+	objectAccessClient proto.S3ObjectAccessClient
+	conn               *grpc.ClientConn
 }
 
 // S3 connects to the S3 provider exposed by gestaltd. The target can be a
@@ -234,7 +241,11 @@ func S3(name ...string) (*S3Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("s3: connect to host: %w", err)
 	}
-	return &S3Client{client: proto.NewS3Client(conn), conn: conn}, nil
+	return &S3Client{
+		client:             proto.NewS3Client(conn),
+		objectAccessClient: proto.NewS3ObjectAccessClient(conn),
+		conn:               conn,
+	}, nil
 }
 
 // Close closes the underlying gRPC transport.
@@ -407,6 +418,42 @@ func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *Presi
 	return presignResultFromProto(resp, requestedMethod), nil
 }
 
+// CreateObjectAccessURL creates a host-mediated object-access URL.
+func (c *S3Client) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	req := &proto.CreateObjectAccessURLRequest{
+		Ref: objectRefToProto(ref),
+	}
+	var requestedMethod PresignMethod
+	if opts != nil {
+		requestedMethod = opts.Method
+		req.Method = presignMethodToProto(opts.Method)
+		req.ExpiresSeconds = int64(opts.Expires / time.Second)
+		req.ContentType = opts.ContentType
+		req.ContentDisposition = opts.ContentDisposition
+		req.Headers = cloneStringMap(opts.Headers)
+	}
+	resp, err := c.objectAccessClient.CreateObjectAccessURL(ctx, req)
+	if err != nil {
+		return ObjectAccessURL{}, grpcS3Err(err)
+	}
+	return objectAccessURLFromProto(resp, requestedMethod), nil
+}
+
+// CreateObjectAccessUrl is an alias for CreateObjectAccessURL.
+func (c *S3Client) CreateObjectAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	return c.CreateObjectAccessURL(ctx, ref, opts)
+}
+
+// CreateAccessURL is a short alias for CreateObjectAccessURL.
+func (c *S3Client) CreateAccessURL(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	return c.CreateObjectAccessURL(ctx, ref, opts)
+}
+
+// CreateAccessUrl is an alias for CreateAccessURL.
+func (c *S3Client) CreateAccessUrl(ctx context.Context, ref ObjectRef, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	return c.CreateObjectAccessURL(ctx, ref, opts)
+}
+
 // Object is a convenience wrapper around repeated operations on one object key.
 type Object struct {
 	client *S3Client
@@ -504,6 +551,16 @@ func (o *Object) Delete(ctx context.Context) error {
 // Presign creates a presigned URL for the current object.
 func (o *Object) Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error) {
 	return o.client.PresignObject(ctx, o.ref, opts)
+}
+
+// CreateAccessURL creates a host-mediated object-access URL for the current object.
+func (o *Object) CreateAccessURL(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	return o.client.CreateObjectAccessURL(ctx, o.ref, opts)
+}
+
+// CreateAccessUrl is an alias for CreateAccessURL.
+func (o *Object) CreateAccessUrl(ctx context.Context, opts *ObjectAccessURLOptions) (ObjectAccessURL, error) {
+	return o.CreateAccessURL(ctx, opts)
 }
 
 type s3ReadCloser struct {
@@ -661,6 +718,25 @@ func presignResultFromProto(resp *proto.PresignObjectResponse, requested Presign
 		method = requested
 	}
 	out := PresignResult{
+		URL:     resp.GetUrl(),
+		Method:  method,
+		Headers: cloneStringMap(resp.GetHeaders()),
+	}
+	if ts := resp.GetExpiresAt(); ts != nil {
+		out.ExpiresAt = ts.AsTime()
+	}
+	return out
+}
+
+func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) ObjectAccessURL {
+	if resp == nil {
+		return ObjectAccessURL{}
+	}
+	method := presignMethodFromProto(resp.GetMethod())
+	if method == "" {
+		method = requested
+	}
+	out := ObjectAccessURL{
 		URL:     resp.GetUrl(),
 		Method:  method,
 		Headers: cloneStringMap(resp.GetHeaders()),

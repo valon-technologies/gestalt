@@ -149,6 +149,27 @@ message PresignObjectResponse {
   map<string, string> headers = 4;
 }
 
+// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
+// for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
+// streams object bytes through the backing S3 provider.
+message CreateObjectAccessURLRequest {
+  S3ObjectRef ref = 1;
+  PresignMethod method = 2;
+  int64 expires_seconds = 3;
+  string content_type = 4;
+  string content_disposition = 5;
+  map<string, string> headers = 6;
+}
+
+// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
+// headers the caller must include when using it.
+message CreateObjectAccessURLResponse {
+  string url = 1;
+  PresignMethod method = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  map<string, string> headers = 4;
+}
+
 // S3 models the shared Gestalt S3-provider protocol.
 service S3 {
   rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
@@ -163,4 +184,11 @@ service S3 {
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
   rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse);
   rpc PresignObject(PresignObjectRequest) returns (PresignObjectResponse);
+}
+
+// S3ObjectAccess models host-mediated object access for plugin-scoped S3
+// bindings. It is registered by gestaltd for plugins and is not implemented by
+// S3 providers.
+service S3ObjectAccess {
+  rpc CreateObjectAccessURL(CreateObjectAccessURLRequest) returns (CreateObjectAccessURLResponse);
 }

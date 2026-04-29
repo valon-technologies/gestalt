@@ -90,6 +90,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		ManagementBaseURL:     cfg.Server.ManagementBaseURL(),
 		SecureCookies:         strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 		StateSecret:           crypto.DeriveKey(cfg.Server.EncryptionKey),
+		S3:                    result.S3,
 		APITokenTTL:           apiTokenTTL,
 		Readiness: func() string {
 			select {

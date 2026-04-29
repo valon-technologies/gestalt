@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
@@ -119,6 +120,8 @@ type Server struct {
 	hostServiceHandlers    map[hostServiceHandlerKey]hostServiceHandlerEntry
 	hostServiceVersion     uint64
 	publicHostServices     *providerhost.PublicHostServiceRegistry
+	s3                     map[string]s3store.Client
+	s3ObjectAccessURLs     *providerhost.S3ObjectAccessURLManager
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
 	providerDevSessions    *providerdev.Manager
 	mountedHTTPBindings    []MountedHTTPBinding
@@ -166,6 +169,7 @@ type Config struct {
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
 	PublicHostServices    *providerhost.PublicHostServiceRegistry
+	S3                    map[string]s3store.Client
 	ProviderDevSessions   *providerdev.Manager
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
@@ -283,6 +287,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	var hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
 	var egressProxyTokens *providerhost.EgressProxyTokenManager
+	var s3ObjectAccessURLs *providerhost.S3ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
 		hostServiceRelayTokens, err = providerhost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
@@ -291,6 +296,10 @@ func New(cfg Config) (*Server, error) {
 		egressProxyTokens, err = providerhost.NewEgressProxyTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
+		}
+		s3ObjectAccessURLs, err = providerhost.NewS3ObjectAccessURLManager(cfg.StateSecret, cfg.PublicBaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("init s3 object access URLs: %w", err)
 		}
 	}
 	publicHostServices, hostServiceVersion := cfg.PublicHostServices.Snapshot()
@@ -338,6 +347,8 @@ func New(cfg Config) (*Server, error) {
 		hostServiceHandlers:    hostServiceHandlers,
 		hostServiceVersion:     hostServiceVersion,
 		publicHostServices:     cfg.PublicHostServices,
+		s3:                     cfg.S3,
+		s3ObjectAccessURLs:     s3ObjectAccessURLs,
 		egressProxyTokens:      egressProxyTokens,
 		providerDevSessions:    cfg.ProviderDevSessions,
 		mountedHTTPBindings:    mountedHTTPBindings,

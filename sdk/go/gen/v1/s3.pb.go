@@ -1249,6 +1249,163 @@ func (x *PresignObjectResponse) GetHeaders() map[string]string {
 	return nil
 }
 
+// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
+// for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
+// streams object bytes through the backing S3 provider.
+type CreateObjectAccessURLRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Ref                *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	Method             PresignMethod          `protobuf:"varint,2,opt,name=method,proto3,enum=gestalt.provider.v1.PresignMethod" json:"method,omitempty"`
+	ExpiresSeconds     int64                  `protobuf:"varint,3,opt,name=expires_seconds,json=expiresSeconds,proto3" json:"expires_seconds,omitempty"`
+	ContentType        string                 `protobuf:"bytes,4,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	ContentDisposition string                 `protobuf:"bytes,5,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
+	Headers            map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CreateObjectAccessURLRequest) Reset() {
+	*x = CreateObjectAccessURLRequest{}
+	mi := &file_v1_s3_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateObjectAccessURLRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateObjectAccessURLRequest) ProtoMessage() {}
+
+func (x *CreateObjectAccessURLRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_s3_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateObjectAccessURLRequest.ProtoReflect.Descriptor instead.
+func (*CreateObjectAccessURLRequest) Descriptor() ([]byte, []int) {
+	return file_v1_s3_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CreateObjectAccessURLRequest) GetRef() *S3ObjectRef {
+	if x != nil {
+		return x.Ref
+	}
+	return nil
+}
+
+func (x *CreateObjectAccessURLRequest) GetMethod() PresignMethod {
+	if x != nil {
+		return x.Method
+	}
+	return PresignMethod_PRESIGN_METHOD_UNSPECIFIED
+}
+
+func (x *CreateObjectAccessURLRequest) GetExpiresSeconds() int64 {
+	if x != nil {
+		return x.ExpiresSeconds
+	}
+	return 0
+}
+
+func (x *CreateObjectAccessURLRequest) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *CreateObjectAccessURLRequest) GetContentDisposition() string {
+	if x != nil {
+		return x.ContentDisposition
+	}
+	return ""
+}
+
+func (x *CreateObjectAccessURLRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
+// headers the caller must include when using it.
+type CreateObjectAccessURLResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Method        PresignMethod          `protobuf:"varint,2,opt,name=method,proto3,enum=gestalt.provider.v1.PresignMethod" json:"method,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateObjectAccessURLResponse) Reset() {
+	*x = CreateObjectAccessURLResponse{}
+	mi := &file_v1_s3_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateObjectAccessURLResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateObjectAccessURLResponse) ProtoMessage() {}
+
+func (x *CreateObjectAccessURLResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_s3_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateObjectAccessURLResponse.ProtoReflect.Descriptor instead.
+func (*CreateObjectAccessURLResponse) Descriptor() ([]byte, []int) {
+	return file_v1_s3_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CreateObjectAccessURLResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *CreateObjectAccessURLResponse) GetMethod() PresignMethod {
+	if x != nil {
+		return x.Method
+	}
+	return PresignMethod_PRESIGN_METHOD_UNSPECIFIED
+}
+
+func (x *CreateObjectAccessURLResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *CreateObjectAccessURLResponse) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
 var File_v1_s3_proto protoreflect.FileDescriptor
 
 const file_v1_s3_proto_rawDesc = "" +
@@ -1350,6 +1507,25 @@ const file_v1_s3_proto_rawDesc = "" +
 	"\aheaders\x18\x04 \x03(\v27.gestalt.provider.v1.PresignObjectResponse.HeadersEntryR\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa1\x03\n" +
+	"\x1cCreateObjectAccessURLRequest\x122\n" +
+	"\x03ref\x18\x01 \x01(\v2 .gestalt.provider.v1.S3ObjectRefR\x03ref\x12:\n" +
+	"\x06method\x18\x02 \x01(\x0e2\".gestalt.provider.v1.PresignMethodR\x06method\x12'\n" +
+	"\x0fexpires_seconds\x18\x03 \x01(\x03R\x0eexpiresSeconds\x12!\n" +
+	"\fcontent_type\x18\x04 \x01(\tR\vcontentType\x12/\n" +
+	"\x13content_disposition\x18\x05 \x01(\tR\x12contentDisposition\x12X\n" +
+	"\aheaders\x18\x06 \x03(\v2>.gestalt.provider.v1.CreateObjectAccessURLRequest.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x02\n" +
+	"\x1dCreateObjectAccessURLResponse\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12:\n" +
+	"\x06method\x18\x02 \x01(\x0e2\".gestalt.provider.v1.PresignMethodR\x06method\x129\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12Y\n" +
+	"\aheaders\x18\x04 \x03(\v2?.gestalt.provider.v1.CreateObjectAccessURLResponse.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x93\x01\n" +
 	"\rPresignMethod\x12\x1e\n" +
 	"\x1aPRESIGN_METHOD_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -1367,7 +1543,9 @@ const file_v1_s3_proto_rawDesc = "" +
 	"\vListObjects\x12'.gestalt.provider.v1.ListObjectsRequest\x1a(.gestalt.provider.v1.ListObjectsResponse\x12]\n" +
 	"\n" +
 	"CopyObject\x12&.gestalt.provider.v1.CopyObjectRequest\x1a'.gestalt.provider.v1.CopyObjectResponse\x12f\n" +
-	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponseB\xcb\x01\n" +
+	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponse2\x90\x01\n" +
+	"\x0eS3ObjectAccess\x12~\n" +
+	"\x15CreateObjectAccessURL\x121.gestalt.provider.v1.CreateObjectAccessURLRequest\x1a2.gestalt.provider.v1.CreateObjectAccessURLResponseB\xcb\x01\n" +
 	"\x17com.gestalt.provider.v1B\aS3ProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -1383,46 +1561,50 @@ func file_v1_s3_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_s3_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_s3_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_v1_s3_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_v1_s3_proto_goTypes = []any{
-	(PresignMethod)(0),            // 0: gestalt.provider.v1.PresignMethod
-	(*S3ObjectRef)(nil),           // 1: gestalt.provider.v1.S3ObjectRef
-	(*S3ObjectMeta)(nil),          // 2: gestalt.provider.v1.S3ObjectMeta
-	(*ByteRange)(nil),             // 3: gestalt.provider.v1.ByteRange
-	(*HeadObjectRequest)(nil),     // 4: gestalt.provider.v1.HeadObjectRequest
-	(*HeadObjectResponse)(nil),    // 5: gestalt.provider.v1.HeadObjectResponse
-	(*ReadObjectRequest)(nil),     // 6: gestalt.provider.v1.ReadObjectRequest
-	(*ReadObjectChunk)(nil),       // 7: gestalt.provider.v1.ReadObjectChunk
-	(*WriteObjectOpen)(nil),       // 8: gestalt.provider.v1.WriteObjectOpen
-	(*WriteObjectRequest)(nil),    // 9: gestalt.provider.v1.WriteObjectRequest
-	(*WriteObjectResponse)(nil),   // 10: gestalt.provider.v1.WriteObjectResponse
-	(*DeleteObjectRequest)(nil),   // 11: gestalt.provider.v1.DeleteObjectRequest
-	(*ListObjectsRequest)(nil),    // 12: gestalt.provider.v1.ListObjectsRequest
-	(*ListObjectsResponse)(nil),   // 13: gestalt.provider.v1.ListObjectsResponse
-	(*CopyObjectRequest)(nil),     // 14: gestalt.provider.v1.CopyObjectRequest
-	(*CopyObjectResponse)(nil),    // 15: gestalt.provider.v1.CopyObjectResponse
-	(*PresignObjectRequest)(nil),  // 16: gestalt.provider.v1.PresignObjectRequest
-	(*PresignObjectResponse)(nil), // 17: gestalt.provider.v1.PresignObjectResponse
-	nil,                           // 18: gestalt.provider.v1.S3ObjectMeta.MetadataEntry
-	nil,                           // 19: gestalt.provider.v1.WriteObjectOpen.MetadataEntry
-	nil,                           // 20: gestalt.provider.v1.PresignObjectRequest.HeadersEntry
-	nil,                           // 21: gestalt.provider.v1.PresignObjectResponse.HeadersEntry
-	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),         // 23: google.protobuf.Empty
+	(PresignMethod)(0),                    // 0: gestalt.provider.v1.PresignMethod
+	(*S3ObjectRef)(nil),                   // 1: gestalt.provider.v1.S3ObjectRef
+	(*S3ObjectMeta)(nil),                  // 2: gestalt.provider.v1.S3ObjectMeta
+	(*ByteRange)(nil),                     // 3: gestalt.provider.v1.ByteRange
+	(*HeadObjectRequest)(nil),             // 4: gestalt.provider.v1.HeadObjectRequest
+	(*HeadObjectResponse)(nil),            // 5: gestalt.provider.v1.HeadObjectResponse
+	(*ReadObjectRequest)(nil),             // 6: gestalt.provider.v1.ReadObjectRequest
+	(*ReadObjectChunk)(nil),               // 7: gestalt.provider.v1.ReadObjectChunk
+	(*WriteObjectOpen)(nil),               // 8: gestalt.provider.v1.WriteObjectOpen
+	(*WriteObjectRequest)(nil),            // 9: gestalt.provider.v1.WriteObjectRequest
+	(*WriteObjectResponse)(nil),           // 10: gestalt.provider.v1.WriteObjectResponse
+	(*DeleteObjectRequest)(nil),           // 11: gestalt.provider.v1.DeleteObjectRequest
+	(*ListObjectsRequest)(nil),            // 12: gestalt.provider.v1.ListObjectsRequest
+	(*ListObjectsResponse)(nil),           // 13: gestalt.provider.v1.ListObjectsResponse
+	(*CopyObjectRequest)(nil),             // 14: gestalt.provider.v1.CopyObjectRequest
+	(*CopyObjectResponse)(nil),            // 15: gestalt.provider.v1.CopyObjectResponse
+	(*PresignObjectRequest)(nil),          // 16: gestalt.provider.v1.PresignObjectRequest
+	(*PresignObjectResponse)(nil),         // 17: gestalt.provider.v1.PresignObjectResponse
+	(*CreateObjectAccessURLRequest)(nil),  // 18: gestalt.provider.v1.CreateObjectAccessURLRequest
+	(*CreateObjectAccessURLResponse)(nil), // 19: gestalt.provider.v1.CreateObjectAccessURLResponse
+	nil,                                   // 20: gestalt.provider.v1.S3ObjectMeta.MetadataEntry
+	nil,                                   // 21: gestalt.provider.v1.WriteObjectOpen.MetadataEntry
+	nil,                                   // 22: gestalt.provider.v1.PresignObjectRequest.HeadersEntry
+	nil,                                   // 23: gestalt.provider.v1.PresignObjectResponse.HeadersEntry
+	nil,                                   // 24: gestalt.provider.v1.CreateObjectAccessURLRequest.HeadersEntry
+	nil,                                   // 25: gestalt.provider.v1.CreateObjectAccessURLResponse.HeadersEntry
+	(*timestamppb.Timestamp)(nil),         // 26: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                 // 27: google.protobuf.Empty
 }
 var file_v1_s3_proto_depIdxs = []int32{
 	1,  // 0: gestalt.provider.v1.S3ObjectMeta.ref:type_name -> gestalt.provider.v1.S3ObjectRef
-	22, // 1: gestalt.provider.v1.S3ObjectMeta.last_modified:type_name -> google.protobuf.Timestamp
-	18, // 2: gestalt.provider.v1.S3ObjectMeta.metadata:type_name -> gestalt.provider.v1.S3ObjectMeta.MetadataEntry
+	26, // 1: gestalt.provider.v1.S3ObjectMeta.last_modified:type_name -> google.protobuf.Timestamp
+	20, // 2: gestalt.provider.v1.S3ObjectMeta.metadata:type_name -> gestalt.provider.v1.S3ObjectMeta.MetadataEntry
 	1,  // 3: gestalt.provider.v1.HeadObjectRequest.ref:type_name -> gestalt.provider.v1.S3ObjectRef
 	2,  // 4: gestalt.provider.v1.HeadObjectResponse.meta:type_name -> gestalt.provider.v1.S3ObjectMeta
 	1,  // 5: gestalt.provider.v1.ReadObjectRequest.ref:type_name -> gestalt.provider.v1.S3ObjectRef
 	3,  // 6: gestalt.provider.v1.ReadObjectRequest.range:type_name -> gestalt.provider.v1.ByteRange
-	22, // 7: gestalt.provider.v1.ReadObjectRequest.if_modified_since:type_name -> google.protobuf.Timestamp
-	22, // 8: gestalt.provider.v1.ReadObjectRequest.if_unmodified_since:type_name -> google.protobuf.Timestamp
+	26, // 7: gestalt.provider.v1.ReadObjectRequest.if_modified_since:type_name -> google.protobuf.Timestamp
+	26, // 8: gestalt.provider.v1.ReadObjectRequest.if_unmodified_since:type_name -> google.protobuf.Timestamp
 	2,  // 9: gestalt.provider.v1.ReadObjectChunk.meta:type_name -> gestalt.provider.v1.S3ObjectMeta
 	1,  // 10: gestalt.provider.v1.WriteObjectOpen.ref:type_name -> gestalt.provider.v1.S3ObjectRef
-	19, // 11: gestalt.provider.v1.WriteObjectOpen.metadata:type_name -> gestalt.provider.v1.WriteObjectOpen.MetadataEntry
+	21, // 11: gestalt.provider.v1.WriteObjectOpen.metadata:type_name -> gestalt.provider.v1.WriteObjectOpen.MetadataEntry
 	8,  // 12: gestalt.provider.v1.WriteObjectRequest.open:type_name -> gestalt.provider.v1.WriteObjectOpen
 	2,  // 13: gestalt.provider.v1.WriteObjectResponse.meta:type_name -> gestalt.provider.v1.S3ObjectMeta
 	1,  // 14: gestalt.provider.v1.DeleteObjectRequest.ref:type_name -> gestalt.provider.v1.S3ObjectRef
@@ -1432,29 +1614,37 @@ var file_v1_s3_proto_depIdxs = []int32{
 	2,  // 18: gestalt.provider.v1.CopyObjectResponse.meta:type_name -> gestalt.provider.v1.S3ObjectMeta
 	1,  // 19: gestalt.provider.v1.PresignObjectRequest.ref:type_name -> gestalt.provider.v1.S3ObjectRef
 	0,  // 20: gestalt.provider.v1.PresignObjectRequest.method:type_name -> gestalt.provider.v1.PresignMethod
-	20, // 21: gestalt.provider.v1.PresignObjectRequest.headers:type_name -> gestalt.provider.v1.PresignObjectRequest.HeadersEntry
+	22, // 21: gestalt.provider.v1.PresignObjectRequest.headers:type_name -> gestalt.provider.v1.PresignObjectRequest.HeadersEntry
 	0,  // 22: gestalt.provider.v1.PresignObjectResponse.method:type_name -> gestalt.provider.v1.PresignMethod
-	22, // 23: gestalt.provider.v1.PresignObjectResponse.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 24: gestalt.provider.v1.PresignObjectResponse.headers:type_name -> gestalt.provider.v1.PresignObjectResponse.HeadersEntry
-	4,  // 25: gestalt.provider.v1.S3.HeadObject:input_type -> gestalt.provider.v1.HeadObjectRequest
-	6,  // 26: gestalt.provider.v1.S3.ReadObject:input_type -> gestalt.provider.v1.ReadObjectRequest
-	9,  // 27: gestalt.provider.v1.S3.WriteObject:input_type -> gestalt.provider.v1.WriteObjectRequest
-	11, // 28: gestalt.provider.v1.S3.DeleteObject:input_type -> gestalt.provider.v1.DeleteObjectRequest
-	12, // 29: gestalt.provider.v1.S3.ListObjects:input_type -> gestalt.provider.v1.ListObjectsRequest
-	14, // 30: gestalt.provider.v1.S3.CopyObject:input_type -> gestalt.provider.v1.CopyObjectRequest
-	16, // 31: gestalt.provider.v1.S3.PresignObject:input_type -> gestalt.provider.v1.PresignObjectRequest
-	5,  // 32: gestalt.provider.v1.S3.HeadObject:output_type -> gestalt.provider.v1.HeadObjectResponse
-	7,  // 33: gestalt.provider.v1.S3.ReadObject:output_type -> gestalt.provider.v1.ReadObjectChunk
-	10, // 34: gestalt.provider.v1.S3.WriteObject:output_type -> gestalt.provider.v1.WriteObjectResponse
-	23, // 35: gestalt.provider.v1.S3.DeleteObject:output_type -> google.protobuf.Empty
-	13, // 36: gestalt.provider.v1.S3.ListObjects:output_type -> gestalt.provider.v1.ListObjectsResponse
-	15, // 37: gestalt.provider.v1.S3.CopyObject:output_type -> gestalt.provider.v1.CopyObjectResponse
-	17, // 38: gestalt.provider.v1.S3.PresignObject:output_type -> gestalt.provider.v1.PresignObjectResponse
-	32, // [32:39] is the sub-list for method output_type
-	25, // [25:32] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	26, // 23: gestalt.provider.v1.PresignObjectResponse.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 24: gestalt.provider.v1.PresignObjectResponse.headers:type_name -> gestalt.provider.v1.PresignObjectResponse.HeadersEntry
+	1,  // 25: gestalt.provider.v1.CreateObjectAccessURLRequest.ref:type_name -> gestalt.provider.v1.S3ObjectRef
+	0,  // 26: gestalt.provider.v1.CreateObjectAccessURLRequest.method:type_name -> gestalt.provider.v1.PresignMethod
+	24, // 27: gestalt.provider.v1.CreateObjectAccessURLRequest.headers:type_name -> gestalt.provider.v1.CreateObjectAccessURLRequest.HeadersEntry
+	0,  // 28: gestalt.provider.v1.CreateObjectAccessURLResponse.method:type_name -> gestalt.provider.v1.PresignMethod
+	26, // 29: gestalt.provider.v1.CreateObjectAccessURLResponse.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 30: gestalt.provider.v1.CreateObjectAccessURLResponse.headers:type_name -> gestalt.provider.v1.CreateObjectAccessURLResponse.HeadersEntry
+	4,  // 31: gestalt.provider.v1.S3.HeadObject:input_type -> gestalt.provider.v1.HeadObjectRequest
+	6,  // 32: gestalt.provider.v1.S3.ReadObject:input_type -> gestalt.provider.v1.ReadObjectRequest
+	9,  // 33: gestalt.provider.v1.S3.WriteObject:input_type -> gestalt.provider.v1.WriteObjectRequest
+	11, // 34: gestalt.provider.v1.S3.DeleteObject:input_type -> gestalt.provider.v1.DeleteObjectRequest
+	12, // 35: gestalt.provider.v1.S3.ListObjects:input_type -> gestalt.provider.v1.ListObjectsRequest
+	14, // 36: gestalt.provider.v1.S3.CopyObject:input_type -> gestalt.provider.v1.CopyObjectRequest
+	16, // 37: gestalt.provider.v1.S3.PresignObject:input_type -> gestalt.provider.v1.PresignObjectRequest
+	18, // 38: gestalt.provider.v1.S3ObjectAccess.CreateObjectAccessURL:input_type -> gestalt.provider.v1.CreateObjectAccessURLRequest
+	5,  // 39: gestalt.provider.v1.S3.HeadObject:output_type -> gestalt.provider.v1.HeadObjectResponse
+	7,  // 40: gestalt.provider.v1.S3.ReadObject:output_type -> gestalt.provider.v1.ReadObjectChunk
+	10, // 41: gestalt.provider.v1.S3.WriteObject:output_type -> gestalt.provider.v1.WriteObjectResponse
+	27, // 42: gestalt.provider.v1.S3.DeleteObject:output_type -> google.protobuf.Empty
+	13, // 43: gestalt.provider.v1.S3.ListObjects:output_type -> gestalt.provider.v1.ListObjectsResponse
+	15, // 44: gestalt.provider.v1.S3.CopyObject:output_type -> gestalt.provider.v1.CopyObjectResponse
+	17, // 45: gestalt.provider.v1.S3.PresignObject:output_type -> gestalt.provider.v1.PresignObjectResponse
+	19, // 46: gestalt.provider.v1.S3ObjectAccess.CreateObjectAccessURL:output_type -> gestalt.provider.v1.CreateObjectAccessURLResponse
+	39, // [39:47] is the sub-list for method output_type
+	31, // [31:39] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_v1_s3_proto_init() }
@@ -1478,9 +1668,9 @@ func file_v1_s3_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_s3_proto_rawDesc), len(file_v1_s3_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   25,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_v1_s3_proto_goTypes,
 		DependencyIndexes: file_v1_s3_proto_depIdxs,

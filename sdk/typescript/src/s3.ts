@@ -20,6 +20,7 @@ import {
   PresignObjectResponseSchema,
   ReadObjectChunkSchema,
   S3 as S3Service,
+  S3ObjectAccess as S3ObjectAccessService,
   type ByteRange as ProtoByteRange,
   type ReadObjectRequest as ProtoReadObjectRequest,
   type S3ObjectMeta as ProtoS3ObjectMeta,
@@ -197,6 +198,16 @@ export interface PresignResult {
   expiresAt?: Date;
   headers: Record<string, string>;
 }
+
+/**
+ * Options used when creating a host-mediated object-access URL.
+ */
+export type ObjectAccessURLOptions = PresignOptions;
+
+/**
+ * Result returned by {@link S3.createObjectAccessURL} or {@link S3Object.createAccessURL}.
+ */
+export type ObjectAccessURL = PresignResult;
 
 /**
  * Accepted write body sources for the S3 client.
@@ -509,7 +520,9 @@ export function createS3Service(
  * ```
  */
 export class S3 {
+  private readonly transport: ReturnType<typeof createGrpcTransport>;
   private readonly client: Client<typeof S3Service>;
+  private objectAccessClient?: Client<typeof S3ObjectAccessService>;
 
   constructor(name?: string) {
     const envName = s3SocketEnv(name);
@@ -538,6 +551,7 @@ export class S3 {
         : {}),
       interceptors,
     });
+    this.transport = transport;
     this.client = createClient(S3Service, transport);
   }
 
@@ -654,6 +668,62 @@ export class S3 {
     }
     return result;
   }
+
+  async createObjectAccessURL(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL> {
+    const requestedMethod = options?.method ?? PresignMethod.Get;
+    const response = await s3Rpc(() =>
+      this.s3ObjectAccessClient().createObjectAccessURL({
+        ref: toProtoObjectRef(ref),
+        method: toProtoPresignMethod(requestedMethod),
+        expiresSeconds: normalizeProtoInt(options?.expiresSeconds),
+        contentType: options?.contentType ?? "",
+        contentDisposition: options?.contentDisposition ?? "",
+        headers: cloneStringMap(options?.headers),
+      }),
+    );
+    const result: ObjectAccessURL = {
+      url: response.url,
+      method: response.method === ProtoPresignMethod.UNSPECIFIED
+        ? requestedMethod
+        : fromProtoPresignMethod(response.method),
+      headers: cloneStringMap(response.headers),
+    };
+    if (response.expiresAt) {
+      result.expiresAt = fromProtoTimestamp(response.expiresAt);
+    }
+    return result;
+  }
+
+  private s3ObjectAccessClient(): Client<typeof S3ObjectAccessService> {
+    if (!this.objectAccessClient) {
+      this.objectAccessClient = createClient(S3ObjectAccessService, this.transport);
+    }
+    return this.objectAccessClient;
+  }
+
+  async createObjectAccessUrl(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL> {
+    return await this.createObjectAccessURL(ref, options);
+  }
+
+  async createAccessURL(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL> {
+    return await this.createObjectAccessURL(ref, options);
+  }
+
+  async createAccessUrl(
+    ref: ObjectRef,
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL> {
+    return await this.createObjectAccessURL(ref, options);
+  }
 }
 
 /**
@@ -767,6 +837,17 @@ export class S3Object {
    */
   async presign(options?: PresignOptions): Promise<PresignResult> {
     return await this.client.presignObject(this.ref, options);
+  }
+
+  /**
+   * Creates a host-mediated object-access URL for the referenced object.
+   */
+  async createAccessURL(options?: ObjectAccessURLOptions): Promise<ObjectAccessURL> {
+    return await this.client.createObjectAccessURL(this.ref, options);
+  }
+
+  async createAccessUrl(options?: ObjectAccessURLOptions): Promise<ObjectAccessURL> {
+    return await this.createAccessURL(options);
   }
 }
 

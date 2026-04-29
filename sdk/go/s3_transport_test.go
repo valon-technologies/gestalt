@@ -93,6 +93,34 @@ func TestS3Transport_TCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
+func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
+	ctx := context.Background()
+	url, err := testS3Client.Object("fixtures", "access/"+t.Name()+".txt").CreateAccessURL(ctx, &gestalt.ObjectAccessURLOptions{
+		Method:      gestalt.PresignMethodPut,
+		Expires:     time.Minute,
+		ContentType: "text/plain",
+		Headers:     map[string]string{"Content-Length": "5"},
+	})
+	if err != nil {
+		t.Fatalf("CreateAccessURL: %v", err)
+	}
+	if url.Method != gestalt.PresignMethodPut {
+		t.Fatalf("method = %q, want PUT", url.Method)
+	}
+	if !strings.HasPrefix(url.URL, "https://gestalt.example.test/api/v1/s3/object-access/") {
+		t.Fatalf("url = %q, want hosted object access URL", url.URL)
+	}
+	if strings.Contains(url.URL, "access/"+t.Name()) {
+		t.Fatalf("url leaks object key: %q", url.URL)
+	}
+	if url.Headers["Content-Length"] != "5" {
+		t.Fatalf("Content-Length header = %q, want 5", url.Headers["Content-Length"])
+	}
+	if url.ExpiresAt.IsZero() {
+		t.Fatal("ExpiresAt is zero")
+	}
+}
+
 func TestS3Transport_WriteReadAndStat(t *testing.T) {
 	ctx := context.Background()
 	key := "docs/" + t.Name() + ".json"

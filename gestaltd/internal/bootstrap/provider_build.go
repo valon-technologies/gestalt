@@ -1909,6 +1909,15 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		return nil, fmt.Errorf("s3 host services are not available")
 	}
 
+	var accessURLs *providerhost.S3ObjectAccessURLManager
+	if len(deps.EncryptionKey) != 0 {
+		var err error
+		accessURLs, err = providerhost.NewS3ObjectAccessURLManager(deps.EncryptionKey, deps.BaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("s3 object access URLs: %w", err)
+		}
+	}
+
 	hostServices := make([]providerhost.HostService, 0, len(entry.S3)+1)
 	for _, binding := range entry.S3 {
 		client, ok := deps.S3[binding]
@@ -1918,20 +1927,29 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		hostServices = append(hostServices, providerhost.HostService{
 			Name:   "s3",
 			EnvVar: providerhost.S3SocketEnv(binding),
-			Register: func(client s3store.Client) func(*grpc.Server) {
+			Register: func(client s3store.Client, binding string) func(*grpc.Server) {
 				return func(srv *grpc.Server) {
-					proto.RegisterS3Server(srv, providerhost.NewS3Server(client, pluginName))
+					proto.RegisterS3Server(srv, providerhost.NewS3ServerWithOptions(client, pluginName, providerhost.S3ServerOptions{
+						BindingName: binding,
+						AccessURLs:  accessURLs,
+					}))
+					proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, pluginName, binding))
 				}
-			}(client),
+			}(client, binding),
 		})
 	}
 	if len(entry.S3) == 1 {
-		client := deps.S3[entry.S3[0]]
+		binding := entry.S3[0]
+		client := deps.S3[binding]
 		hostServices = append(hostServices, providerhost.HostService{
 			Name:   "s3",
 			EnvVar: providerhost.DefaultS3SocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterS3Server(srv, providerhost.NewS3Server(client, pluginName))
+				proto.RegisterS3Server(srv, providerhost.NewS3ServerWithOptions(client, pluginName, providerhost.S3ServerOptions{
+					BindingName: binding,
+					AccessURLs:  accessURLs,
+				}))
+				proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, pluginName, binding))
 			},
 		})
 	}

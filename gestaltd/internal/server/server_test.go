@@ -38,6 +38,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
@@ -142,6 +143,182 @@ type recordingExternalCredentialProvider struct {
 	putCredentialCalls     atomic.Int64
 	restoreCredentialCalls atomic.Int64
 	deleteCredentialCalls  atomic.Int64
+}
+
+func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
+	t.Parallel()
+
+	store := &coretesting.StubS3{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PublicBaseURL = "https://gestalt.example.test"
+		cfg.S3 = map[string]s3store.Client{"brainStorage": store}
+	})
+	defer ts.Close()
+
+	manager, err := providerhost.NewS3ObjectAccessURLManager(
+		[]byte("0123456789abcdef0123456789abcdef"),
+		ts.URL,
+	)
+	if err != nil {
+		t.Fatalf("NewS3ObjectAccessURLManager: %v", err)
+	}
+	targetRef := s3store.ObjectRef{
+		Bucket: "brain",
+		Key:    " workspaces/acme/tokens/token-1/content.bin ",
+	}
+	putURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+		PluginName:  "brain",
+		BindingName: "brainStorage",
+		Ref:         targetRef,
+		Method:      s3store.PresignMethodPut,
+		Expires:     time.Minute,
+		ContentType: "text/plain",
+		Headers:     map[string]string{"Content-Length": "11"},
+	})
+	if err != nil {
+		t.Fatalf("MintURL(put): %v", err)
+	}
+	putReq, err := http.NewRequest(http.MethodPut, putURL.URL, strings.NewReader("hello brain"))
+	if err != nil {
+		t.Fatalf("NewRequest(put): %v", err)
+	}
+	putReq.Header.Set("Content-Type", "text/plain")
+	putResp, err := ts.Client().Do(putReq)
+	if err != nil {
+		t.Fatalf("PUT object access URL: %v", err)
+	}
+	_ = putResp.Body.Close()
+	if putResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200", putResp.StatusCode)
+	}
+	if putResp.Header.Get("ETag") == "" {
+		t.Fatal("PUT response missing ETag")
+	}
+
+	prefixed := s3store.ObjectRef{
+		Bucket: targetRef.Bucket,
+		Key:    providerhost.S3PluginObjectKey("brain", targetRef.Key),
+	}
+	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
+		t.Fatalf("HeadObject(prefixed): %v", err)
+	}
+	if _, err := store.HeadObject(context.Background(), targetRef); !errors.Is(err, s3store.ErrNotFound) {
+		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
+	}
+
+	getURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+		PluginName:  "brain",
+		BindingName: "brainStorage",
+		Ref:         targetRef,
+		Method:      s3store.PresignMethodGet,
+		Expires:     time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintURL(get): %v", err)
+	}
+	getResp, err := ts.Client().Get(getURL.URL)
+	if err != nil {
+		t.Fatalf("GET object access URL: %v", err)
+	}
+	body, readErr := io.ReadAll(getResp.Body)
+	_ = getResp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read GET body: %v", readErr)
+	}
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET status = %d, want 200", getResp.StatusCode)
+	}
+	if string(body) != "hello brain" {
+		t.Fatalf("GET body = %q, want hello brain", body)
+	}
+	if getResp.Header.Get("Content-Type") != "text/plain" {
+		t.Fatalf("GET Content-Type = %q, want text/plain", getResp.Header.Get("Content-Type"))
+	}
+
+	constrainedGetURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+		PluginName:  "brain",
+		BindingName: "brainStorage",
+		Ref:         targetRef,
+		Method:      s3store.PresignMethodGet,
+		Expires:     time.Minute,
+		Headers:     map[string]string{"X-Brain-Download": "ok"},
+	})
+	if err != nil {
+		t.Fatalf("MintURL(constrained get): %v", err)
+	}
+	missingHeaderResp, err := ts.Client().Get(constrainedGetURL.URL)
+	if err != nil {
+		t.Fatalf("GET constrained object access URL without header: %v", err)
+	}
+	_ = missingHeaderResp.Body.Close()
+	if missingHeaderResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("GET constrained status = %d, want 400", missingHeaderResp.StatusCode)
+	}
+
+	rangeReq, err := http.NewRequest(http.MethodGet, constrainedGetURL.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequest(range get): %v", err)
+	}
+	rangeReq.Header.Set("X-Brain-Download", "ok")
+	rangeReq.Header.Set("Range", "bytes=0-4")
+	rangeResp, err := ts.Client().Do(rangeReq)
+	if err != nil {
+		t.Fatalf("GET ranged object access URL: %v", err)
+	}
+	rangeBody, readErr := io.ReadAll(rangeResp.Body)
+	_ = rangeResp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read ranged GET body: %v", readErr)
+	}
+	if rangeResp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("GET ranged status = %d, want 206", rangeResp.StatusCode)
+	}
+	if string(rangeBody) != "hello" {
+		t.Fatalf("GET ranged body = %q, want hello", rangeBody)
+	}
+	if rangeResp.Header.Get("Content-Range") != "bytes 0-4/11" {
+		t.Fatalf("GET ranged Content-Range = %q, want bytes 0-4/11", rangeResp.Header.Get("Content-Range"))
+	}
+
+	fullSuffixReq, err := http.NewRequest(http.MethodGet, constrainedGetURL.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequest(full suffix get): %v", err)
+	}
+	fullSuffixReq.Header.Set("X-Brain-Download", "ok")
+	fullSuffixReq.Header.Set("Range", "bytes=-50")
+	fullSuffixResp, err := ts.Client().Do(fullSuffixReq)
+	if err != nil {
+		t.Fatalf("GET full suffix object access URL: %v", err)
+	}
+	fullSuffixBody, readErr := io.ReadAll(fullSuffixResp.Body)
+	_ = fullSuffixResp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read full suffix GET body: %v", readErr)
+	}
+	if fullSuffixResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET full suffix status = %d, want 200", fullSuffixResp.StatusCode)
+	}
+	if string(fullSuffixBody) != "hello brain" {
+		t.Fatalf("GET full suffix body = %q, want hello brain", fullSuffixBody)
+	}
+	if got := fullSuffixResp.Header.Get("Content-Range"); got != "" {
+		t.Fatalf("GET full suffix Content-Range = %q, want empty", got)
+	}
+
+	invalidConditionalReq, err := http.NewRequest(http.MethodGet, constrainedGetURL.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequest(invalid conditional get): %v", err)
+	}
+	invalidConditionalReq.Header.Set("X-Brain-Download", "ok")
+	invalidConditionalReq.Header.Set("If-Modified-Since", "not a valid http date")
+	invalidConditionalResp, err := ts.Client().Do(invalidConditionalReq)
+	if err != nil {
+		t.Fatalf("GET invalid conditional object access URL: %v", err)
+	}
+	_ = invalidConditionalResp.Body.Close()
+	if invalidConditionalResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("GET invalid conditional status = %d, want 400", invalidConditionalResp.StatusCode)
+	}
 }
 
 func newRecordingExternalCredentialProvider(inner core.ExternalCredentialProvider) *recordingExternalCredentialProvider {

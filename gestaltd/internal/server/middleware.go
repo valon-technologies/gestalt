@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 )
 
 type contextKey string
@@ -58,6 +59,7 @@ func requestMetaMiddleware(next http.Handler) http.Handler {
 const (
 	defaultMaxBodyBytes         = 1 << 20
 	providerDevCallMaxBodyBytes = 128 << 20
+	s3ObjectAccessMaxBodyBytes  = 10 << 30
 )
 
 func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
@@ -73,6 +75,9 @@ func maxBodyLimitForRequest(r *http.Request, defaultLimit int64) int64 {
 	if isProviderDevCompleteCallRequest(r) {
 		return providerDevCallMaxBodyBytes
 	}
+	if isS3ObjectAccessRequest(r) {
+		return s3ObjectAccessMaxBodyBytes
+	}
 	return defaultLimit
 }
 
@@ -86,6 +91,10 @@ func isProviderDevCompleteCallRequest(r *http.Request) bool {
 	}
 	sessionID, callID, ok := strings.Cut(rest, "/calls/")
 	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")
+}
+
+func isS3ObjectAccessRequest(r *http.Request) bool {
+	return r != nil && r.URL != nil && strings.HasPrefix(r.URL.Path, providerhost.S3ObjectAccessPathPrefix)
 }
 
 // contentSecurityPolicy is the CSP applied to all responses. script-src and

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -442,6 +443,67 @@ func TestS3ServerRejectsPluginScopedPresign(t *testing.T) {
 	}
 	if called {
 		t.Fatal("PresignObject called backend for plugin-scoped binding")
+	}
+}
+
+func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewS3ObjectAccessURLManager([]byte("0123456789abcdef0123456789abcdef"), "https://gestalt.example.test")
+	if err != nil {
+		t.Fatalf("NewS3ObjectAccessURLManager: %v", err)
+	}
+	called := false
+	srv := NewS3ServerWithOptions(funcS3Client{
+		presignObject: func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
+			called = true
+			return s3store.PresignResult{}, nil
+		},
+	}, "roadmap", S3ServerOptions{BindingName: "docs", AccessURLs: manager})
+
+	resp, err := srv.PresignObject(context.Background(), &proto.PresignObjectRequest{
+		Ref:            &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+		Method:         proto.PresignMethod_PRESIGN_METHOD_PUT,
+		ExpiresSeconds: 600,
+		ContentType:    "text/plain",
+		Headers:        map[string]string{"Content-Length": "5"},
+	})
+	if err != nil {
+		t.Fatalf("PresignObject: %v", err)
+	}
+	if called {
+		t.Fatal("PresignObject called backend for plugin-scoped binding")
+	}
+	if !strings.HasPrefix(resp.GetUrl(), "https://gestalt.example.test"+S3ObjectAccessPathPrefix) {
+		t.Fatalf("url = %q, want hosted object access URL", resp.GetUrl())
+	}
+	if strings.Contains(resp.GetUrl(), s3NamespacePrefix("roadmap")) || strings.Contains(resp.GetUrl(), "plans/q2.txt") {
+		t.Fatalf("url leaks plugin-scoped object path: %q", resp.GetUrl())
+	}
+	if resp.GetMethod() != proto.PresignMethod_PRESIGN_METHOD_PUT {
+		t.Fatalf("method = %v, want PUT", resp.GetMethod())
+	}
+	if resp.GetHeaders()["Content-Length"] != "5" {
+		t.Fatalf("Content-Length header = %q, want 5", resp.GetHeaders()["Content-Length"])
+	}
+
+	parsed, err := url.Parse(resp.GetUrl())
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	token := strings.TrimPrefix(parsed.Path, S3ObjectAccessPathPrefix)
+	target, err := manager.ResolveToken(token)
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if target.PluginName != "roadmap" || target.BindingName != "docs" {
+		t.Fatalf("target scope = %s/%s, want roadmap/docs", target.PluginName, target.BindingName)
+	}
+	if target.Ref != (s3store.ObjectRef{Bucket: "docs", Key: "plans/q2.txt"}) {
+		t.Fatalf("target ref = %#v, want docs/plans/q2.txt", target.Ref)
+	}
+	if target.Method != s3store.PresignMethodPut {
+		t.Fatalf("target method = %q, want PUT", target.Method)
 	}
 }
 
