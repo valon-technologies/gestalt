@@ -58,9 +58,9 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-export GESTALT_API_KEY=<token-with-provider_dev.attach>
 gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
 gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
+gestaltd provider dev --remote https://gestalt.example.com --remote-token <token-with-provider_dev.attach> --path ./plugins/support
 gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
@@ -82,14 +82,18 @@ Remote attach v1 is also process-local: only enable it on a single-replica
 server or behind sticky routing that keeps attach creation, CLI poll/complete
 traffic, provider invocations, and provider-owned UI requests for the same
 authenticated owner on the same `gestaltd` process.
-Authentication resolves in this order: `--remote-token`, `GESTALT_API_KEY`, then
-the stored CLI token when its recorded server base URL matches `--remote`. The
-token used for remote attach must include `permissions[].actions:
-["provider_dev.attach"]` for every attached plugin. Plain `gestalt auth login`
-credentials are not enough unless the stored API token was minted with that
-action. Stored CLI tokens are not sent to a different remote URL, including a
-different path prefix on the same host; if the stored credential points
-elsewhere, the command fails with a remediation message instead of prompting.
+For the interactive happy path, `provider dev --remote` creates a short-lived
+attach approval request and opens the remote server in your browser. Approving
+that page with your normal browser session creates an owner-scoped attachment
+only when your resolved role is allowed by the plugin's provider-dev attach
+configuration. The terminal prints a verification code, and the browser approval
+page requires that code before approval succeeds. `--remote-token` and
+`GESTALT_API_KEY` are the non-interactive path; those API tokens must include
+`permissions[].actions:
+["provider_dev.attach"]` for every attached plugin. If a stored CLI token exists
+for the same server, the CLI first tries it for direct attach and falls back to
+browser approval when it is not attach-scoped. Stored CLI tokens are not sent to
+a different remote URL, including a different path prefix on the same host.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
 the configured plugin with the same manifest `source` and preserves that
@@ -98,11 +102,11 @@ manifest has no source, pass `--name` to choose the configured remote plugin.
 All non-local plugins and remote host services continue to resolve through the
 remote instance.
 
-After the remote creates an attachment, the CLI uses the returned `attachId` plus
-a one-time dispatcher secret for poll/complete traffic. The dispatcher secret is
-not shown by list/get diagnostics and is not needed for owner cleanup detach.
-Attach creation requires a provider-dev attach grant on the remote plugin and,
-when authenticating with an API token, an explicit token action permission:
+After browser approval or attach-token authentication, the remote creates an
+attachment and the CLI uses the returned `attachId` plus a one-time dispatcher
+secret for poll/complete traffic. The dispatcher secret is not shown by list/get
+diagnostics and is not needed for owner cleanup detach. API-token attach
+requires an explicit token action permission:
 
 ```json
 {

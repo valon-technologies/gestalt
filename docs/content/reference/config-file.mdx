@@ -1112,8 +1112,11 @@ sticky routing for attach creation, poll/complete traffic, provider invocations,
 and provider-owned UI requests as a hard prerequisite before enabling
 `remoteAttach`.
 
-Attach creation requires both a plugin runtime grant and, for API-token
-callers, a token action grant. The runtime grant comes from
+Interactive attach creation uses a short-lived browser approval page plus a
+verification code shown in the initiating terminal. The approving browser
+session must satisfy the plugin runtime grant. For non-interactive/API-token
+attach, the caller must satisfy both the plugin runtime grant and a token action
+grant. The runtime grant comes from
 `plugins.<name>.providerDev.attach.allowedRoles` on a plugin with an
 `authorizationPolicy`, or from a runtime authorizer that explicitly grants the
 same action. API tokens must carry `permissions[].actions:

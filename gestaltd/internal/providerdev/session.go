@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -33,14 +34,17 @@ import (
 )
 
 const (
-	DefaultPollTimeout        = 30 * time.Second
-	DefaultSessionIdleTimeout = 2 * time.Minute
-	DefaultCallIdleTimeout    = 30 * time.Minute
+	DefaultPollTimeout             = 30 * time.Second
+	DefaultSessionIdleTimeout      = 2 * time.Minute
+	DefaultCallIdleTimeout         = 30 * time.Minute
+	DefaultMaxAttachAuthorizations = 1024
 
-	HeaderDispatcherSecret = "X-Gestalt-Provider-Dev-Dispatcher"
+	HeaderDispatcherSecret    = "X-Gestalt-Provider-Dev-Dispatcher"
+	HeaderAuthorizationSecret = "X-Gestalt-Provider-Dev-Authorization"
 
-	PathAttachments = "/api/v1/provider-dev/attachments"
-	PathSessions    = "/api/v1/provider-dev/sessions"
+	PathAttachments          = "/api/v1/provider-dev/attachments"
+	PathAttachAuthorizations = "/api/v1/provider-dev/attach-authorizations"
+	PathSessions             = "/api/v1/provider-dev/sessions"
 )
 
 type RuntimeEnv struct {
@@ -62,14 +66,16 @@ type Target struct {
 }
 
 type Manager struct {
-	mu         sync.RWMutex
-	targets    map[string]Target
-	sessions   map[string]*Session
-	ownerIndex map[string][]string
+	mu             sync.RWMutex
+	targets        map[string]Target
+	sessions       map[string]*Session
+	ownerIndex     map[string][]string
+	authorizations map[string]*AttachAuthorization
 }
 
 type CreateSessionRequest struct {
-	Providers []AttachProvider `json:"providers"`
+	Providers               []AttachProvider `json:"providers"`
+	AttachAuthorizationCode string           `json:"attachAuthorizationCode,omitempty"`
 }
 
 type AttachProvider struct {
@@ -96,6 +102,27 @@ type CreateSessionProvider struct {
 	UIPath       string            `json:"uiPath,omitempty"`
 }
 
+type CreateAttachAuthorizationResponse struct {
+	AuthorizationID    string    `json:"authorizationId"`
+	ClientSecret       string    `json:"clientSecret"`
+	VerificationCode   string    `json:"verificationCode"`
+	ApprovalURL        string    `json:"approvalUrl"`
+	ExpiresAt          time.Time `json:"expiresAt"`
+	PollIntervalMillis int       `json:"pollIntervalMillis"`
+}
+
+type AttachAuthorizationInfo struct {
+	AuthorizationID string    `json:"authorizationId"`
+	Providers       []string  `json:"providers"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	Approved        bool      `json:"approved"`
+}
+
+type PollAttachAuthorizationResponse struct {
+	Approved                bool   `json:"approved"`
+	AttachAuthorizationCode string `json:"attachAuthorizationCode,omitempty"`
+}
+
 type AttachmentInfo struct {
 	AttachID           string                   `json:"attachId"`
 	CreatedAt          time.Time                `json:"createdAt"`
@@ -112,6 +139,21 @@ type AttachmentProviderInfo struct {
 }
 
 type AttachUI struct{}
+
+type AttachAuthorization struct {
+	id               string
+	clientSecretHash string
+	verificationHash string
+	requestHash      string
+	providers        []string
+	createdAt        time.Time
+	expiresAt        time.Time
+	approvedAt       time.Time
+	approvedBy       *principal.Principal
+	codeHash         string
+	code             string
+	used             bool
+}
 
 type UIAssetRequest struct {
 	Method   string      `json:"method,omitempty"`
@@ -186,9 +228,10 @@ type rpcResponse struct {
 
 func NewManager(targets []Target) (*Manager, error) {
 	m := &Manager{
-		targets:    make(map[string]Target, len(targets)),
-		sessions:   map[string]*Session{},
-		ownerIndex: map[string][]string{},
+		targets:        make(map[string]Target, len(targets)),
+		sessions:       map[string]*Session{},
+		ownerIndex:     map[string][]string{},
+		authorizations: map[string]*AttachAuthorization{},
 	}
 	for i := range targets {
 		target := targets[i]
@@ -319,6 +362,14 @@ func (m *Manager) PollSessionWithDispatcherSecret(ctx context.Context, p *princi
 	return session.poll(ctx)
 }
 
+func (m *Manager) PollSessionWithDispatcherSecretOnly(ctx context.Context, sessionID, dispatcherSecret string) (*PollResponse, bool, error) {
+	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
+	if err != nil {
+		return nil, false, err
+	}
+	return session.poll(ctx)
+}
+
 func (s *Session) poll(ctx context.Context) (*PollResponse, bool, error) {
 	s.touch()
 
@@ -374,6 +425,148 @@ func (m *Manager) ResolveAttachProviderNames(req CreateSessionRequest) ([]string
 	slices.Sort(names)
 	names = slices.Compact(names)
 	return names, nil
+}
+
+func (m *Manager) CreateAttachAuthorization(req CreateSessionRequest, now time.Time) (*AttachAuthorizationInfo, string, string, error) {
+	if m == nil {
+		return nil, "", "", status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	names, err := m.ResolveAttachProviderNames(req)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if len(names) == 0 {
+		return nil, "", "", status.Error(codes.InvalidArgument, "at least one provider is required")
+	}
+	requestHash, err := attachAuthorizationRequestHash(req)
+	if err != nil {
+		return nil, "", "", status.Errorf(codes.Internal, "hash provider dev attach authorization request: %v", err)
+	}
+	id, err := randomID()
+	if err != nil {
+		return nil, "", "", status.Errorf(codes.Internal, "create provider dev attach authorization id: %v", err)
+	}
+	clientSecret, clientSecretHash, err := newAttachAuthorizationSecret()
+	if err != nil {
+		return nil, "", "", status.Errorf(codes.Internal, "create provider dev attach authorization secret: %v", err)
+	}
+	verificationCode, verificationHash, err := newAttachAuthorizationVerificationCode()
+	if err != nil {
+		return nil, "", "", status.Errorf(codes.Internal, "create provider dev attach verification code: %v", err)
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	auth := &AttachAuthorization{
+		id:               id,
+		clientSecretHash: clientSecretHash,
+		verificationHash: verificationHash,
+		requestHash:      requestHash,
+		providers:        slices.Clone(names),
+		createdAt:        now,
+		expiresAt:        now.Add(5 * time.Minute),
+	}
+	m.mu.Lock()
+	m.closeExpiredAuthorizationsLocked(now)
+	if len(m.authorizations) >= DefaultMaxAttachAuthorizations {
+		m.mu.Unlock()
+		return nil, "", "", status.Errorf(codes.ResourceExhausted, "too many pending provider dev attach authorizations; try again later")
+	}
+	m.authorizations[id] = auth
+	m.mu.Unlock()
+	info := auth.info()
+	return &info, clientSecret, verificationCode, nil
+}
+
+func (m *Manager) GetAttachAuthorization(id string) (*AttachAuthorizationInfo, error) {
+	auth, err := m.attachAuthorization(id, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	info := auth.info()
+	return &info, nil
+}
+
+func (m *Manager) ApproveAttachAuthorization(id string, p *principal.Principal, verificationCode string) error {
+	owner := principalSubjectID(p)
+	if owner == "" {
+		return status.Error(codes.Unauthenticated, "provider dev attach authorization requires an authenticated principal")
+	}
+	verificationCode = normalizeAttachAuthorizationVerificationCode(verificationCode)
+	if verificationCode == "" {
+		return status.Error(codes.InvalidArgument, "provider dev attach verification code is required")
+	}
+	auth, err := m.attachAuthorization(id, time.Now())
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if auth.used {
+		return status.Error(codes.FailedPrecondition, "provider dev attach authorization was already used")
+	}
+	if subtle.ConstantTimeCompare([]byte(hashAttachAuthorizationSecret(verificationCode)), []byte(auth.verificationHash)) != 1 {
+		return status.Error(codes.PermissionDenied, "provider dev attach verification code is invalid")
+	}
+	if auth.approvedBy != nil || !auth.approvedAt.IsZero() {
+		if principalSubjectID(auth.approvedBy) == owner {
+			return nil
+		}
+		return status.Error(codes.FailedPrecondition, "provider dev attach authorization is already approved")
+	}
+	code, codeHash, err := newAttachAuthorizationCode()
+	if err != nil {
+		return status.Errorf(codes.Internal, "create provider dev attach authorization code: %v", err)
+	}
+	auth.approvedAt = time.Now()
+	auth.approvedBy = clonePrincipal(p)
+	auth.code = code
+	auth.codeHash = codeHash
+	return nil
+}
+
+func (m *Manager) PollAttachAuthorization(id, clientSecret string) (*PollAttachAuthorizationResponse, error) {
+	auth, err := m.attachAuthorizationWithClientSecret(id, clientSecret, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return &PollAttachAuthorizationResponse{
+		Approved:                !auth.approvedAt.IsZero(),
+		AttachAuthorizationCode: auth.code,
+	}, nil
+}
+
+func (m *Manager) ConsumeAttachAuthorization(id, clientSecret, code string, req CreateSessionRequest) (*principal.Principal, error) {
+	auth, err := m.attachAuthorizationWithClientSecret(id, clientSecret, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	requestHash, err := attachAuthorizationRequestHash(req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "hash provider dev attach authorization request: %v", err)
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, status.Error(codes.Unauthenticated, "provider dev attach authorization code is required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if auth.used {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev attach authorization was already used")
+	}
+	if auth.approvedBy == nil || auth.codeHash == "" {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev attach authorization is not approved")
+	}
+	if subtle.ConstantTimeCompare([]byte(hashAttachAuthorizationSecret(code)), []byte(auth.codeHash)) != 1 {
+		return nil, status.Error(codes.PermissionDenied, "provider dev attach authorization code is invalid")
+	}
+	if subtle.ConstantTimeCompare([]byte(requestHash), []byte(auth.requestHash)) != 1 {
+		return nil, status.Error(codes.PermissionDenied, "provider dev attach authorization request does not match")
+	}
+	auth.used = true
+	return clonePrincipal(auth.approvedBy), nil
 }
 
 func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]Target, error) {
@@ -452,12 +645,37 @@ func (m *Manager) CompleteCallWithDispatcherSecret(p *principal.Principal, sessi
 	return session.completeCall(callID, req)
 }
 
+func (m *Manager) CompleteCallWithDispatcherSecretOnly(sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
+	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
+	if err != nil {
+		return err
+	}
+	return session.completeCall(callID, req)
+}
+
 func (m *Manager) VerifyDispatcherSecret(p *principal.Principal, sessionID, dispatcherSecret string) error {
 	session, err := m.sessionForPrincipal(p, sessionID)
 	if err != nil {
 		return err
 	}
 	return session.verifyDispatcherSecret(dispatcherSecret)
+}
+
+func (m *Manager) VerifyDispatcherSecretOnly(sessionID, dispatcherSecret string) error {
+	_, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
+	return err
+}
+
+func (m *Manager) CloseSessionWithDispatcherSecret(sessionID, dispatcherSecret string) error {
+	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
+	if err != nil {
+		return err
+	}
+	if err := session.Close(); err != nil {
+		return status.Errorf(codes.Internal, "close provider dev session: %v", err)
+	}
+	m.removeSession(sessionID, session.owner)
+	return nil
 }
 
 func (s *Session) completeCall(callID string, req CompleteCallRequest) error {
@@ -651,6 +869,7 @@ func (m *Manager) Close() error {
 	}
 	m.sessions = map[string]*Session{}
 	m.ownerIndex = map[string][]string{}
+	m.authorizations = map[string]*AttachAuthorization{}
 	m.mu.Unlock()
 
 	var errs []error
@@ -678,6 +897,54 @@ func (m *Manager) closeIdleSessions(now time.Time) {
 	}
 }
 
+func (m *Manager) attachAuthorization(id string, now time.Time) (*AttachAuthorization, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, status.Error(codes.InvalidArgument, "provider dev attach authorization id is required")
+	}
+	if m == nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closeExpiredAuthorizationsLocked(now)
+	auth := m.authorizations[id]
+	if auth == nil {
+		return nil, status.Errorf(codes.NotFound, "provider dev attach authorization %q not found", id)
+	}
+	if !auth.expiresAt.IsZero() && now.After(auth.expiresAt) {
+		delete(m.authorizations, id)
+		return nil, status.Error(codes.DeadlineExceeded, "provider dev attach authorization expired")
+	}
+	return auth, nil
+}
+
+func (m *Manager) attachAuthorizationWithClientSecret(id, clientSecret string, now time.Time) (*AttachAuthorization, error) {
+	auth, err := m.attachAuthorization(id, now)
+	if err != nil {
+		return nil, err
+	}
+	clientSecret = strings.TrimSpace(clientSecret)
+	if clientSecret == "" {
+		return nil, status.Error(codes.Unauthenticated, "provider dev attach authorization secret is required")
+	}
+	if subtle.ConstantTimeCompare([]byte(hashAttachAuthorizationSecret(clientSecret)), []byte(auth.clientSecretHash)) != 1 {
+		return nil, status.Error(codes.PermissionDenied, "provider dev attach authorization secret is invalid")
+	}
+	return auth, nil
+}
+
+func (m *Manager) closeExpiredAuthorizationsLocked(now time.Time) {
+	for id, auth := range m.authorizations {
+		if auth == nil || (!auth.expiresAt.IsZero() && now.After(auth.expiresAt)) || auth.used {
+			delete(m.authorizations, id)
+		}
+	}
+}
+
 func (m *Manager) sessionForPrincipal(p *principal.Principal, sessionID string) (*Session, error) {
 	owner := principalSubjectID(p)
 	if owner == "" {
@@ -699,6 +966,27 @@ func (m *Manager) sessionForPrincipal(p *principal.Principal, sessionID string) 
 	}
 	if session.owner != owner {
 		return nil, status.Error(codes.PermissionDenied, "provider dev session belongs to another principal")
+	}
+	return session, nil
+}
+
+func (m *Manager) sessionForDispatcherSecret(sessionID, dispatcherSecret string) (*Session, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "session id is required")
+	}
+	if m == nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	m.closeIdleSessions(time.Now())
+	m.mu.RLock()
+	session := m.sessions[sessionID]
+	m.mu.RUnlock()
+	if session == nil || session.isClosed() {
+		return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", sessionID)
+	}
+	if err := session.verifyDispatcherSecret(dispatcherSecret); err != nil {
+		return nil, err
 	}
 	return session, nil
 }
@@ -839,6 +1127,18 @@ func (s *Session) touch() {
 	defer s.mu.Unlock()
 	if !s.closed {
 		s.lastSeen = time.Now()
+	}
+}
+
+func (a *AttachAuthorization) info() AttachAuthorizationInfo {
+	if a == nil {
+		return AttachAuthorizationInfo{}
+	}
+	return AttachAuthorizationInfo{
+		AuthorizationID: a.id,
+		Providers:       slices.Clone(a.providers),
+		ExpiresAt:       a.expiresAt,
+		Approved:        !a.approvedAt.IsZero(),
 	}
 }
 
@@ -1098,10 +1398,11 @@ func (c *sessionProviderClient) PostConnect(ctx context.Context, req *proto.Post
 }
 
 type Client struct {
-	BaseURL          string
-	Token            string
-	DispatcherSecret string
-	HTTPClient       *http.Client
+	BaseURL             string
+	Token               string
+	DispatcherSecret    string
+	AuthorizationSecret string
+	HTTPClient          *http.Client
 }
 
 type DispatcherOption func(*dispatcherConfig)
@@ -1122,6 +1423,35 @@ func (c *Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*
 		return nil, err
 	}
 	c.DispatcherSecret = out.DispatcherSecret
+	return &out, nil
+}
+
+func (c *Client) CreateAttachAuthorization(ctx context.Context, req CreateSessionRequest) (*CreateAttachAuthorizationResponse, error) {
+	var out CreateAttachAuthorizationResponse
+	if err := c.doJSON(ctx, http.MethodPost, PathAttachAuthorizations, req, &out); err != nil {
+		return nil, err
+	}
+	c.AuthorizationSecret = out.ClientSecret
+	return &out, nil
+}
+
+func (c Client) PollAttachAuthorization(ctx context.Context, authorizationID string) (*PollAttachAuthorizationResponse, error) {
+	path := PathAttachAuthorizations + "/" + url.PathEscape(authorizationID) + "/poll"
+	var out PollAttachAuthorizationResponse
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) CreateAuthorizedSession(ctx context.Context, authorizationID string, req CreateSessionRequest) (*CreateSessionResponse, error) {
+	var out CreateSessionResponse
+	path := PathAttachAuthorizations + "/" + url.PathEscape(authorizationID) + "/attachments"
+	if err := c.doJSON(ctx, http.MethodPost, path, req, &out); err != nil {
+		return nil, err
+	}
+	c.DispatcherSecret = out.DispatcherSecret
+	c.AuthorizationSecret = ""
 	return &out, nil
 }
 
@@ -1362,6 +1692,9 @@ func (c Client) doJSONStatus(ctx context.Context, method, path string, in any, o
 	}
 	if secret := strings.TrimSpace(c.DispatcherSecret); secret != "" {
 		req.Header.Set(HeaderDispatcherSecret, secret)
+	}
+	if secret := strings.TrimSpace(c.AuthorizationSecret); secret != "" {
+		req.Header.Set(HeaderAuthorizationSecret, secret)
 	}
 	httpClient := c.HTTPClient
 	if httpClient == nil {
@@ -1627,7 +1960,85 @@ func newDispatcherSecret() (secret string, hash string, err error) {
 	return secret, hashDispatcherSecret(secret), nil
 }
 
+func newAttachAuthorizationSecret() (secret string, hash string, err error) {
+	id, err := randomID()
+	if err != nil {
+		return "", "", err
+	}
+	secret = "pdaa_" + id
+	return secret, hashAttachAuthorizationSecret(secret), nil
+}
+
+func newAttachAuthorizationCode() (code string, hash string, err error) {
+	id, err := randomID()
+	if err != nil {
+		return "", "", err
+	}
+	code = "pdac_" + id
+	return code, hashAttachAuthorizationSecret(code), nil
+}
+
+func newAttachAuthorizationVerificationCode() (code string, hash string, err error) {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", "", err
+	}
+	n := binary.BigEndian.Uint32(b[:]) % 1000000
+	code = fmt.Sprintf("%03d-%03d", n/1000, n%1000)
+	return code, hashAttachAuthorizationSecret(normalizeAttachAuthorizationVerificationCode(code)), nil
+}
+
 func hashDispatcherSecret(secret string) string {
+	return hashProviderDevSecret(secret)
+}
+
+func hashAttachAuthorizationSecret(secret string) string {
+	return hashProviderDevSecret(secret)
+}
+
+func hashProviderDevSecret(secret string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(secret)))
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizeAttachAuthorizationVerificationCode(code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range code {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() != 6 {
+		return ""
+	}
+	return b.String()
+}
+
+func attachAuthorizationRequestHash(req CreateSessionRequest) (string, error) {
+	req.AttachAuthorizationCode = ""
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func clonePrincipal(p *principal.Principal) *principal.Principal {
+	if p == nil {
+		return nil
+	}
+	clone := *p
+	if p.Identity != nil {
+		identity := *p.Identity
+		clone.Identity = &identity
+	}
+	clone.Scopes = slices.Clone(p.Scopes)
+	clone.TokenPermissions = nil
+	clone.ActionPermissions = nil
+	return principal.Canonicalized(&clone)
 }

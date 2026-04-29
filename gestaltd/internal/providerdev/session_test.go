@@ -431,6 +431,26 @@ func TestHTTPTransportRequiresDispatcherSecretForDispatcherTraffic(t *testing.T)
 	}
 }
 
+func TestCreateAttachAuthorizationRejectsWhenPendingLimitReached(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{Name: "roadmap"}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	req := CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}}
+	now := time.Now()
+	for i := 0; i < DefaultMaxAttachAuthorizations; i++ {
+		if _, _, _, err := manager.CreateAttachAuthorization(req, now); err != nil {
+			t.Fatalf("CreateAttachAuthorization %d: %v", i, err)
+		}
+	}
+	_, _, _, err = manager.CreateAttachAuthorization(req, now)
+	if status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("CreateAttachAuthorization over limit code = %v, want %v (err=%v)", status.Code(err), codes.ResourceExhausted, err)
+	}
+}
+
 func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 	t.Parallel()
 
