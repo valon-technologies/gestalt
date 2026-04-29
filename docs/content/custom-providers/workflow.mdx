@@ -457,8 +457,8 @@ invoke target plugin operations.
 ## Config reference
 
 To use a workflow provider in a deployment, configure it under
-`providers.workflow`, then reference it from top-level `workflows:` or the
-global workflow API/CLI:
+`providers.workflow`, then reference it from top-level `workflows:`. The public
+workflow API and CLI publish events and inspect or cancel runs.
 
 ```yaml
 providers:

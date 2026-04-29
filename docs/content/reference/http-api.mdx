@@ -45,30 +45,15 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/workflow/schedules` | List user-owned workflow schedules. |
-| `POST` | `/api/v1/workflow/schedules` | Create a user-owned workflow schedule. |
-| `GET` | `/api/v1/workflow/schedules/{scheduleID}` | Inspect one workflow schedule. |
-| `PUT` | `/api/v1/workflow/schedules/{scheduleID}` | Update one workflow schedule. |
-| `DELETE` | `/api/v1/workflow/schedules/{scheduleID}` | Delete one workflow schedule. |
-| `POST` | `/api/v1/workflow/schedules/{scheduleID}/pause` | Pause one workflow schedule. |
-| `POST` | `/api/v1/workflow/schedules/{scheduleID}/resume` | Resume one workflow schedule. |
-| `GET` | `/api/v1/workflow/event-triggers` | List user-owned workflow triggers. |
-| `POST` | `/api/v1/workflow/event-triggers` | Create a user-owned workflow trigger. |
-| `GET` | `/api/v1/workflow/event-triggers/{triggerID}` | Inspect one workflow trigger. |
-| `PUT` | `/api/v1/workflow/event-triggers/{triggerID}` | Update one workflow trigger. |
-| `DELETE` | `/api/v1/workflow/event-triggers/{triggerID}` | Delete one workflow trigger. |
-| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/pause` | Pause one workflow trigger. |
-| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/resume` | Resume one workflow trigger. |
 | `POST` | `/api/v1/workflow/events` | Publish one workflow event. Gestalt normalizes the event and fans it out across the configured workflow providers. |
 | `GET` | `/api/v1/workflow/runs` | List workflow runs. Supports optional `plugin` and `status` query filters. |
 | `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
 | `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
 
-Schedule, event-trigger, and run responses return exactly one target under
-`target.plugin` or `target.agent`. Plugin targets use `target.plugin` as an
-object with `name`, `operation`, and optional `connection`, `instance`, and
-`input` fields. Schedule and trigger create/update requests use the same nested
-shape.
+Schedules and event triggers are configured in YAML under top-level
+`workflows:`. Run responses return exactly one target under `target.plugin` or
+`target.agent`. Plugin targets use `target.plugin` as an object with `name`,
+`operation`, and optional `connection`, `instance`, and `input` fields.
 
 ### Agents
 
@@ -180,47 +165,6 @@ curl 'http://localhost:8080/api/v1/slack/chat.postMessage?_connection=mcp&_insta
 curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
   -H 'Content-Type: application/json' \
   -d '{"_connection": "mcp", "channel": "C123", "text": "hello"}'
-
-# Create a workflow schedule
-curl -X POST http://localhost:8080/api/v1/workflow/schedules \
-  -H 'Authorization: Bearer gst_api_...' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "cron": "0 */6 * * *",
-    "timezone": "America/New_York",
-    "target": {
-      "plugin": {
-        "name": "github",
-        "operation": "issues.list",
-        "input": {
-          "owner": "valon-technologies",
-          "repo": "gestalt"
-        }
-      }
-    }
-  }'
-
-# Create a workflow trigger
-curl -X POST http://localhost:8080/api/v1/workflow/event-triggers \
-  -H 'Authorization: Bearer gst_api_...' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "match": {
-      "type": "roadmap.item.updated",
-      "source": "roadmap",
-      "subject": "item"
-    },
-    "target": {
-      "plugin": {
-        "name": "slack",
-        "operation": "chat.postMessage",
-        "input": {
-          "channel": "C123",
-          "text": "Roadmap item updated"
-        }
-      }
-    }
-  }'
 
 # Publish a workflow event
 curl -X POST http://localhost:8080/api/v1/workflow/events \

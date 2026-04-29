@@ -76,7 +76,7 @@ jobs:
 | `plugin connect NAME` | Connect a plugin via OAuth or manual authentication |
 | `plugin disconnect NAME` | Disconnect a plugin |
 | `plugin invoke NAME OP` | Execute a plugin operation |
-| `workflow ...` | Manage workflow schedules, triggers, events, and runs |
+| `workflow ...` | Publish workflow events and inspect or cancel workflow runs |
 | `agent` | Start or resume an interactive agent session |
 | `agent sessions ...` | Create, list, inspect, and update agent sessions |
 | `agent turns ...` | Create, list, inspect, cancel, and stream agent turns |

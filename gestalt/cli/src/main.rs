@@ -4,7 +4,6 @@ use gestalt::cli::{
     AgentArgs, AgentCommands, AgentSessionCommands, AgentTurnCommands, AgentTurnEventCommands,
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands,
     TokenCommands, WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands,
-    WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -52,57 +51,6 @@ fn run() -> anyhow::Result<()> {
         Commands::Workflow { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
-                WorkflowCommands::Schedules { command } => match command {
-                    WorkflowScheduleCommands::List { plugin } => {
-                        commands::workflows::list(&client, plugin.as_deref(), format)
-                    }
-                    WorkflowScheduleCommands::Get { id } => {
-                        commands::workflows::get(&client, &id, format)
-                    }
-                    WorkflowScheduleCommands::Create(args) => {
-                        commands::workflows::create(&client, &args, format)
-                    }
-                    WorkflowScheduleCommands::Update(args) => {
-                        commands::workflows::update(&client, &args, format)
-                    }
-                    WorkflowScheduleCommands::Delete { id } => {
-                        commands::workflows::delete(&client, &id, format)
-                    }
-                    WorkflowScheduleCommands::Pause { id } => {
-                        commands::workflows::pause(&client, &id, format)
-                    }
-                    WorkflowScheduleCommands::Resume { id } => {
-                        commands::workflows::resume(&client, &id, format)
-                    }
-                },
-                WorkflowCommands::Triggers { command } => match command {
-                    WorkflowTriggerCommands::List { plugin, event_type } => {
-                        commands::workflows::list_triggers(
-                            &client,
-                            plugin.as_deref(),
-                            event_type.as_deref(),
-                            format,
-                        )
-                    }
-                    WorkflowTriggerCommands::Get { id } => {
-                        commands::workflows::get_trigger(&client, &id, format)
-                    }
-                    WorkflowTriggerCommands::Create(args) => {
-                        commands::workflows::create_trigger(&client, &args, format)
-                    }
-                    WorkflowTriggerCommands::Update(args) => {
-                        commands::workflows::update_trigger(&client, &args, format)
-                    }
-                    WorkflowTriggerCommands::Delete { id } => {
-                        commands::workflows::delete_trigger(&client, &id, format)
-                    }
-                    WorkflowTriggerCommands::Pause { id } => {
-                        commands::workflows::pause_trigger(&client, &id, format)
-                    }
-                    WorkflowTriggerCommands::Resume { id } => {
-                        commands::workflows::resume_trigger(&client, &id, format)
-                    }
-                },
                 WorkflowCommands::Runs { command } => match command {
                     WorkflowRunCommands::List { plugin, status } => commands::workflows::list_runs(
                         &client,

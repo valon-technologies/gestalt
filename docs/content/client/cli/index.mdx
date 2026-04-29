@@ -4,7 +4,7 @@ asIndexPage: true
 
 # CLI
 
-`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, plugin connections, operation invocation, workflow management, agent sessions and turns, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
+`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, plugin connections, operation invocation, workflow events and runs, agent sessions and turns, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
 
 ## Global flags
 
@@ -27,8 +27,6 @@ asIndexPage: true
 | `gestalt plugin disconnect NAME` | Disconnect a plugin, removing stored credentials. |
 | `gestalt plugin invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugin describe NAME OPERATION` | Show one operation's parameter contract. |
-| `gestalt workflow schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
-| `gestalt workflow triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
 | `gestalt workflow events publish ...` | Publish an event into the workflow system. |
 | `gestalt workflow runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt agent` | Start or resume an interactive agent session. |
@@ -95,20 +93,6 @@ gestalt plugin invoke slack chat postMessage \
   --connection plugin \
   -p channel=C123 \
   -p text='hello'
-gestalt workflow schedules create \
-  --cron "0 */6 * * *" \
-  --plugin github \
-  --operation issues.list \
-  -p owner=valon-technologies \
-  -p repo=gestalt
-gestalt workflow triggers create \
-  --type roadmap.item.updated \
-  --source roadmap \
-  --subject item \
-  --plugin slack \
-  --operation chat.postMessage \
-  -p channel=C123 \
-  -p text='Roadmap item updated'
 gestalt workflow events publish \
   --type roadmap.item.updated \
   --source roadmap \
@@ -121,58 +105,8 @@ gestalt tokens create --name automation
 
 ## Workflow commands
 
-The workflow CLI currently covers global schedules, global triggers, and
-workflow runs.
-
-### Schedules
-
-```sh
-gestalt workflow schedules list
-gestalt workflow schedules list --plugin github
-gestalt workflow schedules get <schedule-id>
-gestalt workflow schedules create \
-  --cron "0 */6 * * *" \
-  --timezone America/New_York \
-  --plugin github \
-  --operation issues.list \
-  --connection default \
-  --instance acme-org \
-  -p owner=valon-technologies \
-  -p repo=gestalt \
-  -p state=open
-gestalt workflow schedules update <schedule-id> --cron "0 9 * * 1-5"
-gestalt workflow schedules pause <schedule-id>
-gestalt workflow schedules resume <schedule-id>
-gestalt workflow schedules delete <schedule-id>
-```
-
-Use `-p key=value` for strings and `-p key:=json` for structured values. Use
-`--input-file file.json` to load the target input from JSON instead of flags.
-
-### Triggers
-
-```sh
-gestalt workflow triggers list
-gestalt workflow triggers list --plugin slack --type roadmap.item.updated
-gestalt workflow triggers get <trigger-id>
-gestalt workflow triggers create \
-  --type roadmap.item.updated \
-  --source roadmap \
-  --subject item \
-  --plugin slack \
-  --operation chat.postMessage \
-  --connection default \
-  -p channel=C123 \
-  -p text='Roadmap item updated'
-gestalt workflow triggers update <trigger-id> --type roadmap.item.synced
-gestalt workflow triggers pause <trigger-id>
-gestalt workflow triggers resume <trigger-id>
-gestalt workflow triggers delete <trigger-id>
-```
-
-The create and update commands use the same target input conventions as
-schedules. `--type` is required. `--source` and `--subject` are optional exact
-match fields.
+The workflow CLI covers event publishing and workflow runs. Schedules and event
+triggers are configured in deployment YAML under top-level `workflows:`.
 
 ### Event publishing
 

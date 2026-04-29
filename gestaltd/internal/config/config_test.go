@@ -3096,6 +3096,35 @@ server:
 `,
 				want: `workflows.eventTriggers.task_updated.target.agent.provider is required`,
 			},
+			{
+				name: "agent unsupported workflow system tool",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          prompt: "Inspect failed runs."
+          tools:
+            - system: workflow
+              operation: schedules.create
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.tools[0].operation "schedules.create" is not supported for workflow system tools`,
+			},
 		}
 
 		for _, tc := range cases {

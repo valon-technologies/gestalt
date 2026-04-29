@@ -46,17 +46,17 @@ type workflowRunTriggerInfo struct {
 }
 
 type workflowRunInfo struct {
-	ID            string                     `json:"id"`
-	Provider      string                     `json:"provider"`
-	Status        string                     `json:"status,omitempty"`
-	Target        workflowScheduleTargetInfo `json:"target"`
-	Trigger       *workflowRunTriggerInfo    `json:"trigger,omitempty"`
-	CreatedBy     *workflowActorInfo         `json:"createdBy,omitempty"`
-	CreatedAt     *time.Time                 `json:"createdAt,omitempty"`
-	StartedAt     *time.Time                 `json:"startedAt,omitempty"`
-	CompletedAt   *time.Time                 `json:"completedAt,omitempty"`
-	StatusMessage string                     `json:"statusMessage,omitempty"`
-	ResultBody    string                     `json:"resultBody,omitempty"`
+	ID            string                  `json:"id"`
+	Provider      string                  `json:"provider"`
+	Status        string                  `json:"status,omitempty"`
+	Target        workflowTargetInfo      `json:"target"`
+	Trigger       *workflowRunTriggerInfo `json:"trigger,omitempty"`
+	CreatedBy     *workflowActorInfo      `json:"createdBy,omitempty"`
+	CreatedAt     *time.Time              `json:"createdAt,omitempty"`
+	StartedAt     *time.Time              `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time              `json:"completedAt,omitempty"`
+	StatusMessage string                  `json:"statusMessage,omitempty"`
+	ResultBody    string                  `json:"resultBody,omitempty"`
 }
 
 type workflowRunCancelRequest struct {
@@ -64,7 +64,7 @@ type workflowRunCancelRequest struct {
 }
 
 func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -92,7 +92,7 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -105,7 +105,7 @@ func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -144,7 +144,7 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.CompletedAt = run.CompletedAt
 	info.StatusMessage = run.StatusMessage
 	info.ResultBody = run.ResultBody
-	info.Target = workflowScheduleTargetInfoFromCore(run.Target)
+	info.Target = workflowTargetInfoFromCore(run.Target)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
 	info.CreatedBy = workflowActorInfoFromCore(run.CreatedBy)
 	return info

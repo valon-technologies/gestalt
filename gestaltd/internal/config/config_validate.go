@@ -1330,6 +1330,9 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 			if tool.Operation == "" {
 				return fmt.Errorf("config validation: %s.tools[%d].operation is required for system tool refs", path, i)
 			}
+			if !isSupportedWorkflowSystemToolOperation(tool.Operation) {
+				return fmt.Errorf("config validation: %s.tools[%d].operation %q is not supported for workflow system tools", path, i, tool.Operation)
+			}
 			if tool.Connection != "" || tool.Instance != "" {
 				return fmt.Errorf("config validation: %s.tools[%d] system refs cannot include connection or instance", path, i)
 			}
@@ -1349,6 +1352,15 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 		}
 	}
 	return nil
+}
+
+func isSupportedWorkflowSystemToolOperation(operation string) bool {
+	switch operation {
+	case "runs.list", "runs.get":
+		return true
+	default:
+		return false
+	}
 }
 
 func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {

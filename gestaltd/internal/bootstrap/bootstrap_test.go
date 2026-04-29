@@ -5179,7 +5179,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		Provider: "managed",
 		Prompt:   "Inspect the workflow and sync the roadmap",
 		Tools: []config.WorkflowAgentToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: "schedules.list"},
+			{System: coreagent.SystemToolWorkflow, Operation: "runs.list"},
 			{Plugin: "roadmap", Operation: "sync"},
 		},
 	}}
@@ -5236,7 +5236,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if target.Agent == nil || len(target.Agent.ToolRefs) != 2 {
 			t.Fatalf("%s target = %#v", label, target)
 		}
-		if target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Agent.ToolRefs[0].Operation != "schedules.list" {
+		if target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Agent.ToolRefs[0].Operation != "runs.list" {
 			t.Fatalf("%s workflow tool ref = %#v", label, target.Agent.ToolRefs[0])
 		}
 		if target.Agent.ToolRefs[1].Plugin != "roadmap" || target.Agent.ToolRefs[1].Operation != "sync" {

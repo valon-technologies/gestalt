@@ -32,7 +32,7 @@ type workflowEventPublishResponse struct {
 }
 
 func (s *Server) publishWorkflowEvent(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}

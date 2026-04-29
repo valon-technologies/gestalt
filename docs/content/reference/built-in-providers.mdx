@@ -118,9 +118,10 @@ plugins:
 
 ## Workflow Providers
 
-Workflow providers back global runs, schedules, and triggers. They are
-configured under `providers.workflow.<name>`, then referenced by top-level
-`workflows.*` config or the global workflow API/CLI.
+Workflow providers back workflow runs plus config-managed schedules and
+triggers. They are configured under `providers.workflow.<name>`, then
+referenced by top-level `workflows.*` config. The public workflow API and CLI
+publish events and inspect or cancel runs.
 
 ```yaml
 providers:
