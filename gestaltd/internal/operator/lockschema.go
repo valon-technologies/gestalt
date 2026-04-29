@@ -11,9 +11,6 @@ import (
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
 	providerLockSchemaVersion      = 5
-	providerLockSchemaVersionV4    = 4
-	providerLockSchemaVersionV3    = 3
-	providerLockSchemaVersionV2    = 2
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -60,7 +57,6 @@ type portableLockEntry struct {
 
 func newLockfile() *Lockfile {
 	return &Lockfile{
-		Version:             LockVersion,
 		Providers:           make(map[string]LockEntry),
 		Authentication:      make(map[string]LockEntry),
 		Authorization:       make(map[string]LockEntry),
@@ -81,9 +77,6 @@ func newLockfile() *Lockfile {
 func normalizeLockfile(lock *Lockfile) *Lockfile {
 	if lock == nil {
 		return newLockfile()
-	}
-	if lock.Version == 0 {
-		lock.Version = LockVersion
 	}
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockEntry)
@@ -241,7 +234,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion != providerLockSchemaVersion && lock.SchemaVersion != providerLockSchemaVersionV4 && lock.SchemaVersion != providerLockSchemaVersionV3 && lock.SchemaVersion != providerLockSchemaVersionV2 {
+	if lock.SchemaVersion != providerLockSchemaVersion {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
 	}
 	return nil
