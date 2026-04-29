@@ -945,10 +945,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
             "/api/v1/agent/turns/turn-display-tools/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
             "text/event-stream",
-            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_TUI_INPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"action\":\"Running\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"input\":{\"query\":\"sample\"}}}\n\n\
+            "data: {\"seq\":1,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"arguments\":{\"secret\":\"RAW_TUI_INPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"started\",\"action\":\"Running\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"input\":{\"query\":\"sample\",\"filters\":{\"status\":\"open\",\"tags\":[\"red\",\"blue\"]}}}}\n\n\
              data: {\"seq\":2,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"halfway\"}}\n\n\
              data: {\"seq\":3,\"type\":\"provider.tool\",\"visibility\":\"public\",\"display\":{\"kind\":\"tool\",\"phase\":\"progress\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"almost done\"}}\n\n\
-             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_TUI_OUTPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"action\":\"Ran\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"count\":1}}}\n\n\
+             data: {\"seq\":4,\"type\":\"provider.tool\",\"visibility\":\"public\",\"data\":{\"output\":{\"secret\":\"RAW_TUI_OUTPUT\"}},\"display\":{\"kind\":\"tool\",\"phase\":\"completed\",\"action\":\"Ran\",\"label\":\"lookup\",\"ref\":\"call-lookup\",\"text\":\"200\",\"output\":{\"count\":1,\"items\":[{\"id\":\"REC-1\",\"status\":\"open\"}]}}}\n\n\
              data: {\"seq\":5,\"type\":\"provider.status\",\"visibility\":\"public\",\"display\":{\"kind\":\"status\",\"phase\":\"completed\",\"text\":\"sync complete\"}}\n\n\
              data: {\"seq\":6,\"type\":\"provider.text\",\"visibility\":\"public\",\"display\":{\"kind\":\"text\",\"phase\":\"delta\",\"text\":\"tui\"}}\n\n\
              data: {\"seq\":7,\"type\":\"assistant.completed\",\"visibility\":\"public\",\"data\":{\"text\":\"tui suffix\"},\"display\":{\"kind\":\"text\",\"phase\":\"completed\"}}\n\n\
@@ -986,6 +986,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     session.wait_for(&mut output, "Ran");
     session.wait_for(&mut output, "200");
     session.wait_for(&mut output, "count");
+    session.wait_for(&mut output, "filters");
+    session.wait_for(&mut output, "REC-1");
+    session.wait_for(&mut output, "... +5 lines");
+    session.wait_for(&mut output, "... +4 lines");
     session.wait_for(&mut output, "suffix");
     session.wait_for(&mut output, "done");
     session.wait_for(&mut output, "fallback");
@@ -1006,6 +1010,10 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
             && output.contains("lookup")
             && output.contains("input")
             && output.contains("output")
+            && output.contains("filters")
+            && output.contains("REC-1")
+            && output.contains("... +5 lines")
+            && output.contains("... +4 lines")
             && output.contains("└─")
             && !output.contains("Tool")
             && !output.contains("tool>"),

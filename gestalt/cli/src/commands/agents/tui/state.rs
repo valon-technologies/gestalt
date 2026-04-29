@@ -15,6 +15,7 @@ use super::super::{
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
 const TOOL_PREVIEW_MAX_WIDTH: usize = 120;
+const TOOL_PREVIEW_MAX_LINES: usize = 6;
 const LEGACY_ASSISTANT_FORMAT: &str = "markdown";
 
 pub(super) struct AgentUiState {
@@ -1053,21 +1054,47 @@ fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
 }
 
 fn preview_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
-    value_any_field(data, keys)
-        .and_then(|value| compact_json(value).ok())
-        .map(|value| truncate_preview(&value))
+    value_any_field(data, keys).and_then(|value| format_tool_preview(value).ok())
 }
 
 fn preview_display_value(value: Option<&Value>) -> Option<String> {
-    value
-        .and_then(|value| compact_json(value).ok())
-        .map(|value| truncate_preview(&value))
+    value.and_then(|value| format_tool_preview(value).ok())
 }
 
 fn preview_display_error(value: Option<&Value>) -> Option<String> {
     value
         .and_then(|value| display_value_text(value).ok())
-        .map(|value| truncate_preview(&value))
+        .map(|value| truncate_multiline_preview(&value))
+}
+
+fn format_tool_preview(value: &Value) -> anyhow::Result<String> {
+    let preview = match value {
+        Value::Array(_) | Value::Object(_) => pretty_json(value)?,
+        _ => compact_json(value)?,
+    };
+    Ok(truncate_multiline_preview(&preview))
+}
+
+fn truncate_multiline_preview(value: &str) -> String {
+    let total_lines = value.lines().count();
+    let preview_lines = if total_lines > TOOL_PREVIEW_MAX_LINES {
+        TOOL_PREVIEW_MAX_LINES.saturating_sub(1)
+    } else {
+        TOOL_PREVIEW_MAX_LINES
+    };
+    let mut lines = value
+        .lines()
+        .take(preview_lines)
+        .map(truncate_preview)
+        .collect::<Vec<_>>();
+    if total_lines > TOOL_PREVIEW_MAX_LINES {
+        lines.push(format!("... +{} lines", total_lines - preview_lines));
+    }
+    if lines.is_empty() && !value.is_empty() {
+        truncate_preview(value)
+    } else {
+        lines.join("\n")
+    }
 }
 
 fn truncate_preview(value: &str) -> String {
