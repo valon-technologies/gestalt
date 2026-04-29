@@ -136,6 +136,9 @@ message WorkflowAccessPermission {
 }
 
 message WorkflowExecutionReference {
+  reserved 9;
+  reserved "target_fingerprint";
+
   string id = 1;
   string provider_name = 2;
   BoundWorkflowTarget target = 3;
@@ -144,7 +147,6 @@ message WorkflowExecutionReference {
   repeated WorkflowAccessPermission permissions = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp revoked_at = 8;
-  string target_fingerprint = 9;
   string subject_kind = 10;
   string display_name = 11;
   string auth_source = 12;

@@ -200,9 +200,7 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, 
 }
 
 func workflowTargetsEqual(left, right coreworkflow.Target) bool {
-	leftFingerprint, leftErr := coreworkflow.TargetFingerprint(left)
-	rightFingerprint, rightErr := coreworkflow.TargetFingerprint(right)
-	return leftErr == nil && rightErr == nil && leftFingerprint == rightFingerprint
+	return coreworkflow.TargetsEqual(left, right)
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
@@ -392,11 +390,6 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
 		Permissions:         workflowExecutionRefPermissionsForTarget(target),
 	}
-	fingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		return nil, err
-	}
-	ref.TargetFingerprint = fingerprint
 	if target.Agent != nil {
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
@@ -469,9 +462,6 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 		return false
 	}
 	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
-		return false
-	}
-	if strings.TrimSpace(existing.TargetFingerprint) != strings.TrimSpace(desired.TargetFingerprint) {
 		return false
 	}
 	if !workflowTargetsEqual(existing.Target, desired.Target) {

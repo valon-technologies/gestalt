@@ -69,16 +69,11 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 	if !ok {
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
-	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		t.Fatalf("workflow target fingerprint: %v", err)
-	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:                fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName:      providerName,
-		Target:            target,
-		TargetFingerprint: targetFingerprint,
-		SubjectID:         "system:config",
+		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
 			Plugin:     pluginTarget.PluginName,
 			Operations: []string{pluginTarget.Operation},
@@ -1478,9 +1473,6 @@ func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref
 		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
 	}
 	stored := cloneBootstrapWorkflowExecutionRef(ref)
-	if strings.TrimSpace(stored.TargetFingerprint) == "" {
-		return nil, errors.New("workflow execution reference target fingerprint is required")
-	}
 	p.executionRefs[stored.ID] = stored
 	return cloneBootstrapWorkflowExecutionRef(stored), nil
 }
@@ -4181,16 +4173,11 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
 	}
 	target := coreWorkflowPluginTarget("roadmap", "sync")
-	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		t.Fatalf("workflow target fingerprint: %v", err)
-	}
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:                "workflow_schedule:sched-test:ref-test",
-		ProviderName:      "basic",
-		Target:            target,
-		TargetFingerprint: targetFingerprint,
-		SubjectID:         "user:ada",
+		ID:           "workflow_schedule:sched-test:ref-test",
+		ProviderName: "basic",
+		Target:       target,
+		SubjectID:    "user:ada",
 	}); err != nil {
 		t.Fatalf("PutExecutionReference: %v", err)
 	}
@@ -4803,6 +4790,9 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 				Cron:      "0 2 * * *",
 				Timezone:  "UTC",
 				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
 			},
 		},
 	})
@@ -4815,6 +4805,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	provider.executionRefs[initialExecutionRef].Target.Plugin.Input["limit"] = float64(1)
 	_ = result.Close(context.Background())
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)

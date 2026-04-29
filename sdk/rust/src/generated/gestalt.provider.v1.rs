@@ -10088,8 +10088,6 @@ pub struct WorkflowExecutionReference {
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "8")]
     pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "9")]
-    pub target_fingerprint: ::prost::alloc::string::String,
     #[prost(string, tag = "10")]
     pub subject_kind: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]

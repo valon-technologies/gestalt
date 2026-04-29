@@ -1210,7 +1210,6 @@ type WorkflowExecutionReference struct {
 	Permissions         []*WorkflowAccessPermission `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
 	CreatedAt           *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	RevokedAt           *timestamppb.Timestamp      `protobuf:"bytes,8,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
-	TargetFingerprint   string                      `protobuf:"bytes,9,opt,name=target_fingerprint,json=targetFingerprint,proto3" json:"target_fingerprint,omitempty"`
 	SubjectKind         string                      `protobuf:"bytes,10,opt,name=subject_kind,json=subjectKind,proto3" json:"subject_kind,omitempty"`
 	DisplayName         string                      `protobuf:"bytes,11,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	AuthSource          string                      `protobuf:"bytes,12,opt,name=auth_source,json=authSource,proto3" json:"auth_source,omitempty"`
@@ -1303,13 +1302,6 @@ func (x *WorkflowExecutionReference) GetRevokedAt() *timestamppb.Timestamp {
 		return x.RevokedAt
 	}
 	return nil
-}
-
-func (x *WorkflowExecutionReference) GetTargetFingerprint() string {
-	if x != nil {
-		return x.TargetFingerprint
-	}
-	return ""
 }
 
 func (x *WorkflowExecutionReference) GetSubjectKind() string {
@@ -4348,7 +4340,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1e\n" +
 	"\n" +
 	"operations\x18\x02 \x03(\tR\n" +
-	"operations\"\xf1\x04\n" +
+	"operations\"\xdc\x04\n" +
 	"\x1aWorkflowExecutionReference\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
@@ -4360,14 +4352,14 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12-\n" +
-	"\x12target_fingerprint\x18\t \x01(\tR\x11targetFingerprint\x12!\n" +
+	"revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\x12!\n" +
 	"\fsubject_kind\x18\n" +
 	" \x01(\tR\vsubjectKind\x12!\n" +
 	"\fdisplay_name\x18\v \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vauth_source\x18\f \x01(\tR\n" +
 	"authSource\x12,\n" +
-	"\x12caller_plugin_name\x18\r \x01(\tR\x10callerPluginName\"\xdf\x02\n" +
+	"\x12caller_plugin_name\x18\r \x01(\tR\x10callerPluginNameJ\x04\b\t\x10\n" +
+	"R\x12target_fingerprint\"\xdf\x02\n" +
 	"\x0eWorkflowSignal\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x121\n" +

@@ -1,11 +1,9 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -62,7 +60,6 @@ type ExecutionReference struct {
 	ID                  string
 	ProviderName        string
 	Target              Target
-	TargetFingerprint   string
 	CallerPluginName    string
 	SubjectID           string
 	SubjectKind         string
@@ -310,29 +307,32 @@ type Host interface {
 	InvokeOperation(ctx context.Context, req InvokeOperationRequest) (*InvokeOperationResponse, error)
 }
 
-func TargetFingerprint(target Target) (string, error) {
+func TargetsEqual(left, right Target) bool {
+	if targetHasMixedKinds(left) || targetHasMixedKinds(right) {
+		return false
+	}
+	leftJSON, leftErr := json.Marshal(normalizedTargetComparisonPayload(left))
+	if leftErr != nil {
+		return false
+	}
+	rightJSON, rightErr := json.Marshal(normalizedTargetComparisonPayload(right))
+	return rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
+func targetHasMixedKinds(target Target) bool {
 	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
-		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+		return true
 	}
-	return targetFingerprint(normalizedTargetFingerprintPayload(target))
+	return false
 }
 
-func targetFingerprint(payload any) (string, error) {
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(payloadJSON)
-	return hex.EncodeToString(sum[:]), nil
-}
-
-type targetFingerprintPayload struct {
+type targetComparisonPayload struct {
 	Plugin *PluginTarget
 	Agent  *AgentTarget
 }
 
-func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload {
-	out := targetFingerprintPayload{}
+func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
+	out := targetComparisonPayload{}
 	if target.Agent != nil {
 		agentTarget := *target.Agent
 		if len(agentTarget.Messages) == 0 {

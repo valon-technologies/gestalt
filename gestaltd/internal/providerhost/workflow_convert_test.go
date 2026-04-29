@@ -1,7 +1,6 @@
 package providerhost
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -115,26 +114,5 @@ func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	}
 	if got := trigger.GetManual(); got != nil {
 		t.Fatalf("manual trigger = %#v, want nil", got)
-	}
-}
-
-func TestWorkflowExecutionReferenceFromProtoRequiresTargetFingerprint(t *testing.T) {
-	t.Parallel()
-
-	_, err := workflowExecutionReferenceFromProto(&proto.WorkflowExecutionReference{
-		Id:           "ref-1",
-		ProviderName: "basic",
-		Target: &proto.BoundWorkflowTarget{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: "demo",
-				Operation:  "refresh",
-			},
-		},
-	})
-	if err == nil {
-		t.Fatal("workflowExecutionReferenceFromProto succeeded, want missing target_fingerprint error")
-	}
-	if !strings.Contains(err.Error(), "target_fingerprint is required") {
-		t.Fatalf("error = %v, want target_fingerprint is required", err)
 	}
 }

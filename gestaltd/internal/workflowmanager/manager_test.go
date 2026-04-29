@@ -15,8 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-const canonicalManagerAgentWorkflowTargetFingerprint = "ad3621e6b034d26e8ef7b542e891eadcbca58a2d663bd998a758d2544204410e"
-
 func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing.T) {
 	t.Parallel()
 
@@ -141,11 +139,10 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		},
 	}}
 	ref := &coreworkflow.ExecutionReference{
-		ID:                "workflow_run:stale-permissions",
-		ProviderName:      "local",
-		Target:            target,
-		TargetFingerprint: canonicalManagerAgentWorkflowTargetFingerprint,
-		SubjectID:         "system:http_binding:github:event",
+		ID:           "workflow_run:stale-permissions",
+		ProviderName: "local",
+		Target:       target,
+		SubjectID:    "system:http_binding:github:event",
 		Permissions: []core.AccessPermission{{
 			Plugin:     "github",
 			Operations: []string{"events.handle"},
@@ -278,9 +275,6 @@ func (p *testWorkflowProvider) SignalRun(_ context.Context, req coreworkflow.Sig
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	copied := *ref
-	if strings.TrimSpace(copied.TargetFingerprint) == "" {
-		return nil, errors.New("workflow execution reference target fingerprint is required")
-	}
 	p.refs[copied.ID] = &copied
 	return &copied, nil
 }
