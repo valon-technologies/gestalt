@@ -143,9 +143,11 @@ plugins:
 ```
 
 This is why `plugins.<name>.execution.runtime.image`, `template`,
-`imagePullCredentials`, and `metadata` are forwarded to the runtime backend:
-they are runtime-specific session hints, not universal plugin semantics. Keep
-the manifest release and image digest in sync; Gestalt does not inspect the
+`imagePullAuth`, and `metadata` are forwarded to the runtime backend: they are
+runtime-specific session hints, not universal plugin semantics. For private OCI
+images, `imagePullAuth.dockerConfigJson` carries Docker config JSON, matching
+the registry auth material used by Docker and Kubernetes image pull secrets.
+Keep the manifest release and image digest in sync; Gestalt does not inspect the
 image to prove that the manifest entrypoint exists inside it.
 
 ## What to read next

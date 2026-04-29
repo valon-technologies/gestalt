@@ -7652,13 +7652,14 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves config secret ref in agent runtime image pull credentials", func(t *testing.T) {
+	t.Run("resolves config secret ref in agent runtime image pull auth", func(t *testing.T) {
 		t.Parallel()
 
+		dockerConfigJSON := `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"resolved-ghcr-token"}}}`
 		factories := validFactories()
 		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
 			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"ghcr-token": "resolved-ghcr-token"},
+				Secrets: map[string]string{"ghcr-docker-config": dockerConfigJSON},
 			}, nil
 		}
 
@@ -7669,9 +7670,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 					Mode: config.ExecutionModeHosted,
 					Runtime: &config.HostedRuntimeConfig{
 						Image: "ghcr.io/example/simple-agent:latest",
-						ImagePullCredentials: &config.HostedRuntimeImagePullCredentials{
-							Username: "ghcr-user",
-							Password: transportSecretRef("ghcr-token"),
+						ImagePullAuth: &config.HostedRuntimeImagePullAuth{
+							DockerConfigJSON: transportSecretRef("ghcr-docker-config"),
 						},
 					},
 				},
@@ -7682,12 +7682,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("ResolveConfigSecrets: %v", err)
 		}
 
-		creds := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullCredentials
-		if creds == nil {
-			t.Fatal("imagePullCredentials = nil")
+		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		if auth == nil {
+			t.Fatal("imagePullAuth = nil")
 		}
-		if creds.Password != "resolved-ghcr-token" {
-			t.Fatalf("imagePullCredentials.password = %q, want resolved-ghcr-token", creds.Password)
+		if auth.DockerConfigJSON != dockerConfigJSON {
+			t.Fatalf("imagePullAuth.dockerConfigJson = %q, want resolved Docker config JSON", auth.DockerConfigJSON)
 		}
 	})
 

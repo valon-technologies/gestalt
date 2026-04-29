@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
@@ -751,13 +752,15 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
 	runtimeCfg.Template = strings.TrimSpace(runtimeCfg.Template)
 	runtimeCfg.Image = strings.TrimSpace(runtimeCfg.Image)
-	if runtimeCfg.ImagePullCredentials != nil {
-		runtimeCfg.ImagePullCredentials.Username = strings.TrimSpace(runtimeCfg.ImagePullCredentials.Username)
+	if runtimeCfg.ImagePullAuth != nil {
 		if runtimeCfg.Image == "" {
-			return fmt.Errorf("config validation: %s.runtime.imagePullCredentials requires %s.runtime.image", subject, subject)
+			return fmt.Errorf("config validation: %s.runtime.imagePullAuth requires %s.runtime.image", subject, subject)
 		}
-		if runtimeCfg.ImagePullCredentials.Username == "" || strings.TrimSpace(runtimeCfg.ImagePullCredentials.Password) == "" {
-			return fmt.Errorf("config validation: %s.runtime.imagePullCredentials.username and password are required when imagePullCredentials is set", subject)
+		if strings.TrimSpace(runtimeCfg.ImagePullAuth.DockerConfigJSON) == "" {
+			return fmt.Errorf("config validation: %s.runtime.imagePullAuth.dockerConfigJson is required when imagePullAuth is set", subject)
+		}
+		if err := validateHostedRuntimeDockerConfigJSON(runtimeCfg.ImagePullAuth.DockerConfigJSON); err != nil {
+			return fmt.Errorf("config validation: %s.runtime.imagePullAuth.dockerConfigJson: %w", subject, err)
 		}
 	}
 	trimmed := make(map[string]string, len(runtimeCfg.Metadata))
@@ -770,6 +773,22 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	}
 	if runtimeCfg.Metadata != nil {
 		runtimeCfg.Metadata = trimmed
+	}
+	return nil
+}
+
+func validateHostedRuntimeDockerConfigJSON(value string) error {
+	if _, isSecretRef, err := ParseSecretRefTransport(value); isSecretRef || err != nil {
+		return err
+	}
+	var doc struct {
+		Auths map[string]json.RawMessage `json:"auths"`
+	}
+	if err := json.Unmarshal([]byte(value), &doc); err != nil {
+		return fmt.Errorf("must be valid Docker config JSON: %w", err)
+	}
+	if len(doc.Auths) == 0 {
+		return fmt.Errorf(`must contain a non-empty "auths" object`)
 	}
 	return nil
 }

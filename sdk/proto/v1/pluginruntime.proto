@@ -42,17 +42,18 @@ message PluginRuntimeSessionLifecycle {
   google.protobuf.Timestamp expires_at = 3;
 }
 
-message PluginRuntimeImagePullCredentials {
-  string username = 1;
-  string password = 2;
+message PluginRuntimeImagePullAuth {
+  string docker_config_json = 1;
 }
 
 message StartPluginRuntimeSessionRequest {
+  reserved 5;
+  reserved "image_pull_credentials";
   string plugin_name = 1;
   string template = 2;
   string image = 3;
   map<string, string> metadata = 4;
-  PluginRuntimeImagePullCredentials image_pull_credentials = 5;
+  PluginRuntimeImagePullAuth image_pull_auth = 6;
 }
 
 message GetPluginRuntimeSessionRequest {
