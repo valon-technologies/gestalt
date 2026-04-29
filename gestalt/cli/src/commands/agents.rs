@@ -293,6 +293,19 @@ fn agent_help_lines() -> Vec<String> {
     ]
 }
 
+fn agent_tui_help_lines() -> Vec<String> {
+    let mut lines = agent_help_lines();
+    let insert_at = lines
+        .iter()
+        .position(|line| line.contains("Ctrl-C cancels"))
+        .unwrap_or(lines.len());
+    lines.insert(
+        insert_at,
+        "  Ctrl-O toggles compact/full tool details.".to_string(),
+    );
+    lines
+}
+
 fn agent_session_lines(shell: &AgentShell) -> Vec<String> {
     vec![
         format!("session {}", shell.session.id),
