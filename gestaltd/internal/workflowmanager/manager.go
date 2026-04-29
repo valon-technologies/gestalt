@@ -983,12 +983,6 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.ProviderName = strings.TrimSpace(providerName)
 	target.Model = strings.TrimSpace(target.Model)
 	target.Prompt = strings.TrimSpace(target.Prompt)
-	if target.ToolSource == coreagent.ToolSourceModeUnspecified {
-		target.ToolSource = coreagent.ToolSourceModeNativeSearch
-	}
-	if target.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		return coreworkflow.Target{}, fmt.Errorf("unsupported workflow agent tool source %q", target.ToolSource)
-	}
 	if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow agent target prompt or messages is required")
 	}

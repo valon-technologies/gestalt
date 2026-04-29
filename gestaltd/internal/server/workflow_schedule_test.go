@@ -871,7 +871,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
 	storedTarget := provider.upsertReqs[0].Target
-	if storedTarget.Agent == nil || storedTarget.Agent.ToolSource != coreagent.ToolSourceModeNativeSearch {
+	if storedTarget.Agent == nil {
 		t.Fatalf("stored target = %#v", storedTarget)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {

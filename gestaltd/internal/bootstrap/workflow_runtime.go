@@ -353,7 +353,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		Model:            agentTarget.Model,
 		Messages:         messages,
 		ToolRefs:         append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
-		ToolSource:       agentTarget.ToolSource,
+		ToolSource:       coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:   maps.Clone(agentTarget.ResponseSchema),
 		Metadata:         metadata,
 		ProviderOptions:  maps.Clone(agentTarget.ProviderOptions),

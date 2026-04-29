@@ -47,7 +47,6 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
 			Prompt:       "Handle the webhook.",
-			ToolSource:   coreagent.ToolSourceModeNativeSearch,
 			ToolRefs: []coreagent.ToolRef{
 				{Plugin: "github", Operation: "bot.commitFiles"},
 				{Plugin: "github", Operation: "bot.openPullRequest"},
@@ -109,7 +108,6 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
 			Prompt:       "Handle the webhook.",
-			ToolSource:   coreagent.ToolSourceModeNativeSearch,
 			ToolRefs: []coreagent.ToolRef{
 				{Plugin: "github", Operation: "bot.createPullRequest"},
 			},
@@ -133,7 +131,6 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 	target := coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 		ProviderName: "simple",
 		Prompt:       "Handle the webhook.",
-		ToolSource:   coreagent.ToolSourceModeNativeSearch,
 		ToolRefs: []coreagent.ToolRef{
 			{Plugin: "github", Operation: "bot.openPullRequest"},
 		},

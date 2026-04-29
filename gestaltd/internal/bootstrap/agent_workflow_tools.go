@@ -433,7 +433,6 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 		Prompt:          workflowSystemToolStringArg(agentMap, "prompt"),
 		Messages:        messages,
 		ToolRefs:        toolRefs,
-		ToolSource:      coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:  responseSchema,
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,
