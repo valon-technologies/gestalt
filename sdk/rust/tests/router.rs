@@ -282,7 +282,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "identity".to_owned(),
+                    mode: "user".to_owned(),
                     ..Default::default()
                 }),
                 access: None,
@@ -296,7 +296,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(success.status, 200);
     assert_eq!(
         success.body,
-        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"identity","idempotency_key":"tool-call-123"}"#
+        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"user","idempotency_key":"tool-call-123"}"#
     );
 
     let unknown = server

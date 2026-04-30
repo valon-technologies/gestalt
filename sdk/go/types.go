@@ -123,8 +123,7 @@ type Subject struct {
 	AuthSource  string
 }
 
-// Credential describes the resolved connection or identity used to authorize a
-// request.
+// Credential describes the resolved credential used to authorize a request.
 type Credential struct {
 	Mode       string
 	SubjectID  string

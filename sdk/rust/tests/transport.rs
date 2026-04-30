@@ -256,7 +256,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "identity".to_string(),
+                    mode: "user".to_string(),
                     ..Default::default()
                 }),
                 access: Some(AccessContext {
@@ -292,7 +292,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"user","access_role":"admin","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client
@@ -309,7 +309,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
-                    mode: "identity".to_string(),
+                    mode: "user".to_string(),
                     ..Default::default()
                 }),
                 access: Some(AccessContext {
@@ -329,7 +329,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(catalog.name, "session-example");
     assert_eq!(
         catalog.display_name,
-        "acme|user:user-123|identity|viewer|schedule"
+        "acme|user:user-123|user|viewer|schedule"
     );
 
     let err = client

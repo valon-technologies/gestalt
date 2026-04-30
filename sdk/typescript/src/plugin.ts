@@ -37,8 +37,7 @@ export type ConnectionMode =
   | "unspecified"
   | "none"
   | "user"
-  | "platform"
-  | "identity";
+  | "platform";
 
 /**
  * Metadata for a single connection parameter exposed by a provider.
@@ -516,8 +515,6 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
       return 1;
     case "user":
       return 2;
-    case "identity":
-      return 3;
     case "platform":
       return 5;
     case "unspecified":

@@ -117,7 +117,7 @@ class PluginOperationTests(unittest.TestCase):
                 token="tok-abc",
                 connection_params={"region": "us-east-1"},
                 subject=Subject(id="user:user-123", kind="user"),
-                credential=Credential(mode="identity"),
+                credential=Credential(mode="user"),
                 access=Access(role="admin"),
                 invocation_token="invoke-123",
             ),
@@ -126,7 +126,7 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(body["token"], "tok-abc")
         self.assertEqual(body["region"], "us-east-1")
         self.assertEqual(body["subject_id"], "user:user-123")
-        self.assertEqual(body["credential_mode"], "identity")
+        self.assertEqual(body["credential_mode"], "user")
         self.assertEqual(body["access_role"], "admin")
         self.assertEqual(body["invocation_token"], "invoke-123")
 

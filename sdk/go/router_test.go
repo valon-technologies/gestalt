@@ -179,15 +179,15 @@ func TestRouterOperationExecution(t *testing.T) {
 		AuthSource: "api_token",
 	})
 	ctxWithRequest = gestalt.WithCredential(ctxWithRequest, gestalt.Credential{
-		Mode:      "identity",
-		SubjectID: "identity:__identity__",
+		Mode:      "user",
+		SubjectID: "user:user-123",
 	})
 	result, err = router.Execute(ctxWithRequest, provider, "echo", map[string]any{"value": "hello"}, "tok")
 	if err != nil {
 		t.Fatalf("Execute(with params): %v", err)
 	}
-	if result.Body != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}` {
-		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}`)
+	if result.Body != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123"}` {
+		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123"}`)
 	}
 
 	result, err = router.Execute(ctx, provider, "nonexistent", nil, "tok")
