@@ -185,5 +185,8 @@ func providerConfigureContext(parent context.Context) (context.Context, context.
 	if parent == nil {
 		parent = context.Background()
 	}
+	if useMigrationTimeout, _ := parent.Value(providerMigrationTimeoutContextKey{}).(bool); useMigrationTimeout {
+		return providerMigrationContext(parent)
+	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
 }
