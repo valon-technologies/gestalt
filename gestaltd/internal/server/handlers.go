@@ -125,6 +125,11 @@ func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, 
 
 func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Request) (string, error) {
 	p := PrincipalFromContext(r.Context())
+	if p != nil {
+		if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
+			return subjectID, nil
+		}
+	}
 	if principal.IsNonUserPrincipal(p) {
 		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 		if subjectID == "" {
@@ -217,6 +222,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	p := PrincipalFromContext(r.Context())
+	if p != nil {
+		if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
+			return s.connectedIntegrationsForSubject(r.Context(), subjectID)
+		}
+	}
 	if principal.IsNonUserPrincipal(p) {
 		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 		if subjectID == "" {

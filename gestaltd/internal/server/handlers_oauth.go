@@ -110,9 +110,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	if p != nil {
 		authSource = p.AuthSource()
 	}
+	actor := credentialActorFromPrincipal(p, subjectID)
 	state, err := s.stateCodec.Encode(integrationOAuthState{
 		SubjectID:        subjectID,
 		AuthSource:       authSource,
+		ActorSubjectID:   actor.SubjectID,
+		ActorUserID:      actor.UserID,
+		ActorAuthSource:  actor.AuthSource,
 		Integration:      req.Integration,
 		Connection:       connection,
 		Instance:         instance,
@@ -278,8 +282,11 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		TokenExpiresAt: tokenExpiresAt,
 		MetadataJSON:   metadata,
 	}
+	tm.ActorSubjectID = state.ActorSubjectID
+	tm.ActorUserID = state.ActorUserID
+	tm.ActorAuthSource = state.ActorAuthSource
 
-	result, err := s.runPostConnect(r.Context(), prov, tm)
+	result, err := s.runPostConnect(credentialMaterialContext(r.Context(), nil, tm), prov, tm)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)

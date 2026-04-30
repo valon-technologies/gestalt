@@ -138,12 +138,16 @@ Managed subjects are service-account identities for release bots, service accoun
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/grants` | List plugin authorization grants for the managed subject. |
 | `PUT` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Grant a plugin role to the managed subject. Requires managed subject `admin` and the caller must already hold the requested plugin role, or plugin `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Remove a plugin authorization grant from the managed subject. Requires managed subject `admin`. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}/integrations` | List plugins with connection state resolved against the managed subject's credential subject. Requires managed subject `viewer`. |
+| `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/start-oauth` | Start a plugin OAuth flow that stores credentials on the managed subject. Requires managed subject `editor`. |
+| `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/connect-manual` | Submit manual plugin credentials for the managed subject. Requires managed subject `editor`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/integrations/{name}` | Disconnect one plugin credential from the managed subject. Requires managed subject `editor`. |
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/tokens` | List API tokens owned by the managed subject. |
 | `POST` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Create a subject-owned API token. Plaintext is returned once. Requires managed subject `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens/{id}` | Revoke one subject-owned API token. Requires managed subject `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Revoke all API tokens owned by the managed subject. Requires managed subject `admin`. |
 
-The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects.
+The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's `credentialSubjectId`.
 
 ### Operator Surfaces
 
@@ -431,6 +435,14 @@ curl -X PUT http://localhost:8080/api/v1/authorization/subjects/service_account:
   -H 'Authorization: Bearer gst_api_...' \
   -H 'Content-Type: application/json' \
   -d '{"role":"viewer"}'
+
+curl -X POST http://localhost:8080/api/v1/authorization/subjects/service_account:release-bot/auth/connect-manual \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"integration":"github","credential":"ghp_..."}'
+
+curl http://localhost:8080/api/v1/authorization/subjects/service_account:release-bot/integrations \
+  -H 'Authorization: Bearer gst_api_...'
 
 curl -X POST http://localhost:8080/api/v1/authorization/subjects/service_account:release-bot/tokens \
   -H 'Authorization: Bearer gst_api_...' \

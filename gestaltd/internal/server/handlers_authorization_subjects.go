@@ -71,6 +71,11 @@ func (s *Server) mountAuthorizationSubjectRoutes(r chi.Router) {
 	r.Put("/authorization/subjects/{subjectID}/grants/{plugin}", s.putManagedSubjectGrant)
 	r.Delete("/authorization/subjects/{subjectID}/grants/{plugin}", s.deleteManagedSubjectGrant)
 
+	r.Get("/authorization/subjects/{subjectID}/integrations", s.listManagedSubjectIntegrations)
+	r.Post("/authorization/subjects/{subjectID}/auth/start-oauth", s.startManagedSubjectIntegrationOAuth)
+	r.Post("/authorization/subjects/{subjectID}/auth/connect-manual", s.connectManagedSubjectManual)
+	r.Delete("/authorization/subjects/{subjectID}/integrations/{name}", s.disconnectManagedSubjectIntegration)
+
 	r.Get("/authorization/subjects/{subjectID}/tokens", s.listManagedSubjectAPITokens)
 	r.Post("/authorization/subjects/{subjectID}/tokens", s.createManagedSubjectAPIToken)
 	r.Delete("/authorization/subjects/{subjectID}/tokens", s.revokeAllManagedSubjectAPITokens)
@@ -410,6 +415,50 @@ func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+func (s *Server) listManagedSubjectIntegrations(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectFromPath(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
+		return
+	}
+	s.listIntegrations(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+}
+
+func (s *Server) startManagedSubjectIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectFromPath(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
+		return
+	}
+	s.startIntegrationOAuth(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+}
+
+func (s *Server) connectManagedSubjectManual(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectFromPath(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
+		return
+	}
+	s.connectManual(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+}
+
+func (s *Server) disconnectManagedSubjectIntegration(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectFromPath(w, r)
+	if !ok {
+		return
+	}
+	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
+		return
+	}
+	s.disconnectIntegration(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+}
+
 func (s *Server) createManagedSubjectAPIToken(w http.ResponseWriter, r *http.Request) {
 	subject, ok := s.managedSubjectFromPath(w, r)
 	if !ok {
@@ -525,15 +574,19 @@ func (s *Server) currentManagedSubjectUserSubjectID(w http.ResponseWriter, r *ht
 }
 
 func (s *Server) requireUnscopedManagedSubjectCaller(w http.ResponseWriter, r *http.Request) bool {
-	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
-	if p == nil || p.Source != principal.SourceAPIToken {
-		return true
-	}
-	if p.TokenPermissions == nil && p.ActionPermissions == nil && len(p.Scopes) == 0 {
+	if managedSubjectCallerIsUnscoped(PrincipalFromContext(r.Context())) {
 		return true
 	}
 	writeError(w, http.StatusForbidden, "scoped API tokens cannot manage managed subjects")
 	return false
+}
+
+func managedSubjectCallerIsUnscoped(p *principal.Principal) bool {
+	p = principal.Canonicalized(p)
+	if p == nil || p.Source != principal.SourceAPIToken {
+		return true
+	}
+	return p.TokenPermissions == nil && p.ActionPermissions == nil && len(p.Scopes) == 0
 }
 
 func (s *Server) ensureManagedSubjectsAvailable(w http.ResponseWriter) bool {
@@ -621,6 +674,15 @@ func (s *Server) managedSubjectActionAllowed(ctx context.Context, subjectID, act
 		}
 	}
 	return false, nil
+}
+
+func managedSubjectCredentialContext(ctx context.Context, subjectID string) context.Context {
+	p := principal.Canonicalized(PrincipalFromContext(ctx))
+	if p == nil {
+		return ctx
+	}
+	p.CredentialSubjectID = strings.TrimSpace(subjectID)
+	return principal.WithPrincipal(ctx, p)
 }
 
 func (s *Server) writeManagedSubjectMembership(ctx context.Context, subjectID, memberSubjectID, role string) error {
