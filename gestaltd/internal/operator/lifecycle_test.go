@@ -543,7 +543,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	if intg.Command == "" {
 		t.Fatal("Command = empty, want prepared executable path")
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -607,7 +607,7 @@ spec:
 	if got := conn.Auth.Type; got != providermanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("MCP auth type = %q, want %q", got, providermanifestv1.AuthTypeMCPOAuth)
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -704,7 +704,7 @@ spec:
 	}
 }
 
-func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
+func TestPrepareAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -776,15 +776,15 @@ func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 				t.Fatalf("WriteFile config: %v", err)
 			}
 
-			_, err := NewLifecycle().InitAtPath(cfgPath)
+			_, err := NewLifecycle().PrepareAtPath(cfgPath)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("InitAtPath error = %v, want substring %q", err, tc.want)
+				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
 			}
 		})
 	}
 }
 
-func TestInitAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
+func TestPrepareAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -812,12 +812,12 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	if _, err := NewLifecycle().InitAtPath(cfgPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := NewLifecycle().PrepareAtPath(cfgPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 }
 
-func TestInitAtPath_RejectsHybridExecutableStaticOperationByOriginalNameAfterAlias(t *testing.T) {
+func TestPrepareAtPath_RejectsHybridExecutableStaticOperationByOriginalNameAfterAlias(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -847,13 +847,13 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().InitAtPath(cfgPath)
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "ping" on plugin "target"`) {
-		t.Fatalf("InitAtPath error = %v, want unknown operation error", err)
+		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 }
 
-func TestInitAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
+func TestPrepareAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -874,13 +874,13 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().InitAtPath(cfgPath)
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across merged catalogs`) {
-		t.Fatalf("InitAtPath error = %v, want duplicate operation error", err)
+		t.Fatalf("PrepareAtPath error = %v, want duplicate operation error", err)
 	}
 }
 
-func TestInitAtPath_AllowsManagedPluginInvokesOnFirstInit(t *testing.T) {
+func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -953,16 +953,16 @@ server:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(cfgPath)
+	lock, err := lc.PrepareAtPath(cfgPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if lock.Providers["caller"].Executable == "" || lock.Providers["target"].Executable == "" {
 		t.Fatalf("prepared plugin executables = %#v", lock.Providers)
 	}
 }
 
-func TestInitAtPath_RejectsSessionCatalogOnlyInvokesTarget(t *testing.T) {
+func TestPrepareAtPath_RejectsSessionCatalogOnlyInvokesTarget(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -987,13 +987,13 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().InitAtPath(cfgPath)
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `session-catalog-only operation "private_search" on plugin "target"`) {
-		t.Fatalf("InitAtPath error = %v, want session catalog invokes error", err)
+		t.Fatalf("PrepareAtPath error = %v, want session catalog invokes error", err)
 	}
 }
 
-func TestInitAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing.T) {
+func TestPrepareAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1018,16 +1018,16 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().InitAtPath(cfgPath)
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on plugin "target"`) {
-		t.Fatalf("InitAtPath error = %v, want unknown operation error", err)
+		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(statErr) {
 		t.Fatalf("lockfile should not be written on invokes validation failure, got stat error %v", statErr)
 	}
 }
 
-func TestInitAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
+func TestPrepareAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1052,12 +1052,12 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().InitAtPath(cfgPath)
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
 	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "private_search" on plugin "target"`) {
-		t.Fatalf("InitAtPath error = %v, want unknown operation error", err)
+		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 	if strings.Contains(err.Error(), "session-catalog-only operation") {
-		t.Fatalf("InitAtPath error = %v, want unknown operation classification", err)
+		t.Fatalf("PrepareAtPath error = %v, want unknown operation classification", err)
 	}
 }
 
@@ -1443,7 +1443,7 @@ plugins:
 					t.Fatalf("Plugin AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 				}
 			}
-			if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+			if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 				t.Fatalf("expected lockfile to be created: %v", err)
 			}
 		})
@@ -1489,10 +1489,10 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(cfgPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	lockPath := filepath.Join(dir, InitLockfileName)
+	lockPath := filepath.Join(dir, LockfileName)
 	lock, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
@@ -1630,18 +1630,18 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(cfgPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
-	lock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	lock, err := ReadLockfile(filepath.Join(dir, LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
 	pluginLock := lock.Providers["roadmap"]
 	pluginLock.Manifest = ""
 	lock.Providers["roadmap"] = pluginLock
-	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
@@ -1666,7 +1666,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		}
 	}
 
-	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
@@ -1678,7 +1678,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	}
 }
 
-func TestLoadForExecutionAtPath_ReinitializesManagedPluginWhenGenericArchiveLockIsStale(t *testing.T) {
+func TestLoadForExecutionAtPath_RefreshesManagedPluginWhenGenericArchiveLockIsStale(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1721,15 +1721,15 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(cfgPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := lc.PrepareAtPath(cfgPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
 	loadedCfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	paths := initPathsForConfig(cfgPath)
+	paths := lifecyclePathsForConfig(cfgPath)
 	staleLock := &Lockfile{
 		Providers: map[string]LockEntry{
 			"roadmap": {
@@ -1742,7 +1742,7 @@ server:
 			},
 		},
 	}
-	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), staleLock); err != nil {
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), staleLock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
@@ -1758,7 +1758,7 @@ server:
 		t.Fatal("loaded plugin command is empty")
 	}
 
-	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
@@ -1864,9 +1864,9 @@ server:
 	writeConfig(oldVersion)
 
 	lc := NewLifecycle()
-	initialLock, err := lc.InitAtPath(cfgPath)
+	initialLock, err := lc.PrepareAtPath(cfgPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
 	writeConfig(newVersion)
@@ -1874,7 +1874,7 @@ server:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	paths := initPathsForConfig(cfgPath)
+	paths := lifecyclePathsForConfig(cfgPath)
 	lock := normalizeLockfile(initialLock)
 	lock.Providers = map[string]LockEntry{
 		"roadmap": {
@@ -1889,7 +1889,7 @@ server:
 			},
 		},
 	}
-	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
@@ -1956,9 +1956,9 @@ server:
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(cfgPath)
+	lock, err := lc.PrepareAtPath(cfgPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
 	lock.Providers["example"] = LockEntry{
@@ -1977,7 +1977,7 @@ server:
 	uiEntry.Manifest = "stale/ui/manifest.json"
 	uiEntry.AssetRoot = "stale/ui/assets"
 	lock.UIs["roadmap"] = uiEntry
-	lockPath := filepath.Join(dir, InitLockfileName)
+	lockPath := filepath.Join(dir, LockfileName)
 	if err := WriteLockfile(lockPath, lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -2025,7 +2025,7 @@ server:
 	}
 }
 
-func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) {
+func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -2126,12 +2126,12 @@ server:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
-		t.Fatalf("InitAtPath error = %v, want substring %q", err, "spec.ui.path must stay within the package")
+	if _, err := lc.PrepareAtPath(cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
+		t.Fatalf("PrepareAtPath error = %v, want substring %q", err, "spec.ui.path must stay within the package")
 	}
 }
 
-func TestInitAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCoverage(t *testing.T) {
+func TestPrepareAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCoverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -2202,9 +2202,9 @@ authorization:
 			}
 
 			lc := NewLifecycle()
-			_, err := lc.InitAtPath(cfgPath)
+			_, err := lc.PrepareAtPath(cfgPath)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("InitAtPath error = %v, want substring %q", err, tc.want)
+				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
 			}
 		})
 	}
@@ -2227,7 +2227,7 @@ func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	}, false)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	paths := initPathsForConfig(cfgPath)
+	paths := lifecyclePathsForConfig(cfgPath)
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
 		metadataPath:    "/providers/auth-only/v" + version + "/provider-release.yaml",
 		archiveURLPath:  "/providers/auth-only/v" + version + "/auth-only.tar.gz",
@@ -2290,7 +2290,7 @@ func TestHashPlatformInEntries_HashesMountedUIAndProviderArchives(t *testing.T) 
 		},
 	}
 
-	if err := NewLifecycle().hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
+	if err := NewLifecycle().hashPlatformInEntries(context.Background(), lock, lifecyclePaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
 		t.Fatalf("hashPlatformInEntries: %v", err)
 	}
 
@@ -2390,7 +2390,7 @@ server:
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -2475,7 +2475,7 @@ server:
 	if authCfg["command"] == "" {
 		t.Fatalf("auth config command = %v, want prepared executable path", authCfg["command"])
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -2536,7 +2536,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	if !strings.Contains(string(catalogData), "generated_op") {
 		t.Fatalf("unexpected catalog contents: %s", catalogData)
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -2952,7 +2952,7 @@ print(json.dumps({
 		t.Fatalf("zero_status = %v, want 0", body["zero_status"])
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); err != nil {
 		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
@@ -3076,7 +3076,7 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	paths := initPathsForConfig(cfgPath)
+	paths := lifecyclePathsForConfig(cfgPath)
 
 	if lockMatchesConfig(cfg, paths, nil) {
 		t.Fatal("lockMatchesConfig returned true for nil lock")
@@ -3097,7 +3097,7 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 			},
 		},
 	}
-	paths := initPathsForConfig(cfgPath)
+	paths := lifecyclePathsForConfig(cfgPath)
 	if err := os.MkdirAll(paths.artifactsDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll artifacts: %v", err)
 	}
@@ -3294,7 +3294,7 @@ func TestReadLockfile_RejectsLockfileWithoutSchema(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, InitLockfileName)
+	lockPath := filepath.Join(dir, LockfileName)
 	if err := os.WriteFile(lockPath, []byte(`{"version":999,"providers":{}}`), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -3404,7 +3404,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, InitLockfileName)
+	lockPath := filepath.Join(dir, LockfileName)
 	want := &Lockfile{
 		Providers: map[string]LockEntry{
 			"example": {
@@ -3699,7 +3699,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
+	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, lifecyclePaths{}, "linux/amd64", nil); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 
