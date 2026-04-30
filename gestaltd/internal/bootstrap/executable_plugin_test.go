@@ -58,6 +58,7 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -487,7 +488,7 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 	}
 	r.mu.Unlock()
 
-	dir, err := providerhost.NewPluginTempDir("gstp-fake-")
+	dir, err := pluginservice.NewPluginTempDir("gstp-fake-")
 	if err != nil {
 		return nil, fmt.Errorf("create fake hosted plugin dir: %w", err)
 	}
@@ -499,7 +500,7 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 	}
 
 	srv := grpc.NewServer()
-	proto.RegisterIntegrationProviderServer(srv, providerhost.NewProviderServer(&coretesting.StubIntegration{
+	proto.RegisterIntegrationProviderServer(srv, pluginservice.NewServer(&coretesting.StubIntegration{
 		N:        req.PluginName,
 		DN:       "Fake Hosted Plugin",
 		Desc:     "test-only fake hosted plugin",

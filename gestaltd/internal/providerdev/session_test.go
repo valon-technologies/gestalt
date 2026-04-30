@@ -19,7 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,7 +41,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 			}},
 		},
 	}
-	spec := providerhost.StaticProviderSpec{
+	spec := pluginservice.StaticProviderSpec{
 		Name:           "roadmap",
 		DisplayName:    "Roadmap",
 		ConnectionMode: core.ConnectionModeNone,
@@ -55,7 +55,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 			}},
 		},
 	}
-	remoteSpec := providerhost.StaticProviderSpec{
+	remoteSpec := pluginservice.StaticProviderSpec{
 		Name:           "roadmap",
 		ConnectionMode: core.ConnectionModeUser,
 		AuthTypes:      []string{"oauth2"},
@@ -290,7 +290,7 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	manager, err := NewManager([]Target{{
 		Name:   "workplaceHub",
 		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
-		Spec: providerhost.StaticProviderSpec{
+		Spec: pluginservice.StaticProviderSpec{
 			Name: "workplaceHub",
 		},
 		Config: map[string]any{"remote": true},
@@ -302,7 +302,7 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
 	resp, err := manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{
 		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
-		Spec: providerhost.StaticProviderSpec{
+		Spec: pluginservice.StaticProviderSpec{
 			Name: "local-workplace-hub",
 		},
 	}}})

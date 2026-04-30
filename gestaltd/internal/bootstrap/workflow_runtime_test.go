@@ -20,9 +20,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -275,8 +275,8 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 
 	scheduledFor := time.Date(2026, time.April, 15, 12, 30, 0, 0, time.UTC)
 	roundTripProvider := &workflowRoundTripProvider{}
-	roundTripClient := newWorkflowRoundTripClient(t, providerhost.NewProviderServer(roundTripProvider))
-	roundTripRemote, err := providerhost.NewRemoteProvider(context.Background(), roundTripClient, providerhost.StaticProviderSpec{
+	roundTripClient := newWorkflowRoundTripClient(t, pluginservice.NewServer(roundTripProvider))
+	roundTripRemote, err := pluginservice.NewRemote(context.Background(), roundTripClient, pluginservice.StaticProviderSpec{
 		Name:           "workflow-roundtrip",
 		DisplayName:    "Workflow Round Trip",
 		Description:    "workflow round trip test provider",

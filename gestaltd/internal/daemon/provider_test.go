@@ -35,6 +35,7 @@ import (
 	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -645,15 +646,15 @@ func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testin
 	}
 
 	ctx := context.Background()
-	prov, err := providerhost.NewExecutableProvider(ctx, providerhost.ExecConfig{
+	prov, err := pluginservice.NewExecutable(ctx, pluginservice.ExecConfig{
 		Command: artifactPath,
-		StaticSpec: providerhost.StaticProviderSpec{
+		StaticSpec: pluginservice.StaticProviderSpec{
 			Name: "python-release",
 		},
 		Config: map[string]any{"greeting": "Hi"},
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableProvider: %v", err)
+		t.Fatalf("pluginservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := prov.(interface{ Close() error }); ok {
@@ -991,15 +992,15 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 	}
 
 	ctx := context.Background()
-	prov, err := providerhost.NewExecutableProvider(ctx, providerhost.ExecConfig{
+	prov, err := pluginservice.NewExecutable(ctx, pluginservice.ExecConfig{
 		Command: artifactPath,
-		StaticSpec: providerhost.StaticProviderSpec{
+		StaticSpec: pluginservice.StaticProviderSpec{
 			Name: rustReleasePluginName,
 		},
 		Config: map[string]any{"greeting": "Hi"},
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableProvider: %v", err)
+		t.Fatalf("pluginservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := prov.(interface{ Close() error }); ok {
