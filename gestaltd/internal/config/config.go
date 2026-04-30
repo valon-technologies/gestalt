@@ -57,7 +57,6 @@ type Config struct {
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
 	Runtime       RuntimeConfig             `yaml:"runtime,omitempty"`
-	Workflows     WorkflowsConfig           `yaml:"workflows,omitempty"`
 	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
 
@@ -591,73 +590,6 @@ func (c *HostedRuntimeConfig) lifecyclePolicyConfig() HostedRuntimePoolConfig {
 		return *c.Pool
 	}
 	return HostedRuntimePoolConfig{}
-}
-
-type WorkflowsConfig struct {
-	Schedules     map[string]WorkflowScheduleConfig     `yaml:"schedules,omitempty"`
-	EventTriggers map[string]WorkflowEventTriggerConfig `yaml:"eventTriggers,omitempty"`
-}
-
-type WorkflowScheduleConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Cron     string                `yaml:"cron,omitempty"`
-	Timezone string                `yaml:"timezone,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
-}
-
-type WorkflowEventTriggerConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
-}
-
-type WorkflowTargetConfig struct {
-	Plugin *WorkflowPluginTargetConfig `yaml:"plugin,omitempty"`
-	Agent  *WorkflowAgentConfig        `yaml:"agent,omitempty"`
-}
-
-type WorkflowPluginTargetConfig struct {
-	Name       string         `yaml:"name,omitempty"`
-	Operation  string         `yaml:"operation,omitempty"`
-	Connection string         `yaml:"connection,omitempty"`
-	Instance   string         `yaml:"instance,omitempty"`
-	Input      map[string]any `yaml:"input,omitempty"`
-}
-
-type WorkflowAgentConfig struct {
-	Provider        string                 `yaml:"provider,omitempty"`
-	Model           string                 `yaml:"model,omitempty"`
-	Prompt          string                 `yaml:"prompt,omitempty"`
-	Messages        []WorkflowAgentMessage `yaml:"messages,omitempty"`
-	Tools           []WorkflowAgentToolRef `yaml:"tools,omitempty"`
-	ResponseSchema  map[string]any         `yaml:"responseSchema,omitempty"`
-	Metadata        map[string]any         `yaml:"metadata,omitempty"`
-	ProviderOptions map[string]any         `yaml:"providerOptions,omitempty"`
-	Timeout         string                 `yaml:"timeout,omitempty"`
-}
-
-type WorkflowAgentMessage struct {
-	Role     string         `yaml:"role,omitempty"`
-	Text     string         `yaml:"text,omitempty"`
-	Metadata map[string]any `yaml:"metadata,omitempty"`
-}
-
-type WorkflowAgentToolRef struct {
-	System      string `yaml:"system,omitempty"`
-	Plugin      string `yaml:"plugin,omitempty"`
-	Operation   string `yaml:"operation,omitempty"`
-	Connection  string `yaml:"connection,omitempty"`
-	Instance    string `yaml:"instance,omitempty"`
-	Title       string `yaml:"title,omitempty"`
-	Description string `yaml:"description,omitempty"`
-}
-
-type WorkflowEventMatch struct {
-	Type    string `yaml:"type,omitempty"`
-	Source  string `yaml:"source,omitempty"`
-	Subject string `yaml:"subject,omitempty"`
 }
 
 func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -2520,8 +2452,6 @@ func applyDefaults(cfg *Config) {
 		cfg.Server.Public.Port = 8080
 	}
 	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
-	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
-	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
@@ -2534,20 +2464,6 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
 	cfg.Providers.Agent = nonNilProviderEntryMap(cfg.Providers.Agent)
-}
-
-func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
-	if in == nil {
-		return map[string]WorkflowScheduleConfig{}
-	}
-	return in
-}
-
-func nonNilWorkflowEventTriggerMap(in map[string]WorkflowEventTriggerConfig) map[string]WorkflowEventTriggerConfig {
-	if in == nil {
-		return map[string]WorkflowEventTriggerConfig{}
-	}
-	return in
 }
 
 func normalizeProviderSourceShapes(cfg *Config) {

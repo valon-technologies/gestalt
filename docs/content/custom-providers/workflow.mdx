@@ -397,9 +397,9 @@ This is useful for workflows where many external events should coalesce into
 one active run.
 
 Execution references store the subject, credential subject, caller plugin, and
-allowed plugin operations that delayed execution may use later. Config-managed
-workflows and user-owned workflows both rely on this reference when a provider
-fires a run after the creating request has ended.
+allowed plugin operations that delayed execution may use later. Workflows rely
+on this reference when a provider fires a run after the creating request has
+ended.
 
 ## Workflow host
 
@@ -482,8 +482,7 @@ invoke target plugin operations.
 ## Config reference
 
 To use a workflow provider in a deployment, configure it under
-`providers.workflow`, then reference it from top-level `workflows:` or the
-global workflow API/CLI:
+`providers.workflow`, then reference it from the global workflow API/CLI:
 
 ```yaml
 providers:
@@ -501,17 +500,6 @@ providers:
         db: workflow
       config:
         pollInterval: 1s
-
-workflows:
-  schedules:
-    nightly_sync:
-      provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, Gestalt

@@ -10,8 +10,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
-const ConfigManagedSchedulePrefix = "cfg_"
-
 type RunStatus string
 
 const (

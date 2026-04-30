@@ -456,6 +456,10 @@ pub enum WorkflowEventCommands {
 
 #[derive(Args)]
 pub struct WorkflowScheduleCreateArgs {
+    /// Workflow provider name
+    #[arg(long)]
+    pub provider: Option<String>,
+
     /// Cron expression (e.g. "0 */5 * * *")
     #[arg(long)]
     pub cron: String,
@@ -623,6 +627,10 @@ pub struct AgentTurnEventStreamArgs {
 
 #[derive(Args)]
 pub struct WorkflowTriggerCreateArgs {
+    /// Workflow provider name
+    #[arg(long)]
+    pub provider: Option<String>,
+
     /// Event type to match exactly
     #[arg(long = "type")]
     pub event_type: String,
@@ -668,6 +676,10 @@ pub struct WorkflowTriggerCreateArgs {
 pub struct WorkflowScheduleUpdateArgs {
     /// Schedule ID
     pub id: String,
+
+    /// Workflow provider name (leave unset to keep existing)
+    #[arg(long)]
+    pub provider: Option<String>,
 
     /// Cron expression (leave unset to keep existing)
     #[arg(long)]
@@ -718,6 +730,10 @@ pub struct WorkflowScheduleUpdateArgs {
 pub struct WorkflowTriggerUpdateArgs {
     /// Trigger ID
     pub id: String,
+
+    /// Workflow provider name (leave unset to keep existing)
+    #[arg(long)]
+    pub provider: Option<String>,
 
     /// Event type (leave unset to keep existing)
     #[arg(long = "type")]

@@ -246,39 +246,6 @@ plugins:
     ui:
       path: /roadmap
       bundle: roadmap
-workflows:
-  schedules:
-    nightly_sync:
-      cron: "0 2 * * *"
-      target:
-        plugin:
-          name: roadmap
-          operation: sync
-          connection: default
-          instance: tenant-a
-          input:
-            mode: incremental
-    nightly_summary:
-      cron: "0 3 * * *"
-      target:
-        agent:
-          provider: simple
-          model: fast
-          prompt: Summarize yesterday.
-          tools:
-            - plugin: roadmap
-              operation: sync
-  eventTriggers:
-    roadmap_updated:
-      match:
-        type: roadmap.item.updated
-        source: roadmap
-      target:
-        plugin:
-          name: roadmap
-          operation: sync
-          input:
-            mode: event
 `, indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1406,7 +1373,7 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	artifactRel := filepath.Base(binDest)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
-		Source:      "github.com/test/providers/indexeddb-inmem",
+		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "In-Memory IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
@@ -1589,7 +1556,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 	}
 	writeManifestFile(t, indexedDBDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
-		Source:      "github.com/test/providers/indexeddb-relationaldb",
+		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},

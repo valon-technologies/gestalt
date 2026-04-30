@@ -164,6 +164,7 @@ fn test_cli_creates_schedule() {
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
         r#"{
+            "provider":"test-provider",
             "cron":"0 */5 * * *",
             "timezone":"UTC",
             "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
@@ -180,6 +181,8 @@ fn test_cli_creates_schedule() {
             "workflow",
             "schedules",
             "create",
+            "--provider",
+            "test-provider",
             "--cron",
             "0 */5 * * *",
             "--timezone",
@@ -219,6 +222,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
         r#"{
+            "provider":"test-provider",
             "cron":"15 * * * *",
             "timezone":"UTC",
             "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
@@ -415,6 +419,7 @@ fn test_cli_creates_event_trigger() {
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
         r#"{
+            "provider":"test-provider",
             "match":{"type":"dummy.event","source":"dummy","subject":"item"},
             "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
             "paused":false
@@ -430,6 +435,8 @@ fn test_cli_creates_event_trigger() {
             "workflow",
             "triggers",
             "create",
+            "--provider",
+            "test-provider",
             "--type",
             "dummy.event",
             "--source",

@@ -4,7 +4,7 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared subject access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared subject access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
@@ -58,10 +58,6 @@ providers:
 runtime:
   providers:
     <name>: ...             # each is a RuntimeProviderEntry
-
-workflows:
-  schedules: {}             # config-managed schedules
-  eventTriggers: {}         # config-managed triggers
 
 server:
   # public URL for OAuth callbacks
@@ -511,12 +507,11 @@ and the built-in admin authorization APIs.
 
 ## Configuring workflow providers
 
-The `providers.workflow` block declares workflow backends. Config-managed
-entries under top-level `workflows.schedules` and `workflows.eventTriggers`
-select a provider with `provider`, or inherit the sole/default
-`providers.workflow` entry when that field is omitted. User-owned schedules use
-the same provider pool through the global workflow API and CLI surface:
-`/api/v1/workflow/schedules` and `gestalt workflow ...`.
+The `providers.workflow` block declares workflow backends. Schedules and
+triggers are not declared in YAML; create them through the global workflow API
+or CLI. Agents can create schedules through workflow system tools. Those
+requests select a provider with `provider`, or inherit the sole/default
+`providers.workflow` entry when that field is omitted.
 
 ```yaml
 providers:
@@ -534,33 +529,10 @@ providers:
         db: workflow
       config:
         pollInterval: 1s
-
-workflows:
-  schedules:
-    nightly_sync:
-      provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
-  eventTriggers:
-    item_updated:
-      provider: local
-      match:
-        type: roadmap.item.updated
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
 ```
 
-Workflow targets are always explicit through `target.plugin` or `target.agent`.
-For plugin targets, set `name`, `operation`, and optional `connection`,
-`instance`, and `input`. Config-managed schedules and event triggers are
-reconciled into the provider at startup. See [Workflow](/providers/workflow)
-for the user-facing and provider model.
+Schedules and triggers are created through the workflow HTTP API or CLI. See
+[Workflow](/providers/workflow) for the user-facing and provider model.
 
 ## Configuring agent providers
 

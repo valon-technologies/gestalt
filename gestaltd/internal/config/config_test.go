@@ -2624,14 +2624,10 @@ server:
 		}
 	})
 
-	t.Run("top-level workflows config uses canonical targets", func(t *testing.T) {
+	t.Run("rejects top-level workflows config", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
 workflows:
   schedules:
     nightly:
@@ -2641,194 +2637,16 @@ workflows:
         plugin:
           name: roadmap
           operation: nightly_sync
-          input:
-            source: yaml
-  eventTriggers:
-    task_updated:
-      provider: temporal
-      match:
-        type: roadmap.task.updated
-        source: roadmap
-      target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
-          input:
-            source: event
-      paused: true
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
 server:
-  providers:
-    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		wantSchedule := WorkflowScheduleConfig{
-			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
-					Name:      "roadmap",
-					Operation: "nightly_sync",
-					Input: map[string]any{
-						"source": "yaml",
-					},
-				},
-			},
-			Cron:     "0 2 * * *",
-			Timezone: "UTC",
-		}
-		if got := cfg.Workflows.Schedules["nightly"]; !reflect.DeepEqual(got, wantSchedule) {
-			t.Fatalf("Workflows.Schedules[nightly] = %#v, want %#v", got, wantSchedule)
-		}
-		wantTrigger := WorkflowEventTriggerConfig{
-			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
-					Name:      "roadmap",
-					Operation: "backfill_items",
-					Input: map[string]any{
-						"source": "event",
-					},
-				},
-			},
-			Match: WorkflowEventMatch{
-				Type:   "roadmap.task.updated",
-				Source: "roadmap",
-			},
-			Paused: true,
-		}
-		if got := cfg.Workflows.EventTriggers["task_updated"]; !reflect.DeepEqual(got, wantTrigger) {
-			t.Fatalf("Workflows.EventTriggers[task_updated] = %#v, want %#v", got, wantTrigger)
-		}
-	})
-
-	t.Run("workflow target validation errors use canonical paths", func(t *testing.T) {
-		t.Parallel()
-
-		cases := []struct {
-			name string
-			yaml string
-			want string
-		}{
-			{
-				name: "unknown schedule plugin",
-				yaml: `
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        plugin:
-          name: missing
-          operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.plugin.name references unknown plugin "missing"`,
-			},
-			{
-				name: "event trigger agent missing provider",
-				yaml: `
-workflows:
-  eventTriggers:
-    task_updated:
-      provider: temporal
-      match:
-        type: roadmap.task.updated
-      target:
-        agent:
-          model: gpt-5.5
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.eventTriggers.task_updated.target.agent.provider is required`,
-			},
-		}
-
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-
-				path := mustWriteConfigFile(t, tc.yaml)
-				_, err := Load(path)
-				if err == nil {
-					t.Fatal("Load succeeded, want error")
-				}
-				if !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("Load error = %v, want %q", err, tc.want)
-				}
-			})
-		}
-	})
-
-	t.Run("workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-    cleanup:
-      source:
-        path: ./providers/workflow/cleanup
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		effective, _, err := cfg.EffectiveWorkflowProvider(cfg.Workflows.Schedules["nightly"].Provider)
-		if err != nil {
-			t.Fatalf("EffectiveWorkflowProvider: %v", err)
-		}
-		if effective != "temporal" {
-			t.Fatalf("ProviderName = %q, want %q", effective, "temporal")
+		if !strings.Contains(err.Error(), `field workflows not found`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -2869,47 +2687,6 @@ server:
 		}
 	})
 
-	t.Run("rejects unknown workflow provider names", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: missing
-      cron: "0 2 * * *"
-      target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `workflows.schedules.nightly.provider`) || !strings.Contains(err.Error(), `unknown workflow "missing"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("rejects multiple workflow defaults even when plugins bind explicitly", func(t *testing.T) {
 		t.Parallel()
 
@@ -2918,15 +2695,6 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -2952,167 +2720,6 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `providers.workflow declares multiple defaults: cleanup, temporal`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("allows workflow schedules without provider operation allowlists", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    invalid:
-      provider: temporal
-      cron: "*/5 * * * *"
-      target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: unexpected error: %v", err)
-		}
-	})
-
-	t.Run("allows workflow event triggers without provider operation allowlists", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  eventTriggers:
-    invalid:
-      provider: temporal
-      match:
-        type: roadmap.task.updated
-      target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects workflow event triggers without match type", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  eventTriggers:
-    invalid:
-      provider: temporal
-      match:
-        source: roadmap
-      target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `workflows.eventTriggers.invalid.match.type is required`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("rejects invalid workflow schedule cron and timezone", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-workflows:
-  schedules:
-    invalid:
-      provider: temporal
-      cron: "0 0 0 * * *"
-      timezone: Mars/Olympus
-      target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `workflows.schedules.invalid.cron`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

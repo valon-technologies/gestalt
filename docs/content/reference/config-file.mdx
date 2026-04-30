@@ -10,7 +10,7 @@ them left-to-right before validation and bootstrap. The top-level keys are
 `authorization` (shared subject access policy), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `runtime` (hosted execution backends),
-`workflows` (config-managed schedules and triggers), and `plugins`
+and `plugins`
 (executable integrations and optional plugin-backed UI mounts):
 
 ```yaml
@@ -33,9 +33,6 @@ providers:
   telemetry: {}
   ui: {}
   workflow: {}
-workflows:
-  schedules: {}
-  eventTriggers: {}
 plugins: {}
 ```
 
@@ -424,13 +421,8 @@ The exact config fields depend on the selected authorization provider package. T
 ## `providers.workflow`
 
 Workflow providers back global runs, schedules, and triggers. Configure
-one or more named entries under `providers.workflow`, then reference them from
-top-level `workflows.schedules.*.provider` or
-`workflows.eventTriggers.*.provider`. There is no
-`server.providers.workflow`: config-managed workflow objects choose a provider
-explicitly, or inherit the sole/default workflow provider when `provider` is
-omitted. User-owned schedules and triggers use the same provider pool
-through `/api/v1/workflow/schedules`,
+one or more named entries under `providers.workflow`; user-created schedules
+and triggers select those providers through `/api/v1/workflow/schedules`,
 `/api/v1/workflow/event-triggers`, and `gestalt workflow ...`.
 
 ```yaml
@@ -453,26 +445,6 @@ providers:
           - runs
       config:
         pollInterval: 1s
-
-workflows:
-  schedules:
-    nightly_sync:
-      provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
-  eventTriggers:
-    item_updated:
-      provider: local
-      match:
-        type: roadmap.item.updated
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, it binds a
@@ -482,7 +454,7 @@ allowlist logical stores exposed through that binding.
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named workflow entry as the default selection when a config-managed workflow object or API request omits `provider`. |
+| `default` | Marks this named workflow entry as the default selection when a workflow API request omits `provider`. |
 | `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the workflow provider. |
@@ -554,88 +526,6 @@ longer accepted; use `providers.agent.<name>.execution.runtime`.
 | `env` | Extra environment variables passed to the provider process. |
 | `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
-
-## `workflows`
-
-Top-level `workflows` declares config-managed schedules and triggers.
-These objects are reconciled into the selected workflow provider at startup and
-invoke an explicit `target`. A target is exactly one of `target.plugin` or
-`target.agent`.
-
-Config-managed workflows are deployment-owned. They are created from YAML at
-startup, updated when config changes, and removed when deleted from config.
-They are distinct from user-owned schedules created through the global workflow
-HTTP API and CLI. For an end-to-end usage guide, see
-[Workflow](/providers/workflow).
-
-```yaml
-workflows:
-  schedules:
-    nightly_sync:
-      provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
-          connection: default
-          instance: tenant-a
-          input:
-            mode: incremental
-      paused: false
-
-  eventTriggers:
-    item_updated:
-      provider: local
-      match:
-        type: roadmap.item.updated
-        source: roadmap
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
-          input:
-            reason: sync
-      paused: false
-```
-
-### `workflows.schedules.*`
-
-| Field | Description |
-| --- | --- |
-| `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.plugin.name` | Target plugin key from `plugins`. Required when `target.plugin` is used. |
-| `target.plugin.operation` | Target operation ID. Required when `target.plugin` is used. |
-| `target.plugin.connection` | Optional target connection name. |
-| `target.plugin.instance` | Optional target instance name. |
-| `target.plugin.input` | Optional static input merged into the invocation payload. |
-| `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `providerOptions`, and `timeout`. |
-| `cron` | **Required.** Five-field cron expression. |
-| `timezone` | IANA timezone name. Defaults to `UTC`. |
-| `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
-
-### `workflows.eventTriggers.*`
-
-| Field | Description |
-| --- | --- |
-| `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.plugin.name` | Target plugin key from `plugins`. Required when `target.plugin` is used. |
-| `target.plugin.operation` | Target operation ID. Required when `target.plugin` is used. |
-| `target.plugin.connection` | Optional target connection name. |
-| `target.plugin.instance` | Optional target instance name. |
-| `target.plugin.input` | Optional static input merged into the invocation payload. |
-| `target.agent` | Optional agent target using the same shape as workflow agent requests. |
-| `match.type` | **Required.** Event type matcher. |
-| `match.source` | Optional event source matcher. |
-| `match.subject` | Optional event subject matcher. |
-| `paused` | When `true`, Gestalt reconciles the trigger in a paused state. |
-
-Event trigger matching is exact string matching. `match.type` is required;
-`match.source` and `match.subject` are optional exact-match filters. Event
-triggers can be config-managed through YAML or user-owned through the global
-workflow HTTP API and CLI.
-
 ## `providers.cache`
 
 Caches are provider-based and plugin-bound. Configure one or more named entries

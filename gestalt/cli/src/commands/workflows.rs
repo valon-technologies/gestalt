@@ -34,6 +34,7 @@ pub fn get(client: &ApiClient, id: &str, format: Format) -> Result<()> {
 pub fn create(client: &ApiClient, args: &WorkflowScheduleCreateArgs, format: Format) -> Result<()> {
     let input = build_optional_map(&args.params, args.input_file.as_deref())?;
     let body = build_upsert_body(
+        args.provider.as_deref(),
         &args.cron,
         args.timezone.as_deref(),
         &args.plugin,
@@ -120,7 +121,7 @@ pub fn create_trigger(
 ) -> Result<()> {
     let input = build_optional_map(&args.params, args.input_file.as_deref())?;
     let body = build_trigger_upsert_body(
-        None,
+        args.provider.as_deref(),
         &args.event_type,
         args.source.as_deref(),
         args.subject.as_deref(),
@@ -357,6 +358,7 @@ fn build_event_publish_body(
 
 #[allow(clippy::too_many_arguments)]
 fn build_upsert_body(
+    provider: Option<&str>,
     cron: &str,
     timezone: Option<&str>,
     plugin: &str,
@@ -367,6 +369,12 @@ fn build_upsert_body(
     paused: bool,
 ) -> Value {
     let mut body = Map::new();
+    if let Some(provider) = provider {
+        let provider = provider.trim();
+        if !provider.is_empty() {
+            body.insert("provider".to_string(), Value::String(provider.to_string()));
+        }
+    }
     body.insert("cron".to_string(), Value::String(cron.to_string()));
     if let Some(timezone) = timezone {
         body.insert("timezone".to_string(), Value::String(timezone.to_string()));
@@ -412,6 +420,7 @@ fn build_trigger_upsert_body(
 }
 
 fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<Value> {
+    let provider = resolve_optional_string(args.provider.as_deref(), existing["provider"].as_str());
     let cron = match args.cron.as_deref() {
         Some(value) => value.to_string(),
         None => existing["cron"]
@@ -459,6 +468,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
     };
 
     Ok(build_upsert_body(
+        provider.as_deref(),
         &cron,
         timezone.as_deref(),
         &plugin,
@@ -471,6 +481,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
 }
 
 fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> Result<Value> {
+    let provider = resolve_optional_string(args.provider.as_deref(), existing["provider"].as_str());
     let event_type = match args.event_type.as_deref() {
         Some(value) => value.to_string(),
         None => existing["match"]["type"]
@@ -521,7 +532,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     };
 
     Ok(build_trigger_upsert_body(
-        existing["provider"].as_str(),
+        provider.as_deref(),
         &event_type,
         source.as_deref(),
         subject.as_deref(),

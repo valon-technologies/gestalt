@@ -96,12 +96,14 @@ gestalt plugin invoke slack chat postMessage \
   -p channel=C123 \
   -p text='hello'
 gestalt workflow schedules create \
+  --provider local \
   --cron "0 */6 * * *" \
   --plugin github \
   --operation issues.list \
   -p owner=valon-technologies \
   -p repo=gestalt
 gestalt workflow triggers create \
+  --provider local \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -131,6 +133,7 @@ gestalt workflow schedules list
 gestalt workflow schedules list --plugin github
 gestalt workflow schedules get <schedule-id>
 gestalt workflow schedules create \
+  --provider local \
   --cron "0 */6 * * *" \
   --timezone America/New_York \
   --plugin github \
@@ -140,7 +143,7 @@ gestalt workflow schedules create \
   -p owner=valon-technologies \
   -p repo=gestalt \
   -p state=open
-gestalt workflow schedules update <schedule-id> --cron "0 9 * * 1-5"
+gestalt workflow schedules update <schedule-id> --provider local --cron "0 9 * * 1-5"
 gestalt workflow schedules pause <schedule-id>
 gestalt workflow schedules resume <schedule-id>
 gestalt workflow schedules delete <schedule-id>
@@ -156,6 +159,7 @@ gestalt workflow triggers list
 gestalt workflow triggers list --plugin slack --type roadmap.item.updated
 gestalt workflow triggers get <trigger-id>
 gestalt workflow triggers create \
+  --provider local \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -164,7 +168,7 @@ gestalt workflow triggers create \
   --connection default \
   -p channel=C123 \
   -p text='Roadmap item updated'
-gestalt workflow triggers update <trigger-id> --type roadmap.item.synced
+gestalt workflow triggers update <trigger-id> --provider local --type roadmap.item.synced
 gestalt workflow triggers pause <trigger-id>
 gestalt workflow triggers resume <trigger-id>
 gestalt workflow triggers delete <trigger-id>
