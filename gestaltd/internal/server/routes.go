@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -171,7 +172,17 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 		s.mountAuthRoutes(r)
 		s.mountProviderDevPublicRoutes(r)
 		s.mountAuthenticatedRoutes(r)
+		r.NotFound(apiNotFound)
+		r.MethodNotAllowed(apiMethodNotAllowed)
 	})
+}
+
+func apiNotFound(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusNotFound, fmt.Sprintf("API route %q not found", r.URL.Path))
+}
+
+func apiMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	writeError(w, http.StatusMethodNotAllowed, fmt.Sprintf("method %s is not allowed for API route %q", r.Method, r.URL.Path))
 }
 
 func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) {

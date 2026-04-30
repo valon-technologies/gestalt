@@ -5846,6 +5846,25 @@ func TestMountedRootUIRoutes(t *testing.T) {
 	if strings.Contains(string(body), "root-shell") {
 		t.Fatalf("health body unexpectedly served root UI: %q", body)
 	}
+
+	resp, err = http.Get(ts.URL + "/api/v1/identities")
+	if err != nil {
+		t.Fatalf("GET unknown API route: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll unknown API route: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown API route status = %d, want 404", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("unknown API route content-type = %q, want application/json", ct)
+	}
+	if strings.Contains(string(body), "root-shell") {
+		t.Fatalf("unknown API route unexpectedly served root UI: %q", body)
+	}
 }
 
 func TestMountedRootUIRoutesHiddenOnManagementProfile(t *testing.T) {
