@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -243,31 +245,27 @@ func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integr
 	}, "failed to render success page")
 }
 
-func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, error) {
+func (s *Server) resolvePendingConnectionPrincipal(r *http.Request) (*principal.Principal, bool, error) {
 	if s.noAuth {
-		return "", false, nil
+		return nil, false, nil
 	}
 	p, err := s.resolveRequestPrincipalWithUserID(r)
 	if err != nil {
 		if errors.Is(err, errInvalidAuthorizationHeader) {
-			return "", true, principal.ErrInvalidToken
+			return nil, true, principal.ErrInvalidToken
 		}
-		return "", true, err
+		return nil, true, err
 	}
 	if p == nil {
-		return "", false, nil
+		return nil, false, nil
 	}
 	if principal.IsNonUserPrincipal(p) {
-		return "", true, errUserRequired
+		return nil, true, errUserRequired
 	}
-	subjectID := strings.TrimSpace(p.SubjectID)
-	if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
-		subjectID = principal.UserSubjectID(p.UserID)
+	if strings.TrimSpace(p.SubjectID) == "" && strings.TrimSpace(p.UserID) == "" {
+		return nil, true, fmt.Errorf("authenticated principal missing subject ID")
 	}
-	if subjectID == "" {
-		return "", true, fmt.Errorf("authenticated principal missing subject ID")
-	}
-	return subjectID, true, nil
+	return principal.Canonicalized(p), true, nil
 }
 
 func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pendingConnectionState) error {
@@ -291,31 +289,61 @@ func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pend
 	return nil
 }
 
-func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
-	subjectID, authenticated, err := s.resolvePendingConnectionUserID(r)
+func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) (*principal.Principal, bool) {
+	p, authenticated, err := s.resolvePendingConnectionPrincipal(r)
 	if err != nil {
 		if errors.Is(err, errUserRequired) {
 			writeError(w, http.StatusForbidden, errUserRequired.Error())
-			return false
+			return nil, false
 		}
 		if errors.Is(err, principal.ErrInvalidToken) {
 			writeError(w, http.StatusUnauthorized, "invalid token")
-			return false
+			return nil, false
 		}
 		writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
-		return false
+		return nil, false
 	}
-	if authenticated && subjectID != state.Credential.SubjectID {
-		writeError(w, http.StatusNotFound, "pending connection not found")
-		return false
+	if authenticated {
+		subjectID := strings.TrimSpace(p.SubjectID)
+		if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+			subjectID = principal.UserSubjectID(p.UserID)
+		}
+		if subjectID != state.Credential.SubjectID {
+			if !s.authorizeManagedSubjectPendingConnection(r.Context(), p, state.Credential.SubjectID) {
+				writeError(w, http.StatusNotFound, "pending connection not found")
+				return nil, false
+			}
+		}
+		return p, true
 	}
 	if !authenticated {
+		if _, err := canonicalServiceAccountSubjectID(state.Credential.SubjectID); err == nil {
+			writeError(w, http.StatusUnauthorized, "pending connection authorization required")
+			return nil, false
+		}
 		if err := s.authorizePendingConnectionByCookie(r, state); err != nil {
 			writeError(w, http.StatusUnauthorized, "pending connection authorization required")
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return nil, true
+}
+
+func (s *Server) authorizeManagedSubjectPendingConnection(ctx context.Context, p *principal.Principal, subjectID string) bool {
+	if _, err := canonicalServiceAccountSubjectID(subjectID); err != nil {
+		return false
+	}
+	if !managedSubjectCallerIsUnscoped(p) {
+		return false
+	}
+	if s.managedSubjects == nil || s.authorizationProvider == nil || s.authorizer == nil {
+		return false
+	}
+	if _, err := s.managedSubjects.GetManagedSubject(ctx, subjectID); err != nil {
+		return false
+	}
+	allowed, err := s.managedSubjectActionAllowed(principal.WithPrincipal(ctx, p), subjectID, authorization.ProviderManagedSubjectActionConnect)
+	return err == nil && allowed
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +388,8 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	}
 	providerName = state.Credential.Integration
 	auditTarget = connectionAuditTarget(state.Credential.Integration, state.Credential.Connection, state.Credential.Instance)
-	if !s.authorizePendingConnection(w, r, state) {
+	completionPrincipal, ok := s.authorizePendingConnection(w, r, state)
+	if !ok {
 		auditErr = errors.New("pending connection authorization required")
 		return
 	}
@@ -413,7 +442,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		auditErr = errors.New("integration not found")
 		return
 	}
-	if _, err := s.completeConnection(r.Context(), prov, tm); err != nil {
+	if _, err := s.completeConnection(credentialMaterialContext(r.Context(), completionPrincipal, tm), prov, tm); err != nil {
 		auditErr = errors.New("failed to store connection")
 		writeError(w, http.StatusInternalServerError, "failed to store connection")
 		return

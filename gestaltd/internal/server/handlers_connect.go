@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 type connectManualRequest struct {
@@ -129,6 +130,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  effectiveCredential,
 		MetadataJSON: manualMeta,
 	}
+	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
@@ -248,15 +250,69 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type credentialMaterial struct {
-	SubjectID      string
-	AuthSource     string
-	Integration    string
-	Connection     string
-	Instance       string
-	AccessToken    string
-	RefreshToken   string
-	TokenExpiresAt *time.Time
-	MetadataJSON   string
+	SubjectID       string
+	AuthSource      string
+	Integration     string
+	Connection      string
+	Instance        string
+	AccessToken     string
+	RefreshToken    string
+	TokenExpiresAt  *time.Time
+	MetadataJSON    string
+	ActorSubjectID  string
+	ActorUserID     string
+	ActorAuthSource string
+}
+
+type credentialActor struct {
+	SubjectID  string
+	UserID     string
+	AuthSource string
+}
+
+func credentialActorFromPrincipal(p *principal.Principal, credentialSubjectID string) credentialActor {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return credentialActor{}
+	}
+	actorSubjectID := strings.TrimSpace(p.SubjectID)
+	if actorSubjectID == "" || actorSubjectID == strings.TrimSpace(credentialSubjectID) {
+		return credentialActor{}
+	}
+	return credentialActor{
+		SubjectID:  actorSubjectID,
+		UserID:     strings.TrimSpace(p.UserID),
+		AuthSource: p.AuthSource(),
+	}
+}
+
+func (a credentialActor) applyTo(tm *credentialMaterial) {
+	if tm == nil {
+		return
+	}
+	tm.ActorSubjectID = strings.TrimSpace(a.SubjectID)
+	tm.ActorUserID = strings.TrimSpace(a.UserID)
+	tm.ActorAuthSource = strings.TrimSpace(a.AuthSource)
+}
+
+func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm credentialMaterial) context.Context {
+	if p != nil {
+		p = principal.Canonicalized(p)
+		if p != nil {
+			p.CredentialSubjectID = strings.TrimSpace(tm.SubjectID)
+			return principal.WithPrincipal(ctx, p)
+		}
+	}
+	if strings.TrimSpace(tm.ActorSubjectID) == "" {
+		return ctx
+	}
+	actor := &principal.Principal{
+		SubjectID:           strings.TrimSpace(tm.ActorSubjectID),
+		UserID:              strings.TrimSpace(tm.ActorUserID),
+		CredentialSubjectID: strings.TrimSpace(tm.SubjectID),
+	}
+	principal.SetAuthSource(actor, strings.TrimSpace(tm.ActorAuthSource))
+	return principal.WithPrincipal(ctx, actor)
 }
 
 type postConnectResult struct {

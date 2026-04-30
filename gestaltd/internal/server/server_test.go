@@ -4168,13 +4168,19 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}})
 
 	pluginDefs := map[string]*config.ProviderEntry{
-		"open-svc": {AuthorizationPolicy: "open_policy"},
-		"svc":      {AuthorizationPolicy: "svc_policy"},
+		"discover-manual-svc": {AuthorizationPolicy: "discover_manual_policy"},
+		"manual-svc":          {AuthorizationPolicy: "manual_policy"},
+		"oauth-svc":           {AuthorizationPolicy: "oauth_policy"},
+		"open-svc":            {AuthorizationPolicy: "open_policy"},
+		"svc":                 {AuthorizationPolicy: "svc_policy"},
 	}
 	baseAuthz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
-			"open_policy": {Default: "allow"},
-			"svc_policy":  {Default: "deny"},
+			"discover_manual_policy": {Default: "deny"},
+			"manual_policy":          {Default: "deny"},
+			"oauth_policy":           {Default: "deny"},
+			"open_policy":            {Default: "allow"},
+			"svc_policy":             {Default: "deny"},
 		},
 	}, pluginDefs)
 	if err != nil {
@@ -4182,7 +4188,11 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "owner@example.test", "editor")
+	ownerUser := seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "owner@example.test", "editor")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "manual-svc", "owner@example.test", "viewer")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "discover-manual-svc", "owner@example.test", "viewer")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "oauth-svc", "owner@example.test", "viewer")
+	ownerSubjectID := principal.UserSubjectID(ownerUser.ID)
 
 	newStub := func(name string) *stubIntegrationWithSessionCatalog {
 		return &stubIntegrationWithSessionCatalog{
@@ -4216,6 +4226,68 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	stub := newStub("svc")
 	openStub := newStub("open-svc")
+	var created struct {
+		ID                  string `json:"id"`
+		SubjectID           string `json:"subjectId"`
+		Kind                string `json:"kind"`
+		DisplayName         string `json:"displayName"`
+		CredentialSubjectID string `json:"credentialSubjectId"`
+	}
+	assertManagedSubjectCredentialContext := func(label string) func(context.Context, *core.ExternalCredential) (map[string]string, error) {
+		return func(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
+			p := principal.FromContext(ctx)
+			if p == nil {
+				return nil, fmt.Errorf("%s post-connect principal missing", label)
+			}
+			if p.SubjectID != ownerSubjectID {
+				return nil, fmt.Errorf("%s post-connect subject = %q, want %q", label, p.SubjectID, ownerSubjectID)
+			}
+			if p.CredentialSubjectID != created.SubjectID {
+				return nil, fmt.Errorf("%s post-connect credential subject = %q, want %q", label, p.CredentialSubjectID, created.SubjectID)
+			}
+			if token.SubjectID != created.SubjectID {
+				return nil, fmt.Errorf("%s stored subject = %q, want %q", label, token.SubjectID, created.SubjectID)
+			}
+			return nil, nil
+		}
+	}
+	managedDiscoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
+	}))
+	testutil.CloseOnCleanup(t, managedDiscoverySrv)
+	manualStub := &stubPostConnectManualProvider{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
+		},
+		postConnect: assertManagedSubjectCredentialContext("manual"),
+	}
+	discoverManualStub := &stubDiscoveringManualProvider{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "discover-manual-svc", DN: "Discover Manual Service"},
+		},
+		discovery: &core.DiscoveryConfig{
+			URL:      managedDiscoverySrv.URL,
+			IDPath:   "id",
+			NamePath: "name",
+			Metadata: map[string]string{"workspace": "workspace"},
+		},
+		postConnect: assertManagedSubjectCredentialContext("discovery"),
+	}
+	oauthStub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "oauth-svc", DN: "OAuth Service"},
+		authURL:         "https://oauth.example/authorize",
+		postConnect:     assertManagedSubjectCredentialContext("oauth"),
+	}
+	oauthHandler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://oauth.example/authorize",
+		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			if code != "good-code" {
+				return nil, fmt.Errorf("bad code")
+			}
+			return &core.TokenResponse{AccessToken: "oauth-upstream-token"}, nil
+		},
+	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4233,7 +4305,13 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 				}
 			},
 		}
-		cfg.Providers = testutil.NewProviderRegistry(t, stub, openStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub, openStub, manualStub, discoverManualStub, oauthStub)
+		cfg.DefaultConnection = map[string]string{
+			"manual-svc":          config.PluginConnectionName,
+			"discover-manual-svc": config.PluginConnectionName,
+			"oauth-svc":           testDefaultConnection,
+		}
+		cfg.ConnectionAuth = testConnectionAuth("oauth-svc", oauthHandler)
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
@@ -4292,13 +4370,6 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatalf("create subject status = %d, want 201: %s", resp.StatusCode, body)
 	}
-	var created struct {
-		ID                  string `json:"id"`
-		SubjectID           string `json:"subjectId"`
-		Kind                string `json:"kind"`
-		DisplayName         string `json:"displayName"`
-		CredentialSubjectID string `json:"credentialSubjectId"`
-	}
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		_ = resp.Body.Close()
 		t.Fatalf("decode created managed subject: %v", err)
@@ -4326,6 +4397,197 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "viewer-session", "", http.StatusOK)
 
 	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "viewer-session", `{"name":"viewer-token"}`, http.StatusForbidden)
+
+	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/auth/connect-manual", "viewer-session", `{"integration":"manual-svc","credential":"viewer-key"}`, http.StatusForbidden)
+
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/auth/connect-manual", "owner-session", `{"integration":"manual-svc","credential":"managed-key"}`)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject manual connect status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var connectResp struct {
+		Status      string `json:"status"`
+		Integration string `json:"integration"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&connectResp); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject manual connect: %v", err)
+	}
+	_ = resp.Body.Close()
+	if connectResp.Status != "connected" || connectResp.Integration != "manual-svc" {
+		t.Fatalf("manual connect response = %+v", connectResp)
+	}
+	managedCredentials, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "manual-svc")
+	if err != nil {
+		t.Fatalf("list managed subject manual credentials: %v", err)
+	}
+	if len(managedCredentials) != 1 || managedCredentials[0].AccessToken != "managed-key" {
+		t.Fatalf("managed subject manual credentials = %+v", managedCredentials)
+	}
+
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/auth/connect-manual", "owner-session", `{"integration":"discover-manual-svc","credential":"managed-discovery-key"}`)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject discovery connect status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var discoveryConnectResp struct {
+		Status       string `json:"status"`
+		Integration  string `json:"integration"`
+		SelectionURL string `json:"selectionUrl"`
+		PendingToken string `json:"pendingToken"`
+		Candidates   []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"candidates"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&discoveryConnectResp); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject discovery connect: %v", err)
+	}
+	_ = resp.Body.Close()
+	if discoveryConnectResp.Status != "selection_required" || discoveryConnectResp.Integration != "discover-manual-svc" || discoveryConnectResp.SelectionURL != "/api/v1/auth/pending-connection" || discoveryConnectResp.PendingToken == "" || len(discoveryConnectResp.Candidates) != 2 {
+		t.Fatalf("managed subject discovery connect response = %+v", discoveryConnectResp)
+	}
+
+	discoveryForm := url.Values{
+		"pending_token":   {discoveryConnectResp.PendingToken},
+		"candidate_index": {"1"},
+	}
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+discoveryConnectResp.SelectionURL, strings.NewReader(discoveryForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err = noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("managed subject discovery unauthenticated select: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject discovery unauthenticated select status = %d, want 401: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+discoveryConnectResp.SelectionURL, strings.NewReader(discoveryForm.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "owner-session"})
+	resp, err = noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("managed subject discovery select: %v", err)
+	}
+	if resp.StatusCode != http.StatusSeeOther {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject discovery select status = %d, want 303: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "discover-manual-svc")
+	if err != nil {
+		t.Fatalf("list managed subject discovery credentials: %v", err)
+	}
+	if len(managedCredentials) != 1 || managedCredentials[0].AccessToken != "managed-discovery-key" {
+		t.Fatalf("managed subject discovery credentials = %+v", managedCredentials)
+	}
+	var discoveryMetadata map[string]string
+	if err := json.Unmarshal([]byte(managedCredentials[0].MetadataJSON), &discoveryMetadata); err != nil {
+		t.Fatalf("unmarshal managed subject discovery metadata: %v", err)
+	}
+	if discoveryMetadata["workspace"] != "beta" {
+		t.Fatalf("managed subject discovery workspace = %q, want beta", discoveryMetadata["workspace"])
+	}
+
+	resp = doJSON(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations", "owner-session", "")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject integrations status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var integrations []struct {
+		Name            string `json:"name"`
+		Connected       bool   `json:"connected"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject integrations: %v", err)
+	}
+	_ = resp.Body.Close()
+	var manualIntegration *struct {
+		Name            string `json:"name"`
+		Connected       bool   `json:"connected"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+	}
+	for i := range integrations {
+		if integrations[i].Name == "manual-svc" {
+			manualIntegration = &integrations[i]
+			break
+		}
+	}
+	if manualIntegration == nil {
+		t.Fatalf("manual-svc missing from managed subject integrations: %+v", integrations)
+	}
+	if !manualIntegration.Connected || manualIntegration.Status != "ready" || manualIntegration.CredentialState != "connected" {
+		t.Fatalf("manual-svc status = %+v, want connected ready", *manualIntegration)
+	}
+
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/auth/start-oauth", "owner-session", `{"integration":"oauth-svc","scopes":["read"]}`)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject oauth start status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var oauthStart struct {
+		URL   string `json:"url"`
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&oauthStart); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject oauth start: %v", err)
+	}
+	_ = resp.Body.Close()
+	if oauthStart.State == "" || !strings.Contains(oauthStart.URL, url.QueryEscape(oauthStart.State)) {
+		t.Fatalf("oauth start response = %+v", oauthStart)
+	}
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(oauthStart.State), nil)
+	resp, err = noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("managed subject oauth callback: %v", err)
+	}
+	if resp.StatusCode != http.StatusSeeOther {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject oauth callback status = %d, want 303: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "oauth-svc")
+	if err != nil {
+		t.Fatalf("list managed subject oauth credentials: %v", err)
+	}
+	if len(managedCredentials) != 1 || managedCredentials[0].AccessToken != "oauth-upstream-token" {
+		t.Fatalf("managed subject oauth credentials = %+v", managedCredentials)
+	}
+
+	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations/manual-svc", "viewer-session", "", http.StatusForbidden)
+
+	resp = doJSON(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/integrations/manual-svc", "owner-session", "")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject disconnect status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "manual-svc")
+	if err != nil {
+		t.Fatalf("list managed subject manual credentials after disconnect: %v", err)
+	}
+	if len(managedCredentials) != 0 {
+		t.Fatalf("managed subject manual credentials after disconnect = %+v, want none", managedCredentials)
+	}
 
 	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"blocked@example.test","role":"admin"}`, http.StatusOK)
 
@@ -17934,11 +18196,19 @@ func (s *stubNilAuthTypesProvider) AuthTypes() []string { return nil }
 
 type stubDiscoveringManualProvider struct {
 	stubManualProvider
-	discovery *core.DiscoveryConfig
+	discovery   *core.DiscoveryConfig
+	postConnect func(context.Context, *core.ExternalCredential) (map[string]string, error)
 }
 
 func (s *stubDiscoveringManualProvider) DiscoveryConfig() *core.DiscoveryConfig {
 	return s.discovery
+}
+
+func (s *stubDiscoveringManualProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
+	if s.postConnect != nil {
+		return s.postConnect(ctx, token)
+	}
+	return nil, nil
 }
 
 type stubDiscoveringProvider struct {
