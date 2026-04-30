@@ -35,6 +35,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
@@ -1391,14 +1392,14 @@ func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost
 	}
 	hostServices := make([]runtimehost.HostService, 0, len(deps.IndexedDBs)+1)
 	if ds := deps.IndexedDBs[deps.SelectedIndexedDBName]; ds != nil {
-		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, name, ds))
+		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(indexeddbservice.DefaultSocketEnv, name, ds))
 	}
 	for _, indexedDBName := range slices.Sorted(maps.Keys(deps.IndexedDBs)) {
 		ds := deps.IndexedDBs[indexedDBName]
 		if ds == nil {
 			continue
 		}
-		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(providerhost.IndexedDBSocketEnv(indexedDBName), name, ds))
+		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(indexeddbservice.SocketEnv(indexedDBName), name, ds))
 	}
 	if len(hostServices) == 0 {
 		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
@@ -1411,7 +1412,7 @@ func externalCredentialsIndexedDBHostService(envVar, providerName string, ds ind
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, providerName, providerhost.IndexedDBServerOptions{
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
 				AllowedStores: []string{"external_credentials"},
 			}))
 		},
@@ -1579,7 +1580,7 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 
 	hostServices := make([]runtimehost.HostService, 0, len(indexeddbs)+1)
 	if selected := indexeddbs[selectedName]; strings.TrimSpace(selectedName) != "" && selected != nil {
-		hostServices = append(hostServices, indexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, selectedName, selected))
+		hostServices = append(hostServices, indexedDBHostService(indexeddbservice.DefaultSocketEnv, selectedName, selected))
 	}
 
 	for _, name := range slices.Sorted(maps.Keys(indexeddbs)) {
@@ -1587,7 +1588,7 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 		if ds == nil {
 			continue
 		}
-		hostServices = append(hostServices, indexedDBHostService(providerhost.IndexedDBSocketEnv(name), name, ds))
+		hostServices = append(hostServices, indexedDBHostService(indexeddbservice.SocketEnv(name), name, ds))
 	}
 	return hostServices
 }
@@ -1597,7 +1598,7 @@ func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) runtimeho
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{}))
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{}))
 		},
 	}
 }

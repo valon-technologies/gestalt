@@ -32,6 +32,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
+	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -1146,14 +1150,14 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
 	}
 
-	auth, err := providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
+	auth, err := authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableAuthenticationProvider: %v", err)
+		t.Fatalf("authenticationservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := auth.(interface{ Close() error }); ok {
@@ -1261,12 +1265,12 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
 	}
 
-	authz, err := providerhost.NewExecutableAuthorizationProvider(context.Background(), providerhost.AuthorizationExecConfig{
+	authz, err := authorizationservice.NewExecutable(context.Background(), authorizationservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    "authorization-release",
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableAuthorizationProvider: %v", err)
+		t.Fatalf("authorizationservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := authz.(interface{ Close() error }); ok {
@@ -1350,12 +1354,12 @@ func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", secretsReleaseSchemaPath, err)
 	}
 
-	sm, err := providerhost.NewExecutableSecretManager(context.Background(), providerhost.SecretsExecConfig{
+	sm, err := secretsservice.NewExecutable(context.Background(), secretsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    secretsReleasePluginName,
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableSecretManager: %v", err)
+		t.Fatalf("secretsservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := sm.(interface{ Close() error }); ok {
@@ -1487,19 +1491,19 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	}
 	coretesting.AttachStubExternalCredentials(services)
 
-	provider, err := providerhost.NewExecutableExternalCredentialProvider(context.Background(), providerhost.ExternalCredentialsExecConfig{
+	provider, err := externalcredentialsservice.NewExecutable(context.Background(), externalcredentialsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    externalCredentialReleasePluginName,
 		HostServices: []providerhost.HostService{{
 			Name:   "external-credentials",
-			EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
+			EnvVar: externalcredentialsservice.DefaultSocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(services.ExternalCredentials))
+				proto.RegisterExternalCredentialProviderServer(srv, externalcredentialsservice.NewProviderServer(services.ExternalCredentials))
 			},
 		}},
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableExternalCredentialProvider: %v", err)
+		t.Fatalf("externalcredentialsservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := provider.(interface{ Close() error }); ok {
@@ -2996,14 +3000,14 @@ func assertArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, 
 func assertExecutableAuthProviderWorks(t *testing.T, command, providerName string, assertSessionTTL, assertExternalJWT bool) {
 	t.Helper()
 
-	auth, err := providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
+	auth, err := authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     command,
 		Name:        providerName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableAuthenticationProvider: %v", err)
+		t.Fatalf("authenticationservice.NewExecutable: %v", err)
 	}
 	defer func() {
 		if closer, ok := auth.(interface{ Close() error }); ok {

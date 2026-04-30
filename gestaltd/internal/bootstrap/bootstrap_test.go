@@ -43,6 +43,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -3844,8 +3845,8 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	if got[0] != providerhost.DefaultWorkflowHostSocketEnv {
 		t.Fatalf("workflow host env = %q, want %q", got[0], providerhost.DefaultWorkflowHostSocketEnv)
 	}
-	if got[1] != providerhost.DefaultIndexedDBSocketEnv {
-		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], providerhost.DefaultIndexedDBSocketEnv)
+	if got[1] != indexeddbservice.DefaultSocketEnv {
+		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], indexeddbservice.DefaultSocketEnv)
 	}
 }
 
@@ -3892,8 +3893,8 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	if hostServices[0].EnvVar != providerhost.DefaultAgentHostSocketEnv {
 		t.Fatalf("agent host env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultAgentHostSocketEnv)
 	}
-	if hostServices[1].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
-		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	if hostServices[1].EnvVar != indexeddbservice.DefaultSocketEnv {
+		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].EnvVar, indexeddbservice.DefaultSocketEnv)
 	}
 
 	withIndexedDBHostClient(t, hostServices[1], func(client proto.IndexedDBClient) {
@@ -3976,12 +3977,12 @@ func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.
 	if len(hostServices) != 3 {
 		t.Fatalf("authorization host services = %d, want 3", len(hostServices))
 	}
-	if hostServices[0].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
-		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	if hostServices[0].EnvVar != indexeddbservice.DefaultSocketEnv {
+		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].EnvVar, indexeddbservice.DefaultSocketEnv)
 	}
 	wantNamed := []string{
-		providerhost.IndexedDBSocketEnv("archive"),
-		providerhost.IndexedDBSocketEnv("test"),
+		indexeddbservice.SocketEnv("archive"),
+		indexeddbservice.SocketEnv("test"),
 	}
 	for i, want := range wantNamed {
 		if got := hostServices[i+1].EnvVar; got != want {
@@ -4101,12 +4102,12 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	if len(hostServices) != 3 {
 		t.Fatalf("external credentials host services = %d, want 3", len(hostServices))
 	}
-	if hostServices[0].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
-		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	if hostServices[0].EnvVar != indexeddbservice.DefaultSocketEnv {
+		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].EnvVar, indexeddbservice.DefaultSocketEnv)
 	}
 	wantNamed := []string{
-		providerhost.IndexedDBSocketEnv("archive"),
-		providerhost.IndexedDBSocketEnv("test"),
+		indexeddbservice.SocketEnv("archive"),
+		indexeddbservice.SocketEnv("test"),
 	}
 	for i, want := range wantNamed {
 		if got := hostServices[i+1].EnvVar; got != want {
@@ -4166,7 +4167,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 
 	var indexedDBHost providerhost.HostService
 	for _, hostService := range hostEnv {
-		if hostService.EnvVar == providerhost.DefaultIndexedDBSocketEnv {
+		if hostService.EnvVar == indexeddbservice.DefaultSocketEnv {
 			indexedDBHost = hostService
 			break
 		}

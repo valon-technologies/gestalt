@@ -64,6 +64,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -717,9 +718,9 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	publicHostServices := providerhost.NewPublicHostServiceRegistry()
 	publicHostServices.Register("relay-plugin", providerhost.HostService{
 		Name:   "indexeddb",
-		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stubDB, "relay-plugin", providerhost.IndexedDBServerOptions{
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(stubDB, "relay-plugin", indexeddbservice.ServerOptions{
 				AllowedStores: []string{"tasks"},
 			}))
 		},
@@ -742,7 +743,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
-		EnvVar:       providerhost.DefaultIndexedDBSocketEnv,
+		EnvVar:       indexeddbservice.DefaultSocketEnv,
 		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})

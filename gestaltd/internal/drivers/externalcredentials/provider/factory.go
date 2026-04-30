@@ -7,8 +7,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
@@ -29,7 +29,7 @@ var Factory bootstrap.ExternalCredentialFactory = func(ctx context.Context, name
 	}
 	cfg = prepared.YAMLConfig
 
-	return providerhost.NewExecutableExternalCredentialProvider(ctx, providerhost.ExternalCredentialsExecConfig{
+	return externalcredentialsservice.NewExecutable(ctx, externalcredentialsservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
