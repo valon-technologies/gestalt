@@ -46,6 +46,14 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
 
+For config-free local development, inferred UI mount paths use the manifest
+`source` slug rather than the API-safe provider key. A source ending in
+`vm-style-guide` mounts at `/vm-style-guide`, while the local integration key
+may still be `vm_style_guide`. Explicit `plugins.<name>.ui.path` values take
+precedence for plugin-owned or sibling UI, and explicit
+`providers.ui.<name>.path` values take precedence when developing a UI bundle
+directly.
+
 ## Examples
 
 ```sh
