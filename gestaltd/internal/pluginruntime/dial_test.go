@@ -9,8 +9,8 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -33,7 +33,7 @@ func TestDialHostedPluginRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T
 		t.Fatalf("listen unix: %v", err)
 	}
 	srv := grpc.NewServer()
-	proto.RegisterIntegrationProviderServer(srv, providerhost.NewProviderServer(&coretesting.StubIntegration{N: providerName}))
+	proto.RegisterIntegrationProviderServer(srv, pluginservice.NewProviderServer(&coretesting.StubIntegration{N: providerName}))
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- srv.Serve(lis)

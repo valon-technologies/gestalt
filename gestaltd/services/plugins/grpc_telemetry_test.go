@@ -1,4 +1,4 @@
-package providerhost
+package plugins
 
 import (
 	"context"
@@ -15,28 +15,28 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type providerGRPCMetricsTelemetry struct {
+type providerServerMetricsTelemetry struct {
 	meterProvider metric.MeterProvider
 }
 
-func (t providerGRPCMetricsTelemetry) MeterProvider() metric.MeterProvider {
+func (t providerServerMetricsTelemetry) MeterProvider() metric.MeterProvider {
 	return t.meterProvider
 }
 
-func (providerGRPCMetricsTelemetry) TracerProvider() trace.TracerProvider {
+func (providerServerMetricsTelemetry) TracerProvider() trace.TracerProvider {
 	return nooptrace.NewTracerProvider()
 }
 
-func TestProviderGRPCOptionsRecordClientAndServerDurationWithTelemetryAttrs(t *testing.T) {
+func TestProviderServerGRPCOptionsRecordServerDurationWithTelemetryAttrs(t *testing.T) {
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
 	const providerName = "provider-rpc-metrics"
-	telemetry := providerGRPCMetricsTelemetry{meterProvider: metrics.Provider}
+	telemetry := providerServerMetricsTelemetry{meterProvider: metrics.Provider}
 
 	conn := newBufconnConnWithOptions(t,
 		[]grpc.ServerOption{grpc.StatsHandler(otelgrpc.NewServerHandler(providerServerGRPCOptions(providerName, telemetry)...))},
-		[]grpc.DialOption{grpc.WithStatsHandler(otelgrpc.NewClientHandler(providerClientGRPCOptions(providerName, telemetry)...))},
+		nil,
 		func(srv *grpc.Server) {
 			proto.RegisterIntegrationProviderServer(srv, NewProviderServer(&coretesting.StubIntegration{N: providerName}))
 		},
@@ -47,19 +47,11 @@ func TestProviderGRPCOptionsRecordClientAndServerDurationWithTelemetryAttrs(t *t
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	clientAttrs := map[string]string{
-		"gestaltd.rpc.role":      "provider_client",
-		"gestaltd.provider.name": providerName,
-	}
-	metrictest.RequireFloat64Histogram(t, rm, "rpc.client.call.duration", clientAttrs)
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", clientAttrs, "gestalt.rpc.role")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", clientAttrs, "gestalt.provider")
-
-	serverAttrs := map[string]string{
+	attrs := map[string]string{
 		"gestaltd.rpc.role":      "provider_server",
 		"gestaltd.provider.name": providerName,
 	}
-	metrictest.RequireFloat64Histogram(t, rm, "rpc.server.call.duration", serverAttrs)
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", serverAttrs, "gestalt.rpc.role")
-	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", serverAttrs, "gestalt.provider")
+	metrictest.RequireFloat64Histogram(t, rm, "rpc.server.call.duration", attrs)
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", attrs, "gestalt.rpc.role")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", attrs, "gestalt.provider")
 }

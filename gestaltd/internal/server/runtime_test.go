@@ -12,7 +12,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -107,8 +106,8 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &runtimeTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("relay-plugin", providerhost.HostService{
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("relay-plugin", runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {

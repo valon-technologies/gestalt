@@ -55,7 +55,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -66,6 +65,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -485,9 +485,9 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("session-1")
-	hostService := providerhost.HostService{
+	hostService := runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -575,15 +575,15 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	cacheSrv1 := &relayTestCacheServer{}
 	cacheSrv2 := &relayTestCacheServer{}
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
-	hostService1 := providerhost.HostService{
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	hostService1 := runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv1)
 		},
 	}
-	hostService2 := providerhost.HostService{
+	hostService2 := runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -640,8 +640,8 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
-	hostService := providerhost.HostService{
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	hostService := runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -729,8 +729,8 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("support", providerhost.HostService{
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("support", runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -781,8 +781,8 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	stubDB := &coretesting.StubIndexedDB{}
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("relay-plugin", providerhost.HostService{
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	publicHostServices.Register("relay-plugin", runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -11726,11 +11726,11 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if err != nil {
 		t.Fatalf("RESTOperationConnectionBindings: %v", err)
 	}
-	prov, err := providerhost.NewDeclarativeProvider(
+	prov, err := pluginservice.NewDeclarativeProvider(
 		manifest,
 		upstream.Client(),
-		providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		providerhost.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+		pluginservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+		pluginservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 	)
 	if err != nil {
 		t.Fatalf("NewDeclarativeProvider: %v", err)
