@@ -198,11 +198,11 @@ jobs:
       - name: Validate Kubernetes schemas (ingress)
         run: kubeconform -strict -summary /tmp/rendered-ingress.yaml
 
-      - name: Helm template (plugin-init)
+      - name: Helm template (preparation)
         run: |
           helm template test-release gestaltd/deploy/helm/gestalt \
-            -f gestaltd/deploy/helm/gestalt/ci-values-plugin-init.yaml \
-            > /tmp/rendered-plugin-init.yaml
+            -f gestaltd/deploy/helm/gestalt/ci-values-preparation.yaml \
+            > /tmp/rendered-preparation.yaml
 
-      - name: Validate Kubernetes schemas (plugin-init)
-        run: kubeconform -strict -summary /tmp/rendered-plugin-init.yaml
+      - name: Validate Kubernetes schemas (preparation)
+        run: kubeconform -strict -summary /tmp/rendered-preparation.yaml

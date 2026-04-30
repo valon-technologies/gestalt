@@ -37,9 +37,9 @@ spec:
         fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
-      {{- if .Values.pluginInit.enabled }}
+      {{- if .Values.preparation.enabled }}
       initContainers:
-        - name: plugin-init
+        - name: prepare-state
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
@@ -82,7 +82,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - serve
-            {{- if or .Values.pluginInit.enabled .Values.lockedServe.enabled }}
+            {{- if or .Values.preparation.enabled .Values.lockedServe.enabled }}
             - --locked
             {{- end }}
             - --config
@@ -113,7 +113,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            {{- if .Values.pluginInit.enabled }}
+            {{- if .Values.preparation.enabled }}
             - name: gestalt-state
               mountPath: /etc/gestalt
               readOnly: true
@@ -140,7 +140,7 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- if .Values.pluginInit.enabled }}
+        {{- if .Values.preparation.enabled }}
         - name: gestalt-state
           emptyDir: {}
         {{- end }}
