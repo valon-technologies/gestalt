@@ -89,6 +89,7 @@ type Server struct {
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
 	apiTokens              *coredata.APITokenService
+	managedSubjects        *coredata.ManagedSubjectService
 	agent                  bootstrap.AgentControl
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
@@ -267,6 +268,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	apiTokens := cfg.Services.APITokens
+	managedSubjects := cfg.Services.ManagedSubjects
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -322,6 +324,7 @@ func New(cfg Config) (*Server, error) {
 		users:                  users,
 		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
+		managedSubjects:        managedSubjects,
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,

@@ -60,6 +60,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			RevokeAllAPITokens: s.revokeAllAPITokens,
 			RevokeAPIToken:     s.revokeAPIToken,
 		})
+		s.mountAuthorizationSubjectRoutes(r)
 		providerdevhttp.Mount(r, providerdevhttp.Handlers{
 			CreateAttachment: s.createProviderDevSession,
 			ListAttachments:  s.listProviderDevAttachments,

@@ -13,6 +13,18 @@ type User struct {
 	UpdatedAt   time.Time
 }
 
+type ManagedSubject struct {
+	SubjectID           string
+	Kind                string
+	DisplayName         string
+	Description         string
+	CredentialSubjectID string
+	CreatedBySubjectID  string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	DeletedAt           *time.Time
+}
+
 type ExternalCredential struct {
 	ID                string
 	SubjectID         string

@@ -117,7 +117,7 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -212,7 +212,7 @@ func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Princip
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -236,7 +236,7 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -274,6 +274,10 @@ func (p *SubjectPolicy) roleForPrincipal(pr *principal.Principal) (string, bool)
 		return "", false
 	}
 	return p.staticRoleForIdentity(principal.Canonicalized(pr).SubjectID)
+}
+
+func defaultAllowAppliesToPrincipal(p *principal.Principal) bool {
+	return !principal.IsNonUserPrincipal(p)
 }
 
 func (p *SubjectPolicy) staticRoleForIdentity(subjectID string) (string, bool) {

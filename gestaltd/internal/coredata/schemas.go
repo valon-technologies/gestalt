@@ -5,8 +5,9 @@ import (
 )
 
 const (
-	StoreUsers     = "users"
-	StoreAPITokens = "api_tokens"
+	StoreUsers           = "users"
+	StoreAPITokens       = "api_tokens"
+	StoreManagedSubjects = "managed_subjects"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -42,5 +43,26 @@ var APITokensSchema = indexeddb.ObjectStoreSchema{
 		{Name: "expires_at", Type: indexeddb.TypeTime},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var ManagedSubjectsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_kind", KeyPath: []string{"kind"}},
+		{Name: "by_kind_deleted", KeyPath: []string{"kind", "deleted"}},
+		{Name: "by_created_by", KeyPath: []string{"created_by_subject_id"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true, Unique: true},
+		{Name: "kind", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "display_name", Type: indexeddb.TypeString},
+		{Name: "description", Type: indexeddb.TypeString},
+		{Name: "credential_subject_id", Type: indexeddb.TypeString},
+		{Name: "created_by_subject_id", Type: indexeddb.TypeString},
+		{Name: "deleted", Type: indexeddb.TypeBool},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+		{Name: "deleted_at", Type: indexeddb.TypeTime},
 	},
 }

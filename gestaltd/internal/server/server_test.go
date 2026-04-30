@@ -4154,6 +4154,316 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 }
 
+func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	scopedToken, scopedHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	seedAPITokenWithPermissions(t, svc, scopedToken, scopedHash, "scoped-user", []core.AccessPermission{{
+		Plugin:     "svc",
+		Operations: []string{"run"},
+	}})
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"open-svc": {AuthorizationPolicy: "open_policy"},
+		"svc":      {AuthorizationPolicy: "svc_policy"},
+	}
+	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.SubjectPolicyDef{
+			"open_policy": {Default: "allow"},
+			"svc_policy":  {Default: "deny"},
+		},
+	}, pluginDefs)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "owner@example.test", "editor")
+
+	newStub := func(name string) *stubIntegrationWithSessionCatalog {
+		return &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{
+					N:        name,
+					ConnMode: core.ConnectionModeNone,
+					ExecuteFn: func(ctx context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+						p := principal.FromContext(ctx)
+						access := invocation.AccessContextFromContext(ctx)
+						body, err := json.Marshal(map[string]string{
+							"operation": op,
+							"subject":   p.SubjectID,
+							"role":      access.Role,
+						})
+						if err != nil {
+							return nil, err
+						}
+						return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+					},
+				},
+			},
+			catalog: &catalog.Catalog{
+				Name: name,
+				Operations: []catalog.CatalogOperation{
+					{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+					{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+				},
+			},
+		}
+	}
+	stub := newStub("svc")
+	openStub := newStub("open-svc")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "owner-session":
+					return &core.UserIdentity{Email: "owner@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "blocked-session":
+					return &core.UserIdentity{Email: "blocked@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub, openStub)
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuthorizationProvider = provider
+		cfg.PluginDefs = pluginDefs
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doJSON := func(method, path, session, body string) *http.Response {
+		t.Helper()
+		var reader io.Reader
+		if body != "" {
+			reader = bytes.NewBufferString(body)
+		}
+		req, _ := http.NewRequest(method, ts.URL+path, reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if session != "" {
+			req.AddCookie(&http.Cookie{Name: "session_token", Value: session})
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		return resp
+	}
+	expectJSONStatus := func(method, path, session, body string, want int) {
+		t.Helper()
+		resp := doJSON(method, path, session, body)
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != want {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d: %s", resp.StatusCode, want, body)
+		}
+	}
+
+	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects", "owner-session", `{"subjectId":"user:not-a-service-account","displayName":"bad"}`, http.StatusBadRequest)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/authorization/subjects", bytes.NewBufferString(`{"id":"scoped-token-bot"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+scopedToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create with scoped API token: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("scoped API token create status = %d, want 403: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects", "owner-session", `{"id":"reporting-bot","displayName":"Reporting Bot","description":"Nightly reports"}`)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("create subject status = %d, want 201: %s", resp.StatusCode, body)
+	}
+	var created struct {
+		ID                  string `json:"id"`
+		SubjectID           string `json:"subjectId"`
+		Kind                string `json:"kind"`
+		DisplayName         string `json:"displayName"`
+		CredentialSubjectID string `json:"credentialSubjectId"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode created managed subject: %v", err)
+	}
+	_ = resp.Body.Close()
+	if created.ID != "reporting-bot" || created.SubjectID != "service_account:reporting-bot" || created.Kind != "service_account" || created.CredentialSubjectID != created.SubjectID {
+		t.Fatalf("created managed subject = %+v", created)
+	}
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
+		ID:          "managed-subject-credential",
+		SubjectID:   created.SubjectID,
+		Integration: "svc",
+		Connection:  "default",
+		Instance:    "default",
+		AccessToken: "upstream-token",
+	}); err != nil {
+		t.Fatalf("seed managed subject credential: %v", err)
+	}
+
+	escapedSubjectID := url.PathEscape(created.SubjectID)
+	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "owner-session", "", http.StatusOK)
+
+	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK)
+
+	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "viewer-session", "", http.StatusOK)
+
+	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "viewer-session", `{"name":"viewer-token"}`, http.StatusForbidden)
+
+	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"blocked@example.test","role":"admin"}`, http.StatusOK)
+
+	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "blocked-session", `{"role":"viewer"}`, http.StatusForbidden)
+
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"open-token","permissions":[{"plugin":"open-svc","operations":["run"]}]}`)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("create open subject token status = %d, want 201: %s", resp.StatusCode, body)
+	}
+	var openTokenResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&openTokenResp); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode open token response: %v", err)
+	}
+	_ = resp.Body.Close()
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/open-svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+openTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke default-allow plugin without managed subject grant: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("default-allow invocation without grant status = %d, want 403: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+
+	resp = doJSON(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/grants/svc", "owner-session", `{"role":"viewer"}`)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("grant subject status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var grant struct {
+		Plugin  string `json:"plugin"`
+		Role    string `json:"role"`
+		Source  string `json:"source"`
+		Mutable bool   `json:"mutable"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&grant); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode grant response: %v", err)
+	}
+	_ = resp.Body.Close()
+	if grant.Plugin != "svc" || grant.Role != "viewer" || grant.Source != "dynamic" || !grant.Mutable {
+		t.Fatalf("grant response = %+v", grant)
+	}
+
+	resp = doJSON(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "owner-session", `{"name":"reporting-token","permissions":[{"plugin":"svc","operations":["run"]}]}`)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("create subject token status = %d, want 201: %s", resp.StatusCode, body)
+	}
+	var tokenResp struct {
+		ID          string                  `json:"id"`
+		Token       string                  `json:"token"`
+		Permissions []core.AccessPermission `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode token response: %v", err)
+	}
+	_ = resp.Body.Close()
+	if tokenResp.ID == "" || tokenResp.Token == "" || len(tokenResp.Permissions) != 1 || tokenResp.Permissions[0].Plugin != "svc" {
+		t.Fatalf("token response = %+v", tokenResp)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke with subject token: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("invoke status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var invokeResp map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&invokeResp); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode invoke response: %v", err)
+	}
+	_ = resp.Body.Close()
+	if invokeResp["subject"] != created.SubjectID || invokeResp["role"] != "viewer" || invokeResp["operation"] != "run" {
+		t.Fatalf("invoke response = %+v", invokeResp)
+	}
+
+	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID, "owner-session", "", http.StatusOK)
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke after delete: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("invoke after delete status = %d, want 401: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+
+	rels, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: created.SubjectID},
+	})
+	if err != nil {
+		t.Fatalf("read subject relationships after delete: %v", err)
+	}
+	if len(rels.GetRelationships()) != 0 {
+		t.Fatalf("subject relationships after delete = %+v, want none", rels.GetRelationships())
+	}
+	rels, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeManagedSubject, Id: created.SubjectID},
+	})
+	if err != nil {
+		t.Fatalf("read managed subject relationships after delete: %v", err)
+	}
+	if len(rels.GetRelationships()) != 0 {
+		t.Fatalf("managed subject relationships after delete = %+v, want none", rels.GetRelationships())
+	}
+	credentials, err := svc.ExternalCredentials.ListCredentials(context.Background(), created.SubjectID)
+	if err != nil {
+		t.Fatalf("list credentials after delete: %v", err)
+	}
+	if len(credentials) != 0 {
+		t.Fatalf("credentials after delete = %+v, want none", credentials)
+	}
+
+	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects", "owner-session", `{"id":"reporting-bot","displayName":"Reporting Bot"}`, http.StatusConflict)
+}
+
 func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,6 @@
 # Data Model
 
-Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users and API tokens. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
+Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, and managed subject metadata. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
 
 MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
 
@@ -10,7 +10,7 @@ For encryption mechanics, see [Security Internals](/architecture/security-intern
 
 | Owner | Persistent state |
 | --- | --- |
-| `gestaltd` core | `users`, `api_tokens` |
+| `gestaltd` core | `users`, `managed_subjects`, `api_tokens` |
 | External credentials provider | `external_credentials` |
 | Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
 | Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
@@ -31,6 +31,24 @@ Created automatically on first login.
 | `updated_at` | time | |
 
 Emails and display names are plaintext. If you need encrypted PII at rest, handle it at the storage layer.
+
+### `managed_subjects`
+
+Metadata for service-account identities managed through `/api/v1/authorization/subjects`. The canonical subject ID is always `service_account:<id>`. Authorization relationships for who can manage the subject live in the configured authorization provider as `managed_subject` resource relationships; plugin runtime grants live as provider-backed dynamic plugin relationships.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | string, PK | Same value as `subject_id`; retained for IndexedDB primary-key compatibility. |
+| `subject_id` | string, unique | Canonical service-account subject ID such as `service_account:release-bot`. |
+| `kind` | string | Currently `service_account`. |
+| `display_name` | string | Plaintext. |
+| `description` | string | Plaintext. |
+| `credential_subject_id` | string | Subject whose external credentials and subject-owned API tokens are used; currently matches `subject_id`. |
+| `created_by_subject_id` | string | Canonical user subject that created the managed subject. |
+| `deleted` | bool | Deleted subjects are hidden and their IDs are not reused. |
+| `created_at` | time | |
+| `updated_at` | time | |
+| `deleted_at` | time | Null until deleted. |
 
 ### `external_credentials`
 
