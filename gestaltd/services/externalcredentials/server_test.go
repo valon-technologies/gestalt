@@ -1,4 +1,4 @@
-package providerhost
+package externalcredentials
 
 import (
 	"context"
@@ -46,7 +46,7 @@ func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T)
 	t.Parallel()
 
 	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialProviderServer(server, NewExternalCredentialProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
+		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
 	})
 	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
 
@@ -111,7 +111,7 @@ func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *te
 
 	provider := &restoreTrackingExternalCredentialProvider{}
 	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialProviderServer(server, NewExternalCredentialProviderServer(provider))
+		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
 	})
 	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
 
