@@ -7,9 +7,9 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,7 +29,7 @@ var Factory bootstrap.WorkflowFactory = func(ctx context.Context, name string, n
 	}
 	cfg = prepared.YAMLConfig
 
-	return providerhost.NewExecutableWorkflow(ctx, providerhost.WorkflowExecConfig{
+	return workflowservice.NewExecutable(ctx, workflowservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,

@@ -45,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
@@ -52,6 +53,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -1604,15 +1606,15 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			serviceKey = "s3"
 			serviceLabel = "S3"
 			methodPrefix = "/" + proto.S3_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == providerhost.DefaultWorkflowManagerSocketEnv:
+		case hostService.EnvVar == workflowservice.DefaultManagerSocketEnv:
 			serviceKey = "workflow_manager"
 			serviceLabel = "workflow manager"
 			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == providerhost.DefaultAgentHostSocketEnv:
+		case hostService.EnvVar == agentservice.DefaultHostSocketEnv:
 			serviceKey = "agent_host"
 			serviceLabel = "agent host"
 			methodPrefix = "/" + proto.AgentHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == providerhost.DefaultAgentManagerSocketEnv:
+		case hostService.EnvVar == agentservice.DefaultManagerSocketEnv:
 			serviceKey = "agent_manager"
 			serviceLabel = "agent manager"
 			methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
@@ -2037,9 +2039,9 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 	}
 	return runtimehost.HostService{
 		Name:   "workflow_manager",
-		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
+		EnvVar: workflowservice.DefaultManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(pluginName, manager, tokens))
+			proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer(pluginName, manager, tokens))
 		},
 	}
 }
@@ -2051,9 +2053,9 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pr
 	}
 	return runtimehost.HostService{
 		Name:   "agent_manager",
-		EnvVar: providerhost.DefaultAgentManagerSocketEnv,
+		EnvVar: agentservice.DefaultManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentManagerHostServer(srv, providerhost.NewAgentManagerServer(pluginName, manager, tokens))
+			proto.RegisterAgentManagerHostServer(srv, agentservice.NewManagerServer(pluginName, manager, tokens))
 		},
 	}
 }
