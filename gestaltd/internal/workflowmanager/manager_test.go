@@ -15,6 +15,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing.T) {
@@ -90,6 +92,291 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 	if got := managed.ExecutionRef.Target.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+}
+
+func TestSignalOrStartRunReusesExecutionRefForSameWorkflowKeyAndTarget(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "system:http_binding:github:event",
+	})
+	req := RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	}
+
+	first, err := manager.SignalOrStartRun(context.Background(), caller, req)
+	if err != nil {
+		t.Fatalf("SignalOrStartRun(first): %v", err)
+	}
+	second, err := manager.SignalOrStartRun(context.Background(), caller, req)
+	if err != nil {
+		t.Fatalf("SignalOrStartRun(second): %v", err)
+	}
+	if first.ExecutionRef.ID == "" {
+		t.Fatal("first execution ref ID is empty")
+	}
+	if second.ExecutionRef.ID != first.ExecutionRef.ID {
+		t.Fatalf("execution ref ID changed from %q to %q", first.ExecutionRef.ID, second.ExecutionRef.ID)
+	}
+	if len(provider.refs) != 1 {
+		t.Fatalf("execution refs stored = %d, want 1", len(provider.refs))
+	}
+}
+
+func TestSignalOrStartRunRejectsDeniedExecutionRefPermissionsBeforeEnqueue(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "system:http_binding:github:event",
+	})
+	req := RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+			ToolRefs: []coreagent.ToolRef{
+				{Plugin: "github", Operation: "bot.admin"},
+			},
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	}
+
+	if _, err := manager.SignalOrStartRun(context.Background(), caller, req); err != nil {
+		t.Fatalf("SignalOrStartRun(unrestricted): %v", err)
+	}
+	denyAll := principal.Canonicalize(&principal.Principal{
+		SubjectID:        caller.SubjectID,
+		TokenPermissions: principal.PermissionSet{},
+	})
+	_, err := manager.SignalOrStartRun(context.Background(), denyAll, req)
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("SignalOrStartRun(deny-all) error = %v, want not found from unauthorized target", err)
+	}
+	if provider.signalOrStartCalls != 1 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 1", provider.signalOrStartCalls)
+	}
+}
+
+func TestSignalOrStartRunFailureDoesNotRevokeStableExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "system:http_binding:github:event",
+	})
+	req := RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	}
+
+	first, err := manager.SignalOrStartRun(context.Background(), caller, req)
+	if err != nil {
+		t.Fatalf("SignalOrStartRun(first): %v", err)
+	}
+	if first.ExecutionRef == nil || first.ExecutionRef.ID == "" {
+		t.Fatalf("first execution ref = %#v, want stable ref", first.ExecutionRef)
+	}
+
+	provider.signalOrStartErr = errors.New("transient provider failure")
+	_, err = manager.SignalOrStartRun(context.Background(), caller, req)
+	if !errors.Is(err, provider.signalOrStartErr) {
+		t.Fatalf("SignalOrStartRun(second) error = %v, want %v", err, provider.signalOrStartErr)
+	}
+
+	stored := provider.refs[first.ExecutionRef.ID]
+	if stored == nil {
+		t.Fatalf("execution ref %q was removed", first.ExecutionRef.ID)
+	}
+	if stored.RevokedAt != nil {
+		t.Fatalf("execution ref RevokedAt = %v, want nil", stored.RevokedAt)
+	}
+}
+
+func TestSignalOrStartRunFirstFailureKeepsStableExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "system:http_binding:github:event",
+	})
+	req := RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	}
+
+	provider.signalOrStartErr = errors.New("transient provider failure")
+	_, err := manager.SignalOrStartRun(context.Background(), caller, req)
+	if !errors.Is(err, provider.signalOrStartErr) {
+		t.Fatalf("SignalOrStartRun error = %v, want %v", err, provider.signalOrStartErr)
+	}
+	if len(provider.refs) != 1 {
+		t.Fatalf("execution refs stored = %d, want 1", len(provider.refs))
+	}
+	for id, ref := range provider.refs {
+		if ref.RevokedAt != nil {
+			t.Fatalf("execution ref %q RevokedAt = %v, want nil", id, ref.RevokedAt)
+		}
+	}
+}
+
+func TestSignalOrStartRunCreatesExecutionRefAfterGRPCNotFound(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	provider.getMissingExecutionReferenceErr = status.Error(codes.NotFound, "missing")
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: "system:http_binding:github:event",
+	})
+
+	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRun: %v", err)
+	}
+	if managed == nil || managed.ExecutionRef == nil {
+		t.Fatalf("managed signal = %#v, want execution ref", managed)
+	}
+	if provider.putExecutionReferenceCalls != 1 {
+		t.Fatalf("PutExecutionReference calls = %d, want 1", provider.putExecutionReferenceCalls)
+	}
+}
+
+func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	initialPermissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        "system:http_binding:github:event",
+		TokenPermissions: initialPermissions,
+		Scopes:           principal.PermissionPlugins(initialPermissions),
+	})
+	req := RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	}
+
+	first, err := manager.SignalOrStartRun(context.Background(), caller, req)
+	if err != nil {
+		t.Fatalf("SignalOrStartRun(first): %v", err)
+	}
+	stored := provider.refs[first.ExecutionRef.ID]
+	if stored == nil {
+		t.Fatalf("execution ref %q was not stored", first.ExecutionRef.ID)
+	}
+	initialRefPermissions := stored.Permissions
+	putCalls := provider.putExecutionReferenceCalls
+
+	broaderPermissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle", "bot.admin"},
+	}})
+	broaderCaller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        caller.SubjectID,
+		TokenPermissions: broaderPermissions,
+		Scopes:           principal.PermissionPlugins(broaderPermissions),
+	})
+	provider.signalOrStartErr = errors.New("transient provider failure")
+	_, err = manager.SignalOrStartRun(context.Background(), broaderCaller, req)
+	if !errors.Is(err, provider.signalOrStartErr) {
+		t.Fatalf("SignalOrStartRun(second) error = %v, want %v", err, provider.signalOrStartErr)
+	}
+	if provider.putExecutionReferenceCalls != putCalls+1 {
+		t.Fatalf("PutExecutionReference calls = %d, want %d", provider.putExecutionReferenceCalls, putCalls+1)
+	}
+	stored = provider.refs[first.ExecutionRef.ID]
+	if !reflect.DeepEqual(stored.Permissions, initialRefPermissions) {
+		t.Fatalf("execution ref permissions = %#v, want original %#v", stored.Permissions, initialRefPermissions)
+	}
+	if stored.RevokedAt != nil {
+		t.Fatalf("execution ref RevokedAt = %v, want nil", stored.RevokedAt)
+	}
+	if len(provider.refs) != 2 {
+		t.Fatalf("execution refs stored = %d, want 2 permission-scoped refs", len(provider.refs))
+	}
+	for id, ref := range provider.refs {
+		if ref.RevokedAt != nil {
+			t.Fatalf("execution ref %q RevokedAt = %v, want nil", id, ref.RevokedAt)
+		}
+	}
+}
+
+func TestExecutionRefPermissionsScopeDistinguishesNilAndEmpty(t *testing.T) {
+	t.Parallel()
+
+	if executionRefPermissionsScope(nil) == executionRefPermissionsScope([]core.AccessPermission{}) {
+		t.Fatal("nil and empty execution ref permissions produced the same scope")
 	}
 }
 
@@ -284,10 +571,14 @@ type testAgentManager struct {
 
 type testWorkflowProvider struct {
 	coreworkflow.Provider
-	refs              map[string]*coreworkflow.ExecutionReference
-	runs              map[string]*coreworkflow.Run
-	schedules         map[string]*coreworkflow.Schedule
-	upsertedSchedules []coreworkflow.UpsertScheduleRequest
+	refs                            map[string]*coreworkflow.ExecutionReference
+	runs                            map[string]*coreworkflow.Run
+	schedules                       map[string]*coreworkflow.Schedule
+	upsertedSchedules               []coreworkflow.UpsertScheduleRequest
+	signalOrStartErr                error
+	signalOrStartCalls              int
+	getMissingExecutionReferenceErr error
+	putExecutionReferenceCalls      int
 }
 
 func newTestWorkflowProvider() *testWorkflowProvider {
@@ -299,6 +590,10 @@ func newTestWorkflowProvider() *testWorkflowProvider {
 }
 
 func (p *testWorkflowProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	p.signalOrStartCalls++
+	if p.signalOrStartErr != nil {
+		return nil, p.signalOrStartErr
+	}
 	run := &coreworkflow.Run{
 		ID:           "run-signaled",
 		Status:       coreworkflow.RunStatusRunning,
@@ -372,6 +667,7 @@ func (p *testWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.G
 }
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	p.putExecutionReferenceCalls++
 	copied := *ref
 	p.refs[copied.ID] = &copied
 	return &copied, nil
@@ -380,6 +676,9 @@ func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *cor
 func (p *testWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
 	ref := p.refs[strings.TrimSpace(id)]
 	if ref == nil {
+		if p.getMissingExecutionReferenceErr != nil {
+			return nil, p.getMissingExecutionReferenceErr
+		}
 		return nil, core.ErrNotFound
 	}
 	copied := *ref
