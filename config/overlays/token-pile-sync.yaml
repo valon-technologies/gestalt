@@ -1,0 +1,120 @@
+# Token Pile sync workflows
+#
+# Replaces the GitHub Actions cron jobs in valon-technologies/token-pile with
+# native Gestalt workflow schedules. Each schedule targets a token-pile plugin
+# operation that fetches from the source connection, renders markdown, and
+# upserts entries into the pile.
+#
+# Sources:
+#   - Slack       (every 5 min)   — public channel messages + threads
+#   - GitHub      (every 5 min)   — merged PR activity across the org
+#   - GitHub Repos (5×/day)       — repo snapshots (README, CODEOWNERS, contributors)
+#   - Gong        (hourly)        — call transcripts (replaces the old Gong→Notion pipeline)
+#   - Google Groups (every 5 min) — email threads from implementation groups
+#
+# Refine is event-triggered: each sync publishes a token-pile.sync.completed
+# event, and the refine trigger fires to extract structured features via LLM.
+#
+# Auth: Gestalt connections handle credentials for every source plugin,
+# so no API keys are needed in the workflow config.
+#
+# Usage: merge this overlay with the base gestalt config:
+#   gestaltd serve --config config.yaml --config config/overlays/token-pile-sync.yaml
+
+workflows:
+  schedules:
+    # ── Slack ──────────────────────────────────────────────────────────
+    # Fetches messages from all public channels (excluding noise channels)
+    # since the last watermark. Groups by channel+date, renders with
+    # thread replies, and upserts one entry per channel per day.
+    token_pile_sync_slack:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        plugin:
+          name: token-pile
+          operation: sync.slack
+          input:
+            source_org: "Valon (Internal)"
+            source: Slack
+
+    # ── GitHub activity ───────────────────────────────────────────────
+    # Fetches merged PRs across the org since the last watermark.
+    # Groups by repo+date, includes reviews, comments, and stats.
+    token_pile_sync_github_activity:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        plugin:
+          name: token-pile
+          operation: sync.github
+          input:
+            mode: activity
+            org: valon-technologies
+            source_org: "Valon (Internal)"
+            source: GitHub
+
+    # ── GitHub repo snapshots ─────────────────────────────────────────
+    # Snapshots every repo: README, CODEOWNERS, top contributors (90d).
+    # Runs 5×/day on weekdays (6am, 10am, 1pm, 4pm ET).
+    token_pile_sync_github_repos:
+      cron: "0 10,14,17,20 * * 1-5"
+      timezone: America/New_York
+      target:
+        plugin:
+          name: token-pile
+          operation: sync.github
+          input:
+            mode: repos
+            org: valon-technologies
+            source_org: "Valon (Internal)"
+            source: "GitHub Repos"
+
+    # ── Gong ──────────────────────────────────────────────────────────
+    # Fetches call recordings with transcripts directly from Gong.
+    # Replaces the old Gong→Notion pipeline — no Notion intermediary.
+    token_pile_sync_gong:
+      cron: "0 * * * *"
+      timezone: America/New_York
+      target:
+        plugin:
+          name: token-pile
+          operation: sync.gong
+          input:
+            source_org: "Valon (Internal)"
+            source: Gong
+
+    # ── Google Groups ─────────────────────────────────────────────────
+    # Fetches email threads from implementation groups via Gmail search.
+    # One entry per thread, organized by source org.
+    token_pile_sync_google_groups:
+      cron: "*/5 * * * *"
+      timezone: America/New_York
+      target:
+        plugin:
+          name: token-pile
+          operation: sync.google_groups
+          input:
+            groups:
+              - name: ocean-implementation
+                source_org: servicemac
+              - name: athena-implementation
+                source_org: newrez
+              - name: vesper-implementation
+                source_org: "Valon (Internal)"
+
+  eventTriggers:
+    # ── Refine ────────────────────────────────────────────────────────
+    # Fires when any sync completes. Runs LLM feature extraction on new
+    # entries: clients, people, systems, product areas, topics.
+    # Replaces the 15-min polling cron — only runs when there's new data.
+    token_pile_refine:
+      match:
+        type: token-pile.sync.completed
+        source: token-pile
+      target:
+        plugin:
+          name: token-pile
+          operation: refine
+          input:
+            concurrency: 1
