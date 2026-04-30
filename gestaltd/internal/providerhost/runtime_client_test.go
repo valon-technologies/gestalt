@@ -3,6 +3,7 @@ package providerhost
 import (
 	"context"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
@@ -121,6 +122,31 @@ func TestStartRuntimeProviderTreatsUnimplementedAsNoop(t *testing.T) {
 	}
 	if err := StartRuntimeProvider(context.Background(), client); err != nil {
 		t.Fatalf("StartRuntimeProvider: %v", err)
+	}
+}
+
+func TestStartRuntimeProviderUsesStartupTimeout(t *testing.T) {
+	t.Parallel()
+
+	var remaining time.Duration
+	client := &fakeProviderLifecycleClient{
+		startProvider: func(ctx context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*proto.StartRuntimeProviderResponse, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("StartProvider context has no deadline")
+			}
+			remaining = time.Until(deadline)
+			return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+		},
+	}
+	if err := StartRuntimeProvider(context.Background(), client); err != nil {
+		t.Fatalf("StartRuntimeProvider: %v", err)
+	}
+	if remaining <= providerRPCTimeout {
+		t.Fatalf("StartProvider remaining deadline = %s, want above request timeout %s", remaining, providerRPCTimeout)
+	}
+	if remaining > providerStartTimeout {
+		t.Fatalf("StartProvider remaining deadline = %s, want at most startup timeout %s", remaining, providerStartTimeout)
 	}
 }
 

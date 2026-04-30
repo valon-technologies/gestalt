@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	providerRPCTimeout = 10 * time.Second
+	providerRPCTimeout   = 10 * time.Second
+	providerStartTimeout = 2 * time.Minute
 )
 
 var providerConfigureTimeout = 30 * time.Second
@@ -108,7 +109,7 @@ func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleCli
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}
-	startCtx, cancel := providerCallContext(ctx)
+	startCtx, cancel := providerStartContext(ctx)
 	defer cancel()
 	resp, err := client.StartProvider(startCtx, &emptypb.Empty{})
 	if err != nil {
@@ -146,6 +147,13 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 		parent = context.Background()
 	}
 	return context.WithTimeout(parent, providerRPCTimeout)
+}
+
+func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, providerStartTimeout)
 }
 
 func providerStreamContext(parent context.Context) (context.Context, context.CancelFunc) {
