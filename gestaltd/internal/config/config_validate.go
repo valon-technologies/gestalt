@@ -156,10 +156,10 @@ func validateProviderDevConfig(cfg *Config) error {
 	state := DevAttachmentState(strings.TrimSpace(string(cfg.Server.Dev.AttachmentState)))
 	cfg.Server.Dev.AttachmentState = state
 	switch state {
-	case "", DevAttachmentStateProcessLocal, DevAttachmentStateIndexedDB:
+	case "", DevAttachmentStateIndexedDB:
 		return nil
 	default:
-		return fmt.Errorf("config validation: server.dev.attachmentState %q is not supported; use %q or %q", state, DevAttachmentStateProcessLocal, DevAttachmentStateIndexedDB)
+		return fmt.Errorf("config validation: server.dev.attachmentState %q is not supported; use %q", state, DevAttachmentStateIndexedDB)
 	}
 }
 

@@ -172,7 +172,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
-| `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. Use `indexeddb` for shared or load-balanced servers. Use `processLocal` only for local demos and single-process development servers. |
+| `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. The only supported value is `indexeddb`, which stores attachment state in the configured host IndexedDB for shared and load-balanced servers. |
 | `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
@@ -1122,9 +1122,9 @@ URLs.
 `attachmentState: indexeddb` stores attachment metadata and queued provider/UI
 calls in the selected host IndexedDB, so any `gestaltd` replica can accept
 attach creation, CLI poll/complete traffic, provider invocations, and
-provider-owned UI requests. `attachmentState: processLocal` stores the same
-state in this process only; reserve it for local demos and single-process
-development servers.
+provider-owned UI requests. Process-local attachment state is not exposed as a
+server config mode because it is unsafe for load-balanced or multi-replica
+servers.
 
 Interactive attach creation uses a short-lived browser approval page plus a
 verification code shown in the initiating terminal. The approving browser

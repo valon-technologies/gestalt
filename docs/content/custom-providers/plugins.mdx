@@ -898,9 +898,9 @@ enough, and this action does not grant normal invocation access:
 ```
 `attachmentState: indexeddb` stores attachment metadata and queued provider/UI
 calls in the selected host IndexedDB, so attach traffic can move across
-`gestaltd` replicas. `attachmentState: processLocal` stores attachment state in
-the accepting process only; reserve it for local demos and single-process
-development servers.
+`gestaltd` replicas. Process-local remote attachment state is not exposed as a
+supported server mode because it is unsafe for load-balanced or multi-replica
+servers.
 Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY` for
 non-interactive direct attach. Stored CLI credentials are intentionally not used
 for direct attach; without an explicit token, the CLI uses browser approval. An

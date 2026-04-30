@@ -148,7 +148,7 @@ func TestProviderRemoteCreateSessionErrorAddsAttachPermissionGuidance(t *testing
 	}
 	for _, want := range []string{
 		"remote provider-dev attach was denied",
-		"providerDev.attach.allowedRoles",
+		"dev.attach.allowedRoles",
 		"permissions[].actions including provider_dev.attach",
 		"browser approval",
 	} {

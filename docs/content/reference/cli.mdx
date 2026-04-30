@@ -98,8 +98,8 @@ plugin implementations for the authenticated principal that created the session.
 The remote server must opt in with `server.dev.attachmentState`; otherwise the
 command fails before local code is attached. Use `attachmentState: indexeddb` on
 shared or load-balanced servers so attachment metadata and queued provider calls
-are stored in the configured host IndexedDB. `attachmentState: processLocal` is
-available only for local demos and single-process development servers.
+are stored in the configured host IndexedDB. Process-local remote attachment
+state is not a supported server mode.
 For the interactive happy path, `provider dev --remote` creates a short-lived
 attach approval request and opens the remote server in your browser. Approving
 that page with your normal browser session creates an owner-scoped attachment
