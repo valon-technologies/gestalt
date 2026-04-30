@@ -627,6 +627,11 @@ class AgentHostStub(object):
                 request_serializer=v1_dot_agent__pb2.SearchAgentToolsRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.SearchAgentToolsResponse.FromString,
                 _registered_method=True)
+        self.ListTools = channel.unary_unary(
+                '/gestalt.provider.v1.AgentHost/ListTools',
+                request_serializer=v1_dot_agent__pb2.ListAgentToolsRequest.SerializeToString,
+                response_deserializer=v1_dot_agent__pb2.ListAgentToolsResponse.FromString,
+                _registered_method=True)
         self.ExecuteTool = channel.unary_unary(
                 '/gestalt.provider.v1.AgentHost/ExecuteTool',
                 request_serializer=v1_dot_agent__pb2.ExecuteAgentToolRequest.SerializeToString,
@@ -638,6 +643,12 @@ class AgentHostServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def SearchTools(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTools(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -656,6 +667,11 @@ def add_AgentHostServicer_to_server(servicer, server):
                     servicer.SearchTools,
                     request_deserializer=v1_dot_agent__pb2.SearchAgentToolsRequest.FromString,
                     response_serializer=v1_dot_agent__pb2.SearchAgentToolsResponse.SerializeToString,
+            ),
+            'ListTools': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTools,
+                    request_deserializer=v1_dot_agent__pb2.ListAgentToolsRequest.FromString,
+                    response_serializer=v1_dot_agent__pb2.ListAgentToolsResponse.SerializeToString,
             ),
             'ExecuteTool': grpc.unary_unary_rpc_method_handler(
                     servicer.ExecuteTool,
@@ -690,6 +706,33 @@ class AgentHost(object):
             '/gestalt.provider.v1.AgentHost/SearchTools',
             v1_dot_agent__pb2.SearchAgentToolsRequest.SerializeToString,
             v1_dot_agent__pb2.SearchAgentToolsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTools(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AgentHost/ListTools',
+            v1_dot_agent__pb2.ListAgentToolsRequest.SerializeToString,
+            v1_dot_agent__pb2.ListAgentToolsResponse.FromString,
             options,
             channel_credentials,
             insecure,

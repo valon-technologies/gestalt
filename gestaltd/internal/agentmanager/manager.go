@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,8 @@ const (
 	agentToolSearchAdaptiveMaxResults = 3
 	agentToolSearchMaxResults         = 20
 	agentToolSearchMaxCandidates      = 20
+	agentToolListDefaultPageSize      = 100
+	agentToolListMaxPageSize          = 500
 	agentToolInputSchemaMaxBytes      = 128 * 1024
 	maxAgentRouteCacheEntries         = 20_000
 	AgentListSummaryDefaultLimit      = 100
@@ -93,6 +96,7 @@ type Service interface {
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
 	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
+	ListTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
 	GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error)
 	ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
@@ -583,12 +587,19 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
+	if toolSource == coreagent.ToolSourceModeMCPCatalog {
+		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
+			return nil, err
+		}
+	}
 	if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
 		return nil, err
 	}
 	var tools []coreagent.Tool
-	if _, err := agentProviderSupportsNativeToolSearch(ctx, ownedSession.provider); err != nil {
+	if supported, err := agentProviderSupportsToolSource(ctx, ownedSession.provider, toolSource); err != nil {
 		return nil, err
+	} else if !supported {
+		return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
 	}
 	resolvableToolRefs := resolvableAgentToolRefs(toolRefs)
 	if len(resolvableToolRefs) > 0 {
@@ -1101,6 +1112,9 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if err != nil {
 		return nil, err
 	}
+	if toolSource != coreagent.ToolSourceModeNativeSearch {
+		return nil, fmt.Errorf("agent tool search requires %q tool source", coreagent.ToolSourceModeNativeSearch)
+	}
 	attrs := []attribute.KeyValue{
 		observability.AttrAgentToolSource.String(string(toolSource)),
 	}
@@ -1160,6 +1174,118 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 		Tools:      tools,
 		Candidates: compactCandidates,
 		HasMore:    hasMore,
+	}, nil
+}
+
+func (m *Manager) ListTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
+	ctx, finish := startAgentOperation(ctx, "list_tools")
+	defer func() { finish(err) }()
+
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrAgentSubjectRequired
+	}
+	return m.listTools(ctx, p, req)
+}
+
+func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
+	startedAt := time.Now()
+	toolSource, err := validateToolSource(req.ToolSource)
+	if err != nil {
+		return nil, err
+	}
+	if toolSource != coreagent.ToolSourceModeMCPCatalog {
+		return nil, fmt.Errorf("agent tool listing requires %q tool source", coreagent.ToolSourceModeMCPCatalog)
+	}
+	attrs := []attribute.KeyValue{
+		observability.AttrAgentToolSource.String(string(toolSource)),
+	}
+	ctx, span := observability.StartSpan(ctx, "agent.tool.list", attrs...)
+	defer func() {
+		observability.EndSpan(span, err)
+		observability.RecordAgentToolResolve(ctx, startedAt, err != nil, attrs...)
+	}()
+
+	if m == nil || m.providers == nil {
+		return nil, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
+	}
+	refs, err := normalizeToolRefs(req.ToolRefs)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMCPCatalogToolRefs(refs); err != nil {
+		return nil, err
+	}
+	pageSize, err := effectiveAgentToolListPageSize(req.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	pageOffset, err := agentToolListPageOffset(req.PageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]coreagent.ListedTool, 0, len(refs))
+	seen := map[agentToolTargetKey]struct{}{}
+	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range systemTools {
+		key := agentToolTargetKeyFromTarget(systemTools[i].Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		listed, err := listedAgentSystemTool(systemTools[i])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, listed)
+	}
+
+	candidates, err := m.searchToolCandidates(ctx, p, refs, "", true)
+	if err != nil {
+		return nil, err
+	}
+	var firstUnavailableErr error
+	for i := range candidates {
+		candidate := candidates[i]
+		tool, err := m.resolveTool(ctx, p, candidate.ref)
+		if err != nil {
+			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
+				continue
+			}
+			if candidate.skipUnavailable && agentToolSearchUnavailable(err) {
+				if firstUnavailableErr == nil {
+					firstUnavailableErr = err
+				}
+				continue
+			}
+			return nil, err
+		}
+		key := agentToolTargetKeyFromTarget(tool.Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, listedAgentPluginTool(tool, candidate))
+	}
+	if len(out) == 0 && len(refs) > 0 && firstUnavailableErr != nil {
+		return nil, firstUnavailableErr
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].MCPName != out[j].MCPName {
+			return out[i].MCPName < out[j].MCPName
+		}
+		return out[i].ToolID < out[j].ToolID
+	})
+	assignUniqueListedAgentToolNames(out)
+	tools, nextPageToken := paginateListedAgentTools(out, pageSize, pageOffset)
+	return &coreagent.ListToolsResponse{
+		Tools:         tools,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
@@ -2129,6 +2255,49 @@ func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {
 	return out, nil
 }
 
+func validateMCPCatalogToolRefs(refs []coreagent.ToolRef) error {
+	if err := coreagent.ValidateMCPCatalogToolRefs(refs, "tool_refs"); err != nil {
+		return fmt.Errorf("%w: %w", invocation.ErrInvalidInvocation, err)
+	}
+	return nil
+}
+
+func effectiveAgentToolListPageSize(pageSize int) (int, error) {
+	if pageSize < 0 {
+		return 0, fmt.Errorf("%w: page_size must be non-negative", invocation.ErrInvalidInvocation)
+	}
+	if pageSize == 0 {
+		return agentToolListDefaultPageSize, nil
+	}
+	if pageSize > agentToolListMaxPageSize {
+		return agentToolListMaxPageSize, nil
+	}
+	return pageSize, nil
+}
+
+func agentToolListPageOffset(pageToken string) (int, error) {
+	pageToken = strings.TrimSpace(pageToken)
+	if pageToken == "" {
+		return 0, nil
+	}
+	offset, err := strconv.Atoi(pageToken)
+	if err != nil || offset < 0 {
+		return 0, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	return offset, nil
+}
+
+func paginateListedAgentTools(tools []coreagent.ListedTool, pageSize, offset int) ([]coreagent.ListedTool, string) {
+	if offset >= len(tools) {
+		return nil, ""
+	}
+	end := offset + pageSize
+	if end >= len(tools) {
+		return append([]coreagent.ListedTool(nil), tools[offset:]...), ""
+	}
+	return append([]coreagent.ListedTool(nil), tools[offset:end]...), strconv.Itoa(end)
+}
+
 func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
 	if len(op.InputSchema) <= agentToolInputSchemaMaxBytes {
 		return op.InputSchema
@@ -2137,6 +2306,158 @@ func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
 		return synthesized
 	}
 	return json.RawMessage(`{"type":"object","additionalProperties":true}`)
+}
+
+func agentToolInputSchemaJSON(op catalog.CatalogOperation) string {
+	raw := agentToolInputSchema(op)
+	if len(raw) == 0 {
+		return `{"type":"object","additionalProperties":true}`
+	}
+	return string(raw)
+}
+
+func agentToolSchemaJSON(schema map[string]any) (string, error) {
+	if len(schema) == 0 {
+		return `{"type":"object","additionalProperties":true}`, nil
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return "", fmt.Errorf("marshal agent tool input schema: %w", err)
+	}
+	return string(raw), nil
+}
+
+func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
+	inputSchema, err := agentToolSchemaJSON(tool.ParametersSchema)
+	if err != nil {
+		return coreagent.ListedTool{}, err
+	}
+	return coreagent.ListedTool{
+		ToolID:          tool.ID,
+		MCPName:         agentToolMCPName(tool.Target),
+		Title:           tool.Name,
+		Description:     tool.Description,
+		InputSchemaJSON: inputSchema,
+		Ref:             agentToolRefFromTarget(tool.Target),
+		Target:          tool.Target,
+		Hidden:          tool.Hidden,
+	}, nil
+}
+
+func listedAgentPluginTool(tool coreagent.Tool, candidate agentToolSearchCandidate) coreagent.ListedTool {
+	ref := candidate.ref
+	ref.Connection = tool.Target.Connection
+	ref.Instance = tool.Target.Instance
+	ref.CredentialMode = tool.Target.CredentialMode
+	return coreagent.ListedTool{
+		ToolID:           tool.ID,
+		MCPName:          agentToolMCPName(tool.Target),
+		Title:            tool.Name,
+		Description:      tool.Description,
+		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
+		OutputSchemaJSON: string(candidate.operation.OutputSchema),
+		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),
+		Ref:              ref,
+		Target:           tool.Target,
+		Hidden:           tool.Hidden,
+	}
+}
+
+func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.CapabilityAnnotations {
+	return core.CapabilityAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
+}
+
+func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
+	return coreagent.ToolRef{
+		System:         target.System,
+		Plugin:         target.Plugin,
+		Operation:      target.Operation,
+		Connection:     target.Connection,
+		Instance:       target.Instance,
+		CredentialMode: target.CredentialMode,
+	}
+}
+
+func assignUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
+	used := make(map[string]struct{}, len(tools))
+	nextSuffix := make(map[string]int, len(tools))
+	for i := range tools {
+		base := strings.TrimSpace(tools[i].MCPName)
+		if base == "" {
+			base = "tool"
+		}
+		name := base
+		if _, exists := used[name]; exists {
+			suffix := nextSuffix[base]
+			if suffix < 2 {
+				suffix = 2
+			}
+			for {
+				candidate := fmt.Sprintf("%s_%d", base, suffix)
+				suffix++
+				if _, usedCandidate := used[candidate]; usedCandidate {
+					continue
+				}
+				name = candidate
+				nextSuffix[base] = suffix
+				break
+			}
+		}
+		tools[i].MCPName = name
+		used[name] = struct{}{}
+	}
+}
+
+func agentToolMCPName(target coreagent.ToolTarget) string {
+	var parts []string
+	if strings.TrimSpace(target.System) != "" {
+		parts = []string{"system", target.System, target.Operation}
+	} else {
+		parts = []string{target.Plugin, target.Operation}
+		if strings.TrimSpace(target.Connection) != "" || strings.TrimSpace(target.Instance) != "" || target.CredentialMode != "" {
+			parts = append(parts, target.Connection, target.Instance, string(target.CredentialMode))
+		}
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = sanitizeMCPNamePart(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return "tool"
+	}
+	return strings.Join(out, "__")
+}
+
+func sanitizeMCPNamePart(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	lastSeparator := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastSeparator = false
+		case r == '_' || r == '-':
+			if !lastSeparator {
+				b.WriteRune(r)
+				lastSeparator = true
+			}
+		default:
+			if !lastSeparator {
+				b.WriteByte('_')
+				lastSeparator = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "_-")
 }
 
 func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
@@ -2152,7 +2473,9 @@ func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
 
 func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
 	source = normalizeToolSource(source)
-	if source != coreagent.ToolSourceModeNativeSearch {
+	switch source {
+	case coreagent.ToolSourceModeNativeSearch, coreagent.ToolSourceModeMCPCatalog:
+	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", source)
 	}
 	return source, nil
@@ -2344,7 +2667,7 @@ func agentToolInvokeKey(pluginName, operation string) string {
 	return strings.TrimSpace(pluginName) + "\x00" + strings.TrimSpace(operation)
 }
 
-func agentProviderSupportsNativeToolSearch(ctx context.Context, provider coreagent.Provider) (bool, error) {
+func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {
 	if provider == nil {
 		return false, ErrAgentProviderNotAvailable
 	}
@@ -2352,7 +2675,25 @@ func agentProviderSupportsNativeToolSearch(ctx context.Context, provider coreage
 	if err != nil {
 		return false, err
 	}
-	return caps != nil && caps.NativeToolSearch, nil
+	return agentProviderCapabilitiesSupportToolSource(caps, source), nil
+}
+
+func agentProviderCapabilitiesSupportToolSource(caps *coreagent.ProviderCapabilities, source coreagent.ToolSourceMode) bool {
+	if source == coreagent.ToolSourceModeNativeSearch && caps == nil {
+		return true
+	}
+	if caps == nil {
+		return false
+	}
+	for _, supported := range caps.SupportedToolSources {
+		if normalizeToolSource(supported) == source {
+			return true
+		}
+	}
+	if len(caps.SupportedToolSources) > 0 {
+		return false
+	}
+	return source == coreagent.ToolSourceModeNativeSearch
 }
 
 func requireAgentProviderBoundedListHydration(ctx context.Context, providerName string, provider coreagent.Provider) error {

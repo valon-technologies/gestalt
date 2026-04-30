@@ -109,6 +109,7 @@ type routeCountingAgentProvider struct {
 	name            string
 	sessions        map[string]*coreagent.Session
 	turns           map[string]*coreagent.Turn
+	capabilities    *coreagent.ProviderCapabilities
 	turnIDOverride  string
 	cancelStatus    coreagent.ExecutionStatus
 	getSessionCalls int
@@ -187,6 +188,11 @@ func (p *routeCountingAgentProvider) CancelTurn(_ context.Context, req coreagent
 }
 
 func (p *routeCountingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p.capabilities != nil {
+		caps := *p.capabilities
+		caps.SupportedToolSources = append([]coreagent.ToolSourceMode(nil), p.capabilities.SupportedToolSources...)
+		return &caps, nil
+	}
 	return &coreagent.ProviderCapabilities{NativeToolSearch: true}, nil
 }
 
@@ -234,6 +240,7 @@ func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.capabilities = &coreagent.ProviderCapabilities{}
 	beta := newRouteCountingAgentProvider("beta")
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
@@ -331,6 +338,47 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 	}
 	if alpha.getTurnCalls != 1 {
 		t.Fatalf("GetTurn calls = %d, want 1 cached provider lookup", alpha.getTurnCalls)
+	}
+}
+
+func TestManagerCreateTurnTreatsSupportedToolSourcesAsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.capabilities = &coreagent.ProviderCapabilities{
+		NativeToolSearch: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeMCPCatalog,
+		},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+	})
+	if err == nil {
+		t.Fatal("CreateTurn error = nil, want unsupported native-search tool source")
+	}
+	if !strings.Contains(err.Error(), `does not support tool source "native_search"`) {
+		t.Fatalf("CreateTurn error = %v, want unsupported native-search tool source", err)
 	}
 }
 

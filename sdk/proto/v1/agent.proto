@@ -6,6 +6,7 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "v1/plugin.proto";
 
 message AgentMessage {
   string role = 1;
@@ -100,6 +101,7 @@ message AgentToolCandidate {
 enum AgentToolSourceMode {
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
   AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH = 1;
+  AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2;
 }
 
 enum AgentExecutionStatus {
@@ -142,6 +144,7 @@ message AgentProviderCapabilities {
   bool reasoning_summaries = 7;
   bool native_tool_search = 8;
   bool bounded_list_hydration = 9;
+  repeated AgentToolSourceMode supported_tool_sources = 10;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
@@ -357,6 +360,30 @@ message SearchAgentToolsResponse {
   bool has_more = 3;
 }
 
+message ListedAgentTool {
+  string id = 1;
+  string mcp_name = 2;
+  string title = 3;
+  string description = 4;
+  string input_schema = 5;
+  string output_schema = 6;
+  OperationAnnotations annotations = 7;
+  AgentToolRef ref = 8;
+}
+
+message ListAgentToolsRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  string tool_grant = 5;
+}
+
+message ListAgentToolsResponse {
+  repeated ListedAgentTool tools = 1;
+  string next_page_token = 2;
+}
+
 message AgentManagerCreateSessionRequest {
   reserved 1;
   reserved "request_handle";
@@ -498,6 +525,7 @@ service AgentProvider {
 
 service AgentHost {
   rpc SearchTools(SearchAgentToolsRequest) returns (SearchAgentToolsResponse);
+  rpc ListTools(ListAgentToolsRequest) returns (ListAgentToolsResponse);
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
 }
 

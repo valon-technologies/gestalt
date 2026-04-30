@@ -35,8 +35,8 @@
     "docs:build:deploy": "typedoc --options typedoc.json --out ../../docs/public/api/typescript",
     "docs:check": "bun run docs:lint && bun run docs:build",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "check": "bun test && tsc --noEmit"
+    "test": "bun test --max-concurrency 1",
+    "check": "bun run test && tsc --noEmit"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.11.0",

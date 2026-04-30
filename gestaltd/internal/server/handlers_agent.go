@@ -134,15 +134,16 @@ type agentProviderInfo struct {
 }
 
 type agentProviderCapabilitiesInfo struct {
-	StreamingText        bool `json:"streamingText,omitempty"`
-	ToolCalls            bool `json:"toolCalls,omitempty"`
-	ParallelToolCalls    bool `json:"parallelToolCalls,omitempty"`
-	StructuredOutput     bool `json:"structuredOutput,omitempty"`
-	Interactions         bool `json:"interactions,omitempty"`
-	ResumableTurns       bool `json:"resumableTurns,omitempty"`
-	ReasoningSummaries   bool `json:"reasoningSummaries,omitempty"`
-	NativeToolSearch     bool `json:"nativeToolSearch,omitempty"`
-	BoundedListHydration bool `json:"boundedListHydration,omitempty"`
+	StreamingText        bool     `json:"streamingText,omitempty"`
+	ToolCalls            bool     `json:"toolCalls,omitempty"`
+	ParallelToolCalls    bool     `json:"parallelToolCalls,omitempty"`
+	StructuredOutput     bool     `json:"structuredOutput,omitempty"`
+	Interactions         bool     `json:"interactions,omitempty"`
+	ResumableTurns       bool     `json:"resumableTurns,omitempty"`
+	ReasoningSummaries   bool     `json:"reasoningSummaries,omitempty"`
+	NativeToolSearch     bool     `json:"nativeToolSearch,omitempty"`
+	BoundedListHydration bool     `json:"boundedListHydration,omitempty"`
+	SupportedToolSources []string `json:"supportedToolSources,omitempty"`
 }
 
 type agentTurnInfo struct {
@@ -869,6 +870,8 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 		return coreagent.ToolSourceModeUnspecified, nil
 	case string(coreagent.ToolSourceModeNativeSearch):
 		return coreagent.ToolSourceModeNativeSearch, nil
+	case string(coreagent.ToolSourceModeMCPCatalog):
+		return coreagent.ToolSourceModeMCPCatalog, nil
 	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", value)
 	}
@@ -946,7 +949,22 @@ func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities)
 		ReasoningSummaries:   caps.ReasoningSummaries,
 		NativeToolSearch:     caps.NativeToolSearch,
 		BoundedListHydration: caps.BoundedListHydration,
+		SupportedToolSources: agentToolSourceModesInfoFromCore(caps.SupportedToolSources),
 	}
+}
+
+func agentToolSourceModesInfoFromCore(modes []coreagent.ToolSourceMode) []string {
+	if len(modes) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(modes))
+	for _, mode := range modes {
+		value := strings.TrimSpace(string(mode))
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func agentTurnInfoFromCore(turn *coreagent.Turn) agentTurnInfo {

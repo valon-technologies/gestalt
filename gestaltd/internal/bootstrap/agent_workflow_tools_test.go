@@ -344,6 +344,10 @@ func (workflowSystemToolResolver) SearchTools(context.Context, *principal.Princi
 	return &coreagent.SearchToolsResponse{}, nil
 }
 
+func (workflowSystemToolResolver) ListTools(context.Context, *principal.Principal, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	return &coreagent.ListToolsResponse{}, nil
+}
+
 func (workflowSystemToolResolver) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
 	if ref.System != coreagent.SystemToolWorkflow {
 		return coreagent.Tool{}, core.ErrNotFound

@@ -2187,6 +2187,181 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 	}
 }
 
+func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAgentRuntimeInvoker{}
+	toolGrants := newTestAgentToolGrants(t)
+	readOnly := true
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+			{
+				ID:          "sync",
+				Title:       "Sync roadmap",
+				Description: "Sync roadmap tasks",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+				Annotations: catalog.OperationAnnotations{
+					ReadOnlyHint: &readOnly,
+				},
+			},
+			{
+				ID:          "sync!",
+				Title:       "Sync roadmap loudly",
+				Description: "Sync roadmap tasks with a colliding MCP name",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+			},
+			{
+				ID:          "sync_2",
+				Title:       "Sync roadmap second",
+				Description: "Sync roadmap tasks with a naturally suffixed MCP name",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+			},
+		}},
+	})
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:  providers,
+		ToolGrants: toolGrants,
+		Invoker:    invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"claude": &routingAgentProvider{
+				getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        req.TurnID,
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetToolGrants(toolGrants)
+	runtime.SetToolSearcher(manager)
+
+	grant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync", "sync!", "sync_2"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "roadmap", Operation: "sync"},
+			{Plugin: "roadmap", Operation: "sync!"},
+			{Plugin: "roadmap", Operation: "sync_2"},
+		},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint grant: %v", err)
+	}
+
+	listResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		ToolGrant:    grant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if listResp.NextPageToken != "" || len(listResp.Tools) != 3 {
+		t.Fatalf("ListTools response = %#v, want three tools on one final page", listResp)
+	}
+	names := []string{listResp.Tools[0].MCPName, listResp.Tools[1].MCPName, listResp.Tools[2].MCPName}
+	slices.Sort(names)
+	if strings.Join(names, ",") != "roadmap__sync,roadmap__sync_2,roadmap__sync_2_2" {
+		t.Fatalf("listed MCP names = %#v, want unique sanitized names", names)
+	}
+	var tool coreagent.ListedTool
+	for i := range listResp.Tools {
+		if listResp.Tools[i].Ref.Operation == "sync" {
+			tool = listResp.Tools[i]
+			break
+		}
+	}
+	if tool.MCPName == "" || tool.Title != "Sync roadmap" {
+		t.Fatalf("listed sync tool = %#v, want Sync roadmap", tool)
+	}
+	if tool.InputSchemaJSON == "" || tool.Annotations.ReadOnlyHint == nil || !*tool.Annotations.ReadOnlyHint {
+		t.Fatalf("listed tool schema/annotations = %#v", tool)
+	}
+
+	_, err = runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		Query:        "sync",
+		ToolGrant:    grant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("SearchTools with mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	}
+
+	broadGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap"}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint broad grant: %v", err)
+	}
+	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		ToolGrant:    broadGrant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ListTools with broad mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	}
+
+	execResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       tool.ToolID,
+		ToolGrant:    grant,
+		Arguments:    map[string]any{"taskId": "task-123"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool with mcp catalog grant: %v", err)
+	}
+	if execResp == nil || execResp.Status != http.StatusAccepted || execResp.Body != `{"taskId":"task-123"}` {
+		t.Fatalf("ExecuteTool response = %#v, want accepted task body", execResp)
+	}
+
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       tool.ToolID,
+		ToolGrant:    broadGrant,
+		Arguments:    map[string]any{"taskId": "task-123"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ExecuteTool with broad mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	}
+}
+
 func waitForAgentRuntimeCondition(t *testing.T, timeout time.Duration, fn func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

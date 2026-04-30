@@ -48,6 +48,7 @@ type agentSystemToolExecutor interface {
 
 type agentToolResolver interface {
 	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
+	ListTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 }
 
@@ -359,6 +360,9 @@ func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchTool
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	toolSource := normalizeAgentToolSource(grant.ToolSource)
+	if toolSource != coreagent.ToolSourceModeNativeSearch {
+		return nil, fmt.Errorf("%w: agent tool search requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeNativeSearch)
+	}
 	resp, err := searcher.SearchTools(ctx, principalValue, coreagent.SearchToolsRequest{
 		ProviderName:   strings.TrimSpace(grant.ProviderName),
 		SessionID:      strings.TrimSpace(grant.SessionID),
@@ -386,6 +390,60 @@ func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchTool
 		Tools:      append([]coreagent.Tool(nil), resp.Tools...),
 		Candidates: append([]coreagent.ToolCandidate(nil), resp.Candidates...),
 		HasMore:    resp.HasMore,
+	}, nil
+}
+
+func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	grants := r.toolGrants
+	searcher := r.toolSearcher
+	r.mu.RUnlock()
+	if searcher == nil {
+		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
+	}
+	requestedTurnID := strings.TrimSpace(req.TurnID)
+	grant, err := resolveAgentToolGrant(grants, strings.TrimSpace(req.ToolGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.validateAgentToolGrantTurn(ctx, grant, requestedTurnID); err != nil {
+		return nil, err
+	}
+	principalValue := agentToolGrantPrincipal(grant)
+	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	toolSource := normalizeAgentToolSource(grant.ToolSource)
+	if toolSource != coreagent.ToolSourceModeMCPCatalog {
+		return nil, fmt.Errorf("%w: agent tool listing requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	}
+	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+		return nil, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
+	}
+	resp, err := searcher.ListTools(ctx, principalValue, coreagent.ListToolsRequest{
+		ProviderName: strings.TrimSpace(grant.ProviderName),
+		SessionID:    strings.TrimSpace(grant.SessionID),
+		TurnID:       requestedTurnID,
+		PageSize:     req.PageSize,
+		PageToken:    strings.TrimSpace(req.PageToken),
+		ToolRefs:     append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		ToolSource:   toolSource,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return &coreagent.ListToolsResponse{}, nil
+	}
+	if err := validateAgentListedTools(principalValue, grant.ToolRefs, toolSource, resp.Tools); err != nil {
+		return nil, err
+	}
+	return &coreagent.ListToolsResponse{
+		Tools:         append([]coreagent.ListedTool(nil), resp.Tools...),
+		NextPageToken: strings.TrimSpace(resp.NextPageToken),
 	}, nil
 }
 
@@ -482,8 +540,16 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	if principalValue == nil {
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
-	if normalizeAgentToolSource(grant.ToolSource) != coreagent.ToolSourceModeNativeSearch {
+	source := normalizeAgentToolSource(grant.ToolSource)
+	switch source {
+	case coreagent.ToolSourceModeNativeSearch, coreagent.ToolSourceModeMCPCatalog:
+	default:
 		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, grant.ToolSource)
+	}
+	if source == coreagent.ToolSourceModeMCPCatalog {
+		if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+			return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
+		}
 	}
 	operation := strings.TrimSpace(target.Operation)
 	if systemName := strings.TrimSpace(target.System); systemName != "" {
@@ -516,6 +582,46 @@ func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSou
 		return coreagent.ToolSourceModeNativeSearch
 	}
 	return source
+}
+
+func validateAgentMCPCatalogToolRefs(refs []coreagent.ToolRef) error {
+	return coreagent.ValidateMCPCatalogToolRefs(refs, "toolRefs")
+}
+
+func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.ListedTool) error {
+	if source != coreagent.ToolSourceModeMCPCatalog {
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, source)
+	}
+	for i := range tools {
+		if strings.TrimSpace(tools[i].ToolID) == "" {
+			return fmt.Errorf("%w: listed agent tool id is required", invocation.ErrAuthorizationDenied)
+		}
+		if strings.TrimSpace(tools[i].MCPName) == "" {
+			return fmt.Errorf("%w: listed agent tool mcp_name is required", invocation.ErrAuthorizationDenied)
+		}
+		target := tools[i].Target
+		if systemName := strings.TrimSpace(target.System); systemName != "" {
+			if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(target.Operation) == "" {
+				return fmt.Errorf("%w: listed agent system tool target is incomplete", invocation.ErrAuthorizationDenied)
+			}
+			if !agentToolMatchesRefs(target, refs) {
+				return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+			}
+			continue
+		}
+		pluginName := strings.TrimSpace(target.Plugin)
+		operation := strings.TrimSpace(target.Operation)
+		if pluginName == "" || operation == "" {
+			return fmt.Errorf("%w: listed agent tool target is incomplete", invocation.ErrAuthorizationDenied)
+		}
+		if !principal.AllowsProviderPermission(p, pluginName) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+			return fmt.Errorf("%w: listed agent tool %q is not authorized", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		}
+		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
+			return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		}
+	}
+	return nil
 }
 
 func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.Tool) error {
