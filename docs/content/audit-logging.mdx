@@ -32,8 +32,8 @@ These fields are emitted when available:
 | Field | Meaning |
 | --- | --- |
 | `auth_source` | Authentication mechanism for the caller: `session`, `api_token`, or `env`. |
-| `subject_id` | Canonical caller subject such as `user:<id>` or `service_account:<id>` |
-| `subject_kind` | Canonical subject type, such as `user` or `service_account` |
+| `subject_id` | Canonical caller subject such as `user:<id>`, `managed_identity:<id>`, or `service_account:<id>` |
+| `subject_kind` | Canonical subject type, such as `user`, `managed_identity`, or `service_account` |
 | `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
 | `target_id` | Stable identifier for the affected object when one exists |
 | `target_name` | Human-readable label for the affected object |

@@ -96,6 +96,7 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 		}
 		s.mountAdminRuntimeRoutes(r)
 		s.mountAdminAuthorizationRoutes(r)
+		s.mountAdminSubjectTokenRoutes(r)
 	})
 }
 

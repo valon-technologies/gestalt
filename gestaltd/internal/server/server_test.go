@@ -4088,6 +4088,166 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 }
 
+func TestAdminAPI_SubjectAPITokenCRUD(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	subjectID := "managed_identity:reporting-bot"
+	pluginDefs := map[string]*config.ProviderEntry{
+		"svc": {AuthorizationPolicy: "svc_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.SubjectPolicyDef{
+			"svc_policy": {
+				Default: "deny",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: subjectID,
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, pluginDefs)
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "svc",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(ctx context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					p := principal.FromContext(ctx)
+					access := invocation.AccessContextFromContext(ctx)
+					body, err := json.Marshal(map[string]string{
+						"operation": op,
+						"subject":   p.SubjectID,
+						"role":      access.Role,
+					})
+					if err != nil {
+						return nil, err
+					}
+					return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "svc",
+			Operations: []catalog.CatalogOperation{{
+				ID:           "run",
+				Method:       http.MethodGet,
+				Transport:    catalog.TransportREST,
+				AllowedRoles: []string{"viewer"},
+			}},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody := bytes.NewBufferString(`{"name":"reporting bot","permissions":[{"plugin":"svc","operations":["run"]}]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/admin/api/v1/subjects/"+url.PathEscape(subjectID)+"/tokens", createBody)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST subject token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create subject token status = %d, want 201: %s", resp.StatusCode, body)
+	}
+	var createResp struct {
+		ID    string `json:"id"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode create subject token response: %v", err)
+	}
+	if createResp.ID == "" || createResp.Token == "" {
+		t.Fatalf("create subject token response missing id/token: %+v", createResp)
+	}
+
+	resp, err = http.Get(ts.URL + "/admin/api/v1/subjects/" + url.PathEscape(subjectID) + "/tokens")
+	if err != nil {
+		t.Fatalf("GET subject tokens: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list subject tokens status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var tokens []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
+		t.Fatalf("decode subject token list: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].ID != createResp.ID {
+		t.Fatalf("subject tokens = %+v, want token %q", tokens, createResp.ID)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+createResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke with subject token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("invoke with subject token status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var invokeResp map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&invokeResp); err != nil {
+		t.Fatalf("decode invoke response: %v", err)
+	}
+	if invokeResp["subject"] != subjectID || invokeResp["role"] != "viewer" {
+		t.Fatalf("invoke response = %+v, want subject %q with viewer role", invokeResp, subjectID)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/subjects/"+url.PathEscape(subjectID)+"/tokens/"+createResp.ID, nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE subject token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("delete subject token status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+createResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invoke after subject token revoke: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("invoke after revoke status = %d, want 401: %s", resp.StatusCode, body)
+	}
+
+	userSubjectID := principal.UserSubjectID("user-1")
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/admin/api/v1/subjects/"+url.PathEscape(userSubjectID)+"/tokens", bytes.NewBufferString(`{"name":"bad"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST user subject token: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("user subject token status = %d, want 400: %s", resp.StatusCode, body)
+	}
+}
+
 func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	t.Parallel()
 
