@@ -66,6 +66,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -157,18 +158,18 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 	})
 	defer ts.Close()
 
-	manager, err := providerhost.NewS3ObjectAccessURLManager(
+	manager, err := s3.NewObjectAccessURLManager(
 		[]byte("0123456789abcdef0123456789abcdef"),
 		ts.URL,
 	)
 	if err != nil {
-		t.Fatalf("NewS3ObjectAccessURLManager: %v", err)
+		t.Fatalf("NewObjectAccessURLManager: %v", err)
 	}
 	targetRef := s3store.ObjectRef{
 		Bucket: "brain",
 		Key:    " workspaces/acme/tokens/token-1/content.bin ",
 	}
-	putURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+	putURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
 		PluginName:  "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
@@ -199,7 +200,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 
 	prefixed := s3store.ObjectRef{
 		Bucket: targetRef.Bucket,
-		Key:    providerhost.S3PluginObjectKey("brain", targetRef.Key),
+		Key:    s3.PluginObjectKey("brain", targetRef.Key),
 	}
 	if _, err := store.HeadObject(context.Background(), prefixed); err != nil {
 		t.Fatalf("HeadObject(prefixed): %v", err)
@@ -208,7 +209,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
 	}
 
-	getURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+	getURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
 		PluginName:  "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
@@ -237,7 +238,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 		t.Fatalf("GET Content-Type = %q, want text/plain", getResp.Header.Get("Content-Type"))
 	}
 
-	constrainedGetURL, err := manager.MintURL(providerhost.S3ObjectAccessURLRequest{
+	constrainedGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
 		PluginName:  "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,

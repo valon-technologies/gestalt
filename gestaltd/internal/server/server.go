@@ -26,6 +26,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -123,7 +124,7 @@ type Server struct {
 	hostServiceVersion     uint64
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3store.Client
-	s3ObjectAccessURLs     *providerhost.S3ObjectAccessURLManager
+	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
 	providerDevSessions    *providerdev.Manager
 	providerDevAttach      bool
@@ -291,7 +292,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	var egressProxyTokens *providerhost.EgressProxyTokenManager
-	var s3ObjectAccessURLs *providerhost.S3ObjectAccessURLManager
+	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
 		hostServiceRelayTokens, err = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
@@ -301,7 +302,7 @@ func New(cfg Config) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 		}
-		s3ObjectAccessURLs, err = providerhost.NewS3ObjectAccessURLManager(cfg.StateSecret, cfg.PublicBaseURL)
+		s3ObjectAccessURLs, err = s3.NewObjectAccessURLManager(cfg.StateSecret, cfg.PublicBaseURL)
 		if err != nil {
 			return nil, fmt.Errorf("init s3 object access URLs: %w", err)
 		}

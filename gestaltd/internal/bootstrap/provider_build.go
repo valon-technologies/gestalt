@@ -47,6 +47,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -1930,10 +1931,10 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		return nil, fmt.Errorf("s3 host services are not available")
 	}
 
-	var accessURLs *providerhost.S3ObjectAccessURLManager
+	var accessURLs *s3.ObjectAccessURLManager
 	if len(deps.EncryptionKey) != 0 {
 		var err error
-		accessURLs, err = providerhost.NewS3ObjectAccessURLManager(deps.EncryptionKey, deps.BaseURL)
+		accessURLs, err = s3.NewObjectAccessURLManager(deps.EncryptionKey, deps.BaseURL)
 		if err != nil {
 			return nil, fmt.Errorf("s3 object access URLs: %w", err)
 		}
@@ -1954,7 +1955,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 						BindingName: binding,
 						AccessURLs:  accessURLs,
 					}))
-					proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, pluginName, binding))
+					proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, pluginName, binding))
 				}
 			}(client, binding),
 		})
@@ -1970,7 +1971,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 					BindingName: binding,
 					AccessURLs:  accessURLs,
 				}))
-				proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, pluginName, binding))
+				proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, pluginName, binding))
 			},
 		})
 	}
