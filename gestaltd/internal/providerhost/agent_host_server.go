@@ -3,12 +3,16 @@ package providerhost
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -75,7 +79,7 @@ func (s *AgentHostServer) SearchTools(ctx context.Context, req *proto.SearchAgen
 	return out, nil
 }
 
-func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
+func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (out *proto.ExecuteAgentToolResponse, err error) {
 	if s == nil || s.executeTool == nil {
 		return nil, status.Error(codes.FailedPrecondition, "agent host executor is not configured")
 	}
@@ -99,6 +103,27 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 	if toolCallID == "" && idempotencyKey == "" {
 		return nil, status.Error(codes.InvalidArgument, "tool_call_id or idempotency_key is required")
 	}
+	spanAttrs, metricAttrs := genAIToolExecutionAttrs(
+		strings.TrimSpace(s.providerName),
+		sessionID,
+		turnID,
+		toolID,
+		toolCallID,
+	)
+	ctx, span := observability.StartSpan(ctx, "execute_tool "+toolID, spanAttrs...)
+	startedAt := time.Now()
+	defer func() {
+		attrs := metricAttrs
+		if err != nil {
+			if errorAttr, ok := genAIErrorAttr(err); ok {
+				observability.SetSpanAttributes(ctx, errorAttr)
+				attrs = append(attrs, errorAttr)
+			}
+		}
+		observability.EndSpan(span, err)
+		observability.RecordGenAIClientOperationDuration(ctx, startedAt, attrs...)
+	}()
+
 	resp, err := s.executeTool(ctx, coreagent.ExecuteToolRequest{
 		ProviderName:   strings.TrimSpace(s.providerName),
 		SessionID:      sessionID,
@@ -146,6 +171,44 @@ func agentHostErrorCode(err error) codes.Code {
 	default:
 		return codes.Unknown
 	}
+}
+
+func genAIToolExecutionAttrs(providerName, sessionID, turnID, toolID, toolCallID string) ([]attribute.KeyValue, []attribute.KeyValue) {
+	agentName := strings.TrimSpace(providerName)
+	toolName := strings.TrimSpace(toolID)
+	metricAttrs := []attribute.KeyValue{
+		observability.AttrGenAIOperationName.String("execute_tool"),
+		observability.AttrGenAIProviderName.String("gestalt"),
+		observability.AttrGenAIToolName.String(toolName),
+		observability.AttrGenAIToolType.String("extension"),
+	}
+	if agentName != "" {
+		metricAttrs = append(metricAttrs, observability.AttrGenAIAgentName.String(agentName))
+	}
+	spanAttrs := append([]attribute.KeyValue{}, metricAttrs...)
+	if sessionID != "" {
+		spanAttrs = append(spanAttrs, observability.AttrGenAIConversationID.String(sessionID))
+	}
+	if turnID != "" {
+		spanAttrs = append(spanAttrs, attribute.String("gestalt.agent.turn_id", turnID))
+	}
+	if toolCallID != "" {
+		spanAttrs = append(spanAttrs, observability.AttrGenAIToolCallID.String(toolCallID))
+	}
+	return spanAttrs, metricAttrs
+}
+
+func genAIErrorAttr(err error) (attribute.KeyValue, bool) {
+	if err == nil {
+		return attribute.KeyValue{}, false
+	}
+	if st, ok := status.FromError(err); ok {
+		return observability.AttrErrorType.String(st.Code().String()), true
+	}
+	if typ := reflect.TypeOf(err); typ != nil {
+		return observability.AttrErrorType.String(typ.String()), true
+	}
+	return observability.AttrErrorType.String("_OTHER"), true
 }
 
 var _ proto.AgentHostServer = (*AgentHostServer)(nil)

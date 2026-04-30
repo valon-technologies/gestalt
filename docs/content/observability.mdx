@@ -67,6 +67,129 @@ providers:
           level: info
 ```
 
+## Provider Process Telemetry
+
+Telemetry is selected as a `gestaltd` host provider. It is not an invocable
+provider process. The selected `providers.telemetry` entry configures
+`gestaltd` itself and is also translated into standard `OTEL_*` environment
+variables for executable provider processes.
+
+That keeps provider telemetry on the same OpenTelemetry configuration as the
+host without routing telemetry through another Gestalt RPC service. Non-Python
+providers should initialize their language's OpenTelemetry SDK from the
+injected environment. Python providers using `gestalt-sdk` get exporter setup
+automatically from the runtime and can import `gestalt.telemetry` for GenAI
+semantic-convention helpers.
+
+Provider SDKs expose GenAI semantic-convention helpers for provider-owned model,
+agent, and tool work. These helpers record through the process-global
+OpenTelemetry SDK for each language.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func callModel(ctx context.Context) (err error) {
+        ctx, operation := gestalt.ModelOperation(ctx, gestalt.ModelOperationOptions{
+            ProviderName: "openai",
+            RequestModel: "gpt-4.1",
+            RequestOptions: map[string]any{
+                "max_tokens":  512,
+                "temperature": 0.2,
+            },
+        })
+        defer func() { operation.End(err) }()
+
+        response, err := client.Responses.Create(ctx, request)
+        if err != nil {
+            return err
+        }
+
+        operation.SetResponseMetadata(response.ID, response.Model, "stop")
+        operation.RecordUsage(gestalt.TokenUsage{
+            InputTokens:  gestalt.TokenCount(response.Usage.InputTokens),
+            OutputTokens: gestalt.TokenCount(response.Usage.OutputTokens),
+        })
+        return nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import telemetry
+
+    def call_model() -> None:
+        with telemetry.model_operation(
+            provider_name="openai",
+            request_model="gpt-4.1",
+            request_options={"max_tokens": 512, "temperature": 0.2},
+        ) as operation:
+            response = client.responses.create(...)
+            operation.set_response_metadata(response, finish_reasons=["stop"])
+            telemetry.record_openai_usage(operation, response)
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::telemetry::{
+        self, ModelOperationOptions, RequestOptions, TokenUsage,
+    };
+
+    async fn call_model() -> Result<(), Box<dyn std::error::Error>> {
+        let mut operation = telemetry::model_operation(
+            ModelOperationOptions::new("openai", "gpt-4.1").with_request_options(
+                RequestOptions {
+                    max_tokens: Some(512),
+                    temperature: Some(0.2),
+                    ..RequestOptions::default()
+                },
+            ),
+        );
+
+        let response = client.responses_create(request).await?;
+        operation.set_response_metadata(Some(&response.id), Some(&response.model), &["stop"]);
+        operation.record_usage(TokenUsage {
+            input_tokens: Some(response.usage.input_tokens),
+            output_tokens: Some(response.usage.output_tokens),
+            ..TokenUsage::default()
+        });
+        operation.end();
+        Ok(())
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { withModelOperation } from "@valon-technologies/gestalt/telemetry";
+
+    await withModelOperation(
+      {
+        providerName: "openai",
+        requestModel: "gpt-4.1",
+        requestOptions: { max_tokens: 512, temperature: 0.2 },
+      },
+      async (operation) => {
+        const response = await client.responses.create(request);
+        operation.setResponseMetadata({
+          id: response.id,
+          model: response.model,
+          finishReasons: ["stop"],
+        });
+        operation.recordUsage({
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        });
+      },
+    );
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 ## Audit Routing
 
 Audit logs inherit the main telemetry logger by default. If you need a

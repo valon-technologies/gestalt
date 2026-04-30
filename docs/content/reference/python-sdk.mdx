@@ -32,6 +32,24 @@ Those pages focus on the handwritten SDK surface. Generated protobuf bindings
 under `gestalt.gen` remain available to provider code, but they are not
 expanded as authored reference pages.
 
+Provider runtimes also expose OpenTelemetry helpers through `gestalt.telemetry`.
+`gestaltd` owns exporter configuration through `providers.telemetry` and passes
+standard `OTEL_*` environment into provider processes; Python providers should
+use the SDK helpers only around the GenAI work they own.
+
+```python
+from gestalt import telemetry
+
+with telemetry.model_operation(
+    provider_name="openai",
+    request_model=model,
+    request_options={"temperature": 0.2},
+) as operation:
+    response = client.chat.completions.create(model=model, messages=messages)
+    operation.set_response_metadata(response)
+    telemetry.record_openai_usage(operation, response)
+```
+
 The Python SDK also exposes agent-provider helpers:
 
 ```python

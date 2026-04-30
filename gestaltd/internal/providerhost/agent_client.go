@@ -8,6 +8,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -22,6 +23,7 @@ type AgentExecConfig struct {
 	Cleanup      func()
 	HostServices []HostService
 	Name         string
+	Telemetry    metricutil.TelemetryProviders
 }
 
 var startAgentProviderProcess = startProviderProcess
@@ -51,6 +53,7 @@ func NewExecutableAgent(ctx context.Context, cfg AgentExecConfig) (coreagent.Pro
 		Cleanup:      cfg.Cleanup,
 		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
+		Telemetry:    cfg.Telemetry,
 	}
 	proc, err := startAgentProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

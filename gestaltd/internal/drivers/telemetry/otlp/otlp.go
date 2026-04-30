@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,11 +75,13 @@ const (
 )
 
 type Provider struct {
-	logger     *slog.Logger
-	tp         *sdktrace.TracerProvider
-	mp         *sdkmetric.MeterProvider
-	lp         *sdklog.LoggerProvider
-	prometheus http.Handler
+	logger                *slog.Logger
+	tp                    *sdktrace.TracerProvider
+	mp                    *sdkmetric.MeterProvider
+	lp                    *sdklog.LoggerProvider
+	prometheus            http.Handler
+	providerEnv           map[string]string
+	providerResourceAttrs map[string]string
 }
 
 func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
@@ -112,11 +117,13 @@ func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 	otel.SetMeterProvider(metrics.MeterProvider)
 
 	return &Provider{
-		logger:     logger,
-		tp:         tp,
-		mp:         metrics.MeterProvider,
-		lp:         lp,
-		prometheus: metrics.Prometheus,
+		logger:                logger,
+		tp:                    tp,
+		mp:                    metrics.MeterProvider,
+		lp:                    lp,
+		prometheus:            metrics.Prometheus,
+		providerEnv:           buildProviderTelemetryEnv(cfg),
+		providerResourceAttrs: buildProviderResourceAttributes(cfg),
 	}, nil
 }
 
@@ -124,6 +131,32 @@ func (p *Provider) Logger() *slog.Logger                 { return p.logger }
 func (p *Provider) TracerProvider() trace.TracerProvider { return p.tp }
 func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 func (p *Provider) PrometheusHandler() http.Handler      { return p.prometheus }
+
+func (p *Provider) ProviderTelemetryEnv(providerName string) map[string]string {
+	if p == nil || len(p.providerEnv) == 0 {
+		return nil
+	}
+	env := make(map[string]string, len(p.providerEnv)+1)
+	for key, value := range p.providerEnv {
+		env[key] = value
+	}
+	env["OTEL_SERVICE_NAME"] = providerServiceName(providerName)
+
+	resourceAttrs := make(map[string]string, len(p.providerResourceAttrs)+2)
+	for key, value := range p.providerResourceAttrs {
+		resourceAttrs[key] = value
+	}
+	if strings.TrimSpace(resourceAttrs["service.namespace"]) == "" {
+		resourceAttrs["service.namespace"] = "gestalt-providers"
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" {
+		resourceAttrs["gestaltd.provider.name"] = providerName
+	}
+	if encoded := encodeOTELKeyValueEnv(resourceAttrs); encoded != "" {
+		env["OTEL_RESOURCE_ATTRIBUTES"] = encoded
+	}
+	return env
+}
 
 func (p *Provider) Shutdown(ctx context.Context) error {
 	tpErr := p.tp.Shutdown(ctx)
@@ -160,6 +193,80 @@ func applyConfigDefaults(cfg *yamlConfig) {
 	if cfg.Logs.Format == "" {
 		cfg.Logs.Format = defaultLogFormat
 	}
+}
+
+func buildProviderTelemetryEnv(cfg yamlConfig) map[string]string {
+	env := map[string]string{
+		"OTEL_EXPORTER_OTLP_PROTOCOL": otelEnvProtocol(cfg.Protocol),
+	}
+	if cfg.Endpoint != "" {
+		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = cfg.Endpoint
+	}
+	if cfg.Insecure {
+		env["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+	}
+	if encodedHeaders := encodeOTELKeyValueEnv(cfg.Headers); encodedHeaders != "" {
+		env["OTEL_EXPORTER_OTLP_HEADERS"] = encodedHeaders
+	}
+	if cfg.Traces.SamplingRatio != nil {
+		env["OTEL_TRACES_SAMPLER"] = "parentbased_traceidratio"
+		env["OTEL_TRACES_SAMPLER_ARG"] = strconv.FormatFloat(*cfg.Traces.SamplingRatio, 'f', -1, 64)
+	}
+	if interval, err := time.ParseDuration(cfg.Metrics.Interval); err == nil && interval > 0 {
+		env["OTEL_METRIC_EXPORT_INTERVAL"] = strconv.FormatInt(interval.Milliseconds(), 10)
+	}
+	return env
+}
+
+func buildProviderResourceAttributes(cfg yamlConfig) map[string]string {
+	attrs := make(map[string]string)
+	for _, attr := range telemetryutil.BuildResource("", cfg.ResourceAttributes).Attributes() {
+		key := string(attr.Key)
+		if key == "service.name" {
+			continue
+		}
+		if value := strings.TrimSpace(attr.Value.AsString()); value != "" {
+			attrs[key] = value
+		}
+	}
+	return attrs
+}
+
+func otelEnvProtocol(protocol string) string {
+	if strings.EqualFold(protocol, "http") {
+		return "http/protobuf"
+	}
+	return "grpc"
+}
+
+func providerServiceName(providerName string) string {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return "gestalt-provider"
+	}
+	return "gestalt-provider-" + providerName
+}
+
+func encodeOTELKeyValueEnv(values map[string]string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, encodeOTELKeyValuePart(key)+"="+encodeOTELKeyValuePart(values[key]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func encodeOTELKeyValuePart(value string) string {
+	return strings.ReplaceAll(url.QueryEscape(strings.TrimSpace(value)), "+", "%20")
 }
 
 func buildTracerProvider(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*sdktrace.TracerProvider, error) {

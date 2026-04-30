@@ -845,6 +845,26 @@ Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datado
 | `logs.level` | `info` | Minimum log level. |
 | `logs.format` | `text` | Log format when exporter is `stdout`: `text` or `json`. |
 
+### Provider process telemetry
+
+Telemetry is a host provider, not an invocable runtime provider. `gestaltd`
+uses the selected `providers.telemetry` entry to configure its own OpenTelemetry
+SDKs and to derive standard `OTEL_*` environment for executable provider
+processes. Providers should not configure a separate exporter in their own
+YAML; they should initialize their language's OpenTelemetry SDK from the
+environment that the host injects.
+
+When the selected telemetry provider is `otlp`, executable providers receive
+values such as `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_TRACES_SAMPLER`,
+`OTEL_TRACES_SAMPLER_ARG`, `OTEL_METRIC_EXPORT_INTERVAL`,
+`OTEL_SERVICE_NAME=gestalt-provider-<provider>`, and
+`OTEL_RESOURCE_ATTRIBUTES` containing `service.namespace=gestalt-providers`
+and `gestaltd.provider.name=<provider>`. Python providers using
+`gestalt-sdk` get that OpenTelemetry setup automatically from the SDK runtime
+and can use `from gestalt import telemetry` for GenAI semantic-convention
+helpers around model calls, agent turns, and tool execution.
+
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
 ```yaml

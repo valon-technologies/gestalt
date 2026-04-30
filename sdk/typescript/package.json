@@ -12,6 +12,7 @@
     "./build": "./src/build.ts",
     "./runtime": "./src/runtime.ts",
     "./schema": "./src/schema.ts",
+    "./telemetry": "./src/telemetry.ts",
     "./target": "./src/target.ts"
   },
   "bin": {
@@ -41,6 +42,7 @@
     "@bufbuild/protobuf": "2.11.0",
     "@connectrpc/connect": "2.1.0",
     "@connectrpc/connect-node": "2.1.0",
+    "@opentelemetry/api": "1.9.0",
     "yaml": "2.8.1"
   },
   "devDependencies": {

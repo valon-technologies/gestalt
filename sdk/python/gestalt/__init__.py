@@ -149,8 +149,18 @@ _LAZY_EXPORTS = {
     "session_catalog": ("._plugin", "session_catalog"),
 }
 
+_LAZY_MODULES = {
+    "telemetry": ".telemetry",
+}
+
 
 def __getattr__(name: str):
+    module_name = _LAZY_MODULES.get(name)
+    if module_name is not None:
+        value = import_module(module_name, __name__)
+        globals()[name] = value
+        return value
+
     export = _LAZY_EXPORTS.get(name)
     if export is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -272,4 +282,5 @@ __all__ = [
     "s3_socket_env",
     "s3_socket_token_env",
     "session_catalog",
+    "telemetry",
 ]

@@ -145,7 +145,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 	if providerName := strings.TrimSpace(cfg.ProviderName); providerName != "" {
 		execEnv[proto.EnvProviderName] = providerName
 	}
-	env := mergeExecEnv(cfg.Env, execEnv)
+	env := providerProcessEnv(cfg, execEnv)
 	stdout := cfg.Stdout
 	if stdout == nil {
 		stdout = os.Stderr
@@ -481,6 +481,26 @@ func mergeExecEnv(base, extra map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func providerProcessEnv(cfg ProcessConfig, execEnv map[string]string) map[string]string {
+	env := mergeExecEnv(providerTelemetryEnv(cfg.Telemetry, cfg.ProviderName), cfg.Env)
+	return mergeExecEnv(env, execEnv)
+}
+
+type providerTelemetryEnvProvider interface {
+	ProviderTelemetryEnv(providerName string) map[string]string
+}
+
+func providerTelemetryEnv(telemetry metricutil.TelemetryProviders, providerName string) map[string]string {
+	if telemetry == nil {
+		return nil
+	}
+	provider, ok := telemetry.(providerTelemetryEnvProvider)
+	if !ok {
+		return nil
+	}
+	return provider.ProviderTelemetryEnv(providerName)
 }
 
 func envSlice(values map[string]string) []string {
