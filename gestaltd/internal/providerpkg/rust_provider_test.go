@@ -114,6 +114,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 		{name: "authentication", kind: providermanifestv1.KindAuthentication, expectedServeExport: "__gestalt_serve_authentication"},
 		{name: "cache", kind: "cache", expectedServeExport: "__gestalt_serve_cache"},
 		{name: "indexeddb", kind: "indexeddb", expectedServeExport: "__gestalt_serve_indexeddb"},
+		{name: "runtime", kind: providermanifestv1.KindRuntime, expectedServeExport: "__gestalt_serve_runtime"},
 	}
 
 	for _, tt := range tests {

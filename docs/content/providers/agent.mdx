@@ -1,4 +1,4 @@
-import { Callout } from 'nextra/components'
+import { Callout, Tabs } from 'nextra/components'
 
 # Agent
 
@@ -49,7 +49,7 @@ providers:
         defaultModel: fast
         aliases:
           fast: openai/gpt-4.1-mini
-          deep: anthropic/claude-sonnet-4-20250514
+          deep: openai/gpt-5.5
         maxSteps: 8
         timeoutSeconds: 120
 ```
@@ -162,16 +162,151 @@ Providers may also advertise capabilities such as:
 }
 ```
 
-## First-party provider
+## Invoking agents
 
-The current first-party provider is `agent/simple` from
-`valon-technologies/gestalt-providers`. It is intentionally small:
+Agent sessions and turns are exposed through the shared CLI and HTTP API. Use
+`gestalt agent` for an interactive session, or use the session and turn
+subcommands when automation needs stable JSON output.
 
-- text-in, text-out agent loop
-- OpenAI and Anthropic model backends
-- Gestalt plugin operations as tools
-- provider-owned IndexedDB persistence
-- asynchronous turns plus turn event history
+<Tabs items={['CLI', 'HTTP']}>
+  <Tabs.Tab>
+    Start or resume an interactive session:
+
+    ```sh
+    gestalt agent --provider simple --model fast
+    gestalt agent resume <session-id>
+    gestalt agent resume --provider simple
+    ```
+
+    Create and manage sessions:
+
+    ```sh
+    gestalt agent sessions create --provider simple --model fast
+    gestalt agent sessions list --provider simple --state active
+    gestalt agent sessions get <session-id>
+    gestalt agent sessions update <session-id> --state archived
+    ```
+
+    Create, inspect, stream, or cancel turns:
+
+    ```sh
+    gestalt agent turns create <session-id> \
+      --model fast \
+      --message "Summarize the latest roadmap risk."
+    gestalt agent turns list <session-id> --status succeeded
+    gestalt agent turns get <turn-id>
+    gestalt agent turns transcript <turn-id>
+    gestalt agent turns cancel <turn-id> --reason "operator requested"
+    gestalt agent turns events list <turn-id> --after 0 --limit 100
+    gestalt agent turns events stream <turn-id> --after 100
+    ```
+
+    For structured input, pipe JSON into `--input -`:
+
+    ```sh
+    cat <<'JSON' | gestalt --format json agent turns create <session-id> --input -
+    {
+      "model": "fast",
+      "messages": [
+        {
+          "role": "user",
+          "text": "Summarize the latest roadmap risk."
+        }
+      ],
+      "toolRefs": [
+        {
+          "pluginName": "roadmap",
+          "operation": "sync"
+        }
+      ]
+    }
+    JSON
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Create a session:
+
+    ```sh
+    curl -X POST "$GESTALT_URL/api/v1/agent/sessions" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "provider": "simple",
+        "model": "fast",
+        "clientRef": "roadmap-risk"
+      }'
+    ```
+
+    Create a turn:
+
+    ```sh
+    curl -X POST "$GESTALT_URL/api/v1/agent/sessions/<session-id>/turns" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "fast",
+        "messages": [
+          {
+            "role": "user",
+            "text": "Summarize the latest roadmap risk."
+          }
+        ],
+        "toolRefs": [
+          {
+            "pluginName": "roadmap",
+            "operation": "sync"
+          }
+        ]
+      }'
+    ```
+
+    List or inspect sessions and turns:
+
+    ```sh
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/sessions?provider=simple&state=active"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/sessions/<session-id>"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/sessions/<session-id>/turns?status=running"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/turns/<turn-id>"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/turns/<turn-id>/transcript"
+    ```
+
+    Read or stream turn events:
+
+    ```sh
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/turns/<turn-id>/events?after=0&limit=100"
+
+    curl -N -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/agent/turns/<turn-id>/events/stream?after=100"
+    ```
+
+    Resolve an interaction or cancel a turn:
+
+    ```sh
+    curl -X POST "$GESTALT_URL/api/v1/agent/turns/<turn-id>/interactions/<interaction-id>/resolve" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"resolution":{"approved":true}}'
+
+    curl -X POST "$GESTALT_URL/api/v1/agent/turns/<turn-id>/cancel" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"reason":"operator requested"}'
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Omit `provider` when there is a sole/default agent provider. Include it when
+multiple providers are configured and you need to select one.
 
 ## What to read next
 

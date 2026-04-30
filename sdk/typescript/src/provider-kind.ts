@@ -38,6 +38,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["s3", "provider"],
     label: "s3 provider",
   },
+  runtime: {
+    tokens: ["runtime"],
+    formatToken: "runtime",
+    defaultExportNames: ["runtime", "provider"],
+    label: "runtime provider",
+  },
   workflow: {
     tokens: ["workflow"],
     formatToken: "workflow",

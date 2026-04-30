@@ -58,10 +58,13 @@ async fn execute_bound_tool() -> Result<(), Box<dyn std::error::Error>> {
     let mut host = gestalt::AgentHost::connect().await?;
     let response = host
         .execute_tool(pb::ExecuteAgentToolRequest {
-            run_id: "run-123".into(),
+            session_id: "session-123".into(),
+            turn_id: "turn-123".into(),
             tool_call_id: "call-1".into(),
             tool_id: "roadmap/sync".into(),
             arguments: None,
+            tool_grant: "grant-token".into(),
+            idempotency_key: "turn-123:call-1".into(),
         })
         .await?;
     println!("{}", response.status);

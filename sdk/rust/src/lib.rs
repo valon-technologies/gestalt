@@ -15,6 +15,7 @@ mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod invoker;
+mod plugin_runtime;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -60,6 +61,7 @@ pub use invoker::{
     ENV_PLUGIN_INVOKER_SOCKET, ENV_PLUGIN_INVOKER_SOCKET_TOKEN, InvocationGrant, InvokeOptions,
     PluginInvoker, PluginInvokerError,
 };
+pub use plugin_runtime::PluginRuntimeProvider;
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
@@ -157,6 +159,17 @@ macro_rules! export_s3_provider {
         pub fn __gestalt_serve_s3(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_s3_provider(provider)
+        }
+    };
+}
+
+/// Exports the plugin-runtime-provider entrypoint expected by `gestaltd`.
+#[macro_export]
+macro_rules! export_plugin_runtime_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_runtime(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_plugin_runtime_provider(provider)
         }
     };
 }

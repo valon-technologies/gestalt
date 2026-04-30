@@ -188,6 +188,25 @@ export {
   type WarningsHandler,
 } from "./provider.ts";
 export {
+  PluginRuntimeEgressMode,
+  PluginRuntimeHostServiceAccess,
+  PluginRuntimeProvider,
+  createPluginRuntimeProviderService,
+  definePluginRuntimeProvider,
+  isPluginRuntimeProvider,
+  type BindPluginRuntimeHostServiceRequest,
+  type GetPluginRuntimeSessionRequest,
+  type HostedPlugin,
+  type ListPluginRuntimeSessionsRequest,
+  type PluginRuntimeHostServiceBinding,
+  type PluginRuntimeProviderOptions,
+  type PluginRuntimeSession,
+  type PluginRuntimeSupport,
+  type StartHostedPluginRequest,
+  type StartPluginRuntimeSessionRequest,
+  type StopPluginRuntimeSessionRequest,
+} from "./pluginruntime.ts";
+export {
   array,
   boolean,
   type InferSchema,

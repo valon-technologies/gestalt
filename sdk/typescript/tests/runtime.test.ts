@@ -56,6 +56,14 @@ import {
   SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import {
+  BindPluginRuntimeHostServiceRequestSchema,
+  GetPluginRuntimeSessionRequestSchema,
+  ListPluginRuntimeSessionsRequestSchema,
+  StartHostedPluginRequestSchema,
+  StartPluginRuntimeSessionRequestSchema,
+  StopPluginRuntimeSessionRequestSchema,
+} from "../gen/v1/pluginruntime_pb.ts";
+import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
 } from "../gen/v1/secrets_pb.ts";
@@ -77,6 +85,7 @@ import {
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
+  createPluginRuntimeProviderService,
   createRuntimeService,
   createWorkflowProviderService,
   loadProviderFromTarget,
@@ -86,10 +95,13 @@ import {
 import {
   httpSubjectError,
   PresignMethod,
+  PluginRuntimeEgressMode,
+  PluginRuntimeHostServiceAccess,
   S3,
   WorkflowRunStatus,
   defineCacheProvider,
   definePlugin,
+  definePluginRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
@@ -1405,6 +1417,124 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
   });
   expect(presigned.url).toContain("method=PUT");
   expect(presigned.headers).toEqual({ "x-test": "1" });
+});
+
+test("plugin runtime provider serves runtime metadata plus sessions", async () => {
+  const provider = definePluginRuntimeProvider({
+    name: "runtime-provider",
+    displayName: "Fixture Runtime",
+    warnings: ["set RUNTIME_ENDPOINT"],
+    getSupport() {
+      return {
+        canHostPlugins: true,
+        hostServiceAccess: PluginRuntimeHostServiceAccess.DIRECT,
+        egressMode: PluginRuntimeEgressMode.HOSTNAME,
+      };
+    },
+    startSession(request) {
+      return {
+        id: `${request.pluginName || "plugin"}-session`,
+        state: "ready",
+      };
+    },
+    getSession(request) {
+      return {
+        id: request.sessionId,
+        state: "ready",
+      };
+    },
+    listSessions() {
+      return [{ id: "plugin-session", state: "ready" }];
+    },
+    stopSession() {},
+    bindHostService(request) {
+      return {
+        id: "binding-1",
+        sessionId: request.sessionId,
+        envVar: request.envVar,
+        ...(request.relay ? { relay: request.relay } : {}),
+      };
+    },
+    startPlugin(request) {
+      return {
+        id: "hosted-plugin-1",
+        sessionId: request.sessionId,
+        pluginName: request.pluginName,
+        dialTarget: "unix:///tmp/plugin.sock",
+      };
+    },
+  });
+
+  const runtime = createRuntimeService(provider as any);
+  const service = createPluginRuntimeProviderService(provider);
+  const identity = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema),
+  );
+  expect(identity.kind).toBe(ProtoProviderKind.RUNTIME);
+  expect(identity.name).toBe("runtime-provider");
+  expect(identity.displayName).toBe("Fixture Runtime");
+  expect(identity.warnings).toEqual(["set RUNTIME_ENDPOINT"]);
+
+  const support = await (service.getSupport as any)(create(EmptySchema));
+  expect(support.canHostPlugins).toBe(true);
+  expect(support.hostServiceAccess).toBe(PluginRuntimeHostServiceAccess.DIRECT);
+  expect(support.egressMode).toBe(PluginRuntimeEgressMode.HOSTNAME);
+
+  const session = await (service.startSession as any)(
+    create(StartPluginRuntimeSessionRequestSchema, {
+      pluginName: "plugin",
+      image: "example/plugin:latest",
+    }),
+  );
+  expect(session.id).toBe("plugin-session");
+  expect(session.state).toBe("ready");
+
+  const fetched = await (service.getSession as any)(
+    create(GetPluginRuntimeSessionRequestSchema, {
+      sessionId: "plugin-session",
+    }),
+  );
+  expect(fetched.id).toBe("plugin-session");
+
+  const sessions = await (service.listSessions as any)(
+    create(ListPluginRuntimeSessionsRequestSchema),
+  );
+  expect(sessions.sessions).toHaveLength(1);
+  expect(sessions.sessions[0].id).toBe("plugin-session");
+
+  const binding = await (service.bindHostService as any)(
+    create(BindPluginRuntimeHostServiceRequestSchema, {
+      sessionId: "plugin-session",
+      envVar: "GESTALT_CACHE_SOCKET",
+      relay: { dialTarget: "tcp://127.0.0.1:10000" },
+    }),
+  );
+  expect(binding).toMatchObject({
+    id: "binding-1",
+    sessionId: "plugin-session",
+    envVar: "GESTALT_CACHE_SOCKET",
+  });
+  expect(binding.relay?.dialTarget).toBe("tcp://127.0.0.1:10000");
+
+  const hosted = await (service.startPlugin as any)(
+    create(StartHostedPluginRequestSchema, {
+      sessionId: "plugin-session",
+      pluginName: "plugin",
+    }),
+  );
+  expect(hosted).toMatchObject({
+    id: "hosted-plugin-1",
+    sessionId: "plugin-session",
+    pluginName: "plugin",
+    dialTarget: "unix:///tmp/plugin.sock",
+  });
+
+  const stopped = await (service.stopSession as any)(
+    create(StopPluginRuntimeSessionRequestSchema, {
+      sessionId: "plugin-session",
+    }),
+  );
+  expect(stopped.$typeName).toBe("google.protobuf.Empty");
 });
 
 test("workflow provider target resolves and serves runtime metadata plus workflow operations", async () => {

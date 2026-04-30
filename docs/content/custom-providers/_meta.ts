@@ -1,14 +1,14 @@
 export default {
-  plugins: "Plugin",
-  runtime: "Runtime",
+  agent: "Agent",
   authentication: "Authentication",
   authorization: "Authorization",
-  agent: "Agent",
   cache: "Cache",
   indexeddb: "IndexedDB",
+  plugins: "Plugin",
+  runtime: "Runtime",
   s3: "S3",
   secrets: "Secret",
-  workflow: "Workflow",
   ui: "UI",
+  workflow: "Workflow",
   releasing: "Releasing",
 };

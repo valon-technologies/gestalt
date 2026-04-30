@@ -24,6 +24,7 @@ class ProviderKind(str, Enum):
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
+    RUNTIME = "runtime"
     WORKFLOW = "workflow"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
@@ -267,6 +268,17 @@ class AgentProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AGENT)
+
+
+class PluginRuntimeProvider(PluginProvider):
+    """Base class for hosted plugin-runtime providers."""
+
+    def serve(self) -> None:
+        """Start the plugin-runtime provider."""
+
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.RUNTIME)
 
 
 class WorkflowProvider(PluginProvider):

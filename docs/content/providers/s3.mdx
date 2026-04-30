@@ -199,7 +199,7 @@ HTTP method, expiry, and required headers, and the public route streams bytes
 through the configured S3 provider after applying the plugin namespace prefix.
 That keeps the S3 provider generic and avoids exposing provider-internal object
 keys to clients. The compatibility `presign` methods also return hosted object
-access URLs for plugin-scoped bindings when `server.baseURL` and
+access URLs for plugin-scoped bindings when `server.baseUrl` and
 `server.encryptionKey` are configured.
 
 The first-party provider rejects writes and copies above the single-request S3

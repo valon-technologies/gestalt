@@ -66,3 +66,6 @@ class ExampleAgent(gestalt.AgentProvider):
             resumable_turns=True,
         )
 ```
+
+Workflow providers use the same runtime pattern through `gestalt.WorkflowProvider`.
+Runtime-provider authors should inherit from `gestalt.PluginRuntimeProvider`.

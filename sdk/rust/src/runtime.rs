@@ -30,6 +30,8 @@ use crate::generated::v1::cache_server::CacheServer;
 #[cfg(unix)]
 use crate::generated::v1::integration_provider_server::IntegrationProviderServer;
 #[cfg(unix)]
+use crate::generated::v1::plugin_runtime_provider_server::PluginRuntimeProviderServer;
+#[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
 use crate::generated::v1::s3_server::S3Server;
@@ -39,13 +41,14 @@ use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, S3Provider,
-    SecretsProvider, WorkflowProvider,
+    AgentProvider, AuthenticationProvider, CacheProvider, PluginRuntimeProvider, Provider, Router,
+    S3Provider, SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
     agent::AgentServer, auth_server::AuthenticationServer, cache_server::CacheRpcServer,
-    runtime_server::RuntimeServer, secrets_server::SecretsServer, workflow::WorkflowServer,
+    plugin_runtime::PluginRuntimeServer, runtime_server::RuntimeServer,
+    secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -83,6 +86,11 @@ pub fn run_secrets_provider<P: SecretsProvider>(provider: Arc<P>) -> Result<()> 
 /// Runs an S3 provider on the Unix socket exposed by `gestaltd`.
 pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_s3_provider(provider))
+}
+
+/// Runs a plugin-runtime provider on the Unix socket exposed by `gestaltd`.
+pub fn run_plugin_runtime_provider<P: PluginRuntimeProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_plugin_runtime_provider(provider))
 }
 
 /// Runs a workflow provider on the Unix socket exposed by `gestaltd`.
@@ -240,6 +248,29 @@ where
 }
 
 #[cfg(unix)]
+/// Serves a plugin-runtime provider over the configured Unix socket.
+pub async fn serve_plugin_runtime_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: PluginRuntimeProvider,
+{
+    serve_unix_provider(
+        provider,
+        move |incoming, provider| {
+            Server::builder()
+                .add_service(ProviderLifecycleServer::new(
+                    RuntimeServer::for_plugin_runtime(Arc::clone(&provider)),
+                ))
+                .add_service(PluginRuntimeProviderServer::new(PluginRuntimeServer::new(
+                    Arc::clone(&provider),
+                )))
+                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        },
+        |provider| async move { provider.close().await },
+    )
+    .await
+}
+
+#[cfg(unix)]
 pub async fn serve_workflow_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: WorkflowProvider,
@@ -318,6 +349,16 @@ where
 pub async fn serve_s3_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: S3Provider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_plugin_runtime_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: PluginRuntimeProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

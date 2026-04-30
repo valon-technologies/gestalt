@@ -35,29 +35,124 @@ Agent-provider surfaces are part of the same package:
 
 ```ts
 import {
-  AgentRunStatus,
+  AgentExecutionStatus,
+  AgentSessionState,
   defineAgentProvider,
 } from "@valon-technologies/gestalt";
 
 export const provider = defineAgentProvider({
   displayName: "Example Agent",
-  async startRun(request) {
+
+  async createSession(request) {
     return {
-      id: request.runId,
-      providerName: request.providerName || "example",
+      id: request.sessionId,
+      providerName: "example",
       model: request.model,
-      status: AgentRunStatus.PENDING,
-      messages: request.messages,
+      clientRef: request.clientRef,
+      state: AgentSessionState.ACTIVE,
+      createdBy: request.createdBy,
     };
   },
-  async getRun(request) {
-    return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
+
+  async createTurn(request) {
+    return {
+      id: request.turnId,
+      sessionId: request.sessionId,
+      providerName: "example",
+      model: request.model,
+      status: AgentExecutionStatus.RUNNING,
+      messages: request.messages,
+      createdBy: request.createdBy,
+      executionRef: request.executionRef,
+    };
   },
+
+  async getCapabilities() {
+    return { streamingText: true, toolCalls: true };
+  },
+});
+```
+
+Workflow-provider helpers expose the authored run, schedule, trigger, and event
+surface:
+
+```ts
+import {
+  WorkflowRunStatus,
+  defineWorkflowProvider,
+} from "@valon-technologies/gestalt";
+
+export const workflow = defineWorkflowProvider({
+  async startRun(request) {
+    return {
+      id: `${request.target?.plugin?.pluginName ?? "workflow"}:run-1`,
+      status: WorkflowRunStatus.PENDING,
+      target: request.target,
+    };
+  },
+
+  async getRun(request) {
+    return { id: request.runId };
+  },
+
   async listRuns() {
     return [];
   },
+
   async cancelRun(request) {
-    return { id: request.runId, providerName: "example", status: AgentRunStatus.CANCELED };
+    return { id: request.runId, status: WorkflowRunStatus.CANCELED };
   },
+
+  async upsertSchedule(request) {
+    return {
+      id: request.scheduleId,
+      cron: request.cron,
+      target: request.target,
+      paused: request.paused,
+    };
+  },
+
+  async getSchedule(request) {
+    return { id: request.scheduleId };
+  },
+
+  async listSchedules() {
+    return [];
+  },
+
+  async deleteSchedule() {},
+  async pauseSchedule(request) {
+    return { id: request.scheduleId, paused: true };
+  },
+  async resumeSchedule(request) {
+    return { id: request.scheduleId, paused: false };
+  },
+
+  async upsertEventTrigger(request) {
+    return {
+      id: request.triggerId,
+      match: request.match,
+      target: request.target,
+      paused: request.paused,
+    };
+  },
+
+  async getEventTrigger(request) {
+    return { id: request.triggerId };
+  },
+
+  async listEventTriggers() {
+    return [];
+  },
+
+  async deleteEventTrigger() {},
+  async pauseEventTrigger(request) {
+    return { id: request.triggerId, paused: true };
+  },
+  async resumeEventTrigger(request) {
+    return { id: request.triggerId, paused: false };
+  },
+
+  async publishEvent() {},
 });
 ```

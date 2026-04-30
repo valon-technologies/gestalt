@@ -10,6 +10,7 @@ PROTO_MODULES = (
     "cache",
     "datastore",
     "plugin",
+    "pluginruntime",
     "runtime",
     "s3",
     "secrets",
@@ -23,12 +24,17 @@ def grpc_pb2_import_module(module_name: str) -> str:
     return module_name
 
 
-def grpc_runtime_header(module_name: str) -> str:
+def grpc_runtime_header(module_name: str, *, include_empty_import: bool) -> str:
     pb2_module = grpc_pb2_import_module(module_name)
+    empty_import = (
+        "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
+        if include_empty_import
+        else ""
+    )
     return f"""import grpc
 import warnings
 
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+{empty_import}\
 from . import {pb2_module}_pb2 as v1_dot_{pb2_module}__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
@@ -114,7 +120,13 @@ def main() -> int:
                 "import grpc\n\n"
                 "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
                 f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
-                grpc_runtime_header(module_name),
+                grpc_runtime_header(module_name, include_empty_import=True),
+                1,
+            )
+            pb2_grpc_source = pb2_grpc_source.replace(
+                "import grpc\n\n"
+                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
+                grpc_runtime_header(module_name, include_empty_import=False),
                 1,
             )
 
