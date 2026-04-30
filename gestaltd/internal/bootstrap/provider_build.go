@@ -45,7 +45,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -1802,17 +1804,17 @@ func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
 
 func isIndexedDBHostServiceEnv(envVar string) bool {
 	envVar = strings.TrimSpace(envVar)
-	return envVar == providerhost.DefaultIndexedDBSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultIndexedDBSocketEnv+"_")
+	return envVar == indexeddbservice.DefaultSocketEnv || strings.HasPrefix(envVar, indexeddbservice.DefaultSocketEnv+"_")
 }
 
 func isCacheHostServiceEnv(envVar string) bool {
 	envVar = strings.TrimSpace(envVar)
-	return envVar == providerhost.DefaultCacheSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultCacheSocketEnv+"_")
+	return envVar == cacheservice.DefaultSocketEnv || strings.HasPrefix(envVar, cacheservice.DefaultSocketEnv+"_")
 }
 
 func isS3HostServiceEnv(envVar string) bool {
 	envVar = strings.TrimSpace(envVar)
-	return envVar == providerhost.DefaultS3SocketEnv || strings.HasPrefix(envVar, providerhost.DefaultS3SocketEnv+"_")
+	return envVar == s3.DefaultSocketEnv || strings.HasPrefix(envVar, s3.DefaultSocketEnv+"_")
 }
 
 func appendAllowedHost(allowedHosts []string, host string) []string {
@@ -1871,9 +1873,9 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
-		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName, providerhost.IndexedDBServerOptions{
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, pluginName, indexeddbservice.ServerOptions{
 				AllowedStores: effective.ObjectStores,
 			}))
 		},
@@ -1904,10 +1906,10 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 		boundCaches = append(boundCaches, value)
 		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "cache",
-			EnvVar: providerhost.CacheSocketEnv(bindingName),
+			EnvVar: cacheservice.SocketEnv(bindingName),
 			Register: func(cacheValue corecache.Cache) func(*grpc.Server) {
 				return func(srv *grpc.Server) {
-					proto.RegisterCacheServer(srv, providerhost.NewCacheServer(cacheValue, pluginName))
+					proto.RegisterCacheServer(srv, cacheservice.NewServer(cacheValue, pluginName))
 				}
 			}(value),
 		})
@@ -1916,9 +1918,9 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 		value := boundCaches[0]
 		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "cache",
-			EnvVar: providerhost.DefaultCacheSocketEnv,
+			EnvVar: cacheservice.DefaultSocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterCacheServer(srv, providerhost.NewCacheServer(value, pluginName))
+				proto.RegisterCacheServer(srv, cacheservice.NewServer(value, pluginName))
 			},
 		})
 	}
@@ -1949,10 +1951,10 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		}
 		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "s3",
-			EnvVar: providerhost.S3SocketEnv(binding),
+			EnvVar: s3.SocketEnv(binding),
 			Register: func(client s3store.Client, binding string) func(*grpc.Server) {
 				return func(srv *grpc.Server) {
-					proto.RegisterS3Server(srv, providerhost.NewS3ServerWithOptions(client, pluginName, providerhost.S3ServerOptions{
+					proto.RegisterS3Server(srv, s3.NewServerWithOptions(client, pluginName, s3.ServerOptions{
 						BindingName: binding,
 						AccessURLs:  accessURLs,
 					}))
@@ -1966,9 +1968,9 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		client := deps.S3[binding]
 		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "s3",
-			EnvVar: providerhost.DefaultS3SocketEnv,
+			EnvVar: s3.DefaultSocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterS3Server(srv, providerhost.NewS3ServerWithOptions(client, pluginName, providerhost.S3ServerOptions{
+				proto.RegisterS3Server(srv, s3.NewServerWithOptions(client, pluginName, s3.ServerOptions{
 					BindingName: binding,
 					AccessURLs:  accessURLs,
 				}))
@@ -1991,9 +1993,9 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveH
 
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
-		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
 				AllowedStores: effective.ObjectStores,
 			}))
 		},
@@ -2015,9 +2017,9 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
-		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
 				AllowedStores: effective.ObjectStores,
 			}))
 		},

@@ -51,9 +51,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -709,11 +712,11 @@ func (r *capturingBundlePluginRuntime) cleanupFakeHostedPlugin(sessionID string)
 }
 
 func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := providerhost.DefaultIndexedDBSocketEnv
-	tokenEnvName := providerhost.IndexedDBSocketTokenEnv("")
+	envName := indexeddbservice.DefaultSocketEnv
+	tokenEnvName := indexeddbservice.SocketTokenEnv("")
 	if strings.TrimSpace(binding) != "" {
-		envName = providerhost.IndexedDBSocketEnv(binding)
-		tokenEnvName = providerhost.IndexedDBSocketTokenEnv(binding)
+		envName = indexeddbservice.SocketEnv(binding)
+		tokenEnvName = indexeddbservice.SocketTokenEnv(binding)
 	}
 	target := strings.TrimSpace(env[envName])
 	if target == "" {
@@ -768,11 +771,11 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 }
 
 func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := providerhost.DefaultCacheSocketEnv
-	tokenEnvName := providerhost.CacheSocketTokenEnv("")
+	envName := cacheservice.DefaultSocketEnv
+	tokenEnvName := cacheservice.SocketTokenEnv("")
 	if strings.TrimSpace(binding) != "" {
-		envName = providerhost.CacheSocketEnv(binding)
-		tokenEnvName = providerhost.CacheSocketTokenEnv(binding)
+		envName = cacheservice.SocketEnv(binding)
+		tokenEnvName = cacheservice.SocketTokenEnv(binding)
 	}
 	target := strings.TrimSpace(env[envName])
 	if target == "" {
@@ -849,11 +852,11 @@ func fakeHostedMakeHTTPRequest(targetURL string, env map[string]string) (map[str
 }
 
 func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := providerhost.DefaultS3SocketEnv
-	tokenEnvName := providerhost.S3SocketTokenEnv("")
+	envName := s3service.DefaultSocketEnv
+	tokenEnvName := s3service.SocketTokenEnv("")
 	if strings.TrimSpace(binding) != "" {
-		envName = providerhost.S3SocketEnv(binding)
-		tokenEnvName = providerhost.S3SocketTokenEnv(binding)
+		envName = s3service.SocketEnv(binding)
+		tokenEnvName = s3service.SocketTokenEnv(binding)
 	}
 	target := strings.TrimSpace(env[envName])
 	if target == "" {
@@ -3648,19 +3651,19 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, nil, indexeddbservice.DefaultSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin omits indexeddb and inherits the host selection")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, indexeddbservice.DefaultSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin indexeddb is explicitly empty")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, indexeddbservice.DefaultSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin explicitly selects one indexeddb provider")
 	}
-	if got := checkEnv(t, nil, providerhost.IndexedDBSocketEnv("main")); got {
+	if got := checkEnv(t, nil, indexeddbservice.SocketEnv("main")); got {
 		t.Fatal("named IndexedDB env should not be set for inherited plugin indexeddb access")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, providerhost.IndexedDBSocketEnv("archive")); got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, indexeddbservice.SocketEnv("archive")); got {
 		t.Fatal("named IndexedDB env should not be set when plugins expose a single indexeddb socket")
 	}
 }
@@ -5267,22 +5270,22 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, providerhost.DefaultCacheSocketEnv); got {
+	if got := checkEnv(t, nil, cacheservice.DefaultSocketEnv); got {
 		t.Fatal("default cache env should not be set without plugin cache bindings")
 	}
-	if got := checkEnv(t, []string{"session"}, providerhost.DefaultCacheSocketEnv); !got {
+	if got := checkEnv(t, []string{"session"}, cacheservice.DefaultSocketEnv); !got {
 		t.Fatal("default cache env should be set with a single plugin cache binding")
 	}
-	if got := checkEnv(t, []string{"session"}, providerhost.CacheSocketEnv("session")); !got {
+	if got := checkEnv(t, []string{"session"}, cacheservice.SocketEnv("session")); !got {
 		t.Fatal("named cache env should be set with a single plugin cache binding")
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.DefaultCacheSocketEnv); got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.DefaultSocketEnv); got {
 		t.Fatal("default cache env should not be set with multiple plugin cache bindings")
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("session")); !got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.SocketEnv("session")); !got {
 		t.Fatal(`named cache env for "session" should be set with multiple plugin cache bindings`)
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
+	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.SocketEnv("rate_limit")); !got {
 		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
 	}
 }
@@ -5928,21 +5931,21 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(providerhost.DefaultS3SocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", providerhost.DefaultS3SocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(s3service.DefaultSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", s3service.DefaultSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
 	for _, binding := range []string{"main"} {
-		envName := providerhost.S3SocketEnv(binding)
+		envName := s3service.SocketEnv(binding)
 		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
 			t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
 		}
-		tokenEnvName := providerhost.S3SocketTokenEnv(binding)
+		tokenEnvName := s3service.SocketTokenEnv(binding)
 		if got, found := checkEnv(tokenEnvName); !found || got == "" {
 			t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
 		}
 	}
-	if got, found := checkEnv(providerhost.S3SocketTokenEnv("")); !found || got == "" {
-		t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", providerhost.S3SocketTokenEnv(""), got, found)
+	if got, found := checkEnv(s3service.SocketTokenEnv("")); !found || got == "" {
+		t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", s3service.SocketTokenEnv(""), got, found)
 	}
 
 	bindRequests := runtimeProvider.bindHostServiceRequests()
@@ -5960,8 +5963,8 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
 	for _, binding := range []string{"", "main"} {
-		if got := startRequests[0].Env[providerhost.S3SocketTokenEnv(binding)]; got == "" {
-			t.Fatalf("StartPlugin env should include s3 relay token %s", providerhost.S3SocketTokenEnv(binding))
+		if got := startRequests[0].Env[s3service.SocketTokenEnv(binding)]; got == "" {
+			t.Fatalf("StartPlugin env should include s3 relay token %s", s3service.SocketTokenEnv(binding))
 		}
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
@@ -6000,11 +6003,11 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	})
 
 	for _, binding := range []string{"", "main"} {
-		socketEnv := providerhost.S3SocketEnv(binding)
+		socketEnv := s3service.SocketEnv(binding)
 		if got := env.Env[socketEnv]; !strings.HasPrefix(got, "tls://") {
 			t.Fatalf("runtime env %s = %q, want tls relay target", socketEnv, got)
 		}
-		tokenEnv := providerhost.S3SocketTokenEnv(binding)
+		tokenEnv := s3service.SocketTokenEnv(binding)
 		if got := env.Env[tokenEnv]; got == "" {
 			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
 		}
@@ -6262,10 +6265,10 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 		return env.Value
 	}
 
-	if got := checkEnv(providerhost.DefaultIndexedDBSocketEnv); got != "tls://gestalt.example.test:443" {
+	if got := checkEnv(indexeddbservice.DefaultSocketEnv); got != "tls://gestalt.example.test:443" {
 		t.Fatalf("plugin indexeddb socket env = %q, want %q", got, "tls://gestalt.example.test:443")
 	}
-	if got := checkEnv(providerhost.IndexedDBSocketTokenEnv("")); got == "" {
+	if got := checkEnv(indexeddbservice.SocketTokenEnv("")); got == "" {
 		t.Fatal("plugin indexeddb socket token env should be set for the public relay")
 	}
 
@@ -6281,7 +6284,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
+	if got := startRequests[0].Env[indexeddbservice.SocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the IndexedDB relay token")
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
@@ -6403,7 +6406,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
+	if got := startRequests[0].Env[indexeddbservice.SocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the IndexedDB relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
@@ -6509,15 +6512,15 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 		return env.Value, env.Found
 	}
 
-	if _, found := checkEnv(providerhost.DefaultCacheSocketEnv); found {
-		t.Fatalf("env %s should not be set with multiple cache bindings", providerhost.DefaultCacheSocketEnv)
+	if _, found := checkEnv(cacheservice.DefaultSocketEnv); found {
+		t.Fatalf("env %s should not be set with multiple cache bindings", cacheservice.DefaultSocketEnv)
 	}
 	for _, binding := range []string{"session", "rate_limit"} {
-		envName := providerhost.CacheSocketEnv(binding)
+		envName := cacheservice.SocketEnv(binding)
 		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
 			t.Fatalf("plugin cache env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
 		}
-		tokenEnvName := providerhost.CacheSocketTokenEnv(binding)
+		tokenEnvName := cacheservice.SocketTokenEnv(binding)
 		if got, found := checkEnv(tokenEnvName); !found || got == "" {
 			t.Fatalf("plugin cache token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
 		}
@@ -6538,8 +6541,8 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
 	for _, binding := range []string{"session", "rate_limit"} {
-		if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv(binding)]; got == "" {
-			t.Fatalf("StartPlugin env should include cache relay token %s", providerhost.CacheSocketTokenEnv(binding))
+		if got := startRequests[0].Env[cacheservice.SocketTokenEnv(binding)]; got == "" {
+			t.Fatalf("StartPlugin env should include cache relay token %s", cacheservice.SocketTokenEnv(binding))
 		}
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
@@ -6661,7 +6664,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv("")]; got == "" {
+	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the cache relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
@@ -6803,10 +6806,10 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.S3SocketTokenEnv("")]; got == "" {
+	if got := startRequests[0].Env[s3service.SocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the default s3 relay token")
 	}
-	if got := startRequests[0].Env[providerhost.S3SocketTokenEnv("main")]; got == "" {
+	if got := startRequests[0].Env[s3service.SocketTokenEnv("main")]; got == "" {
 		t.Fatal("StartPlugin env should include the named s3 relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
@@ -7986,7 +7989,7 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	if got := startRequests[0].Env["HTTPS_PROXY"]; got != "" {
 		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want empty when direct host service bindings are available", got)
 	}
-	if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv("session")]; got != "" {
+	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("session")]; got != "" {
 		t.Fatalf("StartPlugin cache token env = %q, want empty for direct host service bindings", got)
 	}
 	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com"}, pluginruntime.PolicyDeny)
@@ -8303,7 +8306,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					t.Fatalf("inherited host indexeddb should use plugin-name default db prefix: %v", err)
 				}
 				if runtimeProvider != nil {
-					assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), providerhost.DefaultIndexedDBSocketEnv)
+					assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), indexeddbservice.DefaultSocketEnv)
 				}
 			})
 		}
@@ -8576,7 +8579,7 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 				t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
 			}
 			if runtimeProvider != nil {
-				assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), providerhost.DefaultIndexedDBSocketEnv)
+				assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), indexeddbservice.DefaultSocketEnv)
 			}
 
 			_ = CloseProviders(providers)
@@ -9067,22 +9070,22 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, providerhost.DefaultS3SocketEnv); got {
+	if got := checkEnv(t, nil, s3service.DefaultSocketEnv); got {
 		t.Fatal("default S3 env should not be set without plugin s3 bindings")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.DefaultS3SocketEnv); !got {
+	if got := checkEnv(t, []string{"main"}, s3service.DefaultSocketEnv); !got {
 		t.Fatal("default S3 env should be set with a single plugin s3 binding")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.S3SocketEnv("main")); !got {
+	if got := checkEnv(t, []string{"main"}, s3service.SocketEnv("main")); !got {
 		t.Fatal("named S3 env should be set with a single plugin s3 binding")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultS3SocketEnv); got {
+	if got := checkEnv(t, []string{"main", "archive"}, s3service.DefaultSocketEnv); got {
 		t.Fatal("default S3 env should not be set with multiple plugin s3 bindings")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.S3SocketEnv("main")); !got {
+	if got := checkEnv(t, []string{"main", "archive"}, s3service.SocketEnv("main")); !got {
 		t.Fatal(`named S3 env for "main" should be set with multiple plugin s3 bindings`)
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.S3SocketEnv("archive")); !got {
+	if got := checkEnv(t, []string{"main", "archive"}, s3service.SocketEnv("archive")); !got {
 		t.Fatal(`named S3 env for "archive" should be set with multiple plugin s3 bindings`)
 	}
 }

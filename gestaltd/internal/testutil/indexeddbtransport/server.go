@@ -12,7 +12,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -51,7 +51,7 @@ func Start(target string, opts Options) (*Server, error) {
 		grpc.ChainUnaryInterceptor(requireRelayTokenUnary(opts.ExpectRelayToken)),
 		grpc.ChainStreamInterceptor(requireRelayTokenStream(opts.ExpectRelayToken)),
 	)
-	proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stub, "", providerhost.IndexedDBServerOptions{}))
+	proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(stub, "", indexeddbservice.ServerOptions{}))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil
 }

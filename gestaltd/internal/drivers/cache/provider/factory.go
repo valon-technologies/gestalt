@@ -7,8 +7,8 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +28,7 @@ var Factory bootstrap.CacheFactory = func(node yaml.Node) (corecache.Cache, erro
 	}
 	cfg = prepared.YAMLConfig
 
-	return providerhost.NewExecutableCache(context.Background(), providerhost.CacheExecConfig{
+	return cacheservice.NewExecutable(context.Background(), cacheservice.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
 		Env:        cfg.Env,

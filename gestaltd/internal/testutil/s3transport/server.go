@@ -12,7 +12,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
@@ -60,7 +59,7 @@ func Start(target string, opts Options) (*Server, error) {
 		grpc.ChainUnaryInterceptor(requireRelayTokenUnary(opts.ExpectRelayToken)),
 		grpc.ChainStreamInterceptor(requireRelayTokenStream(opts.ExpectRelayToken)),
 	)
-	proto.RegisterS3Server(srv, providerhost.NewS3Server(stub, ""))
+	proto.RegisterS3Server(srv, s3.NewServer(stub, ""))
 	proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, "sdk-test", "default"))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil

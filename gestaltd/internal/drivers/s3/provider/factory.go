@@ -7,8 +7,8 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +28,7 @@ var Factory bootstrap.S3Factory = func(node yaml.Node) (s3store.Client, error) {
 	}
 	cfg = prepared.YAMLConfig
 
-	return providerhost.NewExecutableS3(context.Background(), providerhost.S3ExecConfig{
+	return s3service.NewExecutable(context.Background(), s3service.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
 		Env:        cfg.Env,
