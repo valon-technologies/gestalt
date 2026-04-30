@@ -1406,9 +1406,9 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	artifactRel := filepath.Base(binDest)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
-		Source:      "github.com/test/providers/indexeddb-inmem",
+		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
-		DisplayName: "In-Memory IndexedDB",
+		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
 		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
@@ -1589,7 +1589,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 	}
 	writeManifestFile(t, indexedDBDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
-		Source:      "github.com/test/providers/indexeddb-relationaldb",
+		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
