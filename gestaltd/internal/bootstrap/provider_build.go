@@ -2282,7 +2282,7 @@ func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexedd
 	if !ok || def == nil {
 		return nil, fmt.Errorf("indexeddb %q is not available", opts.ProviderName)
 	}
-	scopedDef, transportPrefix, err := newScopedIndexedDBDef(def, scopedIndexedDBDefOptions{
+	scopedDef, err := newScopedIndexedDBDef(def, scopedIndexedDBDefOptions{
 		DB: opts.DB,
 	})
 	if err != nil {
@@ -2292,8 +2292,7 @@ func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexedd
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
 	}
-	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix:   transportPrefix,
+	ds = newIndexedDBStoreAllowlist(ds, indexedDBStoreAllowlistOptions{
 		AllowedStores: opts.AllowedStores,
 	})
 	return metricutil.InstrumentIndexedDB(ds, opts.MetricsName), nil
@@ -2303,20 +2302,20 @@ type scopedIndexedDBDefOptions struct {
 	DB string
 }
 
-func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefOptions) (*config.ProviderEntry, string, error) {
+func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefOptions) (*config.ProviderEntry, error) {
 	if entry == nil {
-		return nil, "", fmt.Errorf("datastore provider is required")
+		return nil, fmt.Errorf("datastore provider is required")
 	}
 	cfg, err := config.NodeToMap(entry.Config)
 	if err != nil {
-		return nil, "", fmt.Errorf("decode config: %w", err)
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
 	if cfg == nil {
 		cfg = make(map[string]any)
 	}
 
-	transportPrefix := ""
-	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+	switch {
+	case isRelationalIndexedDBEntry(entry):
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
 			cfg["table_prefix"] = opts.DB + "_"
@@ -2326,48 +2325,57 @@ func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefO
 			delete(cfg, "prefix")
 			cfg["schema"] = opts.DB
 		}
-	} else {
-		transportPrefix = opts.DB + "_"
+	case isMongoDBIndexedDBEntry(entry):
+		cfg["database"] = opts.DB
+	case isDynamoDBIndexedDBEntry(entry):
+		cfg["table"] = opts.DB
+	default:
+		return nil, fmt.Errorf("scoped indexeddb bindings require a provider with config-level namespace support")
 	}
 
 	configNode, err := mapToYAMLNode(cfg)
 	if err != nil {
-		return nil, "", fmt.Errorf("encode config: %w", err)
+		return nil, fmt.Errorf("encode config: %w", err)
 	}
 
 	cloned := *entry
 	cloned.Config = configNode
-	return &cloned, transportPrefix, nil
-}
-
-func pluginIndexedDBUsesScopedProviderConfig(entry *config.ProviderEntry, cfg map[string]any) bool {
-	if !isRelationalIndexedDBEntry(entry) {
-		return false
-	}
-	dsn, _ := cfg["dsn"].(string)
-	return strings.TrimSpace(dsn) != ""
+	return &cloned, nil
 }
 
 func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
+	return isIndexedDBProviderEntry(entry, "relationaldb")
+}
+
+func isMongoDBIndexedDBEntry(entry *config.ProviderEntry) bool {
+	return isIndexedDBProviderEntry(entry, "mongodb")
+}
+
+func isDynamoDBIndexedDBEntry(entry *config.ProviderEntry) bool {
+	return isIndexedDBProviderEntry(entry, "dynamodb")
+}
+
+func isIndexedDBProviderEntry(entry *config.ProviderEntry, providerName string) bool {
 	if entry == nil {
 		return false
 	}
+	providerPath := "/indexeddb/" + providerName
 	if entry.ResolvedManifest != nil {
-		return strings.HasSuffix(strings.TrimSpace(entry.ResolvedManifest.Source), "/indexeddb/relationaldb")
+		return strings.HasSuffix(strings.TrimSpace(filepath.ToSlash(entry.ResolvedManifest.Source)), providerPath)
 	}
 	if metadataURL := strings.TrimSpace(entry.SourceMetadataURL()); metadataURL != "" {
 		parsed, err := url.Parse(metadataURL)
 		if err == nil {
 			path := filepath.ToSlash(parsed.Path)
-			return strings.Contains(path, "/indexeddb/relationaldb/") && strings.HasSuffix(path, "/provider-release.yaml")
+			return strings.Contains(path, providerPath+"/") && strings.HasSuffix(path, "/provider-release.yaml")
 		}
 	}
 	if path := strings.TrimSpace(entry.SourcePath()); path != "" {
 		path = filepath.ToSlash(path)
-		return strings.HasSuffix(path, "/indexeddb/relationaldb") ||
-			strings.HasSuffix(path, "/relationaldb") ||
-			strings.HasSuffix(path, "/indexeddb/relationaldb/manifest.yaml") ||
-			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
+		return strings.HasSuffix(path, providerPath) ||
+			strings.HasSuffix(path, "/"+providerName) ||
+			strings.HasSuffix(path, providerPath+"/manifest.yaml") ||
+			strings.HasSuffix(path, "/"+providerName+"/manifest.yaml")
 	}
 	return false
 }

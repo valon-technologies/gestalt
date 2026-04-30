@@ -9,16 +9,15 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
 
-func TestPluginIndexedDBTransactionMissingStoreAbortsInnerTransaction(t *testing.T) {
+func TestIndexedDBStoreAllowlistTransactionMissingStoreAbortsInnerTransaction(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	inner := &coretesting.StubIndexedDB{}
-	if err := inner.CreateObjectStore(ctx, "plugin_tasks", indexeddb.ObjectStoreSchema{}); err != nil {
+	if err := inner.CreateObjectStore(ctx, "tasks", indexeddb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
-	db := newPluginIndexedDBTransport(inner, pluginIndexedDBTransportOptions{
-		StorePrefix:   "plugin_",
+	db := newIndexedDBStoreAllowlist(inner, indexedDBStoreAllowlistOptions{
 		AllowedStores: []string{"tasks"},
 	})
 

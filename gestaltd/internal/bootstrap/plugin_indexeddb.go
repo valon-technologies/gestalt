@@ -6,307 +6,95 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-type pluginIndexedDBTransportOptions struct {
-	StorePrefix   string
+type indexedDBStoreAllowlistOptions struct {
 	AllowedStores []string
 }
 
-func newPluginIndexedDBTransport(ds indexeddb.IndexedDB, opts pluginIndexedDBTransportOptions) indexeddb.IndexedDB {
-	if ds == nil {
-		return nil
-	}
-	needsStoreTranslation := opts.StorePrefix != ""
-	needsStoreFiltering := len(opts.AllowedStores) > 0
-	if !needsStoreTranslation && !needsStoreFiltering {
+func newIndexedDBStoreAllowlist(ds indexeddb.IndexedDB, opts indexedDBStoreAllowlistOptions) indexeddb.IndexedDB {
+	if ds == nil || len(opts.AllowedStores) == 0 {
 		return ds
 	}
 	allowed := make(map[string]struct{}, len(opts.AllowedStores))
 	for _, store := range opts.AllowedStores {
 		allowed[store] = struct{}{}
 	}
-	if len(allowed) == 0 {
-		allowed = nil
-	}
-	return &pluginIndexedDBTransport{
+	return &indexedDBStoreAllowlist{
 		inner:   ds,
-		prefix:  opts.StorePrefix,
 		allowed: allowed,
 	}
 }
 
-type pluginIndexedDBTransport struct {
+type indexedDBStoreAllowlist struct {
 	inner   indexeddb.IndexedDB
-	prefix  string
 	allowed map[string]struct{}
 }
 
-func (d *pluginIndexedDBTransport) translateStore(name string) (string, error) {
-	if len(d.allowed) > 0 {
-		if _, ok := d.allowed[name]; !ok {
-			return "", indexeddb.ErrNotFound
-		}
+func (d *indexedDBStoreAllowlist) checkStore(name string) error {
+	if _, ok := d.allowed[name]; !ok {
+		return indexeddb.ErrNotFound
 	}
-	return d.prefix + name, nil
+	return nil
 }
 
-func (d *pluginIndexedDBTransport) ObjectStore(name string) indexeddb.ObjectStore {
-	storeName, err := d.translateStore(name)
-	if err != nil {
+func (d *indexedDBStoreAllowlist) ObjectStore(name string) indexeddb.ObjectStore {
+	if err := d.checkStore(name); err != nil {
 		return missingObjectStore{}
 	}
-	return &pluginIndexedDBObjectStore{
-		transport: d,
-		storeName: storeName,
-	}
+	return d.inner.ObjectStore(name)
 }
 
-func (d *pluginIndexedDBTransport) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
-	translated := make([]string, len(stores))
-	for i, store := range stores {
-		storeName, err := d.translateStore(store)
-		if err != nil {
+func (d *indexedDBStoreAllowlist) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	for _, store := range stores {
+		if err := d.checkStore(store); err != nil {
 			return nil, err
 		}
-		translated[i] = storeName
 	}
-	tx, err := d.inner.Transaction(ctx, translated, mode, opts)
+	tx, err := d.inner.Transaction(ctx, stores, mode, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &pluginIndexedDBTransaction{transport: d, inner: tx}, nil
+	return &indexedDBStoreAllowlistTransaction{allowlist: d, inner: tx}, nil
 }
 
-func (d *pluginIndexedDBTransport) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
-	storeName, err := d.translateStore(name)
-	if err != nil {
+func (d *indexedDBStoreAllowlist) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	if err := d.checkStore(name); err != nil {
 		return err
 	}
-	return d.inner.CreateObjectStore(ctx, storeName, schema)
+	return d.inner.CreateObjectStore(ctx, name, schema)
 }
 
-func (d *pluginIndexedDBTransport) DeleteObjectStore(ctx context.Context, name string) error {
-	storeName, err := d.translateStore(name)
-	if err != nil {
+func (d *indexedDBStoreAllowlist) DeleteObjectStore(ctx context.Context, name string) error {
+	if err := d.checkStore(name); err != nil {
 		return err
 	}
-	return d.inner.DeleteObjectStore(ctx, storeName)
+	return d.inner.DeleteObjectStore(ctx, name)
 }
 
-func (d *pluginIndexedDBTransport) Ping(ctx context.Context) error {
+func (d *indexedDBStoreAllowlist) Ping(ctx context.Context) error {
 	return d.inner.Ping(ctx)
 }
 
-func (d *pluginIndexedDBTransport) Close() error {
+func (d *indexedDBStoreAllowlist) Close() error {
 	return d.inner.Close()
 }
 
-type pluginIndexedDBObjectStore struct {
-	transport *pluginIndexedDBTransport
-	storeName string
-}
-
-func (s *pluginIndexedDBObjectStore) resolve(ctx context.Context) (indexeddb.ObjectStore, error) {
-	return s.transport.inner.ObjectStore(s.storeName), nil
-}
-
-func (s *pluginIndexedDBObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.Get(ctx, id)
-}
-
-func (s *pluginIndexedDBObjectStore) GetKey(ctx context.Context, id string) (string, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return "", err
-	}
-	return store.GetKey(ctx, id)
-}
-
-func (s *pluginIndexedDBObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return store.Add(ctx, record)
-}
-
-func (s *pluginIndexedDBObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return store.Put(ctx, record)
-}
-
-func (s *pluginIndexedDBObjectStore) Delete(ctx context.Context, id string) error {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return store.Delete(ctx, id)
-}
-
-func (s *pluginIndexedDBObjectStore) Clear(ctx context.Context) error {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return err
-	}
-	return store.Clear(ctx)
-}
-
-func (s *pluginIndexedDBObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.GetAll(ctx, r)
-}
-
-func (s *pluginIndexedDBObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.GetAllKeys(ctx, r)
-}
-
-func (s *pluginIndexedDBObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return store.Count(ctx, r)
-}
-
-func (s *pluginIndexedDBObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return store.DeleteRange(ctx, r)
-}
-
-func (s *pluginIndexedDBObjectStore) Index(name string) indexeddb.Index {
-	return &pluginIndexedDBIndex{
-		store: s,
-		name:  name,
-	}
-}
-
-func (s *pluginIndexedDBObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.OpenCursor(ctx, r, dir)
-}
-
-func (s *pluginIndexedDBObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
-	store, err := s.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.OpenKeyCursor(ctx, r, dir)
-}
-
-type pluginIndexedDBIndex struct {
-	store *pluginIndexedDBObjectStore
-	name  string
-}
-
-func (i *pluginIndexedDBIndex) resolve(ctx context.Context) (indexeddb.Index, error) {
-	store, err := i.store.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.Index(i.name), nil
-}
-
-func (i *pluginIndexedDBIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return index.Get(ctx, values...)
-}
-
-func (i *pluginIndexedDBIndex) GetKey(ctx context.Context, values ...any) (string, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return "", err
-	}
-	return index.GetKey(ctx, values...)
-}
-
-func (i *pluginIndexedDBIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return index.GetAll(ctx, r, values...)
-}
-
-func (i *pluginIndexedDBIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return index.GetAllKeys(ctx, r, values...)
-}
-
-func (i *pluginIndexedDBIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return index.Count(ctx, r, values...)
-}
-
-func (i *pluginIndexedDBIndex) Delete(ctx context.Context, values ...any) (int64, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return index.Delete(ctx, values...)
-}
-
-func (i *pluginIndexedDBIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return index.OpenCursor(ctx, r, dir, values...)
-}
-
-func (i *pluginIndexedDBIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
-	index, err := i.resolve(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return index.OpenKeyCursor(ctx, r, dir, values...)
-}
-
-type pluginIndexedDBTransaction struct {
-	transport *pluginIndexedDBTransport
+type indexedDBStoreAllowlistTransaction struct {
+	allowlist *indexedDBStoreAllowlist
 	inner     indexeddb.Transaction
 }
 
-func (tx *pluginIndexedDBTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
-	storeName, err := tx.transport.translateStore(name)
-	if err != nil {
+func (tx *indexedDBStoreAllowlistTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+	if err := tx.allowlist.checkStore(name); err != nil {
 		return missingTransactionObjectStore{tx: tx.inner}
 	}
-	return tx.inner.ObjectStore(storeName)
+	return tx.inner.ObjectStore(name)
 }
 
-func (tx *pluginIndexedDBTransaction) Commit(ctx context.Context) error {
+func (tx *indexedDBStoreAllowlistTransaction) Commit(ctx context.Context) error {
 	return tx.inner.Commit(ctx)
 }
 
-func (tx *pluginIndexedDBTransaction) Abort(ctx context.Context) error {
+func (tx *indexedDBStoreAllowlistTransaction) Abort(ctx context.Context) error {
 	return tx.inner.Abort(ctx)
 }
 

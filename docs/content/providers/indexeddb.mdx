@@ -18,10 +18,11 @@ selected/default host IndexedDB. `plugins.<name>.indexeddb.db` defaults to the
 plugin key and controls the plugin-visible database name used for backend
 scoping. With the first-party RelationalDB provider, Postgres, MySQL, and SQL
 Server receive that value as `schema`, while SQLite falls back to `<db>_`
-table prefixes because it has no schema support. Other IndexedDB providers
-fall back to `<db>_` transport-level store prefixes. Plugins may also set
-`plugins.<name>.indexeddb.objectStores` to allowlist logical stores such as
-`tasks`.
+table prefixes because it has no schema support. First-party MongoDB and
+DynamoDB providers receive the same value as their configured database or
+table namespace. Gestalt does not rewrite plugin object-store names at the
+transport layer. Plugins may also set `plugins.<name>.indexeddb.objectStores`
+to allowlist logical stores such as `tasks`.
 
 ## Using IndexedDB from a plugin
 

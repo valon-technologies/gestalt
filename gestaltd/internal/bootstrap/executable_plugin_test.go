@@ -3617,9 +3617,11 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 
 	indexedDBDefs := map[string]*config.ProviderEntry{
 		"main": {
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{"dsn": "postgres://main.example.test/gestalt"}),
 		},
 		"archive": {
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{"dsn": "sqlite://archive.db"}),
 		},
 	}
@@ -6231,7 +6233,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 		SelectedIndexedDBName: "memory",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
-				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 			},
 		},
@@ -6360,7 +6362,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 		SelectedIndexedDBName: "memory",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
-				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 			},
 		},
@@ -6399,7 +6401,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 		t.Fatalf("indexeddb_roundtrip value = %#v, want %q", got, "ship-it")
 	}
 
-	gotRecord, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1")
+	gotRecord, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1")
 	if err != nil {
 		t.Fatalf("bound IndexedDB Get: %v", err)
 	}
@@ -8258,7 +8260,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					SelectedIndexedDBName: "memory",
 					IndexedDBDefs: map[string]*config.ProviderEntry{
 						"memory": {
-							Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+							Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 							Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 						},
 					},
@@ -8307,8 +8309,8 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 				if got := record["value"]; got != "ship-it" {
 					t.Fatalf("record value = %#v, want %q", got, "ship-it")
 				}
-				if _, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1"); err != nil {
-					t.Fatalf("inherited host indexeddb should use plugin-name default db prefix: %v", err)
+				if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err != nil {
+					t.Fatalf("inherited host indexeddb should expose logical store name directly: %v", err)
 				}
 				if runtimeProvider != nil {
 					assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), indexeddbservice.DefaultSocketEnv)
@@ -8372,6 +8374,18 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 				"schema": "host_local",
 			}),
 		},
+		"mysql-secret": {
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+			Config: mustNode(t, map[string]any{
+				"dsn": map[string]any{
+					"secret": map[string]any{
+						"provider": "secrets",
+						"name":     "gestalt-mysql-dsn-east4",
+					},
+				},
+				"schema": "host_secret",
+			}),
+		},
 	}
 
 	cases := []struct {
@@ -8380,6 +8394,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 		wantDSN    string
 		wantDB     string
 		wantSQLite bool
+		wantSecret bool
 	}{
 		{
 			name:      "defaults db to plugin name for postgres",
@@ -8400,6 +8415,12 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			wantDB:     "roadmap_state",
 			wantSQLite: true,
 		},
+		{
+			name:       "uses schema scope for secret-backed relational DSNs",
+			indexedDB:  &config.HostIndexedDBBindingConfig{Provider: "mysql-secret", DB: "secret_state"},
+			wantDB:     "secret_state",
+			wantSecret: true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -8408,7 +8429,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			t.Parallel()
 
 			var closeCount atomic.Int32
-			captured := make(map[string]capturedIndexedDBConfig)
+			var captured []capturedIndexedDBConfig
 			providers, _, err := buildProvidersStrict(context.Background(), makeConfig(tc.indexedDB), NewFactoryRegistry(), Deps{
 				SelectedIndexedDBName: "postgres",
 				IndexedDBDefs:         indexedDBDefs,
@@ -8417,8 +8438,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 					if err := node.Decode(&decoded); err != nil {
 						return nil, err
 					}
-					dsn, _ := decoded.Config["dsn"].(string)
-					captured[dsn] = decoded
+					captured = append(captured, decoded)
 					return &trackedIndexedDB{
 						StubIndexedDB: coretesting.StubIndexedDB{},
 						onClose:       closeCount.Add,
@@ -8434,9 +8454,24 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 				}
 			})
 
-			cfg, ok := captured[tc.wantDSN]
-			if !ok {
-				t.Fatalf("missing captured indexeddb config for %q", tc.wantDSN)
+			var cfg capturedIndexedDBConfig
+			if tc.wantSecret {
+				for _, candidate := range captured {
+					if _, ok := candidate.Config["dsn"].(map[string]any); ok && candidate.Config["schema"] == tc.wantDB {
+						cfg = candidate
+						break
+					}
+				}
+			} else {
+				for _, candidate := range captured {
+					if dsn, _ := candidate.Config["dsn"].(string); dsn == tc.wantDSN {
+						cfg = candidate
+						break
+					}
+				}
+			}
+			if cfg.Config == nil {
+				t.Fatalf("missing captured indexeddb config for case %q", tc.name)
 			}
 			if tc.wantSQLite {
 				wantPrefix := tc.wantDB + "_"
@@ -8469,7 +8504,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 	}
 }
 
-func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
+func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8511,7 +8546,7 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 				SelectedIndexedDBName: "memory",
 				IndexedDBDefs: map[string]*config.ProviderEntry{
 					"memory": {
-						Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+						Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 						Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
 					},
 				},
@@ -8569,11 +8604,8 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 			if got := record["value"]; got != "ship-it" {
 				t.Fatalf("record value = %#v, want %q", got, "ship-it")
 			}
-			if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err != nil {
-				t.Fatalf("prefixed backing store should contain task: %v", err)
-			}
-			if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err == nil {
-				t.Fatal("unprefixed backing store should remain empty")
+			if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err != nil {
+				t.Fatalf("logical backing store should contain task: %v", err)
 			}
 
 			if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
@@ -8593,110 +8625,6 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 				t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
 			}
 		})
-	}
-}
-
-func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{
-				ID:     "indexeddb_roundtrip",
-				Method: http.MethodPost,
-				Parameters: []catalog.CatalogParameter{
-					{Name: "store", Type: "string", Required: true},
-					{Name: "id", Type: "string", Required: true},
-					{Name: "value", Type: "string", Required: true},
-				},
-			},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-
-	var (
-		closeCount atomic.Int32
-		boundDB    *trackedIndexedDB
-	)
-	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.HostIndexedDBBindingConfig{
-					Provider:     "postgres",
-					DB:           "roadmap",
-					ObjectStores: []string{"tasks"},
-				},
-			},
-		},
-	}, NewFactoryRegistry(), Deps{
-		SelectedIndexedDBName: "postgres",
-		IndexedDBDefs: map[string]*config.ProviderEntry{
-			"postgres": {
-				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
-				Config: mustNode(t, map[string]any{
-					"dsn":    "postgres://db.example.test/gestalt",
-					"schema": "host_schema",
-				}),
-			},
-		},
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
-			boundDB = &trackedIndexedDB{
-				StubIndexedDB: coretesting.StubIndexedDB{},
-				onClose:       closeCount.Add,
-			}
-			return boundDB, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
-
-	result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "tasks",
-		"id":    "task-1",
-		"value": "ship-it",
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
-	}
-	var record map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
-		t.Fatalf("unmarshal record: %v", err)
-	}
-	if got := record["value"]; got != "ship-it" {
-		t.Fatalf("record value = %#v, want %q", got, "ship-it")
-	}
-	if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err != nil {
-		t.Fatalf("scoped-provider indexeddb should use the requested store name directly: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
-		t.Fatal("transport-prefixed backing store should remain empty when scoped provider config is used")
-	}
-
-	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "events",
-		"id":    "evt-1",
-		"value": "blocked",
-	}, ""); err == nil {
-		t.Fatal("indexeddb_roundtrip on disallowed object store should fail when only allowed stores are configured")
-	}
-
-	_ = CloseProviders(providers)
-	providers = nil
-	if got := closeCount.Load(); got != 1 {
-		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
 	}
 }
 
@@ -8738,11 +8666,11 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
-				Source: config.ProviderSource{Path: "./providers/datastore/main"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "main"}),
 			},
 			"archive": {
-				Source: config.ProviderSource{Path: "./providers/datastore/archive"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "archive"}),
 			},
 		},
@@ -8790,7 +8718,7 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 	if _, ok := boundDBs["main"]; ok {
 		t.Fatal("main indexeddb should not be rebuilt when plugin explicitly selects archive")
 	}
-	if _, err := boundDBs["archive"].ObjectStore("roadmap_events").Get(context.Background(), "evt-1"); err != nil {
+	if _, err := boundDBs["archive"].ObjectStore("events").Get(context.Background(), "evt-1"); err != nil {
 		t.Fatalf("archive backing store should contain event: %v", err)
 	}
 }
@@ -8823,7 +8751,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
-				Source: config.ProviderSource{Path: "./providers/datastore/main"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{"bucket": "main"}),
 			},
 		},
