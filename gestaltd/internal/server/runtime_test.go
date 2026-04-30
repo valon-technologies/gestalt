@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"sync"
@@ -32,6 +33,54 @@ func TestHTTPCatalogConnectionMapUsesAPIConnection(t *testing.T) {
 	got := httpCatalogConnectionMap(connMaps)
 	if got["notion"] != "OAuth" {
 		t.Fatalf("catalog connection = %q, want %q", got["notion"], "OAuth")
+	}
+}
+
+type fakeDatastorePinger struct {
+	err error
+}
+
+func (p fakeDatastorePinger) Ping(context.Context) error {
+	return p.err
+}
+
+func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
+	t.Parallel()
+
+	providersReady := make(chan struct{})
+	workflowProvidersReady := make(chan struct{})
+	check := runtimeReadinessStatus(providersReady, workflowProvidersReady, fakeDatastorePinger{})
+
+	if got := check(); got != "providers loading" {
+		t.Fatalf("readiness before providers = %q, want %q", got, "providers loading")
+	}
+
+	close(providersReady)
+	if got := check(); got != "workflow providers loading" {
+		t.Fatalf("readiness before workflow providers = %q, want %q", got, "workflow providers loading")
+	}
+
+	close(workflowProvidersReady)
+	if got := check(); got != "" {
+		t.Fatalf("readiness after workflow providers = %q, want ready", got)
+	}
+}
+
+func TestRuntimeReadinessStatusChecksDatastoreAfterProviders(t *testing.T) {
+	t.Parallel()
+
+	providersReady := make(chan struct{})
+	close(providersReady)
+	workflowProvidersReady := make(chan struct{})
+	close(workflowProvidersReady)
+	check := runtimeReadinessStatus(
+		providersReady,
+		workflowProvidersReady,
+		fakeDatastorePinger{err: errors.New("down")},
+	)
+
+	if got := check(); got != "datastore unavailable" {
+		t.Fatalf("readiness with datastore error = %q, want %q", got, "datastore unavailable")
 	}
 }
 

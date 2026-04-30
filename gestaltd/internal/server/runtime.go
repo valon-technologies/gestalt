@@ -65,6 +65,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}
+	workflowProvidersReady := make(chan struct{})
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
@@ -92,24 +93,11 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		StateSecret:           crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                    result.S3,
 		APITokenTTL:           apiTokenTTL,
-		Readiness: func() string {
-			select {
-			case <-result.ProvidersReady:
-			default:
-				return "providers loading"
-			}
-
-			pingCtx, cancel := context.WithTimeout(context.Background(), readinessDatastorePingTimeout)
-			defer cancel()
-			if err := result.Services.Ping(pingCtx); err != nil {
-				return "datastore unavailable"
-			}
-			return ""
-		},
-		PrometheusMetrics:   result.Telemetry.PrometheusHandler(),
-		ProviderDevSessions: result.ProviderDevSessions,
-		ProviderDevAttach:   cfg.Server.ProviderDev.RemoteAttach,
-		PublicHostServices:  result.PublicHostServices,
+		Readiness:             runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
+		PrometheusMetrics:     result.Telemetry.PrometheusHandler(),
+		ProviderDevSessions:   result.ProviderDevSessions,
+		ProviderDevAttach:     cfg.Server.ProviderDev.RemoteAttach,
+		PublicHostServices:    result.PublicHostServices,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
@@ -179,10 +167,40 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady)
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler) error {
+type datastorePinger interface {
+	Ping(context.Context) error
+}
+
+func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct{}, services datastorePinger) ReadinessChecker {
+	return func() string {
+		select {
+		case <-providersReady:
+		default:
+			return "providers loading"
+		}
+
+		select {
+		case <-workflowProvidersReady:
+		default:
+			return "workflow providers loading"
+		}
+
+		if services == nil {
+			return "datastore unavailable"
+		}
+		pingCtx, cancel := context.WithTimeout(context.Background(), readinessDatastorePingTimeout)
+		defer cancel()
+		if err := services.Ping(pingCtx); err != nil {
+			return "datastore unavailable"
+		}
+		return ""
+	}
+}
+
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}) error {
 	listenErr := make(chan namedListenFailure, len(servers))
 	for _, entry := range servers {
 		entry := entry
@@ -216,6 +234,8 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	if err := result.StartWorkflowProviders(ctx); err != nil {
 		return err
 	}
+	close(workflowProvidersReady)
+	slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
 
 	mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)
 	if err != nil {
