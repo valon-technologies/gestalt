@@ -7930,10 +7930,10 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 		got[integration.Name] = integration
 		credentialPresent := integration.CredentialState == "not_required" || integration.CredentialState == "connected" || integration.CredentialState == "configured"
 		if integration.Connected != credentialPresent {
-			t.Fatalf("%s legacy connected=%v status=%q violates compatibility invariant", integration.Name, integration.Connected, integration.Status)
+			t.Fatalf("%s connected=%v status=%q violates status invariant", integration.Name, integration.Connected, integration.Status)
 		}
 		if integration.Instances == nil || integration.AuthTypes == nil || integration.ConnectionParams == nil || integration.Connections == nil || integration.CredentialFields == nil {
-			t.Fatalf("%s legacy collections must stay non-nil: %+v", integration.Name, integration)
+			t.Fatalf("%s response collections must stay non-nil: %+v", integration.Name, integration)
 		}
 	}
 
@@ -20731,58 +20731,6 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		}
 	})
 
-	t.Run("no longer falls back to shared identity", func(t *testing.T) {
-		t.Parallel()
-
-		svc := coretesting.NewStubServices(t)
-		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken: %v", err)
-		}
-		seedAPIToken(t, svc, apiToken, hashed, "api-user")
-		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-identity", SubjectID: "identity:__identity__", Integration: "svc",
-			Connection: "", Instance: "default", AccessToken: "identity-tok",
-		})
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.Services = svc
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusPreconditionFailed {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
-		}
-
-		var errResp struct {
-			Error       string `json:"error"`
-			Code        string `json:"code"`
-			Integration string `json:"integration"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			t.Fatalf("decoding error response: %v", err)
-		}
-		if errResp.Code != "not_connected" {
-			t.Fatalf("expected not_connected code, got %q", errResp.Code)
-		}
-		if errResp.Error != `no external credential stored for integration "svc"; connect via OAuth first` {
-			t.Fatalf("unexpected error message: %q", errResp.Error)
-		}
-		if errResp.Integration != "svc" {
-			t.Fatalf("expected integration svc, got %q", errResp.Integration)
-		}
-	})
 }
 
 func TestConnectManual_MultiCredential(t *testing.T) {
