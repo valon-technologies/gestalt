@@ -45,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -1615,7 +1616,7 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			serviceKey = "agent_manager"
 			serviceLabel = "agent manager"
 			methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == providerhost.DefaultAuthorizationSocketEnv:
+		case hostService.EnvVar == authorizationservice.DefaultSocketEnv:
 			serviceKey = "authorization"
 			serviceLabel = "authorization"
 			methodPrefix = "/" + proto.AuthorizationProvider_ServiceDesc.ServiceName + "/"
@@ -2060,9 +2061,9 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pr
 func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
 	return runtimehost.HostService{
 		Name:   "authorization",
-		EnvVar: providerhost.DefaultAuthorizationSocketEnv,
+		EnvVar: authorizationservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationProviderServer(srv, providerhost.NewAuthorizationProviderServer(provider))
+			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(provider))
 		},
 	}
 }

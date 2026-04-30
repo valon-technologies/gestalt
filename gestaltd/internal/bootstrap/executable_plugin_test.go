@@ -51,6 +51,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -1040,13 +1041,13 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 }
 
 func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[providerhost.DefaultAuthorizationSocketEnv])
+	target := strings.TrimSpace(env[authorizationservice.DefaultSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing authorization relay target in %s", providerhost.DefaultAuthorizationSocketEnv)
+		return nil, fmt.Errorf("missing authorization relay target in %s", authorizationservice.DefaultSocketEnv)
 	}
-	token := strings.TrimSpace(env[providerhost.AuthorizationSocketTokenEnv()])
+	token := strings.TrimSpace(env[authorizationservice.SocketTokenEnv()])
 	if token == "" {
-		return nil, fmt.Errorf("missing authorization relay token in %s", providerhost.AuthorizationSocketTokenEnv())
+		return nil, fmt.Errorf("missing authorization relay token in %s", authorizationservice.SocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -4095,7 +4096,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAuthorizationSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": authorizationservice.DefaultSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4108,7 +4109,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("authorization env %q should be set for executable plugins with hosted HTTP bindings", providerhost.DefaultAuthorizationSocketEnv)
+		t.Fatalf("authorization env %q should be set for executable plugins with hosted HTTP bindings", authorizationservice.DefaultSocketEnv)
 	}
 }
 
@@ -6148,19 +6149,19 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(providerhost.DefaultAuthorizationSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin authorization env %s = (%q, %v), want (%q, true)", providerhost.DefaultAuthorizationSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(authorizationservice.DefaultSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin authorization env %s = (%q, %v), want (%q, true)", authorizationservice.DefaultSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(providerhost.AuthorizationSocketTokenEnv()); !found || got == "" {
-		t.Fatalf("plugin authorization token env %s = (%q, %v), want non-empty token", providerhost.AuthorizationSocketTokenEnv(), got, found)
+	if got, found := checkEnv(authorizationservice.SocketTokenEnv()); !found || got == "" {
+		t.Fatalf("plugin authorization token env %s = (%q, %v), want non-empty token", authorizationservice.SocketTokenEnv(), got, found)
 	}
 
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {
 		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
 	}
-	if bindRequests[0].EnvVar != providerhost.DefaultAuthorizationSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultAuthorizationSocketEnv)
+	if bindRequests[0].EnvVar != authorizationservice.DefaultSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, authorizationservice.DefaultSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
@@ -6170,7 +6171,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
+	if got := startRequests[0].Env[authorizationservice.SocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
@@ -7755,7 +7756,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
+	if got := startRequests[0].Env[authorizationservice.SocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
