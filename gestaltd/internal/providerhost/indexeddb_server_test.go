@@ -3,7 +3,6 @@ package providerhost
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -14,42 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"google.golang.org/grpc"
 )
-
-var errMissingMigrationTimeout = errors.New("missing indexeddb schema migration timeout")
-
-type schemaMigrationContextIndexedDB struct {
-	coretesting.StubIndexedDB
-
-	mu      sync.Mutex
-	created bool
-	deleted bool
-}
-
-func (db *schemaMigrationContextIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
-	if requested, _ := ctx.Value(providerMigrationTimeoutContextKey{}).(bool); !requested {
-		return errMissingMigrationTimeout
-	}
-	if err := db.StubIndexedDB.CreateObjectStore(ctx, name, schema); err != nil {
-		return err
-	}
-	db.mu.Lock()
-	db.created = true
-	db.mu.Unlock()
-	return nil
-}
-
-func (db *schemaMigrationContextIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
-	if requested, _ := ctx.Value(providerMigrationTimeoutContextKey{}).(bool); !requested {
-		return errMissingMigrationTimeout
-	}
-	if err := db.StubIndexedDB.DeleteObjectStore(ctx, name); err != nil {
-		return err
-	}
-	db.mu.Lock()
-	db.deleted = true
-	db.mu.Unlock()
-	return nil
-}
 
 func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	t.Parallel()
@@ -71,32 +34,6 @@ func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 
 	if _, err := db.ObjectStore("snapshots").Get(ctx, "snap-1"); err != nil {
 		t.Fatalf("expected object store record to exist: %v", err)
-	}
-}
-
-func TestIndexedDBServerSchemaChangesUseMigrationTimeout(t *testing.T) {
-	t.Parallel()
-
-	db := &schemaMigrationContextIndexedDB{}
-	srv := NewIndexedDBServer(db, "workflow", IndexedDBServerOptions{})
-	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterIndexedDBServer(server, srv)
-	})
-	client := proto.NewIndexedDBClient(conn)
-
-	if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{Name: "workflow_runs"}); err != nil {
-		t.Fatalf("CreateObjectStore: %v", err)
-	}
-	if _, err := client.DeleteObjectStore(context.Background(), &proto.DeleteObjectStoreRequest{Name: "workflow_runs"}); err != nil {
-		t.Fatalf("DeleteObjectStore: %v", err)
-	}
-
-	db.mu.Lock()
-	created := db.created
-	deleted := db.deleted
-	db.mu.Unlock()
-	if !created || !deleted {
-		t.Fatalf("schema change calls recorded = created:%v deleted:%v, want both true", created, deleted)
 	}
 }
 

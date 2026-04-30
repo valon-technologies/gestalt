@@ -66,10 +66,6 @@ func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleCli
 	return providerhost.StartRuntimeProvider(ctx, client)
 }
 
-func WithProviderMigrationTimeout(ctx context.Context) context.Context {
-	return providerhost.WithProviderMigrationTimeout(ctx)
-}
-
 func NewPublicHostServiceRegistry() *PublicHostServiceRegistry {
 	return providerhost.NewPublicHostServiceRegistry()
 }

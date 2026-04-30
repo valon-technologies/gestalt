@@ -77,7 +77,6 @@ func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.Crea
 		return nil, indexeddbToGRPCErr(err)
 	}
 	schema := protoToSchema(req.GetSchema())
-	ctx = WithProviderMigrationTimeout(ctx)
 	if err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -88,7 +87,6 @@ func (s *indexedDBServer) DeleteObjectStore(ctx context.Context, req *proto.Dele
 	if err := s.ensureAllowedStore(req.GetName()); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	ctx = WithProviderMigrationTimeout(ctx)
 	if err := s.ds.DeleteObjectStore(ctx, s.storeName(req.GetName())); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
