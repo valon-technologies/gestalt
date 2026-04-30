@@ -15,7 +15,7 @@ const (
 	localConfigDirName = ".gestaltd"
 
 	defaultHTTPBinProvider = config.DefaultProviderRepo + "/plugins/httpbin"
-	defaultHTTPBinVersion  = "0.0.1-alpha.1"
+	defaultHTTPBinVersion  = "0.0.1-alpha.2"
 )
 
 func DefaultLocalConfigPath() string {
