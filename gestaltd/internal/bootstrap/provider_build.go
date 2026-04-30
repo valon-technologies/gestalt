@@ -45,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -1710,11 +1711,11 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	if err != nil {
 		return nil, err
 	}
-	tokenManager, err := providerhost.NewEgressProxyTokenManager(deps.EncryptionKey)
+	tokenManager, err := egressproxy.NewTokenManager(deps.EncryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.EgressProxyTokenRequest{
+	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
 		PluginName:    providerName,
 		SessionID:     sessionID,
 		AllowedHosts:  slices.Clone(allowedHosts),

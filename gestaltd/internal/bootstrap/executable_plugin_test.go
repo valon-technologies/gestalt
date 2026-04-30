@@ -51,6 +51,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
@@ -7294,9 +7295,9 @@ func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registr
 func newRuntimeEgressProxyTestHandler(t *testing.T, stateSecret []byte) http.Handler {
 	t.Helper()
 
-	tokenManager, err := providerhost.NewEgressProxyTokenManager(stateSecret)
+	tokenManager, err := egressproxy.NewTokenManager(stateSecret)
 	if err != nil {
-		t.Fatalf("NewEgressProxyTokenManager: %v", err)
+		t.Fatalf("NewTokenManager: %v", err)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := extractRuntimeProxyAuthorizationToken(r.Header.Get("Proxy-Authorization"))

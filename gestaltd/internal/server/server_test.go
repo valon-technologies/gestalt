@@ -63,6 +63,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -799,7 +800,7 @@ func TestEgressProxyProxiesHTTPRequest(t *testing.T) {
 	proxy.StartTLS()
 	testutil.CloseOnCleanup(t, proxy)
 
-	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, providerhost.EgressProxyTokenRequest{
+	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
@@ -840,7 +841,7 @@ func TestEgressProxyRejectsDisallowedHost(t *testing.T) {
 	proxy.StartTLS()
 	testutil.CloseOnCleanup(t, proxy)
 
-	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, providerhost.EgressProxyTokenRequest{
+	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"api.github.com"},
@@ -886,7 +887,7 @@ func TestEgressProxySupportsHTTPSConnect(t *testing.T) {
 	proxy.StartTLS()
 	testutil.CloseOnCleanup(t, proxy)
 
-	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, providerhost.EgressProxyTokenRequest{
+	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
@@ -959,11 +960,11 @@ func TestEgressProxyConnectForwardsBufferedClientBytes(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, proxy)
 
-	tokenManager, err := providerhost.NewEgressProxyTokenManager(secret)
+	tokenManager, err := egressproxy.NewTokenManager(secret)
 	if err != nil {
-		t.Fatalf("NewEgressProxyTokenManager: %v", err)
+		t.Fatalf("NewTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.EgressProxyTokenRequest{
+	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
@@ -1036,12 +1037,12 @@ func newRelayGRPCConn(t *testing.T, ts *httptest.Server) *grpc.ClientConn {
 	return conn
 }
 
-func mustEgressProxyURL(t *testing.T, baseURL string, secret []byte, req providerhost.EgressProxyTokenRequest) *url.URL {
+func mustEgressProxyURL(t *testing.T, baseURL string, secret []byte, req egressproxy.TokenRequest) *url.URL {
 	t.Helper()
 
-	tokenManager, err := providerhost.NewEgressProxyTokenManager(secret)
+	tokenManager, err := egressproxy.NewTokenManager(secret)
 	if err != nil {
-		t.Fatalf("NewEgressProxyTokenManager: %v", err)
+		t.Fatalf("NewTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(req)
 	if err != nil {

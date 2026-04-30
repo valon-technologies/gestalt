@@ -20,10 +20,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -125,7 +125,7 @@ type Server struct {
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3store.Client
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
-	egressProxyTokens      *providerhost.EgressProxyTokenManager
+	egressProxyTokens      *egressproxy.TokenManager
 	providerDevSessions    *providerdev.Manager
 	providerDevAttach      bool
 	mountedHTTPBindings    []MountedHTTPBinding
@@ -291,14 +291,14 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
-	var egressProxyTokens *providerhost.EgressProxyTokenManager
+	var egressProxyTokens *egressproxy.TokenManager
 	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
 		hostServiceRelayTokens, err = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
 		}
-		egressProxyTokens, err = providerhost.NewEgressProxyTokenManager(cfg.StateSecret)
+		egressProxyTokens, err = egressproxy.NewTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 		}
