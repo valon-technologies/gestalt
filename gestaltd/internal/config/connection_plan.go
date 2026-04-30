@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -11,11 +12,51 @@ import (
 
 type StaticConnectionPlan struct {
 	manifestBacked    bool
-	pluginConnection  ConnectionDef
-	namedConnections  map[string]ConnectionDef
+	pluginConnection  ResolvedConnectionDef
+	namedConnections  map[string]ResolvedConnectionDef
 	surfaces          map[SpecSurface]ResolvedSpecSurface
 	restConnection    string
 	defaultConnection string
+}
+
+type ConfigSource string
+
+const (
+	ConfigSourceDefault  ConfigSource = "default"
+	ConfigSourceManifest ConfigSource = "manifest"
+	ConfigSourceDeploy   ConfigSource = "deploy"
+)
+
+type ResolvedConnectionSource struct {
+	DeclaredInManifest bool
+	DeclaredInDeploy   bool
+	ModeSource         ConfigSource
+	ExposureSource     ConfigSource
+	AuthSource         ConfigSource
+	NarrowedByDeploy   bool
+}
+
+type ResolvedConnectionDef struct {
+	Provider    string
+	Name        string
+	DisplayName string
+	Mode        providermanifestv1.ConnectionMode
+	Exposure    providermanifestv1.ConnectionExposure
+	Auth        ConnectionAuthDef
+	Params      map[string]ConnectionParamDef
+	Discovery   *providermanifestv1.ProviderDiscovery
+	Source      ResolvedConnectionSource
+}
+
+func (r ResolvedConnectionDef) ConnectionDef() ConnectionDef {
+	return ConnectionDef{
+		DisplayName:      r.DisplayName,
+		Mode:             r.Mode,
+		Exposure:         r.Exposure,
+		Auth:             r.Auth,
+		ConnectionParams: r.Params,
+		Discovery:        r.Discovery,
+	}
 }
 
 type ResolvedSpecSurface struct {
@@ -30,13 +71,16 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := StaticConnectionPlan{
 		manifestBacked:   manifestPlugin != nil && manifestPlugin.IsManifestBacked(),
-		pluginConnection: EffectivePluginConnectionDef(plugin),
-		namedConnections: make(map[string]ConnectionDef),
+		pluginConnection: ResolvePluginConnectionDef(plugin),
+		namedConnections: make(map[string]ResolvedConnectionDef),
 		surfaces:         make(map[SpecSurface]ResolvedSpecSurface),
 	}
 
 	for name := range declaredNames {
-		conn, ok := EffectiveNamedConnectionDef(plugin, manifestPlugin, name)
+		conn, ok, err := ResolveNamedConnectionDef(plugin, manifestPlugin, name)
+		if err != nil {
+			return StaticConnectionPlan{}, err
+		}
 		if !ok {
 			continue
 		}
@@ -77,7 +121,7 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 		if err != nil {
 			return StaticConnectionPlan{}, fmt.Errorf("%s references undeclared connection %q", surface.ConnectionField(), resolved.ConnectionName)
 		}
-		resolved.Connection = conn
+		resolved.Connection = conn.ConnectionDef()
 		plan.surfaces[surface] = resolved
 	}
 	if err := plan.validateConnectionModes(); err != nil {
@@ -91,6 +135,10 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 }
 
 func (plan StaticConnectionPlan) PluginConnection() ConnectionDef {
+	return plan.pluginConnection.ConnectionDef()
+}
+
+func (plan StaticConnectionPlan) ResolvedPluginConnection() ResolvedConnectionDef {
 	return plan.pluginConnection
 }
 
@@ -105,6 +153,11 @@ func (plan StaticConnectionPlan) NamedConnectionNames() []string {
 
 func (plan StaticConnectionPlan) NamedConnectionDef(name string) (ConnectionDef, bool) {
 	conn, ok := plan.namedConnections[name]
+	return conn.ConnectionDef(), ok
+}
+
+func (plan StaticConnectionPlan) ResolvedNamedConnectionDef(name string) (ResolvedConnectionDef, bool) {
+	conn, ok := plan.namedConnections[name]
 	return conn, ok
 }
 
@@ -112,6 +165,14 @@ func (plan StaticConnectionPlan) LookupConnection(name string) (ConnectionDef, b
 	conn, err := plan.connectionDef(ResolveConnectionAlias(name))
 	if err != nil {
 		return ConnectionDef{}, false
+	}
+	return conn.ConnectionDef(), true
+}
+
+func (plan StaticConnectionPlan) LookupResolvedConnection(name string) (ResolvedConnectionDef, bool) {
+	conn, err := plan.connectionDef(ResolveConnectionAlias(name))
+	if err != nil {
+		return ResolvedConnectionDef{}, false
 	}
 	return conn, true
 }
@@ -254,12 +315,12 @@ func (plan StaticConnectionPlan) AdvertisedConnectionNames() []string {
 }
 
 func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
-	if ConnectionModeForConnection(plan.pluginConnection) == core.ConnectionModeUser {
+	if ConnectionModeForConnection(plan.pluginConnection.ConnectionDef()) == core.ConnectionModeUser {
 		return core.ConnectionModeUser
 	}
-	hasPlatform := ConnectionModeForConnection(plan.pluginConnection) == core.ConnectionModePlatform
+	hasPlatform := ConnectionModeForConnection(plan.pluginConnection.ConnectionDef()) == core.ConnectionModePlatform
 	for _, name := range plan.NamedConnectionNames() {
-		mode := ConnectionModeForConnection(plan.namedConnections[name])
+		mode := ConnectionModeForConnection(plan.namedConnections[name].ConnectionDef())
 		if mode == core.ConnectionModeUser {
 			return core.ConnectionModeUser
 		}
@@ -281,11 +342,19 @@ func (plan StaticConnectionPlan) validateConnectionModes() error {
 		}
 	}
 
-	if err := addMode("plugin connection", ConnectionModeForConnection(plan.pluginConnection)); err != nil {
+	if err := addMode("plugin connection", ConnectionModeForConnection(plan.pluginConnection.ConnectionDef())); err != nil {
+		return err
+	}
+	if err := validateConnectionExposure("plugin connection", plan.pluginConnection.ConnectionDef()); err != nil {
 		return err
 	}
 	for _, name := range plan.NamedConnectionNames() {
-		if err := addMode(fmt.Sprintf("connection %q", name), ConnectionModeForConnection(plan.namedConnections[name])); err != nil {
+		scope := fmt.Sprintf("connection %q", name)
+		conn := plan.namedConnections[name].ConnectionDef()
+		if err := addMode(scope, ConnectionModeForConnection(conn)); err != nil {
+			return err
+		}
+		if err := validateConnectionExposure(scope, conn); err != nil {
 			return err
 		}
 	}
@@ -389,13 +458,13 @@ func (plan StaticConnectionPlan) shouldAdvertisePluginConnection() bool {
 	return false
 }
 
-func (plan StaticConnectionPlan) connectionDef(name string) (ConnectionDef, error) {
+func (plan StaticConnectionPlan) connectionDef(name string) (ResolvedConnectionDef, error) {
 	if name == "" || name == PluginConnectionName {
 		return plan.pluginConnection, nil
 	}
 	conn, ok := plan.namedConnections[name]
 	if !ok {
-		return ConnectionDef{}, fmt.Errorf("undeclared connection %q", name)
+		return ResolvedConnectionDef{}, fmt.Errorf("undeclared connection %q", name)
 	}
 	return conn, nil
 }
@@ -446,6 +515,116 @@ func namedConnectionNames(plugin *ProviderEntry, manifestPlugin *providermanifes
 	return names
 }
 
+func ResolvePluginConnectionDef(plugin *ProviderEntry) ResolvedConnectionDef {
+	conn := EffectivePluginConnectionDef(plugin)
+	conn.Mode = providermanifestv1.ConnectionMode(ConnectionModeForConnection(conn))
+	conn.Exposure = providermanifestv1.ConnectionExposure(ConnectionExposureForConnection(conn))
+	source := ResolvedConnectionSource{
+		ModeSource:     ConfigSourceDefault,
+		ExposureSource: ConfigSourceDefault,
+		AuthSource:     ConfigSourceDefault,
+	}
+	if plugin != nil {
+		source.DeclaredInDeploy = true
+		if plugin.ConnectionMode != "" {
+			source.ModeSource = ConfigSourceDeploy
+		}
+		if plugin.Auth != nil {
+			source.AuthSource = ConfigSourceDeploy
+		}
+	}
+	return resolvedConnectionDef(PluginConnectionName, conn, source)
+}
+
+func ResolveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec, name string) (ResolvedConnectionDef, bool, error) {
+	conn := ConnectionDef{}
+	source := ResolvedConnectionSource{
+		ModeSource:     ConfigSourceDefault,
+		ExposureSource: ConfigSourceDefault,
+		AuthSource:     ConfigSourceDefault,
+	}
+	found := false
+
+	if manifestPlugin != nil && manifestPlugin.Connections != nil {
+		if def, ok := manifestPlugin.Connections[name]; ok && def != nil {
+			found = true
+			source.DeclaredInManifest = true
+			conn.DisplayName = def.DisplayName
+			if def.Mode != "" {
+				conn.Mode = def.Mode
+				source.ModeSource = ConfigSourceManifest
+			}
+			if def.Exposure != "" {
+				if _, err := ParseConnectionExposure(string(def.Exposure)); err != nil {
+					return ResolvedConnectionDef{}, false, fmt.Errorf("connection %q manifest exposure: %w", name, err)
+				}
+				conn.Exposure = def.Exposure
+				source.ExposureSource = ConfigSourceManifest
+			}
+			if def.Auth != nil {
+				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
+				source.AuthSource = ConfigSourceManifest
+			}
+			if len(def.Params) > 0 {
+				conn.ConnectionParams = maps.Clone(def.Params)
+			}
+			if def.Discovery != nil {
+				conn.Discovery = def.Discovery
+			}
+		}
+	}
+	if plugin != nil {
+		if def, ok := plugin.Connections[name]; ok && def != nil {
+			found = true
+			source.DeclaredInDeploy = true
+			if def.Exposure != "" {
+				if _, err := ParseConnectionExposure(string(def.Exposure)); err != nil {
+					return ResolvedConnectionDef{}, false, fmt.Errorf("connection %q deploy exposure: %w", name, err)
+				}
+				currentExposure := ConnectionExposureForConnection(conn)
+				deployExposure := core.NormalizeConnectionExposure(core.ConnectionExposure(def.Exposure))
+				if currentExposure == core.ConnectionExposureInternal && deployExposure == core.ConnectionExposureUser {
+					return ResolvedConnectionDef{}, false, fmt.Errorf("connection %q deploy exposure %q cannot widen manifest exposure %q", name, def.Exposure, providermanifestv1.ConnectionExposureInternal)
+				}
+				if currentExposure == core.ConnectionExposureUser && deployExposure == core.ConnectionExposureInternal {
+					source.NarrowedByDeploy = true
+				}
+				source.ExposureSource = ConfigSourceDeploy
+			}
+			if def.Mode != "" {
+				source.ModeSource = ConfigSourceDeploy
+			}
+			if def.Auth.Type != "" || def.Auth.Token != "" || def.Auth.AuthMapping != nil || def.Auth.Credentials != nil {
+				source.AuthSource = ConfigSourceDeploy
+			}
+			MergeConnectionDef(&conn, def)
+		}
+	}
+
+	if !found {
+		return ResolvedConnectionDef{}, false, nil
+	}
+	if err := validateConnectionExposure(fmt.Sprintf("connection %q", name), conn); err != nil {
+		return ResolvedConnectionDef{}, false, err
+	}
+	conn.Mode = providermanifestv1.ConnectionMode(ConnectionModeForConnection(conn))
+	conn.Exposure = providermanifestv1.ConnectionExposure(ConnectionExposureForConnection(conn))
+	return resolvedConnectionDef(name, conn, source), true, nil
+}
+
+func resolvedConnectionDef(name string, conn ConnectionDef, source ResolvedConnectionSource) ResolvedConnectionDef {
+	return ResolvedConnectionDef{
+		Name:        name,
+		DisplayName: conn.DisplayName,
+		Mode:        conn.Mode,
+		Exposure:    conn.Exposure,
+		Auth:        conn.Auth,
+		Params:      conn.ConnectionParams,
+		Discovery:   conn.Discovery,
+		Source:      source,
+	}
+}
+
 // ConnectionModeForConnection returns the effective credential mode for a
 // merged connection definition.
 func ConnectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
@@ -458,4 +637,34 @@ func ConnectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
 	default:
 		return core.ConnectionModeUser
 	}
+}
+
+func ParseConnectionExposure(raw string) (core.ConnectionExposure, error) {
+	switch exposure := core.ConnectionExposure(strings.TrimSpace(raw)); exposure {
+	case "", core.ConnectionExposureUser:
+		return core.ConnectionExposureUser, nil
+	case core.ConnectionExposureInternal:
+		return core.ConnectionExposureInternal, nil
+	default:
+		return "", fmt.Errorf("unsupported connection exposure %q", raw)
+	}
+}
+
+func ConnectionExposureForConnection(conn ConnectionDef) core.ConnectionExposure {
+	exposure, err := ParseConnectionExposure(string(conn.Exposure))
+	if err != nil {
+		return core.ConnectionExposure(conn.Exposure)
+	}
+	return exposure
+}
+
+func validateConnectionExposure(scope string, conn ConnectionDef) error {
+	exposure, err := ParseConnectionExposure(string(conn.Exposure))
+	if err != nil {
+		return fmt.Errorf("%s %w", scope, err)
+	}
+	if exposure == core.ConnectionExposureInternal && ConnectionModeForConnection(conn) == core.ConnectionModeUser {
+		return fmt.Errorf("%s exposure %q is not supported for user-owned connections", scope, exposure)
+	}
+	return nil
 }

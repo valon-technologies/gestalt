@@ -63,7 +63,11 @@ type InvocationSurface string
 
 type AccessContext = authorization.AccessContext
 
-const InvocationSurfaceHTTP InvocationSurface = "http"
+const (
+	InvocationSurfaceHTTP        InvocationSurface = "http"
+	InvocationSurfaceHTTPBinding InvocationSurface = "http_binding"
+	InvocationSurfaceMCP         InvocationSurface = "mcp"
+)
 
 func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 	return context.WithValue(ctx, requestMetaCtxKey{}, meta)

@@ -14,6 +14,13 @@ const (
 	ConnectionModePlatform ConnectionMode = "platform"
 )
 
+type ConnectionExposure string
+
+const (
+	ConnectionExposureUser     ConnectionExposure = "user"
+	ConnectionExposureInternal ConnectionExposure = "internal"
+)
+
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 	switch mode {
 	case "", ConnectionModeUser:
@@ -24,6 +31,17 @@ func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 		return ConnectionModePlatform
 	default:
 		return mode
+	}
+}
+
+func NormalizeConnectionExposure(exposure ConnectionExposure) ConnectionExposure {
+	switch exposure {
+	case "", ConnectionExposureUser:
+		return ConnectionExposureUser
+	case ConnectionExposureInternal:
+		return ConnectionExposureInternal
+	default:
+		return exposure
 	}
 }
 

@@ -264,6 +264,9 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
+		if config.ConnectionExposureForConnection(conn) == core.ConnectionExposureInternal {
+			continue
+		}
 		if name == config.PluginConnectionName {
 			conn = displayPluginConnectionDef(plugin, manifestSpec, conn)
 		}
@@ -449,11 +452,14 @@ func (s *Server) hasConfiguredPlatformConnection(integration string) bool {
 	if err != nil {
 		return false
 	}
-	if platformConnectionConfiguredForName(integration, config.PluginConnectionName, plan.PluginConnection()) {
+	if pluginConn := plan.PluginConnection(); config.ConnectionExposureForConnection(pluginConn) != core.ConnectionExposureInternal && platformConnectionConfiguredForName(integration, config.PluginConnectionName, pluginConn) {
 		return true
 	}
 	for _, name := range plan.NamedConnectionNames() {
 		conn, _ := plan.NamedConnectionDef(name)
+		if config.ConnectionExposureForConnection(conn) == core.ConnectionExposureInternal {
+			continue
+		}
 		if platformConnectionConfiguredForName(integration, name, conn) {
 			return true
 		}

@@ -539,7 +539,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
 	}
 	cat = invocation.FilterCatalogForPrincipal(ctx, cat, name, p, s.authorizer)
-	ops := httpVisibleCatalogOperations(cat.Operations)
+	ops := s.publicHTTPOperations(name, prov, cat.Operations)
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].ID < ops[j].ID
 	})
@@ -672,6 +672,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	if !catalog.OperationVisibleByDefault(opMeta) {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
+		return
+	}
+	if err := s.validatePublicOperationInvocation(providerName, surfaceProv, opMeta, params, connection); err != nil {
+		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
@@ -841,21 +845,6 @@ func deploymentCredentialRequired(err error) bool {
 	message := err.Error()
 	return strings.Contains(message, "deployment credential configured") ||
 		strings.Contains(message, "deployment-managed connection")
-}
-
-func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
-	filtered := make([]catalog.CatalogOperation, 0, len(ops))
-	for i := range ops {
-		op := ops[i]
-		if !catalog.OperationVisibleByDefault(op) {
-			continue
-		}
-		if invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
-			continue
-		}
-		filtered = append(filtered, op)
-	}
-	return filtered
 }
 
 func staticCatalogOperationVisibleByDefault(prov core.Provider, operation string) (bool, bool) {

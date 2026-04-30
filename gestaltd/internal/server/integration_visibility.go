@@ -32,7 +32,7 @@ func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context,
 		return false
 	}
 	cat = invocation.FilterCatalogForPrincipal(ctx, cat, provider, p, s.authorizer)
-	return len(httpVisibleCatalogOperations(cat.Operations)) > 0
+	return len(s.publicHTTPOperations(provider, prov, cat.Operations)) > 0
 }
 
 func (s *Server) integrationMountedPathForPrincipalContext(ctx context.Context, p *principal.Principal, provider, mountedPath string) string {

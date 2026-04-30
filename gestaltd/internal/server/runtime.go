@@ -11,6 +11,8 @@ import (
 	"time"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -257,6 +259,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 	if !ok {
 		return nil, fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 	}
+	projectionServer := &Server{pluginDefs: cfg.Plugins}
 
 	names := make([]string, 0, len(cfg.Plugins))
 	for name := range cfg.Plugins {
@@ -289,15 +292,19 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 
 	return mcpserver.NewStreamableHTTPServer(
 		gestaltmcp.NewServer(gestaltmcp.Config{
-			Invoker:          invoker,
-			TokenResolver:    broker,
-			AuditSink:        result.AuditSink,
-			Providers:        result.Providers,
-			Authorizer:       result.Authorizer,
-			AllowedProviders: allowedProviders,
-			ToolPrefixes:     toolPrefixes,
-			IncludeREST:      includeREST,
-			MCPConnection:    mcpConnection,
+			Invoker:           invoker,
+			TokenResolver:     broker,
+			AuditSink:         result.AuditSink,
+			Providers:         result.Providers,
+			Authorizer:        result.Authorizer,
+			AllowedProviders:  allowedProviders,
+			ToolPrefixes:      toolPrefixes,
+			IncludeREST:       includeREST,
+			MCPConnection:     mcpConnection,
+			CatalogProjection: projectionServer.publicMCPCatalog,
+			InvocationValidator: func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
+				return projectionServer.validatePublicOperationInvocation(provName, prov, op, params, explicitConnection)
+			},
 		}),
 		mcpserver.WithStateLess(true),
 	), nil

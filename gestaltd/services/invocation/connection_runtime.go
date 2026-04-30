@@ -11,8 +11,9 @@ const runtimePluginConnectionName = "_plugin"
 // ConnectionRuntimeInfo describes deployment-owned connection material that is
 // resolved after an operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
-	Mode  core.ConnectionMode
-	Token string
+	Mode     core.ConnectionMode
+	Exposure core.ConnectionExposure
+	Token    string
 }
 
 // ConnectionRuntimeResolver resolves runtime metadata for a provider

@@ -569,6 +569,91 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 	}
 }
 
+func TestNewServer_ToolCallValidatesArgumentsAgainstOriginalOperation(t *testing.T) {
+	t.Parallel()
+
+	cat := &catalog.Catalog{
+		Name: "slack",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "chat.postMessage",
+				Method: http.MethodPost,
+				Path:   "/chat.postMessage",
+				Parameters: []catalog.CatalogParameter{
+					{Name: "channel", Type: "string", Required: true},
+					{Name: "actor", Type: "string", Internal: true},
+				},
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"channel":{"type":"string"},"actor":{"type":"string"}}}`),
+			},
+		},
+	}
+	prov := &catalogProvider{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		catalog:         cat,
+	}
+	providers := testutil.NewProviderRegistry(t, prov)
+
+	var invoked bool
+	var validatorSawInternalParam bool
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(_ context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
+				invoked = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		Providers: providers,
+		CatalogProjection: func(_ string, _ core.Provider, source *catalog.Catalog) *catalog.Catalog {
+			projected := source.Clone()
+			projected.Operations[0].Parameters = []catalog.CatalogParameter{
+				{Name: "channel", Type: "string", Required: true},
+			}
+			projected.Operations[0].InputSchema = json.RawMessage(`{"type":"object","properties":{"channel":{"type":"string"}}}`)
+			return projected
+		},
+		InvocationValidator: func(_ context.Context, _ string, _ core.Provider, op catalog.CatalogOperation, params map[string]any, _ string) error {
+			for _, param := range op.Parameters {
+				if param.Name == "actor" && param.Internal {
+					validatorSawInternalParam = true
+					break
+				}
+			}
+			if _, ok := params["actor"]; ok {
+				if !validatorSawInternalParam {
+					return fmt.Errorf("validator saw projected operation metadata")
+				}
+				return fmt.Errorf("%w: parameter %q is not public", invocation.ErrInvalidInvocation, "actor")
+			}
+			return nil
+		},
+	})
+
+	tool := srv.GetTool("slack_chat_postMessage")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "slack_chat_postMessage"
+	req.Params.Arguments = map[string]any{
+		"channel": "C123",
+		"actor":   "bot",
+	}
+	result, err := tool.Handler(ctxWithPrincipal("stub-user-id"), req)
+	if err != nil {
+		t.Fatalf("unexpected protocol-level error: %v", err)
+	}
+	if !validatorSawInternalParam {
+		t.Fatal("expected invocation validator to receive original operation metadata")
+	}
+	if invoked {
+		t.Fatal("expected invalid public MCP arguments to be denied before invocation")
+	}
+	if !result.IsError {
+		t.Fatalf("expected error result, got %+v", result)
+	}
+}
+
 func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	t.Parallel()
 
@@ -1319,6 +1404,84 @@ func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T
 	}
 	if sessionCatalogCalls != 1 {
 		t.Fatalf("sessionCatalogCalls after call = %d, want 1", sessionCatalogCalls)
+	}
+}
+
+func TestNewServer_HumanCallToolRejectsHiddenSessionCatalogArguments(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	sessionCatalog := &catalog.Catalog{
+		Name: "sampledb",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "run a query",
+				Transport:   catalog.TransportMCPPassthrough,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "sql", Type: "string"},
+					{Name: "actor", Type: "string", Internal: true},
+				},
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"},"actor":{"type":"string"}}}`),
+			},
+			{
+				ID:          "open_view",
+				Description: "open a view",
+				Transport:   catalog.TransportMCPPassthrough,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "audience", Type: "string"},
+				},
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"audience":{"type":"string","enum":["user","bot"]}}}`),
+			},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			return sessionCatalog, nil
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				invoked = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		Providers: providers,
+		CatalogProjection: func(_ string, _ core.Provider, source *catalog.Catalog) *catalog.Catalog {
+			projected := source.Clone()
+			projected.Operations[0].Parameters = []catalog.CatalogParameter{
+				{Name: "sql", Type: "string"},
+			}
+			projected.Operations[0].InputSchema = json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`)
+			projected.Operations[1].InputSchema = json.RawMessage(`{"type":"object","properties":{"audience":{"type":"string","enum":["user"]}}}`)
+			return projected
+		},
+	})
+
+	session := newTestSessionWithTools()
+	result := listToolsForSession(t, srv, ctxWithPrincipal("viewer-user"), session)
+	if len(result.Tools) != 2 {
+		t.Fatalf("tools = %+v, want run_query and open_view", result.Tools)
+	}
+
+	hiddenParam := callToolForSession(t, srv, ctxWithPrincipal("viewer-user"), session, "sampledb_run_query", map[string]any{
+		"sql":   "select 1",
+		"actor": "bot",
+	})
+	if !hiddenParam.IsError {
+		t.Fatalf("hidden param call result = %+v, want error", hiddenParam)
+	}
+	hiddenEnum := callToolForSession(t, srv, ctxWithPrincipal("viewer-user"), session, "sampledb_open_view", map[string]any{
+		"audience": "bot",
+	})
+	if !hiddenEnum.IsError {
+		t.Fatalf("hidden enum call result = %+v, want error", hiddenEnum)
+	}
+	if invoked {
+		t.Fatal("expected invalid public MCP arguments to be denied before invocation")
 	}
 }
 
