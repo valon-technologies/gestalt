@@ -51,6 +51,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -970,7 +971,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if invTokens != nil {
 		opts = append(opts,
 			providerhost.WithInvocationTokens(invTokens),
-			providerhost.WithInvocationTokenSubject(name, providerhost.InvocationDependencyGrants(entry.Invokes)),
+			providerhost.WithInvocationTokenSubject(name, plugininvokerservice.InvocationDependencyGrants(entry.Invokes)),
 		)
 	}
 	prov, err := providerhost.NewRemoteProvider(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -1512,13 +1513,13 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, allowDirectBindings bool) ([]runtimehost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, allowDirectBindings bool) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
-		invTokens    *providerhost.InvocationTokenManager
+		invTokens    *plugininvokerservice.InvocationTokenManager
 	)
-	fail := func(err error) ([]runtimehost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+	fail := func(err error) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -1560,7 +1561,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
-		invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
+		invTokens, err = plugininvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
 		if err != nil {
 			return fail(err)
 		}
@@ -1622,7 +1623,7 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			serviceKey = "authorization"
 			serviceLabel = "authorization"
 			methodPrefix = "/" + proto.AuthorizationProvider_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == providerhost.DefaultPluginInvokerSocketEnv:
+		case hostService.EnvVar == plugininvokerservice.DefaultSocketEnv:
 			serviceKey = "plugin_invoker"
 			serviceLabel = "plugin invoker"
 			methodPrefix = "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"
@@ -2032,7 +2033,7 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 	}, nil
 }
 
-func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
+func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -2046,7 +2047,7 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 	}
 }
 
-func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
@@ -2070,16 +2071,16 @@ func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) ru
 	}
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
+func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
 		invoker = unavailablePluginInvoker{}
 	}
 	return runtimehost.HostService{
 		Name:   "plugin_invoker",
-		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
+		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, tokens))
+			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(pluginName, entry.Invokes, invoker, tokens))
 		},
 	}
 }
