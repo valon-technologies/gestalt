@@ -53,6 +53,8 @@ const (
 	maxAgentRouteCacheEntries         = 20_000
 	AgentListSummaryDefaultLimit      = 100
 	AgentListMaxLimit                 = 500
+	agentCreateTurnRecoveryTimeout    = 15 * time.Second
+	agentCreateTurnRecoveryInterval   = 250 * time.Millisecond
 )
 
 type AgentProviderNotAvailableError struct {
@@ -621,10 +623,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		ToolGrant:       toolGrant,
 	})
 	if err != nil {
-		fallback, getErr := ownedSession.provider.GetTurn(ctx, coreagent.GetTurnRequest{
-			TurnID:  turnID,
-			Subject: agentSubjectFromPrincipal(p),
-		})
+		fallback, getErr := recoverCreatedTurnAfterError(ctx, ownedSession.provider, turnID, agentSubjectFromPrincipal(p), err)
 		if getErr == nil {
 			turn = fallback
 		} else {
@@ -640,6 +639,82 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
 	return normalized, nil
+}
+
+func recoverCreatedTurnAfterError(ctx context.Context, provider coreagent.Provider, turnID string, subject coreagent.SubjectContext, createErr error) (*coreagent.Turn, error) {
+	if provider == nil {
+		return nil, createErr
+	}
+	shouldPoll := shouldPollCreateTurnRecovery(createErr)
+	recoveryCtx := ctx
+	cancel := func() {}
+	if shouldPoll {
+		recoveryCtx, cancel = context.WithTimeout(ctx, agentCreateTurnRecoveryTimeout)
+	}
+	defer cancel()
+
+	turn, err := provider.GetTurn(recoveryCtx, coreagent.GetTurnRequest{
+		TurnID:  turnID,
+		Subject: subject,
+	})
+	if err == nil {
+		return turn, nil
+	}
+	if !shouldPoll || !isCreateTurnRecoveryGetRetryable(err) {
+		return nil, err
+	}
+
+	ticker := time.NewTicker(agentCreateTurnRecoveryInterval)
+	defer ticker.Stop()
+	lastErr := err
+	for {
+		select {
+		case <-recoveryCtx.Done():
+			return nil, lastErr
+		case <-ticker.C:
+			turn, err := provider.GetTurn(recoveryCtx, coreagent.GetTurnRequest{
+				TurnID:  turnID,
+				Subject: subject,
+			})
+			if err == nil {
+				return turn, nil
+			}
+			lastErr = err
+			if !isCreateTurnRecoveryGetRetryable(err) {
+				return nil, err
+			}
+		}
+	}
+}
+
+func shouldPollCreateTurnRecovery(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrAgentProviderNotAvailable) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.DeadlineExceeded, codes.Unavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+func isCreateTurnRecoveryGetRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, core.ErrNotFound) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrAgentProviderNotAvailable) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.NotFound, codes.DeadlineExceeded, codes.Unavailable:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (turn *coreagent.Turn, err error) {

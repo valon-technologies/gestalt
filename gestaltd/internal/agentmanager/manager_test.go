@@ -111,6 +111,8 @@ type routeCountingAgentProvider struct {
 	turns           map[string]*coreagent.Turn
 	turnIDOverride  string
 	cancelStatus    coreagent.ExecutionStatus
+	createTurnFunc  func(coreagent.CreateTurnRequest) (*coreagent.Turn, error)
+	getTurnFunc     func(coreagent.GetTurnRequest) (*coreagent.Turn, error)
 	getSessionCalls int
 	getTurnCalls    int
 }
@@ -146,6 +148,9 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent
 }
 
 func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	if p.createTurnFunc != nil {
+		return p.createTurnFunc(req)
+	}
 	turnID := req.TurnID
 	if strings.TrimSpace(p.turnIDOverride) != "" {
 		turnID = p.turnIDOverride
@@ -166,6 +171,9 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent
 
 func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	p.getTurnCalls++
+	if p.getTurnFunc != nil {
+		return p.getTurnFunc(req)
+	}
 	turn := p.turns[strings.TrimSpace(req.TurnID)]
 	if turn == nil {
 		return nil, core.ErrNotFound
@@ -331,6 +339,74 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 	}
 	if alpha.getTurnCalls != 1 {
 		t.Fatalf("GetTurn calls = %d, want 1 cached provider lookup", alpha.getTurnCalls)
+	}
+}
+
+func TestManagerCreateTurnRecoversLateAcceptedTurnAfterProviderDeadline(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	var accepted *coreagent.Turn
+	getTurnCalls := 0
+	alpha.createTurnFunc = func(req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+		accepted = &coreagent.Turn{
+			ID:           req.TurnID,
+			SessionID:    req.SessionID,
+			ProviderName: alpha.name,
+			Model:        req.Model,
+			Status:       coreagent.ExecutionStatusRunning,
+			Messages:     append([]coreagent.Message(nil), req.Messages...),
+			CreatedBy:    req.CreatedBy,
+			ExecutionRef: req.ExecutionRef,
+		}
+		return nil, context.DeadlineExceeded
+	}
+	alpha.getTurnFunc = func(req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+		getTurnCalls++
+		if getTurnCalls == 1 {
+			return nil, core.ErrNotFound
+		}
+		if accepted == nil || strings.TrimSpace(req.TurnID) != accepted.ID {
+			return nil, core.ErrNotFound
+		}
+		return cloneRouteTurn(accepted), nil
+	}
+
+	turn, err := manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:        session.ID,
+		IdempotencyKey:   "workflow:provider:run-1:turn:batch-1",
+		Model:            "test-model",
+		Messages:         []coreagent.Message{{Role: "user", Text: "hello"}},
+		CallerPluginName: "slack",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn == nil || accepted == nil || turn.ID != accepted.ID {
+		t.Fatalf("CreateTurn = %#v, want recovered accepted turn %#v", turn, accepted)
+	}
+	if getTurnCalls < 2 {
+		t.Fatalf("GetTurn calls = %d, want retry after initial miss", getTurnCalls)
 	}
 }
 
