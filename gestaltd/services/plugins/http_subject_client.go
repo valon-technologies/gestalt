@@ -1,4 +1,4 @@
-package providerhost
+package plugins
 
 import (
 	"context"

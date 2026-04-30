@@ -12,9 +12,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 )
 
 type resolvedDependencyCatalog struct {
@@ -197,7 +197,7 @@ func resolveDeclarativeCatalog(name string, manifest *providermanifestv1.Manifes
 }
 
 func loadDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
-	prov, err := providerhost.NewDeclarativeProvider(manifest, nil)
+	prov, err := pluginservice.NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
 	}

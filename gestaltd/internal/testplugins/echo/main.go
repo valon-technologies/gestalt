@@ -12,7 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return providerhost.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
+		return pluginservice.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
 	default:
 		return fmt.Errorf("unknown mode %q", os.Args[1])
 	}

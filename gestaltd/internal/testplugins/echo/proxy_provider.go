@@ -15,7 +15,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -260,7 +260,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		invocationToken := input.InvocationToken
 		if invocationToken == "" {
-			invocationToken = providerhost.InvocationTokenFromContext(ctx)
+			invocationToken = plugininvoker.InvocationTokenFromContext(ctx)
 		}
 		if invocationToken == "" {
 			envelope["error"] = "invocation token is not available"
@@ -314,7 +314,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		invocationToken := input.InvocationToken
 		if invocationToken == "" {
-			invocationToken = providerhost.InvocationTokenFromContext(ctx)
+			invocationToken = plugininvoker.InvocationTokenFromContext(ctx)
 		}
 		if invocationToken == "" {
 			envelope["error"] = "invocation token is not available"
@@ -780,7 +780,7 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 func workflowManagerFromContext(ctx context.Context, invocationToken string) (*gestalt.WorkflowManagerClient, error) {
 	token := strings.TrimSpace(invocationToken)
 	if token == "" {
-		token = providerhost.InvocationTokenFromContext(ctx)
+		token = plugininvoker.InvocationTokenFromContext(ctx)
 	}
 	return gestalt.WorkflowManager(token)
 }

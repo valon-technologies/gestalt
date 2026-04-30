@@ -13,7 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -105,13 +105,13 @@ type indexedDBSessionRecord struct {
 }
 
 type storedTarget struct {
-	Name      string                          `json:"name"`
-	Source    string                          `json:"source,omitempty"`
-	Spec      providerhost.StaticProviderSpec `json:"spec"`
-	Config    map[string]any                  `json:"config,omitempty"`
-	ConfigSet bool                            `json:"configSet,omitempty"`
-	UI        bool                            `json:"ui,omitempty"`
-	UIPath    string                          `json:"uiPath,omitempty"`
+	Name      string                           `json:"name"`
+	Source    string                           `json:"source,omitempty"`
+	Spec      pluginservice.StaticProviderSpec `json:"spec"`
+	Config    map[string]any                   `json:"config,omitempty"`
+	ConfigSet bool                             `json:"configSet,omitempty"`
+	UI        bool                             `json:"ui,omitempty"`
+	UIPath    string                           `json:"uiPath,omitempty"`
 }
 
 type indexedDBCallRecord struct {
