@@ -1588,7 +1588,7 @@ func validConfig() *config.Config {
 				"default": {Source: config.ProviderSource{Builtin: "test-telemetry"}},
 			},
 			IndexedDB: map[string]*config.ProviderEntry{
-				"test": {Source: config.ProviderSource{Path: "stub"}},
+				"test": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml")},
 			},
 		},
 		Server: config.ServerConfig{
@@ -3801,7 +3801,9 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{Source: config.ProviderSource{Path: "stub"}}
+	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
@@ -3856,7 +3858,17 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Providers.IndexedDB["agent_state"] = &config.ProviderEntry{Source: config.ProviderSource{Path: "stub"}}
+	cfg.Providers.IndexedDB["agent_state"] = &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		Config: mustYAMLNode(t, map[string]any{
+			"dsn": map[string]any{
+				"secret": map[string]any{
+					"provider": "secrets",
+					"name":     "agent-state-dsn",
+				},
+			},
+		}),
+	}
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"simple": {
 			Source: config.ProviderSource{Path: "stub"},
@@ -3939,11 +3951,8 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		}
 	})
 
-	if _, err := boundDB.ObjectStore("agent_simple_runs").Get(context.Background(), "run-1"); err != nil {
-		t.Fatalf("prefixed backing store should contain run: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("runs").Get(context.Background(), "run-1"); err == nil {
-		t.Fatal("unprefixed backing store should remain empty")
+	if _, err := boundDB.ObjectStore("runs").Get(context.Background(), "run-1"); err != nil {
+		t.Fatalf("logical backing store should contain run: %v", err)
 	}
 }
 
@@ -4123,7 +4132,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
-		Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 		Config: mustYAMLNode(t, map[string]any{"bucket": "workflow-state"}),
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
@@ -4239,11 +4248,8 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		}
 	})
 
-	if _, err := boundDB.ObjectStore("workflow_workflow_runs").Get(context.Background(), "run-1"); err != nil {
-		t.Fatalf("prefixed backing store should contain run: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("workflow_runs").Get(context.Background(), "run-1"); err == nil {
-		t.Fatal("unprefixed backing store should remain empty")
+	if _, err := boundDB.ObjectStore("workflow_runs").Get(context.Background(), "run-1"); err != nil {
+		t.Fatalf("logical backing store should contain run: %v", err)
 	}
 }
 

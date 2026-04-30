@@ -159,7 +159,7 @@ func workflowStartupTestConfig() *config.Config {
 				"default": {Source: config.ProviderSource{Builtin: "test-telemetry"}},
 			},
 			IndexedDB: map[string]*config.ProviderEntry{
-				"test": {Source: config.ProviderSource{Path: "stub"}},
+				"test": {Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml")},
 			},
 		},
 		Server: config.ServerConfig{

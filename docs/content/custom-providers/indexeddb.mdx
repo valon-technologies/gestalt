@@ -236,11 +236,14 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
 When a plugin binds a datastore through `plugins.<name>.indexeddb`, the host
 rebuilds that provider with plugin-scoped storage before exposing it over the
 SDK socket. Plugins still use plain store names like `tasks` or `snapshots`;
-the host applies isolation outside the plugin. For schema-capable backends,
-that means a plugin-specific schema. For SQLite-backed relationaldb bindings,
-the host falls back to `<db>_` table prefixes. Other IndexedDB providers fall
-back to transport-level `<db>_` store prefixes. `plugins.<name>.indexeddb.objectStores`
-can also allowlist logical stores so the host rejects stores outside that set.
+the host applies isolation outside the plugin by rebuilding the selected
+provider with plugin-scoped config. For schema-capable RelationalDB bindings,
+that means a plugin-specific schema. SQLite-backed RelationalDB bindings use
+`<db>_` table prefixes because SQLite has no schema support. First-party
+MongoDB and DynamoDB bindings use the configured database or table namespace.
+Gestalt does not rewrite object-store names at the transport layer.
+`plugins.<name>.indexeddb.objectStores` can also allowlist logical stores so
+the host rejects stores outside that set.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -451,7 +454,9 @@ providers:
 
 `DATABASE_URL` is a connection string for your database. The RelationalDB provider accepts `postgres://`, `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
 
-Object store names remain logical inside plugins. The host scopes plugin data by rebuilding schema-capable providers with a plugin-specific schema, or by applying a `<db>_` prefix on backends without schema support.
+Object store names remain logical inside plugins. The host scopes plugin data
+by rebuilding providers with provider-native namespace config instead of
+rewriting object-store names at the SDK transport layer.
 
 ## What to read next
 

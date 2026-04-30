@@ -56,6 +56,14 @@ func testHostedAgentRuntimeConfig() *config.HostedRuntimeConfig {
 	}
 }
 
+func testAgentRuntimeIndexedDBDefs() map[string]*config.ProviderEntry {
+	return map[string]*config.ProviderEntry{
+		"agent_state": {
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+		},
+	}
+}
+
 type agentRuntimeInvokerCall struct {
 	providerName           string
 	operation              string
@@ -613,7 +621,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
@@ -702,7 +710,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
@@ -810,7 +818,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
@@ -917,7 +925,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
@@ -993,7 +1001,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
@@ -1062,7 +1070,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	}
 	deps := Deps{
 		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
 		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
