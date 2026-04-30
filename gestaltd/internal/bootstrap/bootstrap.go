@@ -25,7 +25,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/observability"
@@ -36,6 +35,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )

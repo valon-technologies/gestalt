@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding MountedHTTPBinding, r *http.Request, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*principal.Principal, error) {

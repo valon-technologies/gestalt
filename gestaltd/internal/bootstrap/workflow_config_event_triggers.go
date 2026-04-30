@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type desiredWorkflowConfigEventTrigger struct {

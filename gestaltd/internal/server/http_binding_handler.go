@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWriter, r *http.Request) {
