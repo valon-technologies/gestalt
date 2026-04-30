@@ -1,4 +1,4 @@
-package providerhost
+package agents
 
 import (
 	"context"

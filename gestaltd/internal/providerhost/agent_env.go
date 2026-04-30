@@ -1,10 +1,12 @@
 package providerhost
 
+import agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+
 const (
-	DefaultAgentHostSocketEnv    = "GESTALT_AGENT_HOST_SOCKET"
-	DefaultAgentManagerSocketEnv = "GESTALT_AGENT_MANAGER_SOCKET"
+	DefaultAgentHostSocketEnv    = agentservice.DefaultHostSocketEnv
+	DefaultAgentManagerSocketEnv = agentservice.DefaultManagerSocketEnv
 )
 
 func AgentManagerSocketTokenEnv() string {
-	return DefaultAgentManagerSocketEnv + "_TOKEN"
+	return agentservice.ManagerSocketTokenEnv()
 }

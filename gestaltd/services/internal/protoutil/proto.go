@@ -1,4 +1,4 @@
-package providerhost
+package protoutil
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func structFromMap(values map[string]any) (*structpb.Struct, error) {
+func StructFromMap(values map[string]any) (*structpb.Struct, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -19,21 +19,21 @@ func structFromMap(values map[string]any) (*structpb.Struct, error) {
 	return structpb.NewStruct(normalized)
 }
 
-func mapFromStruct(s *structpb.Struct) map[string]any {
+func MapFromStruct(s *structpb.Struct) map[string]any {
 	if s == nil {
 		return nil
 	}
 	return s.AsMap()
 }
 
-func protoValueToAny(v *structpb.Value) any {
+func ValueToAny(v *structpb.Value) any {
 	if v == nil {
 		return nil
 	}
 	return v.AsInterface()
 }
 
-func protoValueFromAny(value any) (*structpb.Value, error) {
+func ValueFromAny(value any) (*structpb.Value, error) {
 	if value == nil {
 		return nil, nil
 	}

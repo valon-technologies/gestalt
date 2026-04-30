@@ -1,4 +1,4 @@
-package providerhost
+package workflows
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
+	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -104,7 +105,7 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if target == nil {
 		return nil, nil
 	}
-	messages, err := agentMessagesToProto(target.Messages)
+	messages, err := agentwire.MessagesToProto(target.Messages)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 		Model:           target.Model,
 		Prompt:          target.Prompt,
 		Messages:        messages,
-		ToolRefs:        agentToolRefsToProto(target.ToolRefs),
+		ToolRefs:        agentwire.ToolRefsToProto(target.ToolRefs),
 		ResponseSchema:  responseSchema,
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,
@@ -146,8 +147,8 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		ProviderName:    strings.TrimSpace(target.GetProviderName()),
 		Model:           strings.TrimSpace(target.GetModel()),
 		Prompt:          target.GetPrompt(),
-		Messages:        agentMessagesFromProto(target.GetMessages()),
-		ToolRefs:        agentToolRefsFromProto(target.GetToolRefs()),
+		Messages:        agentwire.MessagesFromProto(target.GetMessages()),
+		ToolRefs:        agentwire.ToolRefsFromProto(target.GetToolRefs()),
 		ResponseSchema:  mapFromStruct(target.GetResponseSchema()),
 		Metadata:        mapFromStruct(target.GetMetadata()),
 		ProviderOptions: mapFromStruct(target.GetProviderOptions()),
@@ -817,17 +818,20 @@ func workflowExtensionsToProto(values map[string]any) (map[string]*structpb.Valu
 	}
 	out := make(map[string]*structpb.Value, len(values))
 	for key, value := range values {
-		normalized, err := normalizeStructValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		pbValue, err := structpb.NewValue(normalized)
+		pbValue, err := workflowExtensionValueToProto(value)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", key, err)
 		}
 		out[key] = pbValue
 	}
 	return out, nil
+}
+
+func workflowExtensionValueToProto(value any) (*structpb.Value, error) {
+	if value == nil {
+		return structpb.NewNullValue(), nil
+	}
+	return protoValueFromAny(value)
 }
 
 func workflowExtensionsFromProto(values map[string]*structpb.Value) (map[string]any, error) {

@@ -1,10 +1,12 @@
 package providerhost
 
+import workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
+
 const (
-	DefaultWorkflowHostSocketEnv    = "GESTALT_WORKFLOW_HOST_SOCKET"
-	DefaultWorkflowManagerSocketEnv = "GESTALT_WORKFLOW_MANAGER_SOCKET"
+	DefaultWorkflowHostSocketEnv    = workflowservice.DefaultHostSocketEnv
+	DefaultWorkflowManagerSocketEnv = workflowservice.DefaultManagerSocketEnv
 )
 
 func WorkflowManagerSocketTokenEnv() string {
-	return DefaultWorkflowManagerSocketEnv + "_TOKEN"
+	return workflowservice.ManagerSocketTokenEnv()
 }
