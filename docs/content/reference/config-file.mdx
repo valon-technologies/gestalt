@@ -2,21 +2,27 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads one or more YAML config files. When you pass
-multiple `--config` flags, Gestalt merges them left-to-right before validation
-and bootstrap. The top-level keys are `server` (listener, encryption, egress,
-and host-provider selection), `authorization` (shared subject access
-policy), `providers` (named authentication, secrets, telemetry, audit, UI,
-indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
-(config-managed schedules and triggers), and `plugins` (executable
-integrations and optional plugin-backed UI mounts):
+Every `gestaltd` deployment reads one or more YAML config files. The current
+config API version is `gestaltd.config/v4`, and every config file must declare
+it with `apiVersion`. When you pass multiple `--config` flags, Gestalt merges
+them left-to-right before validation and bootstrap. The top-level keys are
+`server` (listener, encryption, egress, and host-provider selection),
+`authorization` (shared subject access policy), `providers` (named
+authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
+workflow, cache, s3, and agent entries), `runtime` (hosted execution backends),
+`workflows` (config-managed schedules and triggers), and `plugins`
+(executable integrations and optional plugin-backed UI mounts):
 
 ```yaml
+apiVersion: gestaltd.config/v4
 server:
   # listener, encryption, egress, host-provider selectors
 authorization:
   policies: {}
+runtime:
+  providers: {}
 providers:
+  agent: {}
   audit: {}
   authentication: {}
   authorization: {}
@@ -251,7 +257,7 @@ When a plugin uses the Modal runtime provider,
 `plugins.<name>.execution.runtime.image` is required. Modal can still run
 hosted plugins that need Gestalt-owned services or hostname-based egress when
 the host is configured for the public relay and proxy path. In practice that
-means `server.baseURL` and `server.encryptionKey` must be set, and the runtime
+means `server.baseUrl` and `server.encryptionKey` must be set, and the runtime
 must report a compatible support profile. Without those prerequisites, Gestalt
 will reject Modal for plugins that need relay-backed host services,
 `egress.allowedHosts`, or a server-wide default-deny egress policy.
@@ -520,7 +526,7 @@ providers:
         defaultModel: fast
         aliases:
           fast: openai/gpt-4.1-mini
-          deep: anthropic/claude-sonnet-4-20250514
+          deep: openai/gpt-5.5
 ```
 
 Agent providers receive canonical session and turn requests with `messages`,
@@ -698,7 +704,7 @@ other S3-compatible backends without changing application code.
 Plugins can also create host-mediated object access URLs for their scoped S3
 bindings with SDK helpers such as TypeScript `object.createAccessUrl(...)` and
 Go `object.CreateAccessURL(...)`. These URLs are served by gestaltd at
-`/api/v1/s3/object-access/{token}` and require `server.baseURL` plus
+`/api/v1/s3/object-access/{token}` and require `server.baseUrl` plus
 `server.encryptionKey`, because the host signs the logical plugin/binding/object
 scope before streaming bytes through the configured S3 provider.
 
@@ -1049,6 +1055,12 @@ when its `next` path resolves into that plugin's mounted UI. Standalone
 `providers.ui` bundles, the built-in admin UI/admin API, integration OAuth
 helper routes, and `/mcp` still use the server-wide auth provider in this
 phase.
+
+Do not put release-download credentials in `plugins.<name>.auth`. That field
+selects route authentication for the mounted plugin. Use `source.auth` for
+fetching private `provider-release.yaml` metadata or private GitHub release
+assets.
+
 For published providers, `source` can point at a `provider-release.yaml`
 metadata URL directly, or it can describe a GitHub release logically:
 
@@ -1182,7 +1194,13 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 ### `connections`
 
-Connections declare how users authenticate to the upstream service. Only `connections.default` may define `params` and `discovery`. A provider manifest can also declare connections; when both the manifest and config define the same connection name, config values are merged on top of the manifest defaults. See [Provider Manifests](/reference/plugin-manifests#connections) for the manifest-side schema.
+Connections declare how users authenticate to the upstream service. A provider
+manifest can declare connection defaults under `spec.connections`; deployment
+YAML can override or extend those defaults under `plugins.<name>.connections`.
+When both declare the same connection name, deployment values are merged on top
+of the manifest defaults. Only `connections.default` should define `params` and
+`discovery` today. See [Provider Manifests](/reference/plugin-manifests#connections)
+for the manifest-side schema.
 
 ```yaml
 connections:
@@ -1203,6 +1221,14 @@ connections:
     auth:
       type: mcp_oauth
 ```
+
+The effective connection is resolved from the most specific declaration first.
+A manifest surface can name a connection with `spec.surfaces.<surface>.connection`,
+and declarative REST operations can name a connection directly. If no surface
+or operation connection is named, Gestalt uses `defaultConnection`, then a
+connection literally named `default`, then the only named connection when there
+is exactly one. If none of those apply, legacy plugin-level auth is exposed as
+the `_plugin` connection.
 
 Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
 

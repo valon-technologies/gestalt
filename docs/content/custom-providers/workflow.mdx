@@ -32,17 +32,34 @@ spec:
 
 ## Provider interface
 
-The workflow service includes:
+The workflow protocol is a state and dispatch surface. A provider stores
+workflow objects and reports their current state. When one of those objects
+should execute, the provider calls back into Gestalt through `WorkflowHost` so
+the host can invoke the target plugin operation or agent target under the right
+subject and authorization ceiling.
+
+The full protocol includes:
 
 | Method | Purpose |
 | --- | --- |
 | `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
+| `SignalRun` / `SignalOrStartRun` | Attach signals to an existing run or create a keyed run before signaling it |
 | `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
 | `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage triggers |
+| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
 | `PublishEvent` | Deliver an event into the provider |
 
-The examples below show the core methods. The remaining methods follow the same
-request/response shape.
+Go and Rust expose the complete generated workflow provider service. Python
+currently registers run, signal, schedule, trigger, and publish methods through
+the SDK runtime. TypeScript currently exposes the core run, schedule, trigger,
+and publish methods through `defineWorkflowProvider`. If you need signal or
+execution-reference methods before the handwritten TypeScript and Python helpers
+grow those methods, implement that provider in Go or Rust, or serve the
+generated protocol directly.
+
+The examples below show the core authored shape. Production workflow providers
+should persist returned IDs, timestamps, status, execution references, and
+signal sequence numbers exactly as stored.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -52,7 +69,6 @@ request/response shape.
     import (
     	"context"
 
-    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
     	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
     )
 
@@ -151,11 +167,6 @@ request/response shape.
     	return nil
     }
 
-    func main() {
-    	if err := gestalt.ServeWorkflowProvider(context.Background(), New()); err != nil {
-    		panic(err)
-    	}
-    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -375,6 +386,20 @@ request/response shape.
     ```
   </Tabs.Tab>
 </Tabs>
+
+## Signals and execution references
+
+Signals let a workflow caller deliver additional payloads into a run after it
+has started. `SignalRun` targets an existing `run_id`. `SignalOrStartRun`
+accepts a `workflow_key`, target, idempotency key, and signal. It should return
+the run, the stored signal, and `started_run: true` when it created the run.
+This is useful for workflows where many external events should coalesce into
+one active run.
+
+Execution references store the subject, credential subject, caller plugin, and
+allowed plugin operations that delayed execution may use later. Config-managed
+workflows and user-owned workflows both rely on this reference when a provider
+fires a run after the creating request has ended.
 
 ## Workflow host
 

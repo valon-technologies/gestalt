@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Runtime
 
 This page covers building custom runtime providers. If you only need to choose
@@ -5,9 +7,10 @@ or configure a runtime backend for a deployment, use
 [Providers > Runtime](/providers/runtime).
 
 Runtime providers are executable provider packages that manage hosted
-executable-plugin sessions. They run as normal provider processes from
-Gestalt's point of view, but instead of exposing plugin operations directly,
-they expose a control plane for starting and managing hosted plugins.
+executable-plugin sessions and hosted agent-provider sessions. They run as
+normal provider processes from Gestalt's point of view, but instead of exposing
+plugin operations directly, they expose a control plane for starting and
+managing provider processes somewhere else.
 
 ## What a runtime provider does
 
@@ -71,6 +74,7 @@ The runtime surface is intentionally small but lifecycle-oriented:
 | `GetSupport` | Advertise grouped runtime support for this backend. |
 | `StartSession` | Create a hosted runtime session for a plugin. |
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
+| `ListSessions` | Return sessions currently known to the runtime backend. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
 | `BindHostService` | Bind a host-local socket into the runtime session. |
 | `StartPlugin` | Start the hosted plugin and return a host-reachable dial target. |
@@ -78,77 +82,287 @@ The runtime surface is intentionally small but lifecycle-oriented:
 In addition to the runtime-specific RPCs, the provider still implements the
 normal provider lifecycle surface, including `Configure`.
 
-## Go example
+Go, Python, Rust, and TypeScript expose runtime-provider helpers. The examples
+below define provider exports for the source-provider flow, so they do not need
+a hand-written `main` function. Gestalt's build and local-source tooling wraps
+the exported provider for the selected language.
 
-```go
-package exampleruntime
+## SDK examples
 
-import (
-	"context"
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleruntime
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
-)
+    import (
+        "context"
 
-type Provider struct {
-	proto.UnimplementedPluginRuntimeProviderServer
-}
+        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+        "google.golang.org/protobuf/types/known/emptypb"
+    )
 
-func (p *Provider) Configure(context.Context, string, map[string]any) error {
-	return nil
-}
+    type Provider struct {
+        proto.UnimplementedPluginRuntimeProviderServer
+    }
 
-func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
-	return &proto.PluginRuntimeSupport{
-		CanHostPlugins:    true,
-		HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
-		EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-	}, nil
-}
+    func New() *Provider { return &Provider{} }
 
-func (p *Provider) StartSession(context.Context, *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
-	return &proto.PluginRuntimeSession{
-		Id:    "session-1",
-		State: "ready",
-	}, nil
-}
+    func (p *Provider) Configure(context.Context, string, map[string]any) error {
+        return nil
+    }
 
-func (p *Provider) GetSession(context.Context, *proto.GetPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
-	return &proto.PluginRuntimeSession{
-		Id:    "session-1",
-		State: "ready",
-	}, nil
-}
+    func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
+        return &proto.PluginRuntimeSupport{
+            CanHostPlugins:    true,
+            HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
+            EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+        }, nil
+    }
 
-func (p *Provider) StopSession(context.Context, *proto.StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, nil
-}
+    func (p *Provider) StartSession(context.Context, *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
+        return &proto.PluginRuntimeSession{
+            Id:    "session-1",
+            State: "ready",
+        }, nil
+    }
 
-func (p *Provider) BindHostService(context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
-	return &proto.PluginRuntimeHostServiceBinding{
-		Id:        "binding-1",
-		SessionId: req.GetSessionId(),
-		EnvVar:    req.GetEnvVar(),
-		Relay:     req.GetRelay(),
-	}, nil
-}
+    func (p *Provider) GetSession(context.Context, *proto.GetPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
+        return &proto.PluginRuntimeSession{
+            Id:    "session-1",
+            State: "ready",
+        }, nil
+    }
 
-func (p *Provider) StartPlugin(context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
-	return &proto.HostedPlugin{
-		Id:         "plugin-1",
-		SessionId:  req.GetSessionId(),
-		PluginName: req.GetPluginName(),
-		DialTarget: "unix:///tmp/example-runtime/plugin.sock",
-	}, nil
-}
+    func (p *Provider) ListSessions(context.Context, *proto.ListPluginRuntimeSessionsRequest) (*proto.ListPluginRuntimeSessionsResponse, error) {
+        return &proto.ListPluginRuntimeSessionsResponse{
+            Sessions: []*proto.PluginRuntimeSession{
+                {Id: "session-1", State: "ready"},
+            },
+        }, nil
+    }
 
-func main() {
-	if err := gestalt.ServePluginRuntimeProvider(context.Background(), &Provider{}); err != nil {
-		panic(err)
-	}
-}
-```
+    func (p *Provider) StopSession(context.Context, *proto.StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
+        return &emptypb.Empty{}, nil
+    }
+
+    func (p *Provider) BindHostService(context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
+        return &proto.PluginRuntimeHostServiceBinding{
+            Id:        "binding-1",
+            SessionId: req.GetSessionId(),
+            EnvVar:    req.GetEnvVar(),
+            Relay:     req.GetRelay(),
+        }, nil
+    }
+
+    func (p *Provider) StartPlugin(context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
+        return &proto.HostedPlugin{
+            Id:         "plugin-1",
+            SessionId:  req.GetSessionId(),
+            PluginName: req.GetPluginName(),
+            DialTarget: "unix:///tmp/example-runtime/plugin.sock",
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from google.protobuf import empty_pb2
+
+    import gestalt
+    from gestalt.gen.v1 import pluginruntime_pb2 as pb
+
+
+    class ExampleRuntime(gestalt.PluginRuntimeProvider):
+        def GetSupport(self, request, context):
+            return pb.PluginRuntimeSupport(
+                can_host_plugins=True,
+                host_service_access=pb.PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
+                egress_mode=pb.PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+            )
+
+        def StartSession(self, request, context):
+            return pb.PluginRuntimeSession(id="session-1", state="ready")
+
+        def GetSession(self, request, context):
+            return pb.PluginRuntimeSession(id=request.session_id, state="ready")
+
+        def ListSessions(self, request, context):
+            return pb.ListPluginRuntimeSessionsResponse(
+                sessions=[pb.PluginRuntimeSession(id="session-1", state="ready")]
+            )
+
+        def StopSession(self, request, context):
+            return empty_pb2.Empty()
+
+        def BindHostService(self, request, context):
+            return pb.PluginRuntimeHostServiceBinding(
+                id="binding-1",
+                session_id=request.session_id,
+                env_var=request.env_var,
+                relay=request.relay,
+            )
+
+        def StartPlugin(self, request, context):
+            return pb.HostedPlugin(
+                id="plugin-1",
+                session_id=request.session_id,
+                plugin_name=request.plugin_name,
+                dial_target="unix:///tmp/example-runtime/plugin.sock",
+            )
+
+
+    provider = ExampleRuntime()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::proto::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleRuntime;
+
+    #[gestalt::async_trait]
+    impl proto::plugin_runtime_provider_server::PluginRuntimeProvider for ExampleRuntime {
+        async fn get_support(
+            &self,
+            _request: Request<()>,
+        ) -> Result<Response<proto::PluginRuntimeSupport>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSupport {
+                can_host_plugins: true,
+                host_service_access: proto::PluginRuntimeHostServiceAccess::Direct as i32,
+                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
+            }))
+        }
+
+        async fn start_session(
+            &self,
+            _request: Request<proto::StartPluginRuntimeSessionRequest>,
+        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSession {
+                id: "session-1".into(),
+                state: "ready".into(),
+                ..Default::default()
+            }))
+        }
+
+        async fn get_session(
+            &self,
+            request: Request<proto::GetPluginRuntimeSessionRequest>,
+        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSession {
+                id: request.into_inner().session_id,
+                state: "ready".into(),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_sessions(
+            &self,
+            _request: Request<proto::ListPluginRuntimeSessionsRequest>,
+        ) -> Result<Response<proto::ListPluginRuntimeSessionsResponse>, Status> {
+            Ok(Response::new(proto::ListPluginRuntimeSessionsResponse {
+                sessions: vec![proto::PluginRuntimeSession {
+                    id: "session-1".into(),
+                    state: "ready".into(),
+                    ..Default::default()
+                }],
+            }))
+        }
+
+        async fn stop_session(
+            &self,
+            _request: Request<proto::StopPluginRuntimeSessionRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+
+        async fn bind_host_service(
+            &self,
+            request: Request<proto::BindPluginRuntimeHostServiceRequest>,
+        ) -> Result<Response<proto::PluginRuntimeHostServiceBinding>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::PluginRuntimeHostServiceBinding {
+                id: "binding-1".into(),
+                session_id: req.session_id,
+                env_var: req.env_var,
+                relay: req.relay,
+            }))
+        }
+
+        async fn start_plugin(
+            &self,
+            request: Request<proto::StartHostedPluginRequest>,
+        ) -> Result<Response<proto::HostedPlugin>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::HostedPlugin {
+                id: "plugin-1".into(),
+                session_id: req.session_id,
+                plugin_name: req.plugin_name,
+                dial_target: "unix:///tmp/example-runtime/plugin.sock".into(),
+            }))
+        }
+    }
+
+    #[gestalt::async_trait]
+    impl gestalt::PluginRuntimeProvider for ExampleRuntime {}
+
+    gestalt::export_plugin_runtime_provider!(constructor = ExampleRuntime::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      PluginRuntimeEgressMode,
+      PluginRuntimeHostServiceAccess,
+      definePluginRuntimeProvider,
+    } from "@valon-technologies/gestalt";
+
+    export const runtime = definePluginRuntimeProvider({
+      getSupport() {
+        return {
+          canHostPlugins: true,
+          hostServiceAccess: PluginRuntimeHostServiceAccess.DIRECT,
+          egressMode: PluginRuntimeEgressMode.HOSTNAME,
+        };
+      },
+
+      startSession() {
+        return { id: "session-1", state: "ready" };
+      },
+
+      getSession(request) {
+        return { id: request.sessionId, state: "ready" };
+      },
+
+      listSessions() {
+        return [{ id: "session-1", state: "ready" }];
+      },
+
+      async stopSession() {},
+
+      bindHostService(request) {
+        return {
+          id: "binding-1",
+          sessionId: request.sessionId,
+          envVar: request.envVar,
+          ...(request.relay ? { relay: request.relay } : {}),
+        };
+      },
+
+      startPlugin(request) {
+        return {
+          id: "plugin-1",
+          sessionId: request.sessionId,
+          pluginName: request.pluginName,
+          dialTarget: "unix:///tmp/example-runtime/plugin.sock",
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ## Support guidelines
 
@@ -172,10 +386,11 @@ network controls at firewall or CIDR granularity, advertise `cidr`.
 
 Hosted runtime providers should run provider images rather than expect Gestalt
 to upload a provider bundle into the session. The `StartSession` request carries
-the selected image, template, and metadata. `StartPlugin` then carries the
-manifest-derived `command` and `args` to execute inside the image. Execute those
-values exactly as provided by the host after applying any environment variables,
-host-service bindings, and egress policy in the request.
+the selected image, template, metadata, and optional `imagePullAuth`
+configuration. `StartPlugin` then carries the manifest-derived `command` and
+`args` to execute inside the image. Execute those values exactly as provided by
+the host after applying any environment variables, host-service bindings, and
+egress policy in the request.
 
 New providers should populate `support`. That grouped support shape is the
 runtime contract operators see in inspection.
@@ -201,6 +416,14 @@ path. Gestalt currently supports `unix://...`, `tcp://host:port`, and
 If your backend starts the plugin behind a guest-local listener, the runtime
 provider is responsible for bridging that listener back into one of the
 host-reachable forms above.
+
+## Runtime logs
+
+Runtime providers can stream provider-process logs back to Gestalt through the
+runtime log host service. The SDK environment exposes that service as
+`GESTALT_RUNTIME_LOG_SOCKET`; Go providers can use `gestalt.RuntimeLogHost()`.
+Use this for logs that originate in the runtime backend or in hosted provider
+processes before Gestalt has dialed the provider directly.
 
 ## Releasing
 

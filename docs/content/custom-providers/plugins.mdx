@@ -364,7 +364,9 @@ The following example defines a `conversations.getMessage` operation that fetche
             ts: s.string({ description: "Message timestamp" }),
           }),
           output: s.object({
-            message: s.any({ description: "The Slack message object" }),
+            message: s.object({
+              ts: s.string({ description: "Message timestamp" }),
+            }),
           }),
           async handler(input, request) {
             // Call Slack API using request.token as Bearer token.

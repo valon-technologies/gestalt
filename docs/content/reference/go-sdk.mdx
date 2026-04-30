@@ -53,13 +53,14 @@ package exampleagent
 import (
 	"context"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 type Agent struct {
 	proto.UnimplementedAgentProviderServer
 }
+
+func New() *Agent { return &Agent{} }
 
 func (a *Agent) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	return &proto.AgentSession{
@@ -91,7 +92,4 @@ func (a *Agent) GetCapabilities(context.Context, *proto.GetAgentProviderCapabili
 	}, nil
 }
 
-func main() {
-	_ = gestalt.ServeAgentProvider(context.Background(), &Agent{})
-}
 ```

@@ -47,7 +47,6 @@ Implement the `S3` gRPC service:
     import (
     	"context"
 
-    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
     	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
     	"google.golang.org/grpc/codes"
     	"google.golang.org/grpc/status"
@@ -55,6 +54,8 @@ Implement the `S3` gRPC service:
     )
 
     type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
 
     func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
     	_ = config
@@ -94,11 +95,6 @@ Implement the `S3` gRPC service:
     	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
-    func main() {
-    	if err := gestalt.ServeS3Provider(context.Background(), &Provider{}); err != nil {
-    		panic(err)
-    	}
-    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -154,8 +150,7 @@ Implement the `S3` gRPC service:
         ) -> s3_pb2.PresignObjectResponse:
             raise NotImplementedError
 
-    if __name__ == "__main__":
-        MinIOS3().serve()
+    provider = MinIOS3()
     ```
   </Tabs.Tab>
   <Tabs.Tab>

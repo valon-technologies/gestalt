@@ -58,6 +58,9 @@ import {
   type StartProviderRequest,
 } from "../gen/v1/plugin_pb.ts";
 import {
+  PluginRuntimeProvider as PluginRuntimeProviderService,
+} from "../gen/v1/pluginruntime_pb.ts";
+import {
   ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
   ProviderIdentitySchema,
@@ -94,6 +97,11 @@ import {
   connectionParamToProto,
   isPluginProvider,
 } from "./plugin.ts";
+import {
+  PluginRuntimeProvider,
+  createPluginRuntimeProviderService,
+  isPluginRuntimeProvider,
+} from "./pluginruntime.ts";
 import {
   providerKindLabel,
   resolveDefaultProviderExport,
@@ -135,6 +143,7 @@ export const CURRENT_PROTOCOL_VERSION = 3;
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 export { createAgentProviderService } from "./agent.ts";
+export { createPluginRuntimeProviderService } from "./pluginruntime.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
 
 /**
@@ -154,6 +163,7 @@ export type LoadedProvider =
   | CacheProvider
   | SecretsProvider
   | S3Provider
+  | PluginRuntimeProvider
   | AgentProvider
   | WorkflowProvider;
 
@@ -212,6 +222,17 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
     protoKind: ProtoProviderKind.S3,
     registerService(router, provider) {
       router.service(S3Service, createS3Service(provider as S3Provider));
+    },
+  },
+  runtime: {
+    isProvider:
+      isPluginRuntimeProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.RUNTIME,
+    registerService(router, provider) {
+      router.service(
+        PluginRuntimeProviderService,
+        createPluginRuntimeProviderService(provider as PluginRuntimeProvider),
+      );
     },
   },
   agent: {

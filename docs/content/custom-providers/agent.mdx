@@ -51,10 +51,15 @@ Providers can call back into Gestalt through the host service:
 
 | Host method | Purpose |
 | --- | --- |
+| `SearchTools` | Ask Gestalt to resolve candidate tools for the current turn. |
 | `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a turn |
 
 These callbacks work the same way when the provider runs directly on the
 `gestaltd` host or inside a hosted runtime.
+
+The host passes a `tool_grant` to `CreateTurn` when tools are available. Pass
+that grant back to `SearchTools` or `ExecuteTool`; it is the scoped authority
+for resolving or executing tools during that turn.
 
 ## Observability
 
@@ -111,25 +116,25 @@ not normalized. `AgentHost.ExecuteTool` does not emit turn lifecycle events by
 itself; providers should still persist tool events or set `display` on their own
 events.
 
-## Go example
+## SDK examples
 
-<Tabs items={['Go', 'TypeScript']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package main
+    package exampleagent
 
     import (
       "context"
-      "log"
 
-      gestalt "github.com/valon-technologies/gestalt/sdk/go"
       proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
       "google.golang.org/protobuf/types/known/timestamppb"
     )
 
-    type provider struct {
+    type Provider struct {
       proto.UnimplementedAgentProviderServer
     }
+
+    func New() *Provider { return &Provider{} }
 
     func actorFromSubject(subject *proto.AgentSubjectContext) *proto.AgentActor {
       if subject == nil {
@@ -143,7 +148,7 @@ events.
       }
     }
 
-    func (p *provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+    func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
       return &proto.AgentSession{
         Id:           req.GetSessionId(),
         ProviderName: "example",
@@ -156,7 +161,7 @@ events.
       }, nil
     }
 
-    func (p *provider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
+    func (p *Provider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
       return &proto.AgentSession{
         Id:           req.GetSessionId(),
         ProviderName: "example",
@@ -165,11 +170,11 @@ events.
       }, nil
     }
 
-    func (p *provider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
+    func (p *Provider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
       return &proto.ListAgentProviderSessionsResponse{}, nil
     }
 
-    func (p *provider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+    func (p *Provider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
       return &proto.AgentSession{
         Id:           req.GetSessionId(),
         ProviderName: "example",
@@ -180,7 +185,7 @@ events.
       }, nil
     }
 
-    func (p *provider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+    func (p *Provider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
       return &proto.AgentTurn{
         Id:           req.GetTurnId(),
         SessionId:    req.GetSessionId(),
@@ -195,7 +200,7 @@ events.
       }, nil
     }
 
-    func (p *provider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+    func (p *Provider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
       return &proto.AgentTurn{
         Id:           req.GetTurnId(),
         SessionId:    "session-1",
@@ -207,11 +212,11 @@ events.
       }, nil
     }
 
-    func (p *provider) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
+    func (p *Provider) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
       return &proto.ListAgentProviderTurnsResponse{}, nil
     }
 
-    func (p *provider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+    func (p *Provider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
       return &proto.AgentTurn{
         Id:            req.GetTurnId(),
         SessionId:     "session-1",
@@ -223,19 +228,19 @@ events.
       }, nil
     }
 
-    func (p *provider) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
+    func (p *Provider) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
       return &proto.ListAgentProviderTurnEventsResponse{}, nil
     }
 
-    func (p *provider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+    func (p *Provider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
       return &proto.AgentInteraction{Id: req.GetInteractionId()}, nil
     }
 
-    func (p *provider) ListInteractions(context.Context, *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
+    func (p *Provider) ListInteractions(context.Context, *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
       return &proto.ListAgentProviderInteractionsResponse{}, nil
     }
 
-    func (p *provider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+    func (p *Provider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
       return &proto.AgentInteraction{
         Id:         req.GetInteractionId(),
         State:      proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED,
@@ -244,7 +249,7 @@ events.
       }, nil
     }
 
-    func (p *provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+    func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
       return &proto.AgentProviderCapabilities{
         StreamingText:    true,
         ToolCalls:        true,
@@ -254,11 +259,309 @@ events.
       }, nil
     }
 
-    func main() {
-      if err := gestalt.ServeAgentProvider(context.Background(), &provider{}); err != nil {
-        log.Fatal(err)
-      }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+    from gestalt.gen.v1 import agent_pb2 as pb
+
+
+    def actor_from_subject(subject):
+        if subject is None:
+            return None
+        return pb.AgentActor(
+            subject_id=subject.subject_id,
+            subject_kind=subject.subject_kind,
+            display_name=subject.display_name,
+            auth_source=subject.auth_source,
+        )
+
+
+    class ExampleAgent(gestalt.AgentProvider):
+        def CreateSession(self, request, context):
+            return pb.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                model=request.model,
+                client_ref=request.client_ref,
+                state=pb.AGENT_SESSION_STATE_ACTIVE,
+                created_by=request.created_by,
+            )
+
+        def GetSession(self, request, context):
+            return pb.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                state=pb.AGENT_SESSION_STATE_ACTIVE,
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListSessions(self, request, context):
+            return pb.ListAgentProviderSessionsResponse()
+
+        def UpdateSession(self, request, context):
+            return pb.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                client_ref=request.client_ref,
+                state=request.state,
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def CreateTurn(self, request, context):
+            return pb.AgentTurn(
+                id=request.turn_id,
+                session_id=request.session_id,
+                provider_name="example",
+                model=request.model,
+                status=pb.AGENT_EXECUTION_STATUS_RUNNING,
+                messages=request.messages,
+                created_by=request.created_by,
+                execution_ref=request.execution_ref,
+            )
+
+        def GetTurn(self, request, context):
+            return pb.AgentTurn(
+                id=request.turn_id,
+                session_id="session-1",
+                provider_name="example",
+                status=pb.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                output_text="done",
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListTurns(self, request, context):
+            return pb.ListAgentProviderTurnsResponse()
+
+        def CancelTurn(self, request, context):
+            return pb.AgentTurn(
+                id=request.turn_id,
+                session_id="session-1",
+                provider_name="example",
+                status=pb.AGENT_EXECUTION_STATUS_CANCELED,
+                status_message="operator requested",
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListTurnEvents(self, request, context):
+            return pb.ListAgentProviderTurnEventsResponse()
+
+        def GetInteraction(self, request, context):
+            return pb.AgentInteraction(
+                id=request.interaction_id,
+                state=pb.AGENT_INTERACTION_STATE_PENDING,
+            )
+
+        def ListInteractions(self, request, context):
+            return pb.ListAgentProviderInteractionsResponse()
+
+        def ResolveInteraction(self, request, context):
+            return pb.AgentInteraction(
+                id=request.interaction_id,
+                state=pb.AGENT_INTERACTION_STATE_RESOLVED,
+                resolution=request.resolution,
+            )
+
+        def GetCapabilities(self, request, context):
+            return pb.AgentProviderCapabilities(
+                streaming_text=True,
+                tool_calls=True,
+                structured_output=True,
+                interactions=True,
+                resumable_turns=True,
+            )
+
+
+    provider = ExampleAgent()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::proto::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleAgent;
+
+    fn actor_from_subject(subject: Option<proto::AgentSubjectContext>) -> Option<proto::AgentActor> {
+        subject.map(|subject| proto::AgentActor {
+            subject_id: subject.subject_id,
+            subject_kind: subject.subject_kind,
+            display_name: subject.display_name,
+            auth_source: subject.auth_source,
+        })
     }
+
+    #[gestalt::async_trait]
+    impl proto::agent_provider_server::AgentProvider for ExampleAgent {
+        async fn create_session(
+            &self,
+            request: Request<proto::CreateAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                model: req.model,
+                client_ref: req.client_ref,
+                state: proto::AgentSessionState::Active as i32,
+                created_by: req.created_by,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_session(
+            &self,
+            request: Request<proto::GetAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                state: proto::AgentSessionState::Active as i32,
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_sessions(
+            &self,
+            _request: Request<proto::ListAgentProviderSessionsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderSessionsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderSessionsResponse::default()))
+        }
+
+        async fn update_session(
+            &self,
+            request: Request<proto::UpdateAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                client_ref: req.client_ref,
+                state: req.state,
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn create_turn(
+            &self,
+            request: Request<proto::CreateAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: req.session_id,
+                provider_name: "example".into(),
+                model: req.model,
+                status: proto::AgentExecutionStatus::Running as i32,
+                messages: req.messages,
+                created_by: req.created_by,
+                execution_ref: req.execution_ref,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_turn(
+            &self,
+            request: Request<proto::GetAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: "session-1".into(),
+                provider_name: "example".into(),
+                status: proto::AgentExecutionStatus::Succeeded as i32,
+                output_text: "done".into(),
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_turns(
+            &self,
+            _request: Request<proto::ListAgentProviderTurnsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderTurnsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderTurnsResponse::default()))
+        }
+
+        async fn cancel_turn(
+            &self,
+            request: Request<proto::CancelAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: "session-1".into(),
+                provider_name: "example".into(),
+                status: proto::AgentExecutionStatus::Canceled as i32,
+                status_message: "operator requested".into(),
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_turn_events(
+            &self,
+            _request: Request<proto::ListAgentProviderTurnEventsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderTurnEventsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderTurnEventsResponse::default()))
+        }
+
+        async fn get_interaction(
+            &self,
+            request: Request<proto::GetAgentProviderInteractionRequest>,
+        ) -> Result<Response<proto::AgentInteraction>, Status> {
+            Ok(Response::new(proto::AgentInteraction {
+                id: request.into_inner().interaction_id,
+                state: proto::AgentInteractionState::Pending as i32,
+                ..Default::default()
+            }))
+        }
+
+        async fn list_interactions(
+            &self,
+            _request: Request<proto::ListAgentProviderInteractionsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderInteractionsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderInteractionsResponse::default()))
+        }
+
+        async fn resolve_interaction(
+            &self,
+            request: Request<proto::ResolveAgentProviderInteractionRequest>,
+        ) -> Result<Response<proto::AgentInteraction>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentInteraction {
+                id: req.interaction_id,
+                state: proto::AgentInteractionState::Resolved as i32,
+                resolution: req.resolution,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_capabilities(
+            &self,
+            _request: Request<proto::GetAgentProviderCapabilitiesRequest>,
+        ) -> Result<Response<proto::AgentProviderCapabilities>, Status> {
+            Ok(Response::new(proto::AgentProviderCapabilities {
+                streaming_text: true,
+                tool_calls: true,
+                structured_output: true,
+                interactions: true,
+                resumable_turns: true,
+                ..Default::default()
+            }))
+        }
+    }
+
+    #[gestalt::async_trait]
+    impl gestalt::AgentProvider for ExampleAgent {}
+
+    gestalt::export_agent_provider!(constructor = ExampleAgent::default);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -431,6 +734,11 @@ background. Callers then use `GetTurn`, `ListTurnEvents`, and
 If your provider needs durable state, configure `providers.agent.<name>.indexeddb`
 and store your canonical records there. Gestalt does not persist session or
 turn content for you.
+
+When an agent emits turn events, set monotonically increasing `seq` values per
+turn. The optional `display` projection gives CLIs and UIs a provider-neutral
+rendering hint, while the raw `type`, `visibility`, and `data` fields remain
+the canonical event payload.
 
 ## What to read next
 

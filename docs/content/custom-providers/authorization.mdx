@@ -144,11 +144,6 @@ func (p *Provider) WriteModel(_ context.Context, req *gestalt.WriteModelRequest)
 	return &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"}, nil
 }
 
-func main() {
-	if err := gestalt.ServeAuthorizationProvider(context.Background(), New()); err != nil {
-		panic(err)
-	}
-}
 ```
 
 ## Config reference

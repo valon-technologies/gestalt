@@ -98,16 +98,18 @@ The crate is intentionally small:
 - `SecretsProvider` models secrets providers
 - `Workflow`, `WorkflowHost`, and `WorkflowProvider` model workflow clients, host callbacks, and workflow base providers
 - `S3`, `S3Provider`, and `gestalt::s3::*` model S3-compatible object-store clients and providers
+- `PluginRuntimeProvider` models hosted plugin-runtime providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`
 - `Catalog` types expose explicit static or session-scoped catalogs when needed
 - `RuntimeMetadata` lets any provider kind describe its runtime name/display metadata and version
-- `runtime` runs the integration, authentication, cache, secrets, workflow, or S3 gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
+- `runtime` runs the integration, authentication, cache, secrets, workflow, S3, or plugin-runtime gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
 - `export_provider!` exports `__gestalt_serve` and `__gestalt_write_catalog` for integration providers
 - `export_authentication_provider!` exports `__gestalt_serve_authentication` for authentication providers
 - `export_cache_provider!` exports `__gestalt_serve_cache` for cache providers
 - `export_secrets_provider!` exports `__gestalt_serve_secrets` for secrets providers
 - `export_workflow_provider!` exports `__gestalt_serve_workflow` for workflow providers
 - `export_s3_provider!` exports `__gestalt_serve_s3` for S3 providers
+- `export_plugin_runtime_provider!` exports `__gestalt_serve_runtime` for runtime providers
 
 ## Package layout
 

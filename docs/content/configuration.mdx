@@ -149,8 +149,8 @@ plugins:
         repo: valon-technologies/private-providers
         tag: plugins/support/v2.4.0
         asset: provider-release.yaml
-    auth:
-      token: ${GITHUB_TOKEN}
+      auth:
+        token: ${GITHUB_TOKEN}
 ```
 
 During development, point at a local provider manifest instead:
@@ -262,7 +262,7 @@ The built-in `local` runtime handles same-machine execution. Installable
 The current Modal backend requires `runtime.providers.<name>.config.app` and
 `plugins.<name>.execution.runtime.image`. Modal can satisfy plugins that need
 Gestalt-owned services or hostname-based egress when the host is configured for
-the public relay and proxy path. In practice that means `server.baseURL` and
+the public relay and proxy path. In practice that means `server.baseUrl` and
 `server.encryptionKey` must be set, and the runtime must report a compatible
 support profile. Without those prerequisites, Gestalt rejects Modal for plugins
 that require relay-backed host services or hostname-based egress.
@@ -360,7 +360,11 @@ Gestalt stores upstream credentials keyed by user, plugin name, connection name,
 
 ## Exposing over MCP
 
-MCP tool exposure is declared in the provider manifest via `spec.mcp: true`. When enabled, the plugin's operations are available at `/mcp` using the same auth model as the HTTP API.
+MCP tool exposure is declared in the provider manifest via `spec.mcp: true`.
+When enabled, the plugin's operations are available at `/mcp`. The MCP endpoint
+uses the server-wide platform authentication provider in this phase, while
+upstream credentials still come from the plugin connection selected for the MCP
+operation.
 
 ## Secrets
 
@@ -580,7 +584,7 @@ providers:
         defaultModel: fast
         aliases:
           fast: openai/gpt-4.1-mini
-          deep: anthropic/claude-sonnet-4-20250514
+          deep: openai/gpt-5.5
 ```
 
 Agent providers receive canonical session and turn requests with `messages`,

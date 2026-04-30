@@ -13,6 +13,7 @@ use crate::generated::v1::{
     ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
     ProviderKind, StartRuntimeProviderResponse,
 };
+use crate::plugin_runtime::PluginRuntimeProvider;
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider, WorkflowProvider};
@@ -51,6 +52,10 @@ struct SecretsRuntime<P> {
 }
 
 struct S3Runtime<P> {
+    provider: Arc<P>,
+}
+
+struct PluginRuntime<P> {
     provider: Arc<P>,
 }
 
@@ -101,6 +106,7 @@ impl_runtime_hooks!(AuthenticationRuntime, AuthenticationProvider);
 impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 impl_runtime_hooks!(S3Runtime, S3Provider);
+impl_runtime_hooks!(PluginRuntime, PluginRuntimeProvider);
 impl_runtime_hooks!(WorkflowRuntime, WorkflowProvider);
 impl_runtime_hooks!(AgentRuntime, AgentProvider);
 
@@ -166,6 +172,16 @@ impl RuntimeServer {
         Self {
             kind: ProviderKind::S3,
             provider: Arc::new(S3Runtime { provider }),
+        }
+    }
+
+    pub fn for_plugin_runtime<P>(provider: Arc<P>) -> Self
+    where
+        P: PluginRuntimeProvider,
+    {
+        Self {
+            kind: ProviderKind::Runtime,
+            provider: Arc::new(PluginRuntime { provider }),
         }
     }
 

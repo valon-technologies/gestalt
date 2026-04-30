@@ -29,6 +29,7 @@ from gestalt import (
     MetadataProvider,
     Plugin,
     PluginProviderAdapter,
+    PluginRuntimeProvider,
     ProviderKind,
     ProviderMetadata,
     Request,
@@ -43,6 +44,7 @@ from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+from gestalt.gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt.gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -53,6 +55,7 @@ duration_pb2: Any = _duration_pb2
 empty_pb2: Any = _empty_pb2
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
+pluginruntime_pb2_grpc: Any = _pluginruntime_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
@@ -1211,6 +1214,74 @@ class S3RuntimeTests(unittest.TestCase):
         self.assertIsInstance(servable, PluginProviderAdapter)
         servable = cast(PluginProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.S3)
+        self.assertIs(servable.provider, provider)
+
+
+class PluginRuntimeRuntimeTests(unittest.TestCase):
+    class StubPluginRuntimeProvider(
+        PluginRuntimeProvider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
+        def configure(self, name: str, config: dict[str, Any]) -> None:
+            self.configured = (name, dict(config))
+
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.RUNTIME,
+                name="stub-runtime",
+                display_name="Stub Runtime",
+                description="test runtime provider",
+                version="0.3.0",
+            )
+
+        def warnings(self) -> list[str]:
+            return ["set RUNTIME_ENDPOINT"]
+
+        def health_check(self) -> None:
+            return None
+
+    def test_normalized_runtime_kind_recognizes_runtime(self) -> None:
+        self.assertEqual(
+            _runtime._normalized_runtime_kind("runtime"),
+            ProviderKind.RUNTIME,
+        )
+
+    def test_runtime_metadata_and_plugin_runtime_registration(self) -> None:
+        provider = self.StubPluginRuntimeProvider()
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.RUNTIME,
+        )
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_RUNTIME)
+        self.assertEqual(meta.name, "stub-runtime")
+        self.assertEqual(list(meta.warnings), ["set RUNTIME_ENDPOINT"])
+
+        adapter = _runtime._plugin_runtime_runtime_plugin(provider)
+        server = mock.Mock()
+        with mock.patch.object(
+            pluginruntime_pb2_grpc,
+            "add_PluginRuntimeProviderServicer_to_server",
+        ) as add_runtime:
+            adapter.register_services(server, provider)
+        add_runtime.assert_called_once()
+        wrapped, registered_server = add_runtime.call_args.args
+        self.assertIsNot(wrapped, provider)
+        self.assertIs(getattr(wrapped, "_provider"), provider)
+        self.assertIs(registered_server, server)
+
+    def test_servable_target_wraps_plugin_runtime_provider(self) -> None:
+        provider = self.StubPluginRuntimeProvider()
+        servable = _runtime._servable_target(
+            provider,
+            runtime_kind=ProviderKind.RUNTIME,
+        )
+        self.assertIsInstance(servable, PluginProviderAdapter)
+        servable = cast(PluginProviderAdapter, servable)
+        self.assertEqual(servable.kind, ProviderKind.RUNTIME)
         self.assertIs(servable.provider, provider)
 
 

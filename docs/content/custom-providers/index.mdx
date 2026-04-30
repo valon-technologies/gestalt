@@ -10,13 +10,12 @@ deployment, start with [Providers](/providers).
 
 ## What belongs here
 
-- Implementing executable or declarative plugin providers
-- Implementing custom runtime providers for hosted executable-plugin execution
-- Implementing custom agent providers for session-and-turn reasoning backends
-- Building custom authentication, authorization, cache, IndexedDB, S3, secrets,
-  workflow, and UI providers
-- Testing providers from local source with `source: ./manifest.yaml`
-- Packaging releases with `gestaltd provider release`
+The pages here cover executable and declarative plugin providers, custom
+runtime providers for hosted execution, agent providers for session-and-turn
+reasoning backends, workflow providers, and the host providers that back
+authentication, authorization, cache, IndexedDB, S3, secrets, and UI bundles.
+They also cover local source testing with `source: ./manifest.yaml` and release
+packaging with `gestaltd provider release`.
 
 ## Runtime model
 
@@ -37,10 +36,7 @@ providers:
 
 ## Choose a starting point
 
-- [Plugin](/custom-providers/plugins): custom tool providers, executable
-  operations, declarative surfaces, and hybrid catalogs
 - [Agent](/custom-providers/agent): custom session-and-turn agent providers and tool callbacks
-- [Runtime](/custom-providers/runtime): hosted runtime backends for executable plugins
 - [Authentication](/custom-providers/authentication): platform login providers and optional bearer
   token validation
 - [Authorization](/custom-providers/authorization): subject authorization
@@ -48,14 +44,17 @@ providers:
 - [Cache](/custom-providers/cache): plugin-bound cache backends
 - [IndexedDB](/custom-providers/indexeddb): custom storage backends for system
   state
+- [Plugin](/custom-providers/plugins): custom tool providers, executable
+  operations, declarative surfaces, and hybrid catalogs
+- [Runtime](/custom-providers/runtime): hosted runtime backends for executable plugins
 - [S3](/custom-providers/s3): custom object-store backends for executable
   plugins
 - [Secret](/custom-providers/secrets): secret managers for structured secret
   refs
   resolution
-- [Workflow](/custom-providers/workflow): workflow run, schedule, and
-  event-trigger providers
 - [UI](/custom-providers/ui): public UI bundles served under
   configured path prefixes
+- [Workflow](/custom-providers/workflow): workflow run, schedule, and
+  event-trigger providers
 - [Releasing](/custom-providers/releasing): packaging, platform builds, and
   release archives
