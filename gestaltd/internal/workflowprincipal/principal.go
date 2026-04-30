@@ -12,6 +12,9 @@ func FromExecutionReference(ref *coreworkflow.ExecutionReference) *principal.Pri
 		return nil
 	}
 	compiled := principal.CompilePermissions(ref.Permissions)
+	if ref.Permissions != nil && compiled == nil {
+		compiled = principal.PermissionSet{}
+	}
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(ref.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(ref.CredentialSubjectID),

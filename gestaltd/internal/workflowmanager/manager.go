@@ -39,6 +39,7 @@ var (
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 const workflowRunExecutionRefBasePrefix = "workflow_run:"
+const workflowNoProviderPermissionsPlugin = "__gestalt.workflow.no_provider_permissions__"
 const defaultWorkflowEventSpecVersion = "1.0"
 
 type signalTargetPrincipalSource uint8
@@ -400,8 +401,15 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 
-	executionRefID := runExecutionRefID(uuid.NewString())
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	executionRefPermissions := m.executionRefPermissions(p, target, req.CallerPluginName)
+	if !m.allowTarget(ctx, executionRefPrincipal(p, executionRefPermissions), target) {
+		return nil, core.ErrNotFound
+	}
+	executionRefID, err := signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerPluginName, executionRefPermissions)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
@@ -414,17 +422,9 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		Signal:         signal,
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, ref)
 		return nil, err
 	}
-	if resp == nil || resp.Run == nil || strings.TrimSpace(resp.Run.ExecutionRef) != executionRefID {
-		m.revokeExecutionRef(ctx, ref)
-	}
-	managed, err := m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
-	if err != nil && resp != nil && resp.Run != nil && strings.TrimSpace(resp.Run.ExecutionRef) == executionRefID {
-		m.revokeExecutionRef(ctx, ref)
-	}
-	return managed, err
+	return m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
 }
 
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
@@ -1233,6 +1233,31 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	})
 }
 
+func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+	store, err := workflowExecutionReferenceStore(providerName, provider)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := store.GetExecutionReference(ctx, executionRefID)
+	if err == nil {
+		existing = workflowExecutionRefForProvider(existing, providerName)
+		if !signalOrStartExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, permissions) {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
+		}
+		if executionRefActive(existing) {
+			return existing, nil
+		}
+	} else if !isWorkflowProviderNotFound(err) {
+		return nil, err
+	}
+
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	return ref, nil
+}
+
 func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerPluginName string) []core.AccessPermission {
 	p = principal.Canonicalized(p)
 	if p == nil || p.TokenPermissions == nil {
@@ -1255,7 +1280,27 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 			addWorkflowPermission(permissions, pluginName, operation)
 		}
 	}
-	return principal.PermissionsToAccessPermissions(permissions)
+	out := principal.PermissionsToAccessPermissions(permissions)
+	if len(out) == 0 {
+		return []core.AccessPermission{{Plugin: workflowNoProviderPermissionsPlugin}}
+	}
+	return out
+}
+
+func executionRefPrincipal(p *principal.Principal, permissions []core.AccessPermission) *principal.Principal {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return nil
+	}
+	compiled := principal.CompilePermissions(permissions)
+	if permissions != nil && compiled == nil {
+		compiled = principal.PermissionSet{}
+	}
+	next := *p
+	next.TokenPermissions = compiled
+	next.ActionPermissions = nil
+	next.Scopes = principal.PermissionPlugins(compiled)
+	return principal.Canonicalize(&next)
 }
 
 func (m *Manager) callerPluginDeclaresInvoke(callerPluginName, pluginName, operation string) bool {
@@ -1693,6 +1738,28 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 	return coreworkflow.TargetsEqual(target, ref.Target)
 }
 
+func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) bool {
+	if ref == nil {
+		return false
+	}
+	if strings.TrimSpace(ref.ID) != strings.TrimSpace(executionRefID) {
+		return false
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+		return false
+	}
+	if strings.TrimSpace(ref.CallerPluginName) != strings.TrimSpace(callerPluginName) {
+		return false
+	}
+	if strings.TrimSpace(ref.CredentialSubjectID) != strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))) {
+		return false
+	}
+	if executionRefPermissionsScope(ref.Permissions) != executionRefPermissionsScope(permissions) {
+		return false
+	}
+	return executionRefOwnedBy(ref, p) && targetMatchesExecutionRef(target, ref)
+}
+
 func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {
 	return coreworkflow.EventMatch{
 		Type:    strings.TrimSpace(match.Type),
@@ -1822,6 +1889,71 @@ func runExecutionRefID(value string) string {
 		value = uuid.NewString()
 	}
 	return workflowRunExecutionRefBasePrefix + value
+}
+
+func signalOrStartExecutionRefID(providerName, workflowKey string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (string, error) {
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		return "", fmt.Errorf("workflow target fingerprint: %w", err)
+	}
+	scope := strings.Join([]string{
+		"gestalt.workflow.run.signal_or_start.ref.v2",
+		strings.TrimSpace(providerName),
+		strings.TrimSpace(workflowKey),
+		strings.TrimSpace(principalSubjectID(p)),
+		strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		strings.TrimSpace(callerPluginName),
+		targetFingerprint,
+		executionRefPermissionsScope(permissions),
+	}, "\x00")
+	return runExecutionRefID(uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()), nil
+}
+
+func executionRefPermissionsScope(permissions []core.AccessPermission) string {
+	if permissions == nil {
+		return "nil"
+	}
+	if len(permissions) == 0 {
+		return "empty"
+	}
+	var b strings.Builder
+	b.WriteString("set\x1f")
+	wrote := false
+	for _, permission := range permissions {
+		plugin := strings.TrimSpace(permission.Plugin)
+		if plugin == "" {
+			continue
+		}
+		wrote = true
+		b.WriteString(plugin)
+		b.WriteByte('\x1e')
+		operations := append([]string(nil), permission.Operations...)
+		sort.Strings(operations)
+		for _, operation := range operations {
+			operation = strings.TrimSpace(operation)
+			if operation == "" {
+				continue
+			}
+			b.WriteString(operation)
+			b.WriteByte('\x1d')
+		}
+		b.WriteByte('\x1e')
+		actions := append([]string(nil), permission.Actions...)
+		sort.Strings(actions)
+		for _, action := range actions {
+			action = strings.TrimSpace(action)
+			if action == "" {
+				continue
+			}
+			b.WriteString(action)
+			b.WriteByte('\x1d')
+		}
+		b.WriteByte('\x1f')
+	}
+	if !wrote {
+		return "empty"
+	}
+	return b.String()
 }
 
 func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Principal, providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse, candidateRef *coreworkflow.ExecutionReference, targetPrincipalSource signalTargetPrincipalSource) (*ManagedRunSignal, error) {

@@ -3,6 +3,8 @@ package workflow
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -334,6 +336,15 @@ func TargetsEqual(left, right Target) bool {
 	}
 	rightJSON, rightErr := json.Marshal(normalizedTargetComparisonPayload(right))
 	return rightErr == nil && bytes.Equal(leftJSON, rightJSON)
+}
+
+func TargetFingerprint(target Target) (string, error) {
+	data, err := json.Marshal(normalizedTargetComparisonPayload(target))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 type targetComparisonPayload struct {
