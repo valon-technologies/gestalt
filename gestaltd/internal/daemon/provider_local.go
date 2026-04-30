@@ -484,7 +484,7 @@ func providerRemoteCreateSessionError(err error) error {
 	}
 	return fmt.Errorf(`%w
 
-remote provider-dev attach was denied. The remote plugin must grant providerDev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
+remote provider-dev attach was denied. The remote plugin must grant dev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
 
 provider scopes, operation permissions, and subject-owned API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
 }

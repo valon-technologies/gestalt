@@ -153,13 +153,13 @@ server:
 			wantErr: `server.dev.attachmentState "sharedRelay" is not supported`,
 		},
 		{
-			name: "process local remote attach",
+			name: "process local attachment state is rejected",
 			yaml: `
 server:
   dev:
     attachmentState: processLocal
 `,
-			wantState: DevAttachmentStateProcessLocal,
+			wantErr: `server.dev.attachmentState "processLocal" is not supported`,
 		},
 		{
 			name: "indexeddb remote attach",

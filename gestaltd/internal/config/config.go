@@ -1408,10 +1408,7 @@ type DevConfig struct {
 
 type DevAttachmentState string
 
-const (
-	DevAttachmentStateProcessLocal DevAttachmentState = "processLocal"
-	DevAttachmentStateIndexedDB    DevAttachmentState = "indexeddb"
-)
+const DevAttachmentStateIndexedDB DevAttachmentState = "indexeddb"
 
 type ServerRuntimeConfig struct {
 	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`
