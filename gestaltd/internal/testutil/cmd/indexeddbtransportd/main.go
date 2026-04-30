@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbtransport"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 )
@@ -125,7 +125,7 @@ func startTLSRelay(address string, certFile string, keyFile string, expectToken 
 	server := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if expectToken != "" {
-				token := strings.TrimSpace(r.Header.Get(providerhost.HostServiceRelayTokenHeader))
+				token := strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader))
 				if token != expectToken {
 					writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
 					return
@@ -166,7 +166,7 @@ func newRuntimeRelayProxy(socketPath string) *httputil.ReverseProxy {
 			pr.Out.URL.Scheme = "http"
 			pr.Out.URL.Host = target
 			pr.Out.Host = target
-			pr.Out.Header.Del(providerhost.HostServiceRelayTokenHeader)
+			pr.Out.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		},
 		Transport: &http2.Transport{
 			AllowHTTP: true,

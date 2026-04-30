@@ -13,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -83,7 +84,7 @@ func validateRelayToken(ctx context.Context, expected string) error {
 	if !ok {
 		return status.Error(codes.Unauthenticated, "missing relay token metadata")
 	}
-	values := md.Get(providerhost.HostServiceRelayTokenHeader)
+	values := md.Get(runtimehost.HostServiceRelayTokenHeader)
 	if len(values) == 0 || strings.TrimSpace(values[0]) != expected {
 		return status.Error(codes.Unauthenticated, "invalid relay token metadata")
 	}

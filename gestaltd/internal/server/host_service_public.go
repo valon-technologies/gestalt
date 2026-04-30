@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
@@ -70,7 +69,7 @@ func (k hostServiceHandlerKey) String() string {
 	return strings.Join(parts, "/")
 }
 
-func (s *Server) hostServiceHandler(ctx context.Context, target providerhost.HostServiceRelayTarget) (http.Handler, error) {
+func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
 	if s == nil {
 		return nil, nil
 	}

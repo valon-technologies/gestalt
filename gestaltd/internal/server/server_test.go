@@ -65,6 +65,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -426,7 +427,7 @@ func (s *relayTestCacheServer) Get(ctx context.Context, req *proto.CacheGetReque
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		s.mu.Lock()
 		s.keys = append(s.keys, req.GetKey())
-		s.receivedTokens = append(s.receivedTokens, md.Get(providerhost.HostServiceRelayTokenHeader)...)
+		s.receivedTokens = append(s.receivedTokens, md.Get(runtimehost.HostServiceRelayTokenHeader)...)
 		s.mu.Unlock()
 	}
 	return &proto.CacheGetResponse{
@@ -501,11 +502,11 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 	publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
@@ -522,7 +523,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if err != nil {
@@ -541,7 +542,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	sessionVerifier.setActive("session-1", false)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
 		t.Fatalf("Cache.Get stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
@@ -554,7 +555,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	publicHostServices.Unregister("support", hostService)
 	unregisteredCtx, unregisteredCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer unregisteredCancel()
-	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	_, err = proto.NewCacheClient(conn).Get(unregisteredCtx, &proto.CacheGetRequest{Key: "unregistered"})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("Cache.Get unregistered provider code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
@@ -589,11 +590,11 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
@@ -610,7 +611,7 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "active"}); err != nil {
 		t.Fatalf("Cache.Get via session relay: %v", err)
 	}
@@ -618,7 +619,7 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 	publicHostServices.UnregisterSession("support", "session-1", hostService)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
 	if grpcstatus.Code(err) != codes.Unavailable {
 		t.Fatalf("Cache.Get unregistered session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
@@ -645,7 +646,7 @@ func TestHostServiceRelayRejectsInvalidToken(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, "not-a-valid-token"))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, "not-a-valid-token"))
 
 	_, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
@@ -677,11 +678,11 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
@@ -698,7 +699,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	_, err = proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if grpcstatus.Code(err) != codes.PermissionDenied {
@@ -731,11 +732,11 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
@@ -749,7 +750,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	recordValue, err := gestaltsdk.RecordToProto(gestaltsdk.Record{"id": "task-1", "value": "ship-it"})
 	if err != nil {

@@ -117,7 +117,7 @@ type Server struct {
 	meterProvider          metric.MeterProvider
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
-	hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
+	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[hostServiceHandlerKey]hostServiceHandlerEntry
 	hostServiceVersion     uint64
@@ -289,11 +289,11 @@ func New(cfg Config) (*Server, error) {
 	if cfg.MeterProvider != nil {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
-	var hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
+	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	var egressProxyTokens *providerhost.EgressProxyTokenManager
 	var s3ObjectAccessURLs *providerhost.S3ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
-		hostServiceRelayTokens, err = providerhost.NewHostServiceRelayTokenManager(cfg.StateSecret)
+		hostServiceRelayTokens, err = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -103,11 +104,11 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		}
 	})
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "cache",
@@ -129,7 +130,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
 	if err != nil {

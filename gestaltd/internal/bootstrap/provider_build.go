@@ -1739,11 +1739,11 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 	if err != nil {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, err
 	}
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
 	if err != nil {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
-	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   providerName,
 		SessionID:    sessionID,
 		Service:      serviceKey,
