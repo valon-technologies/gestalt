@@ -6,7 +6,8 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 
 | Path | Purpose |
 | --- | --- |
-| `gestaltd/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
+| `gestaltd/cmd/gestaltd` | Thin server executable entrypoint. |
+| `gestaltd/internal/daemon` | Server command handling, runtime composition, and built-in registration. |
 | `gestaltd/core` | Public Go interfaces for auth, datastore, secrets, cache, telemetry, and providers. |
 | `gestaltd/internal` | Bootstrap, config loading, invocation, HTTP and MCP serving, operator lifecycle, and other server internals. |
 | `gestaltd/internal/ui` | Embedded admin UI asset serving and related tests. |
@@ -23,7 +24,7 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 When you update docs, keep them aligned with:
 
 - config structs in `gestaltd/internal/config`
-- bootstrap wiring in `gestaltd/cmd/gestaltd` and `gestaltd/internal/bootstrap`
+- bootstrap wiring in `gestaltd/internal/daemon` and `gestaltd/internal/bootstrap`
 - HTTP and MCP behavior in `gestaltd/internal/server` and `gestaltd/internal/mcp`
 - admin and mounted UI behavior in `gestaltd/internal/ui` and `gestaltd/internal/server/mounted_ui.go`
 - deployment assets in `gestaltd/Dockerfile` and `gestaltd/deploy/helm`
@@ -128,7 +129,7 @@ Keep the bare semantic version aligned across artifacts when they are meant to s
 
 If you add a new built-in auth provider, datastore, secret manager, telemetry sink, audit sink, or named provider:
 
-1. Register it in the relevant `gestaltd/cmd/gestaltd` file.
+1. Register it in the relevant `gestaltd/internal/daemon` file.
 2. Add or update tests.
 3. Update [First-Party Providers](https://gestaltd.ai/reference/built-in-providers).
 4. Update any docs or examples that describe the supported inventory.

@@ -1,4 +1,4 @@
-package main
+package daemon
 
 import (
 	"flag"
@@ -16,6 +16,11 @@ import (
 
 type repeatedStringFlag []string
 
+type Options struct {
+	Version string
+	Args    []string
+}
+
 func (f *repeatedStringFlag) String() string {
 	return strings.Join(*f, ",")
 }
@@ -25,7 +30,15 @@ func (f *repeatedStringFlag) Set(value string) error {
 	return nil
 }
 
-func run(args []string) error {
+func Run(opts Options) error {
+	version := opts.Version
+	if version == "" {
+		version = "dev"
+	}
+	return run(opts.Args, version)
+}
+
+func run(args []string, version string) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "-h", "--help", "help":

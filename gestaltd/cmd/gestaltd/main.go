@@ -6,12 +6,17 @@ import (
 	"log/slog"
 	"os"
 	_ "time/tzdata"
+
+	"github.com/valon-technologies/gestalt/server/internal/daemon"
 )
 
 var version = "dev"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := daemon.Run(daemon.Options{
+		Version: version,
+		Args:    os.Args[1:],
+	}); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
