@@ -74,6 +74,9 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*providermanif
 	if err := validateManifest(&manifest, sourceMode); err != nil {
 		return nil, err
 	}
+	if _, err := normalizeManifestKind(&manifest); err != nil {
+		return nil, err
+	}
 	return &manifest, nil
 }
 
@@ -102,6 +105,14 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	kind := providermanifestv1.NormalizeKind(manifest.Kind)
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
 		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, external_credentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
+	}
+	return kind, nil
+}
+
+func normalizeManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return "", err
 	}
 	manifest.Kind = kind
 	return kind, nil
@@ -639,17 +650,41 @@ func EncodeSourceManifestFormat(manifest *providermanifestv1.Manifest, format st
 }
 
 func encodeManifestFormat(manifest *providermanifestv1.Manifest, format string, sourceMode bool) ([]byte, error) {
-	if err := validateManifest(manifest, sourceMode); err != nil {
+	encodedManifest, err := cloneManifest(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("clone manifest: %w", err)
+	}
+	if err := validateManifest(encodedManifest, sourceMode); err != nil {
+		return nil, err
+	}
+	if _, err := normalizeManifestKind(encodedManifest); err != nil {
 		return nil, err
 	}
 	switch format {
 	case ManifestFormatJSON:
-		return encodeManifestJSON(manifest)
+		return encodeManifestJSON(encodedManifest)
 	case ManifestFormatYAML:
-		return encodeManifestYAML(manifest)
+		return encodeManifestYAML(encodedManifest)
 	default:
 		return nil, fmt.Errorf("unsupported manifest format %q", format)
 	}
+}
+
+func cloneManifest(manifest *providermanifestv1.Manifest) (*providermanifestv1.Manifest, error) {
+	if manifest == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	var cloned providermanifestv1.Manifest
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		return nil, err
+	}
+	return &cloned, nil
 }
 
 func encodeManifestJSON(manifest *providermanifestv1.Manifest) ([]byte, error) {

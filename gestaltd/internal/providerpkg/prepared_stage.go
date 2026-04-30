@@ -1,7 +1,6 @@
 package providerpkg
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -326,23 +325,6 @@ func writePreparedManifestFile(path, manifestFormat string, manifest *providerma
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 	return os.WriteFile(path, data, 0o644)
-}
-
-func cloneManifest(manifest *providermanifestv1.Manifest) (*providermanifestv1.Manifest, error) {
-	if manifest == nil {
-		return nil, nil
-	}
-
-	data, err := json.Marshal(manifest)
-	if err != nil {
-		return nil, err
-	}
-
-	var cloned providermanifestv1.Manifest
-	if err := json.Unmarshal(data, &cloned); err != nil {
-		return nil, err
-	}
-	return &cloned, nil
 }
 
 func copyPreparedInstallDir(src, dst string) error {

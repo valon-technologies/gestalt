@@ -70,6 +70,46 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 
 }
 
+func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
+	t.Parallel()
+
+	artifactPath := testArtifactPath("auth")
+	manifest := &providermanifestv1.Manifest{
+		Kind:    "auth",
+		Source:  "github.com/acme/plugins/auth",
+		Version: "1.0.0",
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     testArtifactOS,
+			Arch:   testArtifactArch,
+			Path:   artifactPath,
+			SHA256: sha256Hex("auth"),
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}
+
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		t.Fatalf("ManifestKind: %v", err)
+	}
+	if kind != providermanifestv1.KindAuthentication {
+		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindAuthentication)
+	}
+	if manifest.Kind != "auth" {
+		t.Fatalf("ManifestKind mutated manifest kind to %q", manifest.Kind)
+	}
+
+	encoded, err := EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if manifest.Kind != "auth" {
+		t.Fatalf("EncodeManifest mutated manifest kind to %q", manifest.Kind)
+	}
+	if !strings.Contains(string(encoded), `"kind": "authentication"`) {
+		t.Fatalf("encoded manifest did not normalize kind:\n%s", encoded)
+	}
+}
+
 func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
 	t.Parallel()
 
