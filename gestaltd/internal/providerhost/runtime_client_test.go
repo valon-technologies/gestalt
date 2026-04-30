@@ -3,6 +3,7 @@ package providerhost
 import (
 	"context"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
@@ -108,6 +109,53 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 	}
 	if len(meta.Warnings) != 1 || meta.Warnings[0] != "configured" {
 		t.Fatalf("Warnings = %#v, want %#v", meta.Warnings, []string{"configured"})
+	}
+}
+
+func TestConfigureRuntimeProviderUsesMigrationTimeoutWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	assertMigrationDeadline := func(t *testing.T, ctx context.Context) {
+		t.Helper()
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("provider configure context has no deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining <= providerConfigureTimeout || remaining > providerMigrateTimeout {
+			t.Fatalf("provider configure deadline remaining = %s, want migration budget above %s", remaining, providerConfigureTimeout)
+		}
+	}
+
+	configureCalled := false
+	client := &fakeProviderLifecycleClient{
+		getProviderIdentity: func(ctx context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*proto.ProviderIdentity, error) {
+			assertMigrationDeadline(t, ctx)
+			return &proto.ProviderIdentity{
+				Kind:               proto.ProviderKind_PROVIDER_KIND_WORKFLOW,
+				Name:               "indexeddb",
+				MinProtocolVersion: proto.CurrentProtocolVersion,
+				MaxProtocolVersion: proto.CurrentProtocolVersion,
+			}, nil
+		},
+		configureProvider: func(ctx context.Context, _ *proto.ConfigureProviderRequest, _ ...grpc.CallOption) (*proto.ConfigureProviderResponse, error) {
+			assertMigrationDeadline(t, ctx)
+			configureCalled = true
+			return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+		},
+	}
+
+	if _, err := ConfigureRuntimeProvider(
+		WithProviderMigrationTimeout(context.Background()),
+		client,
+		proto.ProviderKind_PROVIDER_KIND_WORKFLOW,
+		"indexeddb",
+		nil,
+	); err != nil {
+		t.Fatalf("ConfigureRuntimeProvider: %v", err)
+	}
+	if !configureCalled {
+		t.Fatal("ConfigureProvider was not called")
 	}
 }
 
