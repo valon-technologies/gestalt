@@ -18,7 +18,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "root",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "[--config PATH]...", "--lockfile PATH"},
+			wantParts: []string{"gestaltd validate", "gestaltd lock", "gestaltd sync --locked", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "[--config PATH]...", "--lockfile PATH"},
 			notWant:   []string{"gestaltd bundle", "gestaltd dev"},
 		},
 		{
@@ -29,7 +29,17 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "init",
 			args:      []string{"init", "--help"},
-			wantParts: []string{"gestaltd init", "When repeated, --config files merge left-to-right.", "--lockfile PATH"},
+			wantParts: []string{"gestaltd init", "Legacy alias for `gestaltd lock`", "When repeated, --config files merge left-to-right.", "--lockfile PATH"},
+		},
+		{
+			name:      "lock",
+			args:      []string{"lock", "--help"},
+			wantParts: []string{"gestaltd lock", "write canonical lock metadata", "--platform", "--check"},
+		},
+		{
+			name:      "sync",
+			args:      []string{"sync", "--help"},
+			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--check"},
 		},
 		{
 			name:      "provider",
@@ -103,6 +113,11 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "validate trailing args",
 			args:     []string{"validate", "--config", "foo.yaml", "extra"},
 			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "init artifacts dir rejected",
+			args:     []string{"init", "--artifacts-dir", "/tmp/gestaltd-artifacts"},
+			wantPart: "gestaltd init no longer accepts --artifacts-dir",
 		},
 		{
 			name:     "missing validate config",

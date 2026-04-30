@@ -44,7 +44,7 @@ volumes:
 | Variants | `:latest-alpine` (Alpine, has shell) |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
-| Default command | `serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data` |
+| Default command | `serve --config /etc/gestalt/config.yaml --artifacts-dir /data` |
 | Config path | `/etc/gestalt/config.yaml` |
 | Data directory | `/data` |
 
@@ -52,7 +52,7 @@ For the CLI client image, see [Client Docker Image](/client/cli/docker).
 
 ## Production image
 
-For deterministic production deployments, run `gestaltd init` locally to resolve plugins and write lock state, then bake the result into a derived image:
+For deterministic production deployments, run `gestaltd lock` and `gestaltd sync --locked` during image build, then bake the lockfile and prepared artifacts into a derived image:
 
 ```
 deploy/
@@ -68,7 +68,7 @@ COPY deploy/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
-This produces a self-contained image that starts without fetching or resolving anything at runtime.
+This produces a self-contained image that starts without fetching, resolving, or writing provider artifacts at runtime.
 
 See [Configuration](/configuration) for what `gestalt.lock.json` records and
 why `serve --locked` depends on it.

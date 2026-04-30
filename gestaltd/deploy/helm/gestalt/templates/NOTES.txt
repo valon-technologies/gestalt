@@ -68,7 +68,13 @@ For Google OAuth:
 For OIDC, override config.auth.plugin in your values file.
 {{- if .Values.pluginInit.enabled }}
 
-Plugin init is enabled. An init container runs `gestaltd init` before
-the main server starts, preparing locked state in a shared volume.
+Plugin init is enabled. An init container runs `gestaltd lock` followed by
+`gestaltd sync --locked` before the main server starts, preparing locked state
+in a shared volume.
 The main container runs with --locked to prevent mutation at startup.
+{{- else if .Values.lockedServe.enabled }}
+
+Locked serve is enabled. The main container runs with --locked and expects
+lock state plus prepared artifacts to be present from the image or external
+mounts before startup.
 {{- end }}

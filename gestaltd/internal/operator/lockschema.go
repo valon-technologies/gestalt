@@ -229,13 +229,13 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 
 func validateProviderLockfile(lock *providerLockfile) error {
 	if lock == nil {
-		return fmt.Errorf("unsupported lockfile schema; run `gestaltd init` to upgrade")
+		return fmt.Errorf("unsupported lockfile schema; run `gestaltd lock` to upgrade")
 	}
 	if lock.Schema != providerLockSchemaName {
-		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
+		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd lock` to upgrade", lock.Schema)
 	}
 	if lock.SchemaVersion != providerLockSchemaVersion {
-		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
+		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd lock` to upgrade", lock.SchemaVersion)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@
 - Default command:
 
   ```sh
-  /gestaltd serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data
+  /gestaltd serve --config /etc/gestalt/config.yaml --artifacts-dir /data
   ```
 
 - Default config path: `/etc/gestalt/config.yaml`
@@ -96,9 +96,9 @@ volumes:
 
 ## Production images
 
-For deterministic production deployments, run `gestaltd init` locally to
-resolve providers and write `gestalt.lock.json`, then bake the result into a
-derived image:
+For deterministic production deployments, run `gestaltd lock` and
+`gestaltd sync --locked` before runtime, then bake the lockfile and prepared
+artifacts into a derived image:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest-alpine
@@ -107,7 +107,7 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
 See the [deployment documentation](https://gestaltd.ai/deploy) for the full
-vendored-artifacts vs lockfile-only workflow and recommended patterns.
+lock/sync/serve workflow and recommended patterns.
 
 ## Configuration and environment variables
 
@@ -166,9 +166,9 @@ docker run --rm valontechnologies/gestaltd:latest --help
 
 ## Caveats
 
-- The published image defaults to locked startup. A missing config file,
-  missing lockfile, or unwritable artifacts directory causes startup to fail
-  fast.
+- The published image defaults to unlocked startup for local usability. For
+  production, bake locked state and override the command to
+  `serve --locked --config ...`.
 - `docker run valontechnologies/gestaltd:latest` by itself fails because the
   image does not auto-generate config in-container.
 - The default image does not include a shell. Use `-alpine` for debugging.

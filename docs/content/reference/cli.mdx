@@ -10,21 +10,24 @@ import { Callout } from 'nextra/components'
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
-| `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. Repeat `--config` to layer overrides. |
+| `gestaltd serve --locked --config PATH` | Start read-only from an existing lockfile and prepared artifacts. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
-| `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. Repeat `--config` to layer overrides. |
-| `gestaltd init --artifacts-dir DIR` | Directory for prepared provider artifacts. |
-| `gestaltd init --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
+| `gestaltd lock --config PATH` | Resolve published provider sources and write canonical lock metadata. Repeat `--config` to layer overrides. |
+| `gestaltd lock --check --config PATH` | Verify that the checked-in lockfile matches the current config without rewriting it. |
+| `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. |
+| `gestaltd sync --locked --check --config PATH` | Verify that prepared artifacts exist and match the lockfile without rewriting them. |
+| `gestaltd init --config PATH` | Legacy alias for `gestaltd lock`; writes lock metadata only. |
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
-| `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `init` and `serve` without mutating it. |
+| `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `lock`, `sync`, and `serve` without mutating it. |
 | `gestaltd --version` | Print the server version. |
 
 <Callout type="warning">
-  For production deployments, strongly prefer `gestaltd init` followed by
-  `gestaltd serve --locked`. The lockfile pins resolved provider artifacts and
-  verified hashes so startup cannot silently pick up new artifacts or mutate
-  deployment state.
+  For production deployments, strongly prefer `gestaltd lock`, then
+  `gestaltd sync --locked` during image build or release preparation, then
+  `gestaltd serve --locked` at runtime. The lockfile pins resolved provider
+  artifacts and verified hashes, and locked serve refuses to mutate deployment
+  state.
 </Callout>
 
 ## Provider commands
@@ -47,13 +50,16 @@ import { Callout } from 'nextra/components'
 
 ```sh
 gestaltd
-gestaltd init --config ./config.yaml
+gestaltd lock --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
-gestaltd init --config ./config.yaml --lockfile ./local/gestalt.lock.json
+gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
+gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
-gestaltd init --config ./base.yaml --config ./overrides/local.yaml
+gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
+gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd provider validate --path ./plugins/support
 gestaltd provider validate --path ./ui/dashboard
@@ -156,4 +162,4 @@ For TypeScript source plugins, `provider dev` installs dependencies with
 Source UI release builds use the same bootstrap for Bun-managed build workdirs
 before `release.build.command` when dependencies are missing.
 
-See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.
+See [Configuration](/configuration) for the relationship between `lock`, `sync --locked`, `serve --locked`, and `validate`.

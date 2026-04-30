@@ -151,7 +151,14 @@ extraEnv: []
 
 pluginInit:
   # Enable this when your config uses remote REST/GraphQL upstreams or
-  # packaged plugins and you want the chart to prepare locked state for you.
+  # packaged plugins and you want the chart to lock and sync prepared artifacts
+  # before the main container starts in locked mode.
+  enabled: false
+
+lockedServe:
+  # Enable this when lock state and prepared artifacts are baked into the image
+  # or mounted by external automation, without using the chart's pluginInit
+  # init container.
   enabled: false
 
 livenessProbe:

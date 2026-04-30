@@ -126,8 +126,9 @@ plugins:
       - assets
 ```
 
-Run `gestaltd init` when you want to resolve and pin published releases ahead
-of time, then `gestaltd serve --locked` to start from that prepared state.
+Run `gestaltd lock` when you want to resolve and pin published releases ahead
+of time, then `gestaltd sync --locked` to prepare artifacts before
+`gestaltd serve --locked` starts from that prepared state.
 
 ## Building custom providers
 

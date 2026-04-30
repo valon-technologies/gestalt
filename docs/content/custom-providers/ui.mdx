@@ -106,12 +106,11 @@ providers:
       authorizationPolicy: dashboard_users
 ```
 
-When a config references a published UI bundle, run `gestaltd init` to resolve
-and prepare it. This writes lock state to `gestalt.lock.json` and extracts the
-assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the
-locked UI bundle from its configured path prefix. If the prepared UI files are
-already present, Gestalt uses them directly; if they are missing, Gestalt can
-materialize them from the lockfile at startup.
+When a config references a published UI bundle, run `gestaltd lock` to resolve
+it and `gestaltd sync --locked` to prepare it. This writes lock state to
+`gestalt.lock.json` and extracts the assets under `.gestaltd/`. After sync,
+`gestaltd serve --locked` serves the locked UI bundle from its configured path
+prefix and refuses to repair missing artifacts at runtime.
 
 If `providers.ui` is omitted entirely, Gestalt runs headless with no public UI
 bundles.

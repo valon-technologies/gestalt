@@ -14,10 +14,13 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func initConfigWithStatePaths(configFlags []string, state operator.StatePaths, platformFlag string) error {
+func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, platformFlag string, check bool) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
+	if platformFlag == "" && check {
+		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state, nil)
+	}
 	if platformFlag == "" {
-		_, err := operatorLifecycle().InitAtPathsWithStatePaths(configPaths, state)
+		_, err := operatorLifecycle().LockAtPathsWithStatePaths(configPaths, state)
 		return err
 	}
 
@@ -35,8 +38,19 @@ func initConfigWithStatePaths(configFlags []string, state operator.StatePaths, p
 		platArgs[i] = struct{ GOOS, GOARCH string }{p.GOOS, p.GOARCH}
 	}
 
-	_, err = operatorLifecycle().InitAtPathsWithPlatforms(configPaths, state, platArgs)
+	if check {
+		return operatorLifecycle().CheckLockAtPathsWithStatePaths(configPaths, state, platArgs)
+	}
+	_, err = operatorLifecycle().LockAtPathsWithPlatforms(configPaths, state, platArgs)
 	return err
+}
+
+func syncConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
+	configPaths := operator.ResolveConfigPaths(configFlags)
+	if check {
+		return operatorLifecycle().CheckSyncAtPathsWithStatePaths(configPaths, state)
+	}
+	return operatorLifecycle().SyncAtPathsWithStatePaths(configPaths, state)
 }
 
 func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {

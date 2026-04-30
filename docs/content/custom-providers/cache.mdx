@@ -235,6 +235,7 @@ When a plugin binds multiple caches, only the named env vars are set.
 
 ## Release flow
 
-Managed cache providers follow the same `gestaltd init` / lockfile / release
-flow as other source-backed provider kinds. Point a manifest at a published
-source ref, run `gestaltd init`, and package releases with `gestaltd provider release`.
+Managed cache providers follow the same `gestaltd lock` /
+`gestaltd sync --locked` / release flow as other source-backed provider kinds.
+Point a manifest at a published source ref, run `gestaltd lock`, sync locked
+artifacts, and package releases with `gestaltd provider release`.

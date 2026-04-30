@@ -287,7 +287,8 @@ cd /path/to/gestalt-providers/agent/simple
 uv sync --group dev
 
 cd /path/to/gestalt
-go run ./cmd/gestaltd init --config ./config.yaml
+go run ./cmd/gestaltd lock --config ./config.yaml
+go run ./cmd/gestaltd sync --locked --config ./config.yaml
 go run ./cmd/gestaltd serve --locked --config ./config.yaml
 
 gestalt --url http://localhost:18080 agent --provider simple --model fast
@@ -295,6 +296,6 @@ gestalt --url http://localhost:18080 agent --provider simple --model fast
 
 Notes:
 
-- `uv sync --group dev` matters for source-backed Python providers. `gestaltd init` prefers the provider-local `.venv` when it builds locked artifacts.
+- `uv sync --group dev` matters for source-backed Python providers. `gestaltd sync --locked` prefers the provider-local `.venv` when it builds locked artifacts.
 - If your local server has no platform auth configured, the CLI can connect without `GESTALT_API_KEY`.
 - Successful turns still need the upstream model credentials expected by your configured provider, such as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for `agent/simple`.
