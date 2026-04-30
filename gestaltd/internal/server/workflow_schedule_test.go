@@ -578,6 +578,23 @@ type workflowAgentTargetResponse struct {
 		Plugin    string `json:"plugin"`
 		Operation string `json:"operation"`
 	} `json:"toolRefs"`
+	OutputDelivery *struct {
+		Target struct {
+			Name       string         `json:"name"`
+			Operation  string         `json:"operation"`
+			Connection string         `json:"connection"`
+			Instance   string         `json:"instance"`
+			Input      map[string]any `json:"input"`
+		} `json:"target"`
+		CredentialMode string `json:"credentialMode"`
+		InputBindings  []struct {
+			InputField string `json:"inputField"`
+			Value      struct {
+				AgentOutput   string `json:"agentOutput"`
+				SignalPayload string `json:"signalPayload"`
+			} `json:"value"`
+		} `json:"inputBindings"`
+	} `json:"outputDelivery"`
 }
 
 func requireWorkflowPluginTarget(t *testing.T, target workflowTargetResponse) *workflowPluginTargetResponse {
@@ -844,7 +861,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}]}}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]}}}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -867,12 +884,18 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if len(created.Target.Agent.ToolRefs) != 1 || created.Target.Agent.ToolRefs[0].Plugin != "roadmap" || created.Target.Agent.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("created agent tools = %#v", created.Target.Agent.ToolRefs)
 	}
+	if created.Target.Agent.OutputDelivery == nil || created.Target.Agent.OutputDelivery.Target.Name != "roadmap" || created.Target.Agent.OutputDelivery.Target.Operation != "sync" {
+		t.Fatalf("created agent output delivery = %#v", created.Target.Agent.OutputDelivery)
+	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
 	storedTarget := provider.upsertReqs[0].Target
 	if storedTarget.Agent == nil {
 		t.Fatalf("stored target = %#v", storedTarget)
+	}
+	if storedTarget.Agent.OutputDelivery == nil || storedTarget.Agent.OutputDelivery.Target.PluginName != "roadmap" || len(storedTarget.Agent.OutputDelivery.InputBindings) != 2 {
+		t.Fatalf("stored agent output delivery = %#v", storedTarget.Agent.OutputDelivery)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {
 		t.Fatal("expected execution ref")
@@ -904,6 +927,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].Target.Agent == nil || listed[0].Target.Agent.Prompt != "Send the status summary" {
 		t.Fatalf("listed schedules = %#v", listed)
+	}
+	if listed[0].Target.Agent.OutputDelivery == nil || listed[0].Target.Agent.OutputDelivery.Target.Operation != "sync" {
+		t.Fatalf("listed agent output delivery = %#v", listed[0].Target.Agent.OutputDelivery)
 	}
 }
 

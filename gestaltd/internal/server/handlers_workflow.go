@@ -34,15 +34,34 @@ type workflowPluginTargetRequest struct {
 }
 
 type workflowAgentTargetRequest struct {
-	ProviderName    string                `json:"provider,omitempty"`
-	Model           string                `json:"model,omitempty"`
-	Prompt          string                `json:"prompt,omitempty"`
-	Messages        []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
-	Metadata        map[string]any        `json:"metadata,omitempty"`
-	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
-	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
+	ProviderName    string                         `json:"provider,omitempty"`
+	Model           string                         `json:"model,omitempty"`
+	Prompt          string                         `json:"prompt,omitempty"`
+	Messages        []agentMessageRequest          `json:"messages,omitempty"`
+	ToolRefs        []agentToolRefRequest          `json:"toolRefs,omitempty"`
+	OutputDelivery  *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
+	ResponseSchema  map[string]any                 `json:"responseSchema,omitempty"`
+	Metadata        map[string]any                 `json:"metadata,omitempty"`
+	ProviderOptions map[string]any                 `json:"providerOptions,omitempty"`
+	TimeoutSeconds  int                            `json:"timeoutSeconds,omitempty"`
+}
+
+type workflowOutputDeliveryRequest struct {
+	Target         workflowPluginTargetRequest    `json:"target"`
+	InputBindings  []workflowOutputBindingRequest `json:"inputBindings,omitempty"`
+	CredentialMode string                         `json:"credentialMode,omitempty"`
+}
+
+type workflowOutputBindingRequest struct {
+	InputField string                           `json:"inputField"`
+	Value      workflowOutputValueSourceRequest `json:"value"`
+}
+
+type workflowOutputValueSourceRequest struct {
+	AgentOutput    string `json:"agentOutput,omitempty"`
+	SignalPayload  string `json:"signalPayload,omitempty"`
+	SignalMetadata string `json:"signalMetadata,omitempty"`
+	Literal        any    `json:"literal,omitempty"`
 }
 
 type workflowScheduleUpsertRequest struct {
@@ -67,15 +86,34 @@ type workflowPluginTargetInfo struct {
 }
 
 type workflowAgentTargetInfo struct {
-	ProviderName    string                `json:"provider,omitempty"`
-	Model           string                `json:"model,omitempty"`
-	Prompt          string                `json:"prompt,omitempty"`
-	Messages        []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
-	Metadata        map[string]any        `json:"metadata,omitempty"`
-	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
-	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
+	ProviderName    string                      `json:"provider,omitempty"`
+	Model           string                      `json:"model,omitempty"`
+	Prompt          string                      `json:"prompt,omitempty"`
+	Messages        []agentMessageRequest       `json:"messages,omitempty"`
+	ToolRefs        []agentToolRefRequest       `json:"toolRefs,omitempty"`
+	OutputDelivery  *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
+	ResponseSchema  map[string]any              `json:"responseSchema,omitempty"`
+	Metadata        map[string]any              `json:"metadata,omitempty"`
+	ProviderOptions map[string]any              `json:"providerOptions,omitempty"`
+	TimeoutSeconds  int                         `json:"timeoutSeconds,omitempty"`
+}
+
+type workflowOutputDeliveryInfo struct {
+	Target         workflowPluginTargetInfo    `json:"target"`
+	InputBindings  []workflowOutputBindingInfo `json:"inputBindings,omitempty"`
+	CredentialMode string                      `json:"credentialMode,omitempty"`
+}
+
+type workflowOutputBindingInfo struct {
+	InputField string                        `json:"inputField"`
+	Value      workflowOutputValueSourceInfo `json:"value"`
+}
+
+type workflowOutputValueSourceInfo struct {
+	AgentOutput    string `json:"agentOutput,omitempty"`
+	SignalPayload  string `json:"signalPayload,omitempty"`
+	SignalMetadata string `json:"signalMetadata,omitempty"`
+	Literal        any    `json:"literal,omitempty"`
 }
 
 type workflowScheduleInfo struct {
@@ -283,11 +321,48 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		Prompt:          strings.TrimSpace(target.Prompt),
 		Messages:        agentMessagesFromRequest(target.Messages),
 		ToolRefs:        agentToolRefsFromRequest(target.ToolRefs),
+		OutputDelivery:  workflowOutputDeliveryFromRequest(target.OutputDelivery),
 		ResponseSchema:  maps.Clone(target.ResponseSchema),
 		Metadata:        maps.Clone(target.Metadata),
 		ProviderOptions: maps.Clone(target.ProviderOptions),
 		TimeoutSeconds:  target.TimeoutSeconds,
 	}
+}
+
+func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) *coreworkflow.OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	return &coreworkflow.OutputDelivery{
+		Target: coreworkflow.PluginTarget{
+			PluginName: strings.TrimSpace(delivery.Target.Name),
+			Operation:  strings.TrimSpace(delivery.Target.Operation),
+			Connection: strings.TrimSpace(delivery.Target.Connection),
+			Instance:   strings.TrimSpace(delivery.Target.Instance),
+			Input:      maps.Clone(delivery.Target.Input),
+		},
+		InputBindings:  workflowOutputBindingsFromRequest(delivery.InputBindings),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.CredentialMode))),
+	}
+}
+
+func workflowOutputBindingsFromRequest(bindings []workflowOutputBindingRequest) []coreworkflow.OutputBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.OutputBinding, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, coreworkflow.OutputBinding{
+			InputField: strings.TrimSpace(binding.InputField),
+			Value: coreworkflow.OutputValueSource{
+				AgentOutput:    strings.TrimSpace(binding.Value.AgentOutput),
+				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
+				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
+				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
 }
 
 func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
@@ -345,6 +420,7 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 				Prompt:          agentTarget.Prompt,
 				Messages:        agentMessageInfoFromCore(agentTarget.Messages),
 				ToolRefs:        agentToolRefsToRequest(agentTarget.ToolRefs),
+				OutputDelivery:  workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
 				ResponseSchema:  maps.Clone(agentTarget.ResponseSchema),
 				Metadata:        maps.Clone(agentTarget.Metadata),
 				ProviderOptions: maps.Clone(agentTarget.ProviderOptions),
@@ -365,6 +441,42 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 			Input:      maps.Clone(pluginTarget.Input),
 		},
 	}
+}
+
+func workflowOutputDeliveryInfoFromCore(delivery *coreworkflow.OutputDelivery) *workflowOutputDeliveryInfo {
+	if delivery == nil {
+		return nil
+	}
+	return &workflowOutputDeliveryInfo{
+		Target: workflowPluginTargetInfo{
+			Name:       delivery.Target.PluginName,
+			Operation:  delivery.Target.Operation,
+			Connection: userFacingConnectionName(delivery.Target.Connection),
+			Instance:   delivery.Target.Instance,
+			Input:      maps.Clone(delivery.Target.Input),
+		},
+		InputBindings:  workflowOutputBindingInfoFromCore(delivery.InputBindings),
+		CredentialMode: string(delivery.CredentialMode),
+	}
+}
+
+func workflowOutputBindingInfoFromCore(bindings []coreworkflow.OutputBinding) []workflowOutputBindingInfo {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]workflowOutputBindingInfo, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, workflowOutputBindingInfo{
+			InputField: binding.InputField,
+			Value: workflowOutputValueSourceInfo{
+				AgentOutput:    binding.Value.AgentOutput,
+				SignalPayload:  binding.Value.SignalPayload,
+				SignalMetadata: binding.Value.SignalMetadata,
+				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
 }
 
 func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, pluginName, scheduleID string, err error) {

@@ -264,7 +264,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +391,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +603,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +755,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -837,7 +837,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -943,14 +943,14 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 	return m.workflow.ResolveProvider(strings.TrimSpace(providerName))
 }
 
-func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
+func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerPluginName string) (coreworkflow.Target, error) {
 	hasPlugin := target.Plugin != nil
 	hasAgent := target.Agent != nil
 	if hasAgent && hasPlugin {
 		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of plugin or agent")
 	}
 	if hasAgent {
-		return m.resolveAgentTarget(ctx, p, *target.Agent)
+		return m.resolveAgentTarget(ctx, p, *target.Agent, callerPluginName)
 	}
 	pluginTarget := coreworkflow.PluginTarget{}
 	if target.Plugin != nil {
@@ -1037,7 +1037,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	}, nil
 }
 
-func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget) (coreworkflow.Target, error) {
+func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget, callerPluginName string) (coreworkflow.Target, error) {
 	if m == nil || m.agent == nil || m.agentManager == nil {
 		return coreworkflow.Target{}, fmt.Errorf("%w: agent workflows are not configured", invocation.ErrInternal)
 	}
@@ -1059,7 +1059,11 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.Metadata = maps.Clone(target.Metadata)
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
+	target.OutputDelivery = cloneWorkflowOutputDelivery(target.OutputDelivery)
 	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
+		return coreworkflow.Target{}, err
+	}
+	if err := m.normalizeWorkflowOutputDelivery(target.OutputDelivery, callerPluginName); err != nil {
 		return coreworkflow.Target{}, err
 	}
 	return coreworkflow.Target{Agent: &target}, nil
@@ -1247,6 +1251,9 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 				addWorkflowPermission(permissions, pluginName, operation)
 			}
 		}
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+			addWorkflowPermission(permissions, pluginName, operation)
+		}
 	}
 	return principal.PermissionsToAccessPermissions(permissions)
 }
@@ -1413,6 +1420,14 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 				return false
 			}
 		}
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.OutputDelivery); ok {
+			if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
+				return false
+			}
+			if !principal.AllowsOperationPermission(p, pluginName, operation) {
+				return false
+			}
+		}
 		return true
 	}
 	if target.Plugin == nil {
@@ -1471,6 +1486,122 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 		}
 	}
 	return nil
+}
+
+func cloneWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery) *coreworkflow.OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := *delivery
+	out.Target.Input = maps.Clone(delivery.Target.Input)
+	out.InputBindings = append([]coreworkflow.OutputBinding(nil), delivery.InputBindings...)
+	return &out
+}
+
+func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName string) error {
+	if delivery == nil {
+		return nil
+	}
+	delivery.Target.PluginName = strings.TrimSpace(delivery.Target.PluginName)
+	delivery.Target.Operation = strings.TrimSpace(delivery.Target.Operation)
+	delivery.Target.Connection = strings.TrimSpace(delivery.Target.Connection)
+	delivery.Target.Instance = strings.TrimSpace(delivery.Target.Instance)
+	delivery.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
+	if delivery.Target.PluginName == "" {
+		return fmt.Errorf("%w: workflow agent output_delivery.target.plugin_name is required", invocation.ErrProviderNotFound)
+	}
+	if delivery.Target.Operation == "" {
+		return fmt.Errorf("%w: workflow agent output_delivery.target.operation is required", invocation.ErrOperationNotFound)
+	}
+	if delivery.CredentialMode != "" && callerPluginName == "" {
+		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied)
+	}
+	if delivery.CredentialMode != "" && delivery.CredentialMode != core.ConnectionModeNone && delivery.CredentialMode != core.ConnectionModeUser {
+		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode %q is not supported", invocation.ErrInvalidInvocation, delivery.CredentialMode)
+	}
+	mode, declared, err := m.callerPluginInvokeCredentialMode(callerPluginName, delivery.Target.PluginName, delivery.Target.Operation)
+	if err != nil {
+		return err
+	}
+	if delivery.CredentialMode != "" && !declared {
+		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode requires a declared invoke mode", invocation.ErrAuthorizationDenied)
+	}
+	if delivery.CredentialMode != "" && delivery.CredentialMode != mode {
+		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, delivery.CredentialMode, mode)
+	}
+	if delivery.CredentialMode == "" && declared {
+		delivery.CredentialMode = mode
+	}
+	for i := range delivery.InputBindings {
+		binding := &delivery.InputBindings[i]
+		binding.InputField = strings.TrimSpace(binding.InputField)
+		binding.Value.AgentOutput = strings.TrimSpace(binding.Value.AgentOutput)
+		binding.Value.SignalPayload = strings.TrimSpace(binding.Value.SignalPayload)
+		binding.Value.SignalMetadata = strings.TrimSpace(binding.Value.SignalMetadata)
+		if binding.InputField == "" {
+			return fmt.Errorf("%w: workflow agent output_delivery.input_bindings[%d].input_field is required", invocation.ErrInvalidInvocation, i)
+		}
+		if !workflowOutputValueSourceIsSet(binding.Value) {
+			return fmt.Errorf("%w: workflow agent output_delivery.input_bindings[%d].value must set exactly one source", invocation.ErrInvalidInvocation, i)
+		}
+	}
+	return nil
+}
+
+func (m *Manager) callerPluginInvokeCredentialMode(callerPluginName, pluginName, operation string) (core.ConnectionMode, bool, error) {
+	callerPluginName = strings.TrimSpace(callerPluginName)
+	pluginName = strings.TrimSpace(pluginName)
+	operation = strings.TrimSpace(operation)
+	if callerPluginName == "" || pluginName == "" || operation == "" || m == nil {
+		return "", false, nil
+	}
+	for _, invoke := range m.pluginInvokes[callerPluginName] {
+		if strings.TrimSpace(invoke.Surface) != "" {
+			continue
+		}
+		if strings.TrimSpace(invoke.Plugin) != pluginName || strings.TrimSpace(invoke.Operation) != operation {
+			continue
+		}
+		mode := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(invoke.CredentialMode))))
+		switch mode {
+		case "":
+			return "", false, nil
+		case core.ConnectionModeNone, core.ConnectionModeUser:
+			return mode, true, nil
+		default:
+			return "", false, fmt.Errorf("%w: caller plugin invoke credentialMode %q is not supported", invocation.ErrInvalidInvocation, invoke.CredentialMode)
+		}
+	}
+	return "", false, nil
+}
+
+func workflowOutputValueSourceIsSet(source coreworkflow.OutputValueSource) bool {
+	set := 0
+	if strings.TrimSpace(source.AgentOutput) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalPayload) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalMetadata) != "" {
+		set++
+	}
+	if source.Literal != nil {
+		set++
+	}
+	return set == 1
+}
+
+func workflowOutputDeliveryOperation(delivery *coreworkflow.OutputDelivery) (string, string, bool) {
+	if delivery == nil {
+		return "", "", false
+	}
+	pluginName := strings.TrimSpace(delivery.Target.PluginName)
+	operation := strings.TrimSpace(delivery.Target.Operation)
+	if pluginName == "" || operation == "" {
+		return "", "", false
+	}
+	return pluginName, operation, true
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {

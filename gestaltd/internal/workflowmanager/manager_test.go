@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -27,6 +28,7 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 		PluginInvokes: map[string][]config.PluginInvocationDependency{
 			"github": {
 				{Plugin: "github", Operation: "bot.commitFiles"},
+				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: providermanifestv1.ConnectionModeNone},
 				{Plugin: "github", Operation: "bot.openPullRequest"},
 			},
 		},
@@ -52,6 +54,15 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 				{Plugin: "github", Operation: "bot.commitFiles"},
 				{Plugin: "github", Operation: "bot.openPullRequest"},
 			},
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "github",
+					Operation:  "bot.commentFinal",
+				},
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				},
+			},
 		}},
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
@@ -65,6 +76,7 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	wantPermissions := []core.AccessPermission{{
 		Plugin: "github",
 		Operations: []string{
+			"bot.commentFinal",
 			"bot.commitFiles",
 			"bot.openPullRequest",
 			"events.handle",
@@ -75,6 +87,9 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 	if managed.ExecutionRef.CallerPluginName != "github" {
 		t.Fatalf("caller plugin = %q, want github", managed.ExecutionRef.CallerPluginName)
+	}
+	if got := managed.ExecutionRef.Target.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 }
 

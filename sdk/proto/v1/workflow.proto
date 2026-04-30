@@ -38,6 +38,27 @@ message BoundWorkflowAgentTarget {
   google.protobuf.Struct metadata = 8;
   google.protobuf.Struct provider_options = 9;
   int32 timeout_seconds = 10;
+  WorkflowOutputDelivery output_delivery = 11;
+}
+
+message WorkflowOutputDelivery {
+  BoundWorkflowPluginTarget target = 1;
+  repeated WorkflowOutputBinding input_bindings = 2;
+  string credential_mode = 3;
+}
+
+message WorkflowOutputBinding {
+  string input_field = 1;
+  WorkflowOutputValueSource value = 2;
+}
+
+message WorkflowOutputValueSource {
+  oneof kind {
+    string agent_output = 1;
+    string signal_payload = 2;
+    string signal_metadata = 3;
+    google.protobuf.Value literal = 4;
+  }
 }
 
 message WorkflowActor {

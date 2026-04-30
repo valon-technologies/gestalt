@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -206,7 +207,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
 	}
 	if req.Target.Agent != nil {
-		return r.invokeAgent(ctx, req, agentManager)
+		return r.invokeAgent(ctx, req, agentManager, invoker)
 	}
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
@@ -296,7 +297,7 @@ func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
 	return target.Agent != nil && target.Plugin != nil
 }
 
-func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service) (*coreworkflow.InvokeOperationResponse, error) {
+func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker) (*coreworkflow.InvokeOperationResponse, error) {
 	if agentManager == nil {
 		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
 	}
@@ -371,6 +372,11 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	switch turn.Status {
 	case coreagent.ExecutionStatusSucceeded:
+		if agentTarget.OutputDelivery != nil {
+			if err := r.deliverAgentOutput(ctx, req, invoker, principalValue, agentTarget, turn); err != nil {
+				return nil, err
+			}
+		}
 		return &coreworkflow.InvokeOperationResponse{Status: 200, Body: turn.OutputText}, nil
 	case coreagent.ExecutionStatusCanceled:
 		return nil, fmt.Errorf("workflow agent turn %q was canceled: %s", turn.ID, strings.TrimSpace(turn.StatusMessage))
@@ -380,6 +386,143 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	default:
 		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
 	}
+}
+
+func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, turn *coreagent.Turn) error {
+	if invoker == nil {
+		return fmt.Errorf("%w: workflow agent output delivery requires an invoker", invocation.ErrInternal)
+	}
+	delivery := agentTarget.OutputDelivery
+	if delivery == nil {
+		return nil
+	}
+	target := delivery.Target
+	pluginName := strings.TrimSpace(target.PluginName)
+	operation := strings.TrimSpace(target.Operation)
+	if pluginName == "" || operation == "" {
+		return fmt.Errorf("%w: workflow agent output_delivery target is incomplete", invocation.ErrInvalidInvocation)
+	}
+	params := maps.Clone(target.Input)
+	if params == nil {
+		params = map[string]any{}
+	}
+	signal := workflowOutputDeliverySignal(req.Signals)
+	for i := range delivery.InputBindings {
+		binding := delivery.InputBindings[i]
+		inputField := strings.TrimSpace(binding.InputField)
+		if inputField == "" {
+			return fmt.Errorf("%w: workflow agent output_delivery input binding field is required", invocation.ErrInvalidInvocation)
+		}
+		value, ok, err := workflowOutputBindingValue(turn, signal, binding.Value)
+		if err != nil {
+			return fmt.Errorf("workflow agent output_delivery.%s: %w", inputField, err)
+		}
+		if !ok {
+			return fmt.Errorf("%w: workflow agent output_delivery.%s source did not resolve", invocation.ErrInvalidInvocation, inputField)
+		}
+		params[inputField] = value
+	}
+	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
+		ctx = invocation.WithWorkflowContext(ctx, contextValue)
+	}
+	if connection := strings.TrimSpace(target.Connection); connection != "" {
+		ctx = invocation.WithConnection(ctx, connection)
+	}
+	if strings.TrimSpace(string(delivery.CredentialMode)) != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, core.NormalizeConnectionMode(delivery.CredentialMode))
+	}
+	if idempotencyKey := workflowAgentOutputDeliveryIdempotencyKey(req); idempotencyKey != "" {
+		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
+	}
+	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(target.Instance), operation, params)
+	if err != nil {
+		return err
+	}
+	if result != nil && result.Status >= http.StatusBadRequest {
+		return fmt.Errorf("workflow agent output delivery returned status %d", result.Status)
+	}
+	return nil
+}
+
+func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.Signal {
+	if len(signals) == 0 {
+		return nil
+	}
+	return &signals[len(signals)-1]
+}
+
+func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signal, source coreworkflow.OutputValueSource) (any, bool, error) {
+	switch {
+	case strings.TrimSpace(source.AgentOutput) != "":
+		return workflowAgentOutputValue(turn, source.AgentOutput)
+	case strings.TrimSpace(source.SignalPayload) != "":
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Payload, source.SignalPayload)
+	case strings.TrimSpace(source.SignalMetadata) != "":
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Metadata, source.SignalMetadata)
+	case source.Literal != nil:
+		return source.Literal, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func workflowAgentOutputValue(turn *coreagent.Turn, path string) (any, bool, error) {
+	path = strings.TrimSpace(path)
+	if turn == nil {
+		return nil, false, nil
+	}
+	switch path {
+	case "text", "output_text", "outputText":
+		return turn.OutputText, true, nil
+	case "structured_output", "structuredOutput":
+		if turn.StructuredOutput == nil {
+			return nil, false, nil
+		}
+		return maps.Clone(turn.StructuredOutput), true, nil
+	}
+	for _, prefix := range []string{"structured_output.", "structuredOutput."} {
+		if strings.HasPrefix(path, prefix) {
+			return workflowMapPathValue(turn.StructuredOutput, strings.TrimPrefix(path, prefix))
+		}
+	}
+	return nil, false, fmt.Errorf("%w: unsupported agent output source %q", invocation.ErrInvalidInvocation, path)
+}
+
+func workflowMapPathValue(values map[string]any, path string) (any, bool, error) {
+	if len(values) == 0 {
+		return nil, false, nil
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, false, nil
+	}
+	if value, ok := values[path]; ok {
+		return value, true, nil
+	}
+	parts := strings.Split(path, ".")
+	var current any = values
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, false, fmt.Errorf("%w: empty path segment in %q", invocation.ErrInvalidInvocation, path)
+		}
+		currentMap, ok := current.(map[string]any)
+		if !ok {
+			return nil, false, nil
+		}
+		next, ok := currentMap[part]
+		if !ok {
+			return nil, false, nil
+		}
+		current = next
+	}
+	return current, true, nil
 }
 
 func workflowAgentTimeout(seconds int) time.Duration {
@@ -404,6 +547,14 @@ func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) st
 		return workflowAgentIdempotencyKey(req, "turn")
 	}
 	return workflowAgentIdempotencyKey(req, "turn:"+batchID)
+}
+
+func workflowAgentOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
+	batchID := workflowSignalBatchID(req.Signals)
+	if batchID == "" {
+		return workflowAgentIdempotencyKey(req, "output")
+	}
+	return workflowAgentIdempotencyKey(req, "output:"+batchID)
 }
 
 func workflowSignalBatchID(signals []coreworkflow.Signal) string {
@@ -784,6 +935,18 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 				}
 			}
 			value["tools"] = tools
+		}
+		if delivery := agentTarget.OutputDelivery; delivery != nil {
+			outputDelivery := map[string]any{}
+			if pluginName := strings.TrimSpace(delivery.Target.PluginName); pluginName != "" {
+				outputDelivery["plugin"] = pluginName
+			}
+			if operation := strings.TrimSpace(delivery.Target.Operation); operation != "" {
+				outputDelivery["operation"] = operation
+			}
+			if len(outputDelivery) > 0 {
+				value["outputDelivery"] = outputDelivery
+			}
 		}
 		return value
 	}

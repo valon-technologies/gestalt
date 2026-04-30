@@ -52,6 +52,25 @@ type AgentTarget struct {
 	ProviderOptions map[string]any
 	Metadata        map[string]any
 	TimeoutSeconds  int
+	OutputDelivery  *OutputDelivery
+}
+
+type OutputDelivery struct {
+	Target         PluginTarget
+	InputBindings  []OutputBinding
+	CredentialMode core.ConnectionMode
+}
+
+type OutputBinding struct {
+	InputField string
+	Value      OutputValueSource
+}
+
+type OutputValueSource struct {
+	AgentOutput    string
+	SignalPayload  string
+	SignalMetadata string
+	Literal        any
 }
 
 type ExecutionReference struct {
@@ -340,6 +359,16 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		}
 		if len(agentTarget.Metadata) == 0 {
 			agentTarget.Metadata = nil
+		}
+		if agentTarget.OutputDelivery != nil {
+			outputDelivery := *agentTarget.OutputDelivery
+			if len(outputDelivery.Target.Input) == 0 {
+				outputDelivery.Target.Input = nil
+			}
+			if len(outputDelivery.InputBindings) == 0 {
+				outputDelivery.InputBindings = nil
+			}
+			agentTarget.OutputDelivery = &outputDelivery
 		}
 		out.Agent = &agentTarget
 		return out

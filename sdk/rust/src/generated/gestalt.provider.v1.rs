@@ -11163,6 +11163,43 @@ pub struct BoundWorkflowAgentTarget {
     pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(int32, tag = "10")]
     pub timeout_seconds: i32,
+    #[prost(message, optional, tag = "11")]
+    pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowOutputDelivery {
+    #[prost(message, optional, tag = "1")]
+    pub target: ::core::option::Option<BoundWorkflowPluginTarget>,
+    #[prost(message, repeated, tag = "2")]
+    pub input_bindings: ::prost::alloc::vec::Vec<WorkflowOutputBinding>,
+    #[prost(string, tag = "3")]
+    pub credential_mode: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowOutputBinding {
+    #[prost(string, tag = "1")]
+    pub input_field: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub value: ::core::option::Option<WorkflowOutputValueSource>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowOutputValueSource {
+    #[prost(oneof = "workflow_output_value_source::Kind", tags = "1, 2, 3, 4")]
+    pub kind: ::core::option::Option<workflow_output_value_source::Kind>,
+}
+/// Nested message and enum types in `WorkflowOutputValueSource`.
+pub mod workflow_output_value_source {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(string, tag = "1")]
+        AgentOutput(::prost::alloc::string::String),
+        #[prost(string, tag = "2")]
+        SignalPayload(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        SignalMetadata(::prost::alloc::string::String),
+        #[prost(message, tag = "4")]
+        Literal(::prost_types::Value),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {
