@@ -1,3 +1,5 @@
 package providerhost
 
-const DefaultRuntimeLogHostSocketEnv = "GESTALT_RUNTIME_LOG_SOCKET"
+import "github.com/valon-technologies/gestalt/server/services/runtimehost"
+
+const DefaultRuntimeLogHostSocketEnv = runtimehost.DefaultRuntimeLogHostSocketEnv

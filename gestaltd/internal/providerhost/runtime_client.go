@@ -2,144 +2,28 @@ package providerhost
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 const (
-	providerRPCTimeout   = 10 * time.Second
-	providerStartTimeout = 2 * time.Minute
+	providerRPCTimeout = 10 * time.Second
 )
 
-var providerConfigureTimeout = 30 * time.Second
-
-type RuntimeProviderMetadata struct {
-	Kind        proto.ProviderKind
-	Name        string
-	DisplayName string
-	Description string
-	Version     string
-	Warnings    []string
-}
+type RuntimeProviderMetadata = runtimehost.RuntimeProviderMetadata
 
 func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
-	if client == nil {
-		return nil, fmt.Errorf("runtime client is required")
-	}
-	metaCtx, cancel := providerConfigureContext(ctx)
-	defer cancel()
-	meta, err := client.GetProviderIdentity(metaCtx, &emptypb.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("get provider identity: %w", err)
-	}
-	if expectedKind != proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED && meta.GetKind() != expectedKind {
-		return nil, fmt.Errorf("provider kind mismatch: got %s, want %s", meta.GetKind().String(), expectedKind.String())
-	}
-	if err := validateRuntimeProtocol(meta); err != nil {
-		return nil, err
-	}
-
-	cfgStruct, err := structFromMap(config)
-	if err != nil {
-		return nil, fmt.Errorf("encode provider config: %w", err)
-	}
-	configureCtx, configureCancel := providerConfigureContext(ctx)
-	defer configureCancel()
-	resp, err := client.ConfigureProvider(configureCtx, &proto.ConfigureProviderRequest{
-		Name:            name,
-		Config:          cfgStruct,
-		ProtocolVersion: proto.CurrentProtocolVersion,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("configure provider: %w", err)
-	}
-	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		return nil, fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-
-	// Some providers expose configured metadata such as display names only after
-	// ConfigureProvider has applied the runtime config.
-	configuredMetaCtx, configuredCancel := providerConfigureContext(ctx)
-	defer configuredCancel()
-	configuredMeta, err := client.GetProviderIdentity(configuredMetaCtx, &emptypb.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("get configured provider identity: %w", err)
-	}
-
-	return &RuntimeProviderMetadata{
-		Kind:        configuredMeta.GetKind(),
-		Name:        configuredMeta.GetName(),
-		DisplayName: configuredMeta.GetDisplayName(),
-		Description: configuredMeta.GetDescription(),
-		Version:     configuredMeta.GetVersion(),
-		Warnings:    append([]string(nil), configuredMeta.GetWarnings()...),
-	}, nil
+	return runtimehost.ConfigureRuntimeProvider(ctx, client, expectedKind, name, config)
 }
 
 func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecycleClient) error {
-	if client == nil {
-		return fmt.Errorf("runtime client is required")
-	}
-	healthCtx, cancel := providerCallContext(ctx)
-	defer cancel()
-	resp, err := client.HealthCheck(healthCtx, &emptypb.Empty{})
-	if err != nil {
-		return err
-	}
-	if resp == nil {
-		return fmt.Errorf("provider health check returned nil response")
-	}
-	if !resp.GetReady() {
-		message := strings.TrimSpace(resp.GetMessage())
-		if message == "" {
-			message = "not ready"
-		}
-		return fmt.Errorf("provider health check failed: %s", message)
-	}
-	return nil
+	return runtimehost.CheckRuntimeProviderHealth(ctx, client)
 }
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
-	if client == nil {
-		return fmt.Errorf("runtime client is required")
-	}
-	startCtx, cancel := providerStartContext(ctx)
-	defer cancel()
-	resp, err := client.StartProvider(startCtx, &emptypb.Empty{})
-	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			return nil
-		}
-		return fmt.Errorf("start provider: %w", err)
-	}
-	if resp == nil {
-		return fmt.Errorf("provider start returned nil response")
-	}
-	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		return fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-	return nil
-}
-
-func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
-	if meta == nil {
-		return fmt.Errorf("provider identity is required")
-	}
-	minVersion := meta.GetMinProtocolVersion()
-	maxVersion := meta.GetMaxProtocolVersion()
-	if minVersion != 0 && proto.CurrentProtocolVersion < minVersion {
-		return fmt.Errorf("provider requires protocol version >= %d, host has %d", minVersion, proto.CurrentProtocolVersion)
-	}
-	if maxVersion != 0 && proto.CurrentProtocolVersion > maxVersion {
-		return fmt.Errorf("provider supports protocol version <= %d, host has %d", maxVersion, proto.CurrentProtocolVersion)
-	}
-	return nil
+	return runtimehost.StartRuntimeProvider(ctx, client)
 }
 
 func providerCallContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -149,23 +33,9 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
-func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	return context.WithTimeout(parent, providerStartTimeout)
-}
-
 func providerStreamContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
 	return context.WithCancel(parent)
-}
-
-func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	return context.WithTimeout(parent, providerConfigureTimeout)
 }

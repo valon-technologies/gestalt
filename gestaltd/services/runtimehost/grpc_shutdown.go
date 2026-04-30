@@ -1,4 +1,4 @@
-package providerhost
+package runtimehost
 
 import (
 	"time"
