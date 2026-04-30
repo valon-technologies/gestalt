@@ -3,6 +3,7 @@ package providerhost
 import (
 	"context"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
@@ -108,6 +109,56 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 	}
 	if len(meta.Warnings) != 1 || meta.Warnings[0] != "configured" {
 		t.Fatalf("Warnings = %#v, want %#v", meta.Warnings, []string{"configured"})
+	}
+}
+
+func TestConfigureRuntimeProviderUsesMigrationTimeoutForConfigureProvider(t *testing.T) {
+	t.Parallel()
+
+	var configureRemaining time.Duration
+	client := &fakeProviderLifecycleClient{
+		getProviderIdentity: func(_ context.Context, _ *emptypb.Empty, _ ...grpc.CallOption) (*proto.ProviderIdentity, error) {
+			return &proto.ProviderIdentity{
+				Kind:               proto.ProviderKind_PROVIDER_KIND_WORKFLOW,
+				Name:               "indexeddb",
+				MinProtocolVersion: proto.CurrentProtocolVersion,
+				MaxProtocolVersion: proto.CurrentProtocolVersion,
+			}, nil
+		},
+		configureProvider: func(ctx context.Context, _ *proto.ConfigureProviderRequest, _ ...grpc.CallOption) (*proto.ConfigureProviderResponse, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("ConfigureProvider context has no deadline")
+			}
+			configureRemaining = time.Until(deadline)
+			return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+		},
+	}
+
+	_, err := ConfigureRuntimeProvider(
+		WithProviderMigrationTimeout(context.Background()),
+		client,
+		proto.ProviderKind_PROVIDER_KIND_WORKFLOW,
+		"indexeddb",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ConfigureRuntimeProvider: %v", err)
+	}
+
+	if configureRemaining <= providerConfigureTimeout {
+		t.Fatalf(
+			"ConfigureProvider remaining deadline = %s, want migration timeout above %s",
+			configureRemaining,
+			providerConfigureTimeout,
+		)
+	}
+	if configureRemaining > providerMigrateTimeout {
+		t.Fatalf(
+			"ConfigureProvider remaining deadline = %s, want at most %s",
+			configureRemaining,
+			providerMigrateTimeout,
+		)
 	}
 }
 

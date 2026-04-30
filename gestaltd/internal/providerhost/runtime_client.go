@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	providerRPCTimeout = 10 * time.Second
+	providerRPCTimeout     = 10 * time.Second
+	providerMigrateTimeout = 2 * time.Minute
 )
 
 var providerConfigureTimeout = 30 * time.Second
@@ -48,7 +49,7 @@ func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 	if err != nil {
 		return nil, fmt.Errorf("encode provider config: %w", err)
 	}
-	configureCtx, configureCancel := providerConfigureContext(ctx)
+	configureCtx, configureCancel := providerConfigureOperationContext(ctx)
 	defer configureCancel()
 	resp, err := client.ConfigureProvider(configureCtx, &proto.ConfigureProviderRequest{
 		Name:            name,
@@ -148,6 +149,22 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
+type providerMigrationTimeoutContextKey struct{}
+
+func WithProviderMigrationTimeout(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, providerMigrationTimeoutContextKey{}, true)
+}
+
+func providerMigrationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, providerMigrateTimeout)
+}
+
 func providerStreamContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
@@ -160,4 +177,13 @@ func providerConfigureContext(parent context.Context) (context.Context, context.
 		parent = context.Background()
 	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
+}
+
+func providerConfigureOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent != nil {
+		if useMigrationTimeout, _ := parent.Value(providerMigrationTimeoutContextKey{}).(bool); useMigrationTimeout {
+			return providerMigrationContext(parent)
+		}
+	}
+	return providerConfigureContext(parent)
 }

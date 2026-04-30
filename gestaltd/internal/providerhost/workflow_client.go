@@ -3,12 +3,15 @@ package providerhost
 import (
 	"context"
 	"io"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+const workflowListRunsTimeout = 30 * time.Second
 
 type WorkflowExecConfig struct {
 	Command      string
@@ -49,7 +52,8 @@ func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (corewor
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	workflowClient := proto.NewWorkflowProviderClient(proc.conn)
-	if _, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
+	configureCtx := WithProviderMigrationTimeout(ctx)
+	if _, err := ConfigureRuntimeProvider(configureCtx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}
@@ -89,7 +93,7 @@ func (r *remoteWorkflow) GetRun(ctx context.Context, req coreworkflow.GetRunRequ
 }
 
 func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	ctx, cancel := providerCallContext(ctx)
+	ctx, cancel := workflowListRunsContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{})
 	if err != nil {
@@ -104,6 +108,13 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 		runs = append(runs, value)
 	}
 	return runs, nil
+}
+
+func workflowListRunsContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, workflowListRunsTimeout)
 }
 
 func (r *remoteWorkflow) CancelRun(ctx context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
