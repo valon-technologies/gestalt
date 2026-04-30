@@ -1455,6 +1455,7 @@ func (s ServerConfig) ManagementBaseURL() string {
 type ConnectionDef struct {
 	DisplayName      string                                `yaml:"displayName,omitempty"`
 	Mode             providermanifestv1.ConnectionMode     `yaml:"mode"`
+	Exposure         providermanifestv1.ConnectionExposure `yaml:"exposure,omitempty"`
 	Auth             ConnectionAuthDef                     `yaml:"auth"`
 	ConnectionParams map[string]ConnectionParamDef         `yaml:"params"`
 	Discovery        *providermanifestv1.ProviderDiscovery `yaml:"-"`
@@ -1611,6 +1612,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if src.Mode != "" {
 		dst.Mode = src.Mode
 	}
+	if src.Exposure != "" {
+		dst.Exposure = src.Exposure
+	}
 	MergeConnectionAuth(&dst.Auth, src.Auth)
 	if len(src.ConnectionParams) > 0 {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
@@ -1703,6 +1707,9 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *provider
 			conn.DisplayName = def.DisplayName
 			if def.Mode != "" {
 				conn.Mode = def.Mode
+			}
+			if def.Exposure != "" {
+				conn.Exposure = def.Exposure
 			}
 			if def.Auth != nil {
 				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))

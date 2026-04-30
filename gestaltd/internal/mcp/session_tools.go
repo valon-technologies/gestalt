@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -24,10 +25,12 @@ const (
 )
 
 type sessionCatalogOperationMeta struct {
-	AllowedRoles []string `json:"allowedRoles,omitempty"`
-	Transport    string   `json:"transport,omitempty"`
-	Connection   string   `json:"connection,omitempty"`
-	Projected    bool     `json:"projected,omitempty"`
+	AllowedRoles    []string        `json:"allowedRoles,omitempty"`
+	Transport       string          `json:"transport,omitempty"`
+	Connection      string          `json:"connection,omitempty"`
+	Projected       bool            `json:"projected,omitempty"`
+	HiddenArguments []string        `json:"hiddenArguments,omitempty"`
+	InputSchema     json.RawMessage `json:"inputSchema,omitempty"`
 }
 
 func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string, staticToolNames map[string]struct{}) {
@@ -72,10 +75,11 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 			continue
 		}
 
-		cat, _, err := core.CatalogForRequest(sessionCtx, prov, token)
+		rawCat, _, err := core.CatalogForRequest(sessionCtx, prov, token)
 		if err != nil {
 			continue
 		}
+		cat := projectCatalog(cfg, provName, prov, rawCat)
 		if deleteSessionProviderHydrationAttempted(tools, provName, instance) {
 			changed = true
 		}
@@ -85,7 +89,7 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if cat == nil {
 			continue
 		}
-		storeSessionCatalogOperationMetadata(tools, cfg, provName, cat, staticToolNames, instance, connection)
+		storeSessionCatalogOperationMetadata(tools, cfg, provName, rawCat, cat, staticToolNames, instance, connection)
 
 		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
@@ -187,14 +191,26 @@ func sessionProviderHydrationAttemptedFromContext(ctx context.Context, provider,
 	return sessionProviderHydrationAttempted(sessionWithTools.GetSessionTools(), provider, instance)
 }
 
-func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, cat *catalog.Catalog, staticToolNames map[string]struct{}, instance string, connection string) {
+func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, rawCat *catalog.Catalog, cat *catalog.Catalog, staticToolNames map[string]struct{}, instance string, connection string) {
+	rawOps := map[string]catalog.CatalogOperation{}
+	if rawCat != nil {
+		for i := range rawCat.Operations {
+			rawOps[rawCat.Operations[i].ID] = rawCat.Operations[i]
+		}
+	}
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
+		rawOp := *op
+		if candidate, ok := rawOps[op.ID]; ok {
+			rawOp = candidate
+		}
 		payload, err := json.Marshal(sessionCatalogOperationMeta{
-			AllowedRoles: append([]string(nil), op.AllowedRoles...),
-			Transport:    op.Transport,
-			Connection:   connection,
-			Projected:    catalogOperationProjectedToMCP(cfg, provider, *op),
+			AllowedRoles:    append([]string(nil), op.AllowedRoles...),
+			Transport:       op.Transport,
+			Connection:      connection,
+			Projected:       catalogOperationProjectedToMCP(cfg, provider, *op),
+			HiddenArguments: hiddenSessionCatalogArguments(rawOp, *op),
+			InputSchema:     append(json.RawMessage(nil), op.InputSchema...),
 		})
 		if err != nil {
 			continue
@@ -241,6 +257,112 @@ func sessionCatalogOperationFromContext(ctx context.Context, provider, operation
 		AllowedRoles: meta.AllowedRoles,
 		Transport:    meta.Transport,
 	}, meta.Connection, true
+}
+
+func validateSessionCatalogInvocation(ctx context.Context, provider, operation, instance string, args map[string]any) error {
+	meta, ok := sessionCatalogOperationMetaFromContext(ctx, provider, operation, instance)
+	if !ok || !meta.Projected {
+		return nil
+	}
+	for _, name := range meta.HiddenArguments {
+		if _, ok := args[name]; ok {
+			return fmt.Errorf("%w: parameter %q is not public", invocation.ErrInvalidInvocation, name)
+		}
+	}
+	enums := sessionCatalogSchemaEnums(meta.InputSchema)
+	for name, values := range enums {
+		raw, ok := args[name]
+		if !ok || raw == nil {
+			continue
+		}
+		if _, allowed := values[fmt.Sprint(raw)]; !allowed {
+			return fmt.Errorf("%w: parameter %q value %q is not public", invocation.ErrInvalidInvocation, name, fmt.Sprint(raw))
+		}
+	}
+	return nil
+}
+
+func hiddenSessionCatalogArguments(rawOp catalog.CatalogOperation, projectedOp catalog.CatalogOperation) []string {
+	projected := map[string]struct{}{}
+	for _, param := range projectedOp.Parameters {
+		projected[param.Name] = struct{}{}
+	}
+	for name := range schemaPropertyNames(projectedOp.InputSchema) {
+		projected[name] = struct{}{}
+	}
+
+	hidden := map[string]struct{}{}
+	for _, param := range rawOp.Parameters {
+		if _, ok := projected[param.Name]; !ok {
+			hidden[param.Name] = struct{}{}
+		}
+	}
+	for name := range schemaPropertyNames(rawOp.InputSchema) {
+		if _, ok := projected[name]; !ok {
+			hidden[name] = struct{}{}
+		}
+	}
+	names := make([]string, 0, len(hidden))
+	for name := range hidden {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func schemaPropertyNames(raw json.RawMessage) map[string]struct{} {
+	props := schemaProperties(raw)
+	if len(props) == 0 {
+		return nil
+	}
+	names := make(map[string]struct{}, len(props))
+	for name := range props {
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+func sessionCatalogSchemaEnums(raw json.RawMessage) map[string]map[string]struct{} {
+	props := schemaProperties(raw)
+	if len(props) == 0 {
+		return nil
+	}
+	out := map[string]map[string]struct{}{}
+	for name, prop := range props {
+		rawEnum, _ := prop["enum"].([]any)
+		if len(rawEnum) == 0 {
+			continue
+		}
+		values := make(map[string]struct{}, len(rawEnum))
+		for _, value := range rawEnum {
+			values[fmt.Sprint(value)] = struct{}{}
+		}
+		out[name] = values
+	}
+	return out
+}
+
+func schemaProperties(raw json.RawMessage) map[string]map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil
+	}
+	rawProps, _ := schema["properties"].(map[string]any)
+	if len(rawProps) == 0 {
+		return nil
+	}
+	props := make(map[string]map[string]any, len(rawProps))
+	for name, rawProp := range rawProps {
+		prop, _ := rawProp.(map[string]any)
+		if prop == nil {
+			continue
+		}
+		props[name] = prop
+	}
+	return props
 }
 
 func sessionCatalogOperationSuppressedFromContext(ctx context.Context, provider, operation, instance string) bool {

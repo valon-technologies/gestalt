@@ -68,7 +68,7 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 	ctx = principal.WithPrincipal(ctx, p)
 	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.PluginName))
 	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
-	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
+	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTPBinding)
 	ctx = invocation.WithHTTPBinding(ctx, binding.Name)
 	if binding.CredentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, binding.CredentialMode)

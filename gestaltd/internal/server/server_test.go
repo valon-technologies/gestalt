@@ -7515,6 +7515,93 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 	}
 }
 
+func TestListIntegrations_HidesProviderWithOnlyInternalHTTPOperations(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Source:      "internal-only",
+		DisplayName: "Internal Only",
+		Spec: &providermanifestv1.Spec{
+			DefaultConnection: "bot",
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"bot": {
+					Mode:     providermanifestv1.ConnectionModePlatform,
+					Exposure: providermanifestv1.ConnectionExposureInternal,
+					Auth:     &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+				},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					Connection: "bot",
+					Operations: []providermanifestv1.ProviderOperation{
+						{
+							Name:       "bot.only",
+							Method:     http.MethodGet,
+							Path:       "/bot.only",
+							Connection: "bot",
+						},
+					},
+				},
+			},
+		},
+	}
+	prov := &stubNonOAuthProvider{
+		name: "internal-only",
+		catalog: serverTestCatalog("internal-only", []catalog.CatalogOperation{{
+			ID:        "bot.only",
+			Method:    http.MethodGet,
+			Path:      "/bot.only",
+			Transport: catalog.TransportREST,
+		}}),
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"internal-only": {ResolvedManifest: manifest},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("list integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("integrations status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	var integrations []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decode integrations: %v", err)
+	}
+	for _, integration := range integrations {
+		if integration.Name == "internal-only" {
+			t.Fatalf("internal-only integration leaked in integrations response: %+v", integration)
+		}
+	}
+
+	opsResp, err := http.Get(ts.URL + "/api/v1/integrations/internal-only/operations")
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	defer func() { _ = opsResp.Body.Close() }()
+	if opsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(opsResp.Body)
+		t.Fatalf("operations status = %d, want %d: %s", opsResp.StatusCode, http.StatusOK, body)
+	}
+	var ops []catalog.CatalogOperation
+	if err := json.NewDecoder(opsResp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decode operations: %v", err)
+	}
+	if len(ops) != 0 {
+		t.Fatalf("operations = %+v, want none", ops)
+	}
+}
+
 func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t *testing.T) {
 	t.Parallel()
 
@@ -11168,13 +11255,14 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {Mode: providermanifestv1.ConnectionModeUser},
 				"bot": {
-					Mode: providermanifestv1.ConnectionModePlatform,
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+					Mode:     providermanifestv1.ConnectionModePlatform,
+					Exposure: providermanifestv1.ConnectionExposureInternal,
+					Auth:     &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 				},
 			},
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				REST: &providermanifestv1.RESTSurface{
-					Connection: "bot",
+					Connection: "default",
 					BaseURL:    upstream.URL,
 					Operations: []providermanifestv1.ProviderOperation{
 						{
@@ -11184,7 +11272,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 							Path:        "/api/chat.postMessage",
 							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
 								Parameter: "actor",
-								Default:   "bot",
+								Default:   "user",
 								Values: map[string]string{
 									"bot":  "bot",
 									"user": "default",
@@ -11205,6 +11293,18 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 								{Name: "channel", Type: "string", In: "body", Required: true},
 								{Name: "text", Type: "string", In: "body", Required: true},
 								{Name: "post_at", Type: "int", In: "body", Required: true},
+							},
+						},
+						{
+							Name:        "assistant.threads.setStatus",
+							Description: "Set assistant status",
+							Method:      http.MethodPost,
+							Path:        "/api/assistant.threads.setStatus",
+							Connection:  "bot",
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "channel_id", Type: "string", In: "body", Required: true},
+								{Name: "thread_ts", Type: "string", In: "body", Required: true},
+								{Name: "status", Type: "string", In: "body", Required: true},
 							},
 						},
 						{
@@ -11289,8 +11389,12 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		svc.ExternalCredentials,
 		invocation.WithConnectionRuntime(connectionRuntime.Resolve),
 	)
-	if _, token, err := broker.ResolveToken(context.Background(), &principal.Principal{SubjectID: subjectID}, "slack", "bot", ""); err != nil || token != "bot-slack-token" {
-		t.Fatalf("ResolveToken bot = token %q, err %v; want platform token", token, err)
+	if _, token, err := broker.ResolveToken(context.Background(), &principal.Principal{SubjectID: subjectID}, "slack", "bot", ""); !errors.Is(err, invocation.ErrAuthorizationDenied) || token != "" {
+		t.Fatalf("ResolveToken public bot = token %q, err %v; want authorization denied", token, err)
+	}
+	trustedCtx := invocation.WithHTTPBinding(invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTPBinding), "event")
+	if _, token, err := broker.ResolveToken(trustedCtx, &principal.Principal{SubjectID: subjectID}, "slack", "bot", ""); err != nil || token != "bot-slack-token" {
+		t.Fatalf("ResolveToken trusted bot = token %q, err %v; want platform token", token, err)
 	}
 	metrics := metrictest.NewManualMeterProvider(t)
 
@@ -11337,7 +11441,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if err := json.NewDecoder(integrationsResp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decode integrations: %v", err)
 	}
-	var botConnection *struct {
+	var defaultConnection *struct {
 		Name        string   `json:"name"`
 		Mode        string   `json:"mode"`
 		Connected   bool     `json:"connected"`
@@ -11351,19 +11455,22 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 		slackConnected = integrations[i].Connected
 		for j := range integrations[i].Connections {
+			if integrations[i].Connections[j].Name == "default" {
+				defaultConnection = &integrations[i].Connections[j]
+			}
 			if integrations[i].Connections[j].Name == "bot" {
-				botConnection = &integrations[i].Connections[j]
+				t.Fatalf("internal bot connection leaked in integrations response: %+v", integrations[i].Connections[j])
 			}
 		}
 	}
-	if botConnection == nil {
-		t.Fatal("bot connection missing from integrations response")
+	if defaultConnection == nil {
+		t.Fatal("default connection missing from integrations response")
 	}
 	if !slackConnected {
-		t.Fatal("slack integration connected = false, want true when a platform connection is configured")
+		t.Fatal("slack integration connected = false, want true when the user connection is connected")
 	}
-	if botConnection.Mode != "platform" || !botConnection.Connected || botConnection.Connectable || len(botConnection.AuthTypes) != 0 {
-		t.Fatalf("bot connection metadata = %+v, want connected platform non-connectable with no auth types", *botConnection)
+	if defaultConnection.Mode != "user" || !defaultConnection.Connected || !defaultConnection.Connectable {
+		t.Fatalf("default connection metadata = %+v, want connected user connection", *defaultConnection)
 	}
 	for _, tc := range []struct {
 		name string
@@ -11395,6 +11502,69 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		}
 	}
 
+	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/slack/operations", nil)
+	opsReq.Header.Set("Authorization", "Bearer api-token")
+	opsResp, err := http.DefaultClient.Do(opsReq)
+	if err != nil {
+		t.Fatalf("operations request: %v", err)
+	}
+	if opsResp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(opsResp.Body)
+		_ = opsResp.Body.Close()
+		t.Fatalf("operations status = %d: %s", opsResp.StatusCode, payload)
+	}
+	var ops []catalog.CatalogOperation
+	if err := json.NewDecoder(opsResp.Body).Decode(&ops); err != nil {
+		_ = opsResp.Body.Close()
+		t.Fatalf("decode operations: %v", err)
+	}
+	_ = opsResp.Body.Close()
+	seenOps := map[string]catalog.CatalogOperation{}
+	for _, op := range ops {
+		seenOps[op.ID] = op
+	}
+	if _, ok := seenOps["assistant.threads.setStatus"]; ok {
+		t.Fatal("internal bot-only operation leaked in public operations response")
+	}
+	postMessage, ok := seenOps["chat.postMessage"]
+	if !ok {
+		t.Fatal("chat.postMessage missing from public operations response")
+	}
+	for _, param := range postMessage.Parameters {
+		if param.Name == "actor" {
+			t.Fatal("internal actor parameter leaked in public operations response")
+		}
+	}
+	if strings.Contains(string(postMessage.InputSchema), "actor") {
+		t.Fatalf("public chat.postMessage input schema contains internal actor parameter: %s", postMessage.InputSchema)
+	}
+	viewsOpen, ok := seenOps["views.open"]
+	if !ok {
+		t.Fatal("views.open missing from public operations response")
+	}
+	var viewsSchema map[string]any
+	if err := json.Unmarshal(viewsOpen.InputSchema, &viewsSchema); err != nil {
+		t.Fatalf("unmarshal views.open schema: %v", err)
+	}
+	viewsProps, _ := viewsSchema["properties"].(map[string]any)
+	audienceSchema, _ := viewsProps["audience"].(map[string]any)
+	audienceEnum, _ := audienceSchema["enum"].([]any)
+	if len(audienceEnum) != 1 || audienceEnum[0] != "user" {
+		t.Fatalf("views.open audience enum = %#v, want [user]", audienceEnum)
+	}
+	if strings.Contains(string(viewsOpen.InputSchema), "bot") {
+		t.Fatalf("public views.open input schema contains internal selector value: %s", viewsOpen.InputSchema)
+	}
+	cachedViewsOpen, ok := invocation.CatalogOperation(prov.Catalog(), "views.open")
+	if !ok {
+		t.Fatal("views.open missing from provider catalog")
+	}
+	for _, param := range cachedViewsOpen.Parameters {
+		if param.Name == "audience" && param.Default != nil {
+			t.Fatalf("cached views.open audience default mutated = %#v, want nil", param.Default)
+		}
+	}
+
 	doInvoke := func(operation, body string) int {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/"+operation, strings.NewReader(body))
@@ -11415,20 +11585,26 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		return resp.StatusCode
 	}
 
-	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as user","actor":"user"}`); status != http.StatusOK {
-		t.Fatalf("user actor status = %d, want %d", status, http.StatusOK)
+	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as user"}`); status != http.StatusOK {
+		t.Fatalf("default user status = %d, want %d", status, http.StatusOK)
 	}
-	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as bot"}`); status != http.StatusOK {
-		t.Fatalf("default actor status = %d, want %d", status, http.StatusOK)
+	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"bad actor","actor":"user"}`); status != http.StatusBadRequest {
+		t.Fatalf("hidden actor status = %d, want %d", status, http.StatusBadRequest)
 	}
 	if status := doInvoke("chat.scheduleMessage?_connection=default", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
 		t.Fatalf("surface fallback override status = %d, want %d", status, http.StatusOK)
 	}
+	if status := doInvoke("chat.scheduleMessage?_connection=bot", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusForbidden {
+		t.Fatalf("internal connection override status = %d, want %d", status, http.StatusForbidden)
+	}
+	if status := doInvoke("assistant.threads.setStatus", `{"channel_id":"C1","thread_ts":"1.0","status":"thinking"}`); status != http.StatusForbidden {
+		t.Fatalf("internal operation status = %d, want %d", status, http.StatusForbidden)
+	}
 	if status := doInvoke("views.open", `{"trigger_id":"T1","audience":"user"}`); status != http.StatusOK {
 		t.Fatalf("non-internal selector status = %d, want %d", status, http.StatusOK)
 	}
-	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"bad actor","actor":"workspace"}`); status != http.StatusBadRequest {
-		t.Fatalf("invalid actor status = %d, want %d", status, http.StatusBadRequest)
+	if status := doInvoke("views.open", `{"trigger_id":"T1","audience":"bot"}`); status != http.StatusForbidden {
+		t.Fatalf("internal selector status = %d, want %d", status, http.StatusForbidden)
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
@@ -11440,15 +11616,12 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	}
 	userAttrs := maps.Clone(httpOperationAttrs)
 	userAttrs["gestaltd.connection.mode"] = "user"
-	platformAttrs := maps.Clone(httpOperationAttrs)
-	platformAttrs["gestaltd.connection.mode"] = "platform"
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", userAttrs)
-	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", platformAttrs)
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(calls) != 4 {
-		t.Fatalf("upstream calls = %d, want 4", len(calls))
+	if len(calls) != 3 {
+		t.Fatalf("upstream calls = %d, want 3", len(calls))
 	}
 	if calls[0].path != "/api/chat.postMessage" {
 		t.Fatalf("first call path = %q, want chat.postMessage", calls[0].path)
@@ -11459,29 +11632,23 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if _, ok := calls[0].body["actor"]; ok {
 		t.Fatalf("first upstream body included internal actor param: %+v", calls[0].body)
 	}
-	if calls[1].auth != "Bearer bot-slack-token" {
-		t.Fatalf("second call auth = %q, want bot token", calls[1].auth)
+	if calls[1].path != "/api/chat.scheduleMessage" {
+		t.Fatalf("second call path = %q, want chat.scheduleMessage", calls[1].path)
 	}
-	if _, ok := calls[1].body["actor"]; ok {
-		t.Fatalf("second upstream body included internal actor param: %+v", calls[1].body)
+	if calls[1].auth != "Bearer user-slack-token" {
+		t.Fatalf("second call auth = %q, want user token", calls[1].auth)
 	}
-	if calls[2].path != "/api/chat.scheduleMessage" {
-		t.Fatalf("third call path = %q, want chat.scheduleMessage", calls[2].path)
+	if calls[1].body["text"] != "scheduled" {
+		t.Fatalf("second upstream body text = %#v, want scheduled", calls[1].body["text"])
+	}
+	if calls[2].path != "/api/views.open" {
+		t.Fatalf("third call path = %q, want views.open", calls[2].path)
 	}
 	if calls[2].auth != "Bearer user-slack-token" {
 		t.Fatalf("third call auth = %q, want user token", calls[2].auth)
 	}
-	if calls[2].body["text"] != "scheduled" {
-		t.Fatalf("third upstream body text = %#v, want scheduled", calls[2].body["text"])
-	}
-	if calls[3].path != "/api/views.open" {
-		t.Fatalf("fourth call path = %q, want views.open", calls[3].path)
-	}
-	if calls[3].auth != "Bearer user-slack-token" {
-		t.Fatalf("fourth call auth = %q, want user token", calls[3].auth)
-	}
-	if calls[3].body["audience"] != "user" {
-		t.Fatalf("fourth upstream body audience = %#v, want user", calls[3].body["audience"])
+	if calls[2].body["audience"] != "user" {
+		t.Fatalf("third upstream body audience = %#v, want user", calls[2].body["audience"])
 	}
 }
 

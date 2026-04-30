@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -316,7 +315,10 @@ func hybridPluginOperationConnection(plan config.StaticConnectionPlan, specConne
 }
 
 func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
-	if !reflect.DeepEqual(plan.PluginConnection(), config.ConnectionDef{}) {
+	pluginConnection := plan.ResolvedPluginConnection()
+	if pluginConnection.Source.ModeSource == config.ConfigSourceDeploy ||
+		pluginConnection.Source.AuthSource == config.ConfigSourceDeploy ||
+		len(pluginConnection.Params) > 0 {
 		return true
 	}
 	return plan.AuthDefaultConnection() == config.PluginConnectionName && len(plan.NamedConnectionNames()) > 0

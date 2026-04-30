@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -19,16 +20,18 @@ const (
 )
 
 type Config struct {
-	Invoker          invocation.Invoker
-	TokenResolver    invocation.TokenResolver
-	AuditSink        core.AuditSink
-	Providers        *registry.ProviderMap[core.Provider]
-	Authorizer       authorization.RuntimeAuthorizer
-	AllowedProviders []string
-	ToolPrefixes     map[string]string
-	ToolTargets      *toolTargetIndex
-	IncludeREST      map[string]bool
-	MCPConnection    map[string]string
+	Invoker             invocation.Invoker
+	TokenResolver       invocation.TokenResolver
+	AuditSink           core.AuditSink
+	Providers           *registry.ProviderMap[core.Provider]
+	Authorizer          authorization.RuntimeAuthorizer
+	AllowedProviders    []string
+	ToolPrefixes        map[string]string
+	ToolTargets         *toolTargetIndex
+	IncludeREST         map[string]bool
+	MCPConnection       map[string]string
+	CatalogProjection   func(provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog
+	InvocationValidator func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
@@ -67,7 +70,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 			dynamicProviders = append(dynamicProviders, provName)
 		}
 
-		if cat := prov.Catalog(); cat != nil {
+		if cat := projectCatalog(cfg, provName, prov, prov.Catalog()); cat != nil {
 			for name := range buildToolMap(cfg, provName, cat) {
 				staticToolNames[name] = struct{}{}
 			}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -14,6 +15,13 @@ func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat 
 	for name := range m {
 		srv.AddTool(m[name].Tool, m[name].Handler)
 	}
+}
+
+func projectCatalog(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
+	if cfg.CatalogProjection == nil || cat == nil {
+		return cat
+	}
+	return cfg.CatalogProjection(provName, prov, cat)
 }
 
 func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]mcpserver.ServerTool {

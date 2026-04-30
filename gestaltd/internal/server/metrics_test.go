@@ -800,7 +800,7 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		"gestalt.operation":           "receive_event",
 		"gestalt.transport":           "rest",
 		"gestalt.connection_mode":     "none",
-		"gestalt.invocation_surface":  "http",
+		"gestalt.invocation_surface":  "http_binding",
 		"gestalt.http_binding":        "delivery",
 		"gestalt.result_status":       "200",
 		"gestalt.result_status_class": "2xx",

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -34,12 +35,17 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 		if connection != "" {
 			ctx = invocation.WithConnection(ctx, connection)
 		}
+		ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceMCP)
 		if sessionCatalogOperationSuppressedFromContext(ctx, provName, opName, instance) {
 			return mcpgo.NewToolResultError("requested instance is unavailable for this tool"), nil
 		}
+		var validationOp catalog.CatalogOperation
+		var hasValidationOp bool
 		opMeta, sessionConnection, ok := sessionCatalogOperationFromContext(ctx, provName, opName, instance)
 		if ok {
 			ctx = invocation.WithCatalogOperation(ctx, provName, opMeta)
+			validationOp = opMeta
+			hasValidationOp = true
 			if invocation.ConnectionFromContext(ctx) == "" && sessionConnection != "" {
 				ctx = invocation.WithConnection(ctx, sessionConnection)
 			}
@@ -51,6 +57,15 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 			}
 		} else if instance != "" {
 			return mcpgo.NewToolResultError("requested instance is unavailable for this tool"), nil
+		}
+		if err := validateSessionCatalogInvocation(ctx, provName, opName, instance, args); err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		if err := validateToolInvocation(ctx, cfg, provName, opName, validationOp, hasValidationOp, args); err != nil {
+			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
+				return mcpgo.NewToolResultError("operation access denied"), nil
+			}
+			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
 		result, err := cfg.Invoker.Invoke(ctx, p, provName, instance, opName, args)
@@ -73,4 +88,24 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 		}
 		return mcpgo.NewToolResultText(result.Body), nil
 	}
+}
+
+func validateToolInvocation(ctx context.Context, cfg Config, provName, opName string, fallbackOp catalog.CatalogOperation, hasFallbackOp bool, args map[string]any) error {
+	if cfg.InvocationValidator == nil || cfg.Providers == nil {
+		return nil
+	}
+	prov, err := cfg.Providers.Get(provName)
+	if err != nil {
+		return err
+	}
+	op := fallbackOp
+	hasOp := hasFallbackOp
+	if staticOp, ok := invocation.CatalogOperation(prov.Catalog(), opName); ok {
+		op = staticOp
+		hasOp = true
+	}
+	if !hasOp {
+		return nil
+	}
+	return cfg.InvocationValidator(ctx, provName, prov, op, args, invocation.ConnectionFromContext(ctx))
 }

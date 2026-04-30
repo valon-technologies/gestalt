@@ -568,6 +568,19 @@ func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, 
 	return effectiveConnectionMode(ctx, prov)
 }
 
+func (b *Broker) resolveConnectionExposure(providerName, connection string) core.ConnectionExposure {
+	if b != nil && b.connectionRuntime != nil {
+		if info, ok := b.connectionRuntime(providerName, connection); ok && info.Exposure != "" {
+			return core.NormalizeConnectionExposure(info.Exposure)
+		}
+	}
+	return core.ConnectionExposureUser
+}
+
+func allowsInternalConnection(ctx context.Context) bool {
+	return InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTPBinding && HTTPBindingFromContext(ctx) != ""
+}
+
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
@@ -667,6 +680,9 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	}
 
 	mode := b.resolveConnectionMode(ctx, prov, providerName, connection)
+	if b.resolveConnectionExposure(providerName, connection) == core.ConnectionExposureInternal && !allowsInternalConnection(ctx) {
+		return ctx, "", fmt.Errorf("%w: integration %q connection %q is internal", ErrAuthorizationDenied, providerName, strings.TrimSpace(connection))
+	}
 	switch mode {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")

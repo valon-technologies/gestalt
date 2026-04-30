@@ -95,7 +95,10 @@ func connectionRuntimeInfo(integration, connection string, conn *config.Connecti
 // connection material using the same rules as invocation bootstrap.
 func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
-	info := invocation.ConnectionRuntimeInfo{Mode: mode}
+	info := invocation.ConnectionRuntimeInfo{
+		Mode:     mode,
+		Exposure: config.ConnectionExposureForConnection(conn),
+	}
 	if mode != core.ConnectionModePlatform {
 		return info, nil
 	}
