@@ -74,6 +74,11 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*providermanif
 	if err := validateManifest(&manifest, sourceMode); err != nil {
 		return nil, err
 	}
+	kind, err := ManifestKind(&manifest)
+	if err != nil {
+		return nil, err
+	}
+	manifest.Kind = kind
 	return &manifest, nil
 }
 
@@ -103,7 +108,6 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
 		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, external_credentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
 	}
-	manifest.Kind = kind
 	return kind, nil
 }
 
