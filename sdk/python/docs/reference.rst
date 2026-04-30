@@ -204,6 +204,65 @@ payloads without reaching into private modules.
 
 .. autoclass:: CompleteLoginRequest
 
+Provider telemetry
+------------------
+
+``gestaltd`` configures OpenTelemetry exporters from the selected
+``providers.telemetry`` entry and passes standard ``OTEL_*`` environment into
+provider processes. Python providers that run through the SDK runtime get that
+setup automatically and can use :mod:`gestalt.telemetry` for
+provider-authored GenAI spans and metrics.
+
+.. automodule:: gestalt.telemetry
+   :no-members:
+
+.. currentmodule:: gestalt.telemetry
+
+.. autosummary::
+   :nosignatures:
+
+   Operation
+   configure_from_environment
+   shutdown
+   model_operation
+   agent_invocation
+   tool_execution
+   record_openai_usage
+   record_anthropic_usage
+
+.. autodata:: GENAI_PROVIDER_NAME
+
+.. autodata:: GENAI_OPERATION_CHAT
+
+.. autodata:: GENAI_OPERATION_EXECUTE_TOOL
+
+.. autodata:: GENAI_OPERATION_INVOKE_AGENT
+
+.. autodata:: GENAI_TOOL_TYPE_DATASTORE
+
+.. autodata:: GENAI_TOOL_TYPE_EXTENSION
+
+.. autoclass:: Operation
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autofunction:: configure_from_environment
+
+.. autofunction:: shutdown
+
+.. autofunction:: model_operation
+
+.. autofunction:: agent_invocation
+
+.. autofunction:: tool_execution
+
+.. autofunction:: record_openai_usage
+
+.. autofunction:: record_anthropic_usage
+
+.. currentmodule:: gestalt
+
 Cache client
 ------------
 

@@ -26,6 +26,8 @@ mod runtime_server;
 pub mod s3;
 mod secrets;
 mod secrets_server;
+/// OpenTelemetry helpers for provider-authored GenAI instrumentation.
+pub mod telemetry;
 mod workflow;
 mod workflow_manager;
 

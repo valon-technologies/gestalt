@@ -5,6 +5,7 @@
     "docs/entrypoints/build",
     "docs/entrypoints/runtime",
     "docs/entrypoints/schema",
+    "docs/entrypoints/telemetry",
     "docs/entrypoints/target"
   ],
   "displayBasePath": "docs/entrypoints",

@@ -39,5 +39,6 @@ var Factory bootstrap.AgentFactory = func(ctx context.Context, name string, node
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
+		Telemetry:    deps.Telemetry,
 	})
 }

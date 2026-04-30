@@ -10,6 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	"go.opentelemetry.io/otel/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health"
@@ -196,6 +200,32 @@ func TestWaitForPluginConnReturnsProcessExitBeforeReady(t *testing.T) {
 	}
 }
 
+func TestProviderProcessEnvAddsTelemetryDefaultsWithoutOverridingProviderEnv(t *testing.T) {
+	t.Parallel()
+
+	env := providerProcessEnv(ProcessConfig{
+		ProviderName: "simple",
+		Telemetry:    testProviderTelemetry{},
+		Env: map[string]string{
+			"OTEL_SERVICE_NAME": "custom-provider-service",
+			"CUSTOM":            "provider",
+		},
+	}, map[string]string{
+		"GESTALT_PLUGIN_SOCKET": "/tmp/provider.sock",
+		"CUSTOM":                "host",
+	})
+
+	if got := env["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "otel-collector:4317" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want host telemetry env", got)
+	}
+	if got := env["OTEL_SERVICE_NAME"]; got != "custom-provider-service" {
+		t.Fatalf("OTEL_SERVICE_NAME = %q, want provider env override", got)
+	}
+	if got := env["CUSTOM"]; got != "host" {
+		t.Fatalf("CUSTOM = %q, want reserved exec env override", got)
+	}
+}
+
 func waitForTestGRPCHealth(t *testing.T, socket string) {
 	t.Helper()
 
@@ -224,5 +254,23 @@ func waitForTestGRPCHealth(t *testing.T, socket string) {
 			t.Fatalf("grpc health never became ready: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+type testProviderTelemetry struct{}
+
+func (testProviderTelemetry) MeterProvider() metric.MeterProvider {
+	return noopmetric.NewMeterProvider()
+}
+
+func (testProviderTelemetry) TracerProvider() trace.TracerProvider {
+	return nooptrace.NewTracerProvider()
+}
+
+func (testProviderTelemetry) ProviderTelemetryEnv(providerName string) map[string]string {
+	return map[string]string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT": "otel-collector:4317",
+		"OTEL_SERVICE_NAME":           "gestalt-provider-" + providerName,
+		"CUSTOM":                      "telemetry",
 	}
 }

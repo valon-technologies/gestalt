@@ -20,6 +20,14 @@ var (
 	AttrAgentRuntimePhase      = attribute.Key("gestalt.agent.runtime.phase")
 	AttrAgentRuntimeReason     = attribute.Key("gestalt.agent.runtime.reason")
 	AttrAgentToolSource        = attribute.Key("gestalt.agent.tool.source")
+	AttrErrorType              = attribute.Key("error.type")
+	AttrGenAIOperationName     = attribute.Key("gen_ai.operation.name")
+	AttrGenAIProviderName      = attribute.Key("gen_ai.provider.name")
+	AttrGenAIAgentName         = attribute.Key("gen_ai.agent.name")
+	AttrGenAIConversationID    = attribute.Key("gen_ai.conversation.id")
+	AttrGenAIToolName          = attribute.Key("gen_ai.tool.name")
+	AttrGenAIToolCallID        = attribute.Key("gen_ai.tool.call.id")
+	AttrGenAIToolType          = attribute.Key("gen_ai.tool.type")
 	AttrAuthorizationOperation = attribute.Key("gestalt.authorization.operation")
 	AttrAuthorizationProvider  = attribute.Key("gestalt.authorization.provider")
 	AttrAuthorizationScope     = attribute.Key("gestalt.authorization.scope")
@@ -53,11 +61,14 @@ var (
 	agentRuntimeHealthCheckMetrics       metricutil.MeterCache[metricSet]
 	agentRuntimeReplacementMetrics       metricutil.MeterCache[countMetricSet]
 	agentToolResolveMetrics              metricutil.MeterCache[metricSet]
+	genAIClientOperationDurationMetrics  metricutil.MeterCache[metric.Float64Histogram]
 	authorizationProviderOperationMetric metricutil.MeterCache[metricSet]
 	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
 	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
 	credentialProviderOperationMetrics   metricutil.MeterCache[metricSet]
 )
+
+var genAIClientOperationDurationBuckets = []float64{0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92}
 
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
 	if ctx == nil {
@@ -141,6 +152,22 @@ func RecordAgentRuntimeReplacement(ctx context.Context, failed bool, attrs ...at
 
 func RecordAgentToolResolve(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &agentToolResolveMetrics, "gestaltd.agent.tool.resolve", "gestaltd agent tool resolution", startedAt, failed, attrs...)
+}
+
+func RecordGenAIClientOperationDuration(ctx context.Context, startedAt time.Time, attrs ...attribute.KeyValue) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	duration := genAIClientOperationDurationMetrics.Load(ctx, tracerName, func(meter metric.Meter) metric.Float64Histogram {
+		return metricutil.NewFloat64Histogram(
+			meter,
+			"gen_ai.client.operation.duration",
+			"GenAI operation duration.",
+			"s",
+			metric.WithExplicitBucketBoundaries(genAIClientOperationDurationBuckets...),
+		)
+	})
+	duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
 }
 
 func RecordAuthorizationProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

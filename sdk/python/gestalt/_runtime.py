@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final, cast
 
+from . import _telemetry
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
@@ -65,6 +66,7 @@ workflow_pb2: Any = cast(Any, None)
 workflow_pb2_grpc: Any = cast(Any, None)
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
+ENV_PROVIDER_NAME: Final[str] = "GESTALT_PLUGIN_NAME"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 3
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
@@ -186,6 +188,7 @@ def serve(
     runtime_kind: ProviderKind | str | None = None,
 ) -> None:
     _ensure_grpc_runtime()
+    _telemetry.configure_from_environment(service_name=_provider_service_name())
     scheme, address = _provider_socket_target_from_env()
     bind_target = address
     if scheme == "unix":
@@ -205,6 +208,14 @@ def serve(
         server.wait_for_termination()
     finally:
         close_provider()
+        _telemetry.shutdown()
+
+
+def _provider_service_name() -> str:
+    provider_name = os.environ.get(ENV_PROVIDER_NAME, "").strip()
+    if provider_name:
+        return f"gestalt-provider-{provider_name}"
+    return "gestalt-provider"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -390,3 +390,20 @@ export {
   type WorkflowEvent,
   type WorkflowProviderOptions,
 } from "./workflow.ts";
+export {
+  GENAI_OPERATION_CHAT,
+  GENAI_OPERATION_EXECUTE_TOOL,
+  GENAI_OPERATION_INVOKE_AGENT,
+  GENAI_PROVIDER_NAME,
+  GENAI_TOOL_TYPE_DATASTORE,
+  GENAI_TOOL_TYPE_EXTENSION,
+  GenAIOperation,
+  TELEMETRY_INSTRUMENTATION_NAME,
+  withAgentInvocation,
+  withModelOperation,
+  withToolExecution,
+  type AgentInvocationOptions,
+  type ModelOperationOptions,
+  type TokenUsage,
+  type ToolExecutionOptions,
+} from "./telemetry.ts";
