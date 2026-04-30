@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 )
 
 type lazyAgentManager struct {
