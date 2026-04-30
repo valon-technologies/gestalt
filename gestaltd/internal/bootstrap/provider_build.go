@@ -2362,26 +2362,22 @@ func isIndexedDBProviderEntry(entry *config.ProviderEntry, providerName string) 
 		return false
 	}
 	providerPath := "/indexeddb/" + providerName
-	legacyProviderPath := "/indexeddb-" + providerName
 	if entry.ResolvedManifest != nil {
 		source := strings.TrimSpace(filepath.ToSlash(entry.ResolvedManifest.Source))
-		return strings.HasSuffix(source, providerPath) || strings.HasSuffix(source, legacyProviderPath)
+		return strings.HasSuffix(source, providerPath)
 	}
 	if metadataURL := strings.TrimSpace(entry.SourceMetadataURL()); metadataURL != "" {
 		parsed, err := url.Parse(metadataURL)
 		if err == nil {
 			path := filepath.ToSlash(parsed.Path)
-			return (strings.Contains(path, providerPath+"/") || strings.Contains(path, legacyProviderPath+"/")) &&
-				strings.HasSuffix(path, "/provider-release.yaml")
+			return strings.Contains(path, providerPath+"/") && strings.HasSuffix(path, "/provider-release.yaml")
 		}
 	}
 	if path := strings.TrimSpace(entry.SourcePath()); path != "" {
 		path = filepath.ToSlash(path)
 		return strings.HasSuffix(path, providerPath) ||
-			strings.HasSuffix(path, legacyProviderPath) ||
 			strings.HasSuffix(path, "/"+providerName) ||
 			strings.HasSuffix(path, providerPath+"/manifest.yaml") ||
-			strings.HasSuffix(path, legacyProviderPath+"/manifest.yaml") ||
 			strings.HasSuffix(path, "/"+providerName+"/manifest.yaml")
 	}
 	return false
