@@ -13,6 +13,7 @@ const DefaultHostSocketEnv = providerhost.DefaultAgentHostSocketEnv
 const DefaultManagerSocketEnv = providerhost.DefaultAgentManagerSocketEnv
 
 type ExecConfig = providerhost.AgentExecConfig
+type RemoteConfig = providerhost.RemoteAgentConfig
 type InvocationTokenManager = providerhost.InvocationTokenManager
 type ManagerService = providerhost.AgentManagerService
 
@@ -26,6 +27,10 @@ func ManagerSocketTokenEnv() string {
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (coreagent.Provider, error) {
 	return providerhost.NewExecutableAgent(ctx, cfg)
+}
+
+func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error) {
+	return providerhost.NewRemoteAgent(ctx, cfg)
 }
 
 func NewHostServer(

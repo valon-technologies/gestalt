@@ -29,10 +29,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
 
@@ -274,7 +274,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 	}
 
-	processes := make([]*providerhost.PluginProcess, 0, len(targets))
+	processes := make([]*runtimehost.PluginProcess, 0, len(targets))
 	providerClients := make(map[string]proto.IntegrationProviderClient, len(targets))
 	cleanupProcesses := func() {
 		for _, process := range processes {
@@ -845,7 +845,7 @@ func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEnt
 	return manifestPath, manifest, nil
 }
 
-func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*providerhost.PluginProcess, error) {
+func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*runtimehost.PluginProcess, error) {
 	entry := target.Entry
 	command := entry.Command
 	args := slices.Clone(entry.Args)
@@ -878,7 +878,7 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	// Remote dev runs arbitrary local source trees. The plugin sandbox is tuned
 	// for staged executables and can hide source files from TypeScript/Python
 	// runtimes, so v1 leaves local source execution unsandboxed.
-	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
+	process, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command:      command,
 		Args:         args,
 		Env:          env,
