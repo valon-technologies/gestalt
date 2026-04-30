@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -48,15 +49,7 @@ const PluginConnectionName = "_plugin"
 // PluginConnectionName. In hybrid integrations, mcp.connection can be set
 // to "plugin" to reuse the plugin's OAuth token.
 const PluginConnectionAlias = "plugin"
-const APIVersionV3 = "gestaltd.config/v3"
-const APIVersionV4 = "gestaltd.config/v4"
-
-type providerSourceSyntaxMode int
-
-const (
-	providerSourceSyntaxV3 providerSourceSyntaxMode = iota
-	providerSourceSyntaxV4
-)
+const ConfigAPIVersion = "gestaltd.config/v4"
 
 type Config struct {
 	APIVersion    string                    `yaml:"apiVersion,omitempty"`
@@ -148,9 +141,9 @@ type ServerProvidersConfig struct {
 //   - Builtin:  recognized host builtins such as source: "env" or "stdout"
 //   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
 //   - GitHub:   source: {githubRelease: {repo, tag, asset}}  -> ProviderSource{GitHubRelease: ...}
-//   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."} in v3
-//   - Local:    source: {path} or source: "./dist/provider-release.yaml"
-//     -> ProviderSource{metadataPath: "..."} in v4
+//   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."}
+//   - Local metadata: source: {path} or source: "./dist/provider-release.yaml"
+//     -> ProviderSource{metadataPath: "..."}
 type ProviderSource struct {
 	Builtin       string                  `yaml:"-"`
 	scalar        string                  `yaml:"-"`
@@ -2053,22 +2046,11 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	}
 
 	roots := make([]yaml.Node, len(paths))
-	var sourceSyntax providerSourceSyntaxMode
-	sourceSyntaxSet := false
 	for i, path := range paths {
 		root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
 		if err != nil {
 			return yaml.Node{}, err
 		}
-		rootSyntax, err := configRootSourceSyntax(root)
-		if err != nil {
-			return yaml.Node{}, err
-		}
-		if sourceSyntaxSet && sourceSyntax != rootSyntax {
-			return yaml.Node{}, fmt.Errorf("config validation: mixed apiVersion values are not supported across merged config files")
-		}
-		sourceSyntax = rootSyntax
-		sourceSyntaxSet = true
 		roots[i] = root
 	}
 
@@ -2101,27 +2083,26 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	return root, nil
 }
 
-func configRootSourceSyntax(root yaml.Node) (providerSourceSyntaxMode, error) {
+func validateConfigRootAPIVersion(root yaml.Node) error {
 	doc := documentValueNode(&root)
 	if doc == nil || doc.Kind == 0 {
-		return providerSourceSyntaxV3, requiredAPIVersionError()
+		return requiredAPIVersionError()
 	}
 	if doc.Kind != yaml.MappingNode {
-		return providerSourceSyntaxV3, fmt.Errorf("parsing config YAML: expected mapping document")
+		return fmt.Errorf("parsing config YAML: expected mapping document")
 	}
 	node := mappingValueNode(doc, "apiVersion")
 	if node == nil {
-		return providerSourceSyntaxV3, requiredAPIVersionError()
+		return requiredAPIVersionError()
 	}
 	value := strings.TrimSpace(node.Value)
 	if value == "" {
-		return providerSourceSyntaxV3, requiredAPIVersionError()
+		return requiredAPIVersionError()
 	}
-	mode, err := providerSourceSyntaxForAPIVersion(value)
-	if err != nil {
-		return providerSourceSyntaxV3, err
+	if value != ConfigAPIVersion {
+		return fmt.Errorf("config validation: unsupported apiVersion %q", value)
 	}
-	return mode, nil
+	return nil
 }
 
 func loadConfigValue(path string, root yaml.Node) (any, error) {
@@ -2166,6 +2147,9 @@ func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mo
 		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
 	}
 	if err := normalizeConfigRoot(&root); err != nil {
+		return yaml.Node{}, err
+	}
+	if err := validateConfigRootAPIVersion(root); err != nil {
 		return yaml.Node{}, err
 	}
 
@@ -2564,13 +2548,12 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		return
 	}
 	cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 
 	normalizeEntry := func(kind string, entry *ProviderEntry) {
 		if entry == nil {
 			return
 		}
-		normalizeProviderSource(kind, &entry.Source, sourceSyntax)
+		normalizeProviderSource(kind, &entry.Source)
 	}
 
 	for _, entry := range cfg.Plugins {
@@ -2608,7 +2591,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 	}
 }
 
-func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax providerSourceSyntaxMode) {
+func normalizeProviderSource(kind string, source *ProviderSource) {
 	if source == nil {
 		return
 	}
@@ -2618,7 +2601,7 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 	source.metadataPath = strings.TrimSpace(source.metadataPath)
 	source.unsupported = strings.TrimSpace(source.unsupported)
 	source.Auth = cloneSourceAuthDef(source.Auth)
-	if sourceSyntax == providerSourceSyntaxV4 && source.Path != "" && source.metadataPath == "" {
+	if source.Path != "" && source.metadataPath == "" && isLocalReleaseMetadataPath(source.Path) {
 		source.metadataPath = source.Path
 		source.Path = ""
 	}
@@ -2644,12 +2627,16 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 		source.metadataURL = source.scalar
 	case looksLikeUnsupportedScalarSource(source.scalar):
 		source.unsupported = source.scalar
-	case sourceSyntax == providerSourceSyntaxV4:
+	case isLocalReleaseMetadataPath(source.scalar):
 		source.metadataPath = source.scalar
 	default:
 		source.Path = source.scalar
 	}
 	source.scalar = ""
+}
+
+func isLocalReleaseMetadataPath(value string) bool {
+	return path.Base(filepath.ToSlash(strings.TrimSpace(value))) == "provider-release.yaml"
 }
 
 func isBuiltinScalarSource(kind, source string) bool {
@@ -2710,27 +2697,6 @@ func looksLikeUnsupportedScalarSource(value string) bool {
 		}
 	}
 	return false
-}
-
-func providerSourceSyntaxForAPIVersion(apiVersion string) (providerSourceSyntaxMode, error) {
-	switch strings.TrimSpace(apiVersion) {
-	case APIVersionV3:
-		return providerSourceSyntaxV3, nil
-	case APIVersionV4:
-		return providerSourceSyntaxV4, nil
-	case "":
-		return providerSourceSyntaxV3, requiredAPIVersionError()
-	default:
-		return providerSourceSyntaxV3, fmt.Errorf("config validation: unsupported apiVersion %q", strings.TrimSpace(apiVersion))
-	}
-}
-
-func sourceSyntaxForConfig(apiVersion string) providerSourceSyntaxMode {
-	mode, err := providerSourceSyntaxForAPIVersion(apiVersion)
-	if err != nil {
-		return providerSourceSyntaxV3
-	}
-	return mode
 }
 
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {

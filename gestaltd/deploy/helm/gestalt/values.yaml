@@ -73,7 +73,7 @@ persistence:
 # placeholders at startup, so secrets can be injected via extraEnv when
 # you enable OAuth/OIDC or an external datastore below.
 config:
-  apiVersion: gestaltd.config/v3
+  apiVersion: gestaltd.config/v4
   server:
     public:
       port: 8080

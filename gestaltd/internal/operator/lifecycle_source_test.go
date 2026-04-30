@@ -312,10 +312,10 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 		remoteArchives     bool
 		tamperLocalArchive bool
 	}{
-		{name: "remote metadata url", apiVersion: config.APIVersionV3},
-		{name: "local metadata file", apiVersion: config.APIVersionV4, localSource: true},
-		{name: "local metadata file with remote archives", apiVersion: config.APIVersionV4, localSource: true, remoteArchives: true},
-		{name: "local metadata file rejects tampered archive", apiVersion: config.APIVersionV4, localSource: true, tamperLocalArchive: true},
+		{name: "remote metadata url", apiVersion: config.ConfigAPIVersion},
+		{name: "local metadata file", apiVersion: config.ConfigAPIVersion, localSource: true},
+		{name: "local metadata file with remote archives", apiVersion: config.ConfigAPIVersion, localSource: true, remoteArchives: true},
+		{name: "local metadata file rejects tampered archive", apiVersion: config.ConfigAPIVersion, localSource: true, tamperLocalArchive: true},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -834,7 +834,7 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
-	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  workflow:",
 		"    runner:",
 		"      source:",
@@ -1001,7 +1001,7 @@ func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
-	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  externalCredentials:",
 		"    runner:",
 		"      source:",
@@ -1179,7 +1179,7 @@ func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
-	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"  ui:",
 		"    roadmap:",
 		"      source:",
@@ -1328,7 +1328,7 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  gadget:",
 		"    source: " + srv.URL + metadataPath,
@@ -1454,7 +1454,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  alpha:",
 		"    source:",
@@ -1654,7 +1654,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  alpha:",
 		"    source:",
@@ -1781,7 +1781,7 @@ func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  alpha:",
 		"    source:",
@@ -1856,7 +1856,7 @@ func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  alpha:",
 		"    source:",
@@ -1989,7 +1989,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  alpha:",
 		"    source:",
@@ -2189,7 +2189,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"plugins:",
 		"  gadget:",
 		"    source: " + srv.URL + metadataPath,
@@ -2330,7 +2330,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
 		"    secrets:",
@@ -2505,7 +2505,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
 		"    secrets:",
@@ -2580,7 +2580,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"providers:",
 		"  indexeddb:",
 		"    main:",
@@ -2661,7 +2661,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"providers:",
 		"  secrets:",
 		"    session:",
@@ -2785,8 +2785,8 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 		apiVersion  string
 		localSource bool
 	}{
-		{name: "remote metadata url", apiVersion: config.APIVersionV3},
-		{name: "local metadata file", apiVersion: config.APIVersionV4, localSource: true},
+		{name: "remote metadata url", apiVersion: config.ConfigAPIVersion},
+		{name: "local metadata file", apiVersion: config.ConfigAPIVersion, localSource: true},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -3130,7 +3130,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
 		"    bootstrap:",
@@ -3371,7 +3371,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
 		"    bootstrap:",
@@ -3500,7 +3500,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
+		"apiVersion: " + config.ConfigAPIVersion,
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
 		"    secrets:",

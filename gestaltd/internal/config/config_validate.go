@@ -51,7 +51,6 @@ func CanonicalizeStructure(cfg *Config) error {
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}
@@ -87,7 +86,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{HostProviderKindAudit, cfg.Providers.Audit},
 	} {
-		if err := validateHostProviderEntries(collection.kind, collection.entries, sourceSyntax); err != nil {
+		if err := validateHostProviderEntries(collection.kind, collection.entries); err != nil {
 			return err
 		}
 		if _, _, err := cfg.SelectedHostProvider(collection.kind); err != nil {
@@ -104,7 +103,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if entry.Source.IsBuiltin() {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
-		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
 			return err
 		}
 		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
@@ -143,7 +142,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 
 	// Validate plugins
 	for name, entry := range cfg.Plugins {
-		if err := validatePlugin(cfg, name, entry, sourceSyntax); err != nil {
+		if err := validatePlugin(cfg, name, entry); err != nil {
 			return err
 		}
 	}
@@ -178,10 +177,10 @@ func validateAPIVersion(cfg *Config) error {
 		return nil
 	}
 	// YAML roots require apiVersion before this point; direct programmatic
-	// Config values may omit it and use v3 source normalization.
+	// Config values may omit it and use current source normalization.
 	apiVersion := strings.TrimSpace(cfg.APIVersion)
 	switch apiVersion {
-	case "", APIVersionV3, APIVersionV4:
+	case "", ConfigAPIVersion:
 		return nil
 	default:
 		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
@@ -189,10 +188,10 @@ func validateAPIVersion(cfg *Config) error {
 }
 
 func requiredAPIVersionError() error {
-	return fmt.Errorf("config validation: apiVersion is required; supported values are %q or %q", APIVersionV3, APIVersionV4)
+	return fmt.Errorf("config validation: apiVersion is required; supported value is %q", ConfigAPIVersion)
 }
 
-func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
+func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry) error {
 	for name, entry := range entries {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.%s.%s is required", kind, name)
@@ -205,26 +204,26 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: authentication provider %q does not support builtin providers; use a provider source reference or omit authentication", name)
 			}
-			if err := validateProviderEntrySource("authentication", name, entry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("authentication", name, entry); err != nil {
 				return err
 			}
 		case HostProviderKindAuthorization:
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: authorization provider %q does not support builtin providers; use a provider source reference or omit authorization", name)
 			}
-			if err := validateProviderEntrySource("authorization", name, entry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("authorization", name, entry); err != nil {
 				return err
 			}
 		case HostProviderKindExternalCredentials:
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: externalCredentials provider %q does not support builtin providers; use a provider source reference or omit externalCredentials", name)
 			}
-			if err := validateProviderEntrySource("externalCredentials", name, entry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("externalCredentials", name, entry); err != nil {
 				return err
 			}
 		case HostProviderKindSecrets, HostProviderKindTelemetry:
 			if !entry.Source.IsBuiltin() {
-				if err := validateProviderEntrySource(string(kind), name, entry, sourceSyntax); err != nil {
+				if err := validateProviderEntrySource(string(kind), name, entry); err != nil {
 					return err
 				}
 			}
@@ -234,7 +233,7 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 					return err
 				}
 			} else {
-				if err := validateProviderEntrySource("audit", name, entry, sourceSyntax); err != nil {
+				if err := validateProviderEntrySource("audit", name, entry); err != nil {
 					return err
 				}
 			}
@@ -292,7 +291,7 @@ func validateBuiltinAudit(entry *ProviderEntry) error {
 	}
 }
 
-func validateProviderEntrySource(kind, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
+func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -306,7 +305,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 	}
 	if src.UnsupportedURL() != "" {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(src.UnsupportedURL())), "git+") {
-			return fmt.Errorf("config validation: %s %q git+ sources are not supported in apiVersion v3 configs", kind, name)
+			return fmt.Errorf("config validation: %s %q git+ sources are not supported", kind, name)
 		}
 		return fmt.Errorf("config validation: %s %q only provider-release.yaml metadata URLs are supported for remote sources", kind, name)
 	}
@@ -324,19 +323,10 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 		modeCount++
 	}
 	if modeCount == 0 {
-		if sourceSyntax == providerSourceSyntaxV4 {
-			return fmt.Errorf("config validation: %s %q source.path or provider-release metadata URL is required", kind, name)
-		}
-		return fmt.Errorf("config validation: %s %q source.path or metadata URL is required", kind, name)
+		return fmt.Errorf("config validation: %s %q source.path or provider-release metadata URL is required", kind, name)
 	}
 	if modeCount > 1 {
-		if sourceSyntax == providerSourceSyntaxV4 {
-			return fmt.Errorf("config validation: %s %q local and remote provider-release metadata sources are mutually exclusive", kind, name)
-		}
 		return fmt.Errorf("config validation: %s %q source.path and metadata URL sources are mutually exclusive", kind, name)
-	}
-	if src.IsLocal() && sourceSyntax == providerSourceSyntaxV4 {
-		return fmt.Errorf("config validation: %s %q apiVersion v4 source.path must reference provider-release.yaml metadata, not a source manifest", kind, name)
 	}
 	if src.IsLocalMetadataPath() {
 		if path.Base(filepath.ToSlash(src.MetadataPath())) != "provider-release.yaml" {
@@ -444,7 +434,6 @@ func validateRuntimeConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
@@ -459,7 +448,7 @@ func validateRuntimeConfig(cfg *Config) error {
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: runtime provider %q does not support builtin providers; use a provider source reference or driver: %q", name, RuntimeProviderDriverLocal)
 			}
-			if err := validateProviderEntrySource("runtime", name, &entry.ProviderEntry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("runtime", name, &entry.ProviderEntry); err != nil {
 				return err
 			}
 		case RuntimeProviderDriverLocal:
@@ -491,7 +480,7 @@ func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
 		entry.Source.UnsupportedURL() != ""
 }
 
-func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
+func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: plugin %q requires a source", name)
 	}
@@ -539,7 +528,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if entry.UI != "" && entry.MountPath == "" {
 		return fmt.Errorf("config validation: plugins.%s.ui.bundle requires plugins.%s.ui.path", name, name)
 	}
-	if err := validateProviderEntrySource("plugin", name, entry, sourceSyntax); err != nil {
+	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
 	}
 	if err := validatePluginRouteAuth(cfg, name, entry); err != nil {
@@ -588,7 +577,6 @@ func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) err
 }
 
 func validateDatastoreConfig(cfg *Config) error {
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.IndexedDB {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.indexeddb.%s is required", name)
@@ -596,7 +584,7 @@ func validateDatastoreConfig(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("indexeddb", name, entry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
 			return err
 		}
 	}
@@ -607,7 +595,6 @@ func validateDatastoreConfig(cfg *Config) error {
 }
 
 func validateCacheConfig(cfg *Config) error {
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.Cache {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.cache.%s is required", name)
@@ -618,7 +605,7 @@ func validateCacheConfig(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.cache."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("cache", name, entry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("cache", name, entry); err != nil {
 			return err
 		}
 	}
@@ -626,7 +613,6 @@ func validateCacheConfig(cfg *Config) error {
 }
 
 func validateS3Config(cfg *Config) error {
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.S3 {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.s3.%s is required", name)
@@ -634,7 +620,7 @@ func validateS3Config(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.s3."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("s3", name, entry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("s3", name, entry); err != nil {
 			return err
 		}
 	}
@@ -642,7 +628,6 @@ func validateS3Config(cfg *Config) error {
 }
 
 func validateWorkflowConfig(cfg *Config) error {
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	defaults := make([]string, 0, len(cfg.Providers.Workflow))
 	for name, entry := range cfg.Providers.Workflow {
 		if entry == nil {
@@ -661,7 +646,7 @@ func validateWorkflowConfig(cfg *Config) error {
 		if err := validateWorkflowProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("workflow", name, entry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
 			return err
 		}
 	}
@@ -673,7 +658,6 @@ func validateWorkflowConfig(cfg *Config) error {
 }
 
 func validateAgentConfig(cfg *Config) error {
-	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	defaults := make([]string, 0, len(cfg.Providers.Agent))
 	for name, entry := range cfg.Providers.Agent {
 		if entry == nil {
@@ -697,7 +681,7 @@ func validateAgentConfig(cfg *Config) error {
 		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("agent", name, entry, sourceSyntax); err != nil {
+		if err := validateProviderEntrySource("agent", name, entry); err != nil {
 			return err
 		}
 	}
