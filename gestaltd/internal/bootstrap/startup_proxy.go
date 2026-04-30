@@ -12,8 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 )
 
 type startupWaitTracker struct {
@@ -78,7 +78,7 @@ func (t *startupWaitTracker) beginWorkflowWait(providerName, pluginName string) 
 }
 
 type startupProviderProxy struct {
-	spec             providerhost.StaticProviderSpec
+	spec             pluginservice.StaticProviderSpec
 	operationRouting startupOperationRouting
 	tracker          *startupWaitTracker
 
@@ -90,7 +90,7 @@ type startupProviderProxy struct {
 	err      error
 }
 
-func newStartupProviderProxy(spec providerhost.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
+func newStartupProviderProxy(spec pluginservice.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
 	operationRouting.connections = maps.Clone(operationRouting.connections)
 	return &startupProviderProxy{
 		spec:             spec,

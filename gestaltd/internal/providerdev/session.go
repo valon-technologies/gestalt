@@ -25,7 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,7 +56,7 @@ type RuntimeEnvBuilder func(sessionID string) (RuntimeEnv, error)
 type Target struct {
 	Name       string
 	Source     string
-	Spec       providerhost.StaticProviderSpec
+	Spec       pluginservice.StaticProviderSpec
 	Config     map[string]any
 	UI         bool
 	UIPath     string
@@ -75,11 +75,11 @@ type CreateSessionRequest struct {
 }
 
 type AttachProvider struct {
-	Name   string                          `json:"name"`
-	Source string                          `json:"source,omitempty"`
-	Spec   providerhost.StaticProviderSpec `json:"spec"`
-	Config *map[string]any                 `json:"config,omitempty"`
-	UI     bool                            `json:"ui,omitempty"`
+	Name   string                           `json:"name"`
+	Source string                           `json:"source,omitempty"`
+	Spec   pluginservice.StaticProviderSpec `json:"spec"`
+	Config *map[string]any                  `json:"config,omitempty"`
+	UI     bool                             `json:"ui,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -1166,7 +1166,7 @@ func (t *attachedTarget) providerForSession(ctx context.Context, session *Sessio
 	}
 
 	client := &sessionProviderClient{session: session, provider: providerName}
-	prov, err := providerhost.NewRemoteProvider(ctx, client, t.target.Spec, t.target.Config)
+	prov, err := pluginservice.NewRemote(ctx, client, t.target.Spec, t.target.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -1735,7 +1735,7 @@ func normalizeAttachProviders(values []AttachProvider) ([]AttachProvider, error)
 	return requests, nil
 }
 
-func buildAttachSpec(remoteSpec providerhost.StaticProviderSpec, localSpec providerhost.StaticProviderSpec) providerhost.StaticProviderSpec {
+func buildAttachSpec(remoteSpec pluginservice.StaticProviderSpec, localSpec pluginservice.StaticProviderSpec) pluginservice.StaticProviderSpec {
 	spec := cloneStaticProviderSpec(remoteSpec)
 	if spec.Name == "" {
 		spec.Name = localSpec.Name
@@ -1784,7 +1784,7 @@ func buildAttachCatalog(remoteCat, localCat *catalog.Catalog) *catalog.Catalog {
 	return out
 }
 
-func cloneStaticProviderSpec(spec providerhost.StaticProviderSpec) providerhost.StaticProviderSpec {
+func cloneStaticProviderSpec(spec pluginservice.StaticProviderSpec) pluginservice.StaticProviderSpec {
 	out := spec
 	out.AuthTypes = slices.Clone(spec.AuthTypes)
 	if spec.ConnectionParams != nil {

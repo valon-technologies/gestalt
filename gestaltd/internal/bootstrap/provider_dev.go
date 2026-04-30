@@ -12,8 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
@@ -110,9 +110,9 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 	}
 }
 
-func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) providerhost.StaticProviderSpec {
+func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) pluginservice.StaticProviderSpec {
 	meta := resolveProviderMetadata(entry)
-	spec := providerhost.StaticProviderSpec{
+	spec := pluginservice.StaticProviderSpec{
 		Name:             name,
 		DisplayName:      provider.DisplayName(),
 		Description:      provider.Description(),
