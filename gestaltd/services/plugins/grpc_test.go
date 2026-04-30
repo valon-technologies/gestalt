@@ -1,14 +1,24 @@
-package providerhost
+package plugins
 
 import (
 	"context"
 	"net"
 	"testing"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
+
+func newIntegrationProviderClient(t *testing.T, server proto.IntegrationProviderServer) proto.IntegrationProviderClient {
+	t.Helper()
+
+	conn := newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterIntegrationProviderServer(srv, server)
+	})
+	return proto.NewIntegrationProviderClient(conn)
+}
 
 func newBufconnConn(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
 	t.Helper()

@@ -1,12 +1,9 @@
 package providerhost
 
-import proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+import plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 
-const (
-	DefaultPluginInvokerSocketEnv = proto.EnvPluginInvokerSocket
-	defaultPluginInvokerTokenEnv  = DefaultPluginInvokerSocketEnv + "_TOKEN"
-)
+const DefaultPluginInvokerSocketEnv = plugininvokerservice.DefaultSocketEnv
 
 func PluginInvokerSocketTokenEnv() string {
-	return defaultPluginInvokerTokenEnv
+	return plugininvokerservice.SocketTokenEnv()
 }

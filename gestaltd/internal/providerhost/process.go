@@ -2,17 +2,13 @@ package providerhost
 
 import (
 	"context"
-	"fmt"
-	"net"
-	"os"
 	"strings"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -42,30 +38,21 @@ type ExecConfig struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	conn, err := runtimehost.StartPluginProcess(ctx, cfg.processConfig())
-	if err != nil {
-		return nil, err
-	}
-
-	opts := []RemoteProviderOption{WithCloser(conn)}
-	if cfg.InvocationTokens != nil {
-		opts = append(opts,
-			WithInvocationTokens(cfg.InvocationTokens),
-			WithInvocationTokenSubject(cfg.StaticSpec.Name, cfg.InvocationGrants),
-		)
-	}
-	prov, err := NewRemoteProvider(
-		ctx,
-		conn.Integration(),
-		cfg.StaticSpec,
-		cfg.Config,
-		opts...,
-	)
-	if err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-	return prov, nil
+	return pluginservice.NewExecutable(ctx, pluginservice.ExecConfig{
+		Command:          cfg.Command,
+		Args:             cfg.Args,
+		Env:              cfg.Env,
+		StaticSpec:       cfg.StaticSpec,
+		Config:           cfg.Config,
+		Egress:           cfg.Egress,
+		HostBinary:       cfg.HostBinary,
+		Cleanup:          cfg.Cleanup,
+		HostServices:     cfg.HostServices,
+		InvocationTokens: cfg.InvocationTokens,
+		InvocationGrants: cfg.InvocationGrants,
+		ProviderName:     cfg.ProviderName,
+		Telemetry:        cfg.Telemetry,
+	})
 }
 
 func (c ExecConfig) processConfig() runtimehost.ProcessConfig {
@@ -109,46 +96,7 @@ func cloneEgressPolicy(policy egress.Policy) egress.Policy {
 }
 
 func ServeProvider(ctx context.Context, provider core.Provider) error {
-	return serveProvider(ctx, func(srv *grpc.Server) {
-		proto.RegisterIntegrationProviderServer(srv, NewProviderServer(provider))
-	})
-}
-
-func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(proto.EnvProviderSocket)
-	if socket == "" {
-		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
-	}
-	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove stale socket %q: %w", socket, err)
-	}
-
-	lis, err := net.Listen("unix", socket)
-	if err != nil {
-		return fmt.Errorf("listen on plugin socket %q: %w", socket, err)
-	}
-	defer func() {
-		_ = lis.Close()
-		_ = os.Remove(socket)
-	}()
-
-	providerName := strings.TrimSpace(os.Getenv(proto.EnvProviderName))
-	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(providerServerGRPCOptions(providerName, nil)...)))
-	register(srv)
-
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		<-ctx.Done()
-		srv.GracefulStop()
-	}()
-
-	err = srv.Serve(lis)
-	if ctx.Err() != nil {
-		<-stopped
-		return nil
-	}
-	return err
+	return pluginservice.ServeProvider(ctx, provider)
 }
 
 func firstNonBlank(values ...string) string {

@@ -1,4 +1,4 @@
-package providerhost
+package plugininvoker
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package providerhost
+package plugininvoker
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 		),
 		&invocation.InvocationMeta{RequestID: "req-1"},
 	)
-	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+	rootToken, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
 		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	})
 	if err != nil {
@@ -100,14 +100,14 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 			Source:    principal.SourceSession,
 		},
 	)
-	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+	rootToken, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
 		"example": {AllOperations: true},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	if _, err := manager.ExchangeToken(rootToken, "caller", invocationGrants{
+	if _, err := manager.ExchangeToken(rootToken, "caller", InvocationGrants{
 		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	}, time.Minute); err != nil {
 		t.Fatalf("ExchangeToken should allow narrowing wildcard grants: %v", err)
@@ -134,7 +134,7 @@ func TestPluginInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
 			Source:    principal.SourceSession,
 		},
 	)
-	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+	rootToken, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
 		"example": {AllOperations: true},
 	})
 	if err != nil {
@@ -179,7 +179,7 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 			Source: principal.SourceEnv,
 		},
 	)
-	token, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+	token, err := manager.MintRootToken(ctx, "caller", InvocationGrants{
 		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	})
 	if err != nil {

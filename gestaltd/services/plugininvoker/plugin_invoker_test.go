@@ -1,4 +1,4 @@
-package providerhost
+package plugininvoker
 
 import (
 	"context"
@@ -57,7 +57,7 @@ func TestPluginInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 		Kind:      principal.KindUser,
 		Source:    principal.SourceSession,
 	})
-	rootToken, err := tokens.MintRootToken(ctx, "caller", invocationGrants{
+	rootToken, err := tokens.MintRootToken(ctx, "caller", InvocationGrants{
 		"github": {Operations: map[string]core.ConnectionMode{"issues.create": ""}},
 		"linear": {Surfaces: map[string]struct{}{"graphql": {}}},
 	})
