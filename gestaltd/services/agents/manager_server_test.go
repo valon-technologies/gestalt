@@ -1,4 +1,4 @@
-package providerhost
+package agents
 
 import (
 	"context"
@@ -12,62 +12,62 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type recordingAgentManagerService struct {
+type recordingManagerService struct {
 	listSessions func(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
 	listTurns    func(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
 }
 
-func (s *recordingAgentManagerService) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (s *recordingManagerService) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	return nil, errors.New("unexpected CreateSession call")
 }
 
-func (s *recordingAgentManagerService) GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error) {
+func (s *recordingManagerService) GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error) {
 	return nil, errors.New("unexpected GetSession call")
 }
 
-func (s *recordingAgentManagerService) ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
+func (s *recordingManagerService) ListSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
 	if s.listSessions != nil {
 		return s.listSessions(ctx, p, req)
 	}
 	return nil, errors.New("unexpected ListSessions call")
 }
 
-func (s *recordingAgentManagerService) UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
+func (s *recordingManagerService) UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
 	return nil, errors.New("unexpected UpdateSession call")
 }
 
-func (s *recordingAgentManagerService) CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	return nil, errors.New("unexpected CreateTurn call")
 }
 
-func (s *recordingAgentManagerService) GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error) {
+func (s *recordingManagerService) GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error) {
 	return nil, errors.New("unexpected GetTurn call")
 }
 
-func (s *recordingAgentManagerService) ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
+func (s *recordingManagerService) ListTurns(ctx context.Context, p *principal.Principal, req coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error) {
 	if s.listTurns != nil {
 		return s.listTurns(ctx, p, req)
 	}
 	return nil, errors.New("unexpected ListTurns call")
 }
 
-func (s *recordingAgentManagerService) CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error) {
 	return nil, errors.New("unexpected CancelTurn call")
 }
 
-func (s *recordingAgentManagerService) ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error) {
+func (s *recordingManagerService) ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error) {
 	return nil, errors.New("unexpected ListTurnEvents call")
 }
 
-func (s *recordingAgentManagerService) ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
+func (s *recordingManagerService) ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
 	return nil, errors.New("unexpected ListInteractions call")
 }
 
-func (s *recordingAgentManagerService) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
+func (s *recordingManagerService) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
 	return nil, errors.New("unexpected ResolveInteraction call")
 }
 
-func TestAgentManagerServerForwardsBoundedListRequests(t *testing.T) {
+func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-test-secret"))
@@ -83,7 +83,7 @@ func TestAgentManagerServerForwardsBoundedListRequests(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	service := &recordingAgentManagerService{
+	service := &recordingManagerService{
 		listSessions: func(_ context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error) {
 			if p == nil || p.SubjectID != "user-1" {
 				t.Fatalf("principal = %#v, want subject user-1", p)
@@ -114,7 +114,7 @@ func TestAgentManagerServerForwardsBoundedListRequests(t *testing.T) {
 			}}, nil
 		},
 	}
-	server := NewAgentManagerServer("caller-plugin", service, tokens)
+	server := NewManagerServer("caller-plugin", service, tokens)
 
 	if _, err := server.ListSessions(context.Background(), &proto.AgentManagerListSessionsRequest{
 		InvocationToken: token,

@@ -2,14 +2,9 @@ package providerhost
 
 import (
 	"context"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-)
-
-const (
-	providerRPCTimeout = 10 * time.Second
 )
 
 type RuntimeProviderMetadata = runtimehost.RuntimeProviderMetadata
@@ -24,11 +19,4 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 
 func StartRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
 	return runtimehost.StartRuntimeProvider(ctx, client)
-}
-
-func providerCallContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	return context.WithTimeout(parent, providerRPCTimeout)
 }

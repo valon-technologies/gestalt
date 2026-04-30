@@ -1,4 +1,4 @@
-package providerhost
+package agents
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 )
 
 func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
@@ -29,59 +30,12 @@ func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent
 	}
 }
 
-func agentMessageToProto(message coreagent.Message) (*proto.AgentMessage, error) {
-	parts, err := agentMessagePartsToProto(message.Parts)
-	if err != nil {
-		return nil, err
-	}
-	metadata, err := structFromMap(message.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentMessage{
-		Role:     message.Role,
-		Text:     message.Text,
-		Parts:    parts,
-		Metadata: metadata,
-	}, nil
-}
-
 func agentMessagesToProto(messages []coreagent.Message) ([]*proto.AgentMessage, error) {
-	if len(messages) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentMessage, 0, len(messages))
-	for _, message := range messages {
-		encoded, err := agentMessageToProto(message)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, encoded)
-	}
-	return out, nil
-}
-
-func agentMessageFromProto(message *proto.AgentMessage) coreagent.Message {
-	if message == nil {
-		return coreagent.Message{}
-	}
-	return coreagent.Message{
-		Role:     message.GetRole(),
-		Text:     message.GetText(),
-		Parts:    agentMessagePartsFromProto(message.GetParts()),
-		Metadata: mapFromStruct(message.GetMetadata()),
-	}
+	return agentwire.MessagesToProto(messages)
 }
 
 func agentMessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
-	if len(messages) == 0 {
-		return nil
-	}
-	out := make([]coreagent.Message, 0, len(messages))
-	for _, message := range messages {
-		out = append(out, agentMessageFromProto(message))
-	}
-	return out
+	return agentwire.MessagesFromProto(messages)
 }
 
 func agentActorToProto(actor coreagent.Actor) *proto.AgentActor {
@@ -171,71 +125,24 @@ func agentToolCandidatesToProto(candidates []coreagent.ToolCandidate) []*proto.A
 	return out
 }
 
-func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
-	if ref == nil {
-		return coreagent.ToolRef{}
-	}
-	return coreagent.ToolRef{
-		System:      ref.GetSystem(),
-		Plugin:      ref.GetPlugin(),
-		Operation:   ref.GetOperation(),
-		Connection:  ref.GetConnection(),
-		Instance:    ref.GetInstance(),
-		Title:       ref.GetTitle(),
-		Description: ref.GetDescription(),
-	}
-}
-
 func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
-	return &proto.AgentToolRef{
-		System:      ref.System,
-		Plugin:      ref.Plugin,
-		Operation:   ref.Operation,
-		Connection:  ref.Connection,
-		Instance:    ref.Instance,
-		Title:       ref.Title,
-		Description: ref.Description,
-	}
+	return agentwire.ToolRefToProto(ref)
 }
 
 func agentToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]coreagent.ToolRef, 0, len(refs))
-	for _, ref := range refs {
-		out = append(out, agentToolRefFromProto(ref))
-	}
-	return out
+	return agentwire.ToolRefsFromProto(refs)
 }
 
 func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(refs))
-	for i := range refs {
-		out = append(out, agentToolRefToProto(refs[i]))
-	}
-	return out
+	return agentwire.ToolRefsToProto(refs)
 }
 
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
-	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH:
-		return coreagent.ToolSourceModeNativeSearch
-	default:
-		return coreagent.ToolSourceModeUnspecified
-	}
+	return agentwire.ToolSourceModeFromProto(mode)
 }
 
 func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
-	switch mode {
-	case coreagent.ToolSourceModeNativeSearch:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH
-	default:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-	}
+	return agentwire.ToolSourceModeToProto(mode)
 }
 
 func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentExecutionStatus {
@@ -495,156 +402,6 @@ func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
 			CreatedAt:  timeToProto(value.CreatedAt),
 			Display:    display,
 		})
-	}
-	return out
-}
-
-func agentMessagePartTypeFromProto(partType proto.AgentMessagePartType) (coreagent.MessagePartType, error) {
-	switch partType {
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT:
-		return coreagent.MessagePartTypeText, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON:
-		return coreagent.MessagePartTypeJSON, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL:
-		return coreagent.MessagePartTypeToolCall, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT:
-		return coreagent.MessagePartTypeToolResult, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF:
-		return coreagent.MessagePartTypeImageRef, nil
-	default:
-		return "", fmt.Errorf("unknown agent message part type %v", partType)
-	}
-}
-
-func agentMessagePartTypeToProto(partType coreagent.MessagePartType) proto.AgentMessagePartType {
-	switch partType {
-	case "":
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
-	case coreagent.MessagePartTypeText:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
-	case coreagent.MessagePartTypeJSON:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON
-	case coreagent.MessagePartTypeToolCall:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL
-	case coreagent.MessagePartTypeToolResult:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
-	case coreagent.MessagePartTypeImageRef:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF
-	default:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
-	}
-}
-
-func agentMessagePartToProto(part coreagent.MessagePart) (*proto.AgentMessagePart, error) {
-	jsonValue, err := structFromMap(part.JSON)
-	if err != nil {
-		return nil, fmt.Errorf("agent message part json: %w", err)
-	}
-	var toolCall *proto.AgentMessagePartToolCall
-	if part.ToolCall != nil {
-		args, err := structFromMap(part.ToolCall.Arguments)
-		if err != nil {
-			return nil, fmt.Errorf("agent message tool call arguments: %w", err)
-		}
-		toolCall = &proto.AgentMessagePartToolCall{
-			Id:        part.ToolCall.ID,
-			ToolId:    part.ToolCall.ToolID,
-			Arguments: args,
-		}
-	}
-	var toolResult *proto.AgentMessagePartToolResult
-	if part.ToolResult != nil {
-		output, err := structFromMap(part.ToolResult.Output)
-		if err != nil {
-			return nil, fmt.Errorf("agent message tool result output: %w", err)
-		}
-		toolResult = &proto.AgentMessagePartToolResult{
-			ToolCallId: part.ToolResult.ToolCallID,
-			Status:     int32(part.ToolResult.Status),
-			Content:    part.ToolResult.Content,
-			Output:     output,
-		}
-	}
-	var imageRef *proto.AgentMessagePartImageRef
-	if part.ImageRef != nil {
-		imageRef = &proto.AgentMessagePartImageRef{
-			Uri:      part.ImageRef.URI,
-			MimeType: part.ImageRef.MIMEType,
-		}
-	}
-	return &proto.AgentMessagePart{
-		Type:       agentMessagePartTypeToProto(part.Type),
-		Text:       part.Text,
-		Json:       jsonValue,
-		ToolCall:   toolCall,
-		ToolResult: toolResult,
-		ImageRef:   imageRef,
-	}, nil
-}
-
-func agentMessagePartsToProto(parts []coreagent.MessagePart) ([]*proto.AgentMessagePart, error) {
-	if len(parts) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentMessagePart, 0, len(parts))
-	for _, part := range parts {
-		encoded, err := agentMessagePartToProto(part)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, encoded)
-	}
-	return out, nil
-}
-
-func agentMessagePartFromProto(part *proto.AgentMessagePart) coreagent.MessagePart {
-	if part == nil {
-		return coreagent.MessagePart{}
-	}
-	partType, _ := agentMessagePartTypeFromProto(part.GetType())
-	var toolCall *coreagent.ToolCallPart
-	if value := part.GetToolCall(); value != nil {
-		toolCall = &coreagent.ToolCallPart{
-			ID:        value.GetId(),
-			ToolID:    value.GetToolId(),
-			Arguments: mapFromStruct(value.GetArguments()),
-		}
-	}
-	var toolResult *coreagent.ToolResultPart
-	if value := part.GetToolResult(); value != nil {
-		toolResult = &coreagent.ToolResultPart{
-			ToolCallID: value.GetToolCallId(),
-			Status:     int(value.GetStatus()),
-			Content:    value.GetContent(),
-			Output:     mapFromStruct(value.GetOutput()),
-		}
-	}
-	var imageRef *coreagent.ImageRefPart
-	if value := part.GetImageRef(); value != nil {
-		imageRef = &coreagent.ImageRefPart{
-			URI:      value.GetUri(),
-			MIMEType: value.GetMimeType(),
-		}
-	}
-	return coreagent.MessagePart{
-		Type:       partType,
-		Text:       part.GetText(),
-		JSON:       mapFromStruct(part.GetJson()),
-		ToolCall:   toolCall,
-		ToolResult: toolResult,
-		ImageRef:   imageRef,
-	}
-}
-
-func agentMessagePartsFromProto(parts []*proto.AgentMessagePart) []coreagent.MessagePart {
-	if len(parts) == 0 {
-		return nil
-	}
-	out := make([]coreagent.MessagePart, 0, len(parts))
-	for _, part := range parts {
-		out = append(out, agentMessagePartFromProto(part))
 	}
 	return out
 }

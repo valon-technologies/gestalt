@@ -1,4 +1,4 @@
-package providerhost
+package agents
 
 import (
 	"context"
@@ -15,11 +15,11 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestAgentHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
+func TestHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
 	var captured coreagent.ExecuteToolRequest
-	server := NewAgentHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		captured = req
 		return &coreagent.ExecuteToolResponse{Status: 207, Body: `{"ok":true}`}, nil
 	})
@@ -57,10 +57,10 @@ func TestAgentHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 	}
 }
 
-func TestAgentHostServerExecuteToolRequiresReplayKey(t *testing.T) {
+func TestHostServerExecuteToolRequiresReplayKey(t *testing.T) {
 	t.Parallel()
 
-	server := NewAgentHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		t.Fatal("executeTool should not be called")
 		return nil, nil
 	})
@@ -82,12 +82,12 @@ func TestAgentHostServerExecuteToolRequiresReplayKey(t *testing.T) {
 	}
 }
 
-func TestAgentHostServerExecuteToolRecordsGenAITelemetry(t *testing.T) {
+func TestHostServerExecuteToolRecordsGenAITelemetry(t *testing.T) {
 	t.Parallel()
 
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	server := NewAgentHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		return &coreagent.ExecuteToolResponse{Status: 200, Body: `{"ok":true}`}, nil
 	})
 
