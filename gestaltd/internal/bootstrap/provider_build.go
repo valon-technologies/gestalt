@@ -40,7 +40,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
@@ -1256,7 +1255,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		return nil, fmt.Errorf("dial hosted agent provider: %w", err)
 	}
 	phaseStarted = time.Now()
-	provider, err := providerhost.NewRemoteAgent(ctx, providerhost.RemoteAgentConfig{
+	provider, err := agentservice.NewRemote(ctx, agentservice.RemoteConfig{
 		Client:  conn.Agent(),
 		Runtime: conn.Lifecycle(),
 		Closer: &runtimeBackedHostedCloser{
