@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
 func (s *Server) mountS3ObjectAccessRoutes(r chi.Router) {
-	path := providerhost.S3ObjectAccessPathPrefix + "{token}"
+	path := s3.ObjectAccessPathPrefix + "{token}"
 	r.MethodFunc(http.MethodGet, path, s.handleS3ObjectAccess)
 	r.MethodFunc(http.MethodHead, path, s.handleS3ObjectAccess)
 	r.MethodFunc(http.MethodPut, path, s.handleS3ObjectAccess)
@@ -46,7 +46,7 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ref := target.Ref
-	ref.Key = providerhost.S3PluginObjectKey(target.PluginName, ref.Key)
+	ref.Key = s3.PluginObjectKey(target.PluginName, ref.Key)
 
 	switch target.Method {
 	case s3store.PresignMethodGet:
@@ -99,7 +99,7 @@ func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3store.Client, target providerhost.S3ObjectAccessTarget, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessPut(w http.ResponseWriter, r *http.Request, client s3store.Client, target s3.ObjectAccessTarget, ref s3store.ObjectRef) {
 	contentType := target.ContentType
 	if contentType == "" {
 		contentType = r.Header.Get("Content-Type")
@@ -133,7 +133,7 @@ func (s *Server) handleS3ObjectAccessDelete(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func enforceS3ObjectAccessHeaders(r *http.Request, target providerhost.S3ObjectAccessTarget, enforceContentType bool) error {
+func enforceS3ObjectAccessHeaders(r *http.Request, target s3.ObjectAccessTarget, enforceContentType bool) error {
 	if enforceContentType && target.ContentType != "" && r.Header.Get("Content-Type") != target.ContentType {
 		return fmt.Errorf("Content-Type header must be %q", target.ContentType)
 	}

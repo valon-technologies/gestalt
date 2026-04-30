@@ -14,6 +14,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -47,7 +48,7 @@ func Start(target string, opts Options) (*Server, error) {
 		return nil, err
 	}
 	stub := &coretesting.StubS3{}
-	accessURLs, err := providerhost.NewS3ObjectAccessURLManager(
+	accessURLs, err := s3.NewObjectAccessURLManager(
 		[]byte("0123456789abcdef0123456789abcdef"),
 		"https://gestalt.example.test",
 	)
@@ -60,7 +61,7 @@ func Start(target string, opts Options) (*Server, error) {
 		grpc.ChainStreamInterceptor(requireRelayTokenStream(opts.ExpectRelayToken)),
 	)
 	proto.RegisterS3Server(srv, providerhost.NewS3Server(stub, ""))
-	proto.RegisterS3ObjectAccessServer(srv, providerhost.NewS3ObjectAccessServer(accessURLs, "sdk-test", "default"))
+	proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, "sdk-test", "default"))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, target: target}, nil
 }

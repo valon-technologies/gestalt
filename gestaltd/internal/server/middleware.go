@@ -11,8 +11,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
 type contextKey string
@@ -94,7 +94,7 @@ func isProviderDevCompleteCallRequest(r *http.Request) bool {
 }
 
 func isS3ObjectAccessRequest(r *http.Request) bool {
-	return r != nil && r.URL != nil && strings.HasPrefix(r.URL.Path, providerhost.S3ObjectAccessPathPrefix)
+	return r != nil && r.URL != nil && strings.HasPrefix(r.URL.Path, s3.ObjectAccessPathPrefix)
 }
 
 // contentSecurityPolicy is the CSP applied to all responses. script-src and
