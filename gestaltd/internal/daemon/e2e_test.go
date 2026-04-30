@@ -1408,7 +1408,7 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 		Kind:        providermanifestv1.KindIndexedDB,
 		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
-		DisplayName: "In-Memory IndexedDB",
+		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
 		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
