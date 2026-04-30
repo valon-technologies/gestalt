@@ -4150,7 +4150,6 @@ pub enum ConnectionMode {
     Unspecified = 0,
     None = 1,
     User = 2,
-    Identity = 3,
     Platform = 5,
 }
 impl ConnectionMode {
@@ -4163,7 +4162,6 @@ impl ConnectionMode {
             Self::Unspecified => "CONNECTION_MODE_UNSPECIFIED",
             Self::None => "CONNECTION_MODE_NONE",
             Self::User => "CONNECTION_MODE_USER",
-            Self::Identity => "CONNECTION_MODE_IDENTITY",
             Self::Platform => "CONNECTION_MODE_PLATFORM",
         }
     }
@@ -4173,7 +4171,6 @@ impl ConnectionMode {
             "CONNECTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
             "CONNECTION_MODE_NONE" => Some(Self::None),
             "CONNECTION_MODE_USER" => Some(Self::User),
-            "CONNECTION_MODE_IDENTITY" => Some(Self::Identity),
             "CONNECTION_MODE_PLATFORM" => Some(Self::Platform),
             _ => None,
         }

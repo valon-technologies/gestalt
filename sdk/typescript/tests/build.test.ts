@@ -325,8 +325,8 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
               authSource: "api_token",
             }),
             credential: create(CredentialContextSchema, {
-              mode: "identity",
-              subjectId: "identity:__identity__",
+              mode: "user",
+              subjectId: "user:user-123",
             }),
             access: create(AccessContextSchema, {
               policy: "sample_policy",
@@ -341,7 +341,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         region: "iad",
         configuredRegion: "use1",
         subjectId: "user:user-123",
-        credentialMode: "identity",
+        credentialMode: "user",
         accessPolicy: "sample_policy",
         accessRole: "admin",
         invocationToken: "",
@@ -386,7 +386,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
               kind: "user",
             }),
             credential: create(CredentialContextSchema, {
-              mode: "identity",
+              mode: "user",
             }),
             access: create(AccessContextSchema, {
               policy: "sample_policy",
@@ -402,7 +402,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
       expect(sessionOperation?.id).toBe("session-hello");
       expect(sessionOperation?.allowedRoles).toEqual(["viewer", "admin"]);
       expect(sessionOperation?.title).toBe(
-        `Session Hello ${label} user:user-123 identity viewer`,
+        `Session Hello ${label} user:user-123 user viewer`,
       );
     } finally {
       if (child) {

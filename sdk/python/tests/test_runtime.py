@@ -508,8 +508,8 @@ class MainEntrypointTests(unittest.TestCase):
                         auth_source="api_token",
                     ),
                     credential=plugin_pb2.CredentialContext(
-                        mode="identity",
-                        subject_id="identity:__identity__",
+                        mode="user",
+                        subject_id="user:user-123",
                     ),
                     access=plugin_pb2.AccessContext(
                         policy="sample_policy",
@@ -526,7 +526,7 @@ class MainEntrypointTests(unittest.TestCase):
                 connection_params={"tenant": "acme"},
                 context=plugin_pb2.RequestContext(
                     subject=plugin_pb2.SubjectContext(id="user:user-123", kind="user"),
-                    credential=plugin_pb2.CredentialContext(mode="identity"),
+                    credential=plugin_pb2.CredentialContext(mode="user"),
                     access=plugin_pb2.AccessContext(
                         policy="sample_policy",
                         role="viewer",
@@ -585,8 +585,8 @@ class MainEntrypointTests(unittest.TestCase):
                 "token": "secret-token",
                 "subject_id": "user:user-123",
                 "subject_kind": "user",
-                "credential_mode": "identity",
-                "credential_subject_id": "identity:__identity__",
+                "credential_mode": "user",
+                "credential_subject_id": "user:user-123",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
                 "idempotency_key": "tool-call-123",
@@ -619,7 +619,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.name, "session-source")
         self.assertEqual(
             catalog.display_name,
-            "acme|user:user-123|identity|viewer|run-456",
+            "acme|user:user-123|user|viewer|run-456",
         )
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")

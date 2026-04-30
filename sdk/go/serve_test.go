@@ -310,7 +310,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 					Kind: "user",
 				},
 				Credential: &proto.CredentialContext{
-					Mode: "identity",
+					Mode: "user",
 				},
 				Access: &proto.AccessContext{
 					Policy: "roadmap",
@@ -324,8 +324,8 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		if resp.GetCatalog() == nil {
 			t.Fatal("expected session catalog")
 		}
-		if resp.GetCatalog().GetDisplayName() != "user:user-123|identity|roadmap|viewer" {
-			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|identity|roadmap|viewer")
+		if resp.GetCatalog().GetDisplayName() != "user:user-123|user|roadmap|viewer" {
+			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|user|roadmap|viewer")
 		}
 		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
 			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
@@ -384,7 +384,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__","access_policy":"roadmap","access_role":"admin","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -398,8 +398,8 @@ func TestProviderServerExecute(t *testing.T) {
 						Kind: "user",
 					},
 					Credential: &proto.CredentialContext{
-						Mode:      "identity",
-						SubjectId: "identity:__identity__",
+						Mode:      "user",
+						SubjectId: "user:user-123",
 					},
 					Access: &proto.AccessContext{
 						Policy: "roadmap",

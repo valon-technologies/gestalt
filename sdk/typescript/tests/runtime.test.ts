@@ -567,8 +567,8 @@ test("integration provider service exposes metadata, configure, execute, and ses
           authSource: "api_token",
         }),
         credential: create(CredentialContextSchema, {
-          mode: "identity",
-          subjectId: "identity:__identity__",
+          mode: "user",
+          subjectId: "user:user-123",
         }),
         access: create(AccessContextSchema, {
           policy: "sample_policy",
@@ -585,7 +585,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     region: "iad",
     configuredRegion: "use1",
     subjectId: "user:user-123",
-    credentialMode: "identity",
+    credentialMode: "user",
     accessPolicy: "sample_policy",
     accessRole: "admin",
     invocationToken: "invocation-token-123",
@@ -604,7 +604,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
           kind: "user",
         }),
         credential: create(CredentialContextSchema, {
-          mode: "identity",
+          mode: "user",
         }),
         access: create(AccessContextSchema, {
           policy: "sample_policy",
@@ -622,7 +622,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     "admin",
   ]);
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
-    "Session Hello ops user:user-123 identity viewer",
+    "Session Hello ops user:user-123 user viewer",
   );
 
   const postConnect = await (service.postConnect as any)(
