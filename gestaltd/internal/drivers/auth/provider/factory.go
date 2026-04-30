@@ -8,8 +8,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,7 +38,7 @@ var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (c
 	if callbackURL == "" && deps.BaseURL != "" {
 		callbackURL = deps.BaseURL + config.AuthCallbackPath
 	}
-	return providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
+	return authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     cfg.Command,
 		Args:        cfg.Args,
 		Env:         cfg.Env,
