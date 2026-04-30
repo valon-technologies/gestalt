@@ -2564,19 +2564,19 @@ plugins:
 	}
 }
 
-func TestE2EInitLocalProviders(t *testing.T) {
+func TestE2ELockLocalProviders(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping E2E init test in short mode")
+		t.Skip("skipping E2E lock test in short mode")
 	}
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init failed: %v\noutput: %s", err, out)
+		t.Fatalf("gestaltd lock failed: %v\noutput: %s", err, out)
 	}
 
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
@@ -2599,7 +2599,7 @@ func TestE2EInitLocalProviders(t *testing.T) {
 		t.Fatalf("expected schema-based lockfile without version field, got %v", lock["version"])
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
-		t.Fatalf("init is a lock-only alias and should not prepare artifacts, got err=%v", err)
+		t.Fatalf("lock should not prepare artifacts, got err=%v", err)
 	}
 }
 
@@ -2794,20 +2794,20 @@ plugins:
 	}
 }
 
-func TestE2EInitWritesOverrideLockfile(t *testing.T) {
+func TestE2ELockWritesOverrideLockfile(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping E2E init lockfile override test in short mode")
+		t.Skip("skipping E2E lockfile override test in short mode")
 	}
 
 	dir := t.TempDir()
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 	lockPath := filepath.Join(dir, "state", "local", "gestalt.lock.json")
 
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
-		t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
+		t.Fatalf("gestaltd lock with --lockfile failed: %v\noutput: %s", err, out)
 	}
 	if _, err := os.Stat(lockPath); err != nil {
 		t.Fatalf("expected override lockfile at %s: %v", lockPath, err)
@@ -2817,7 +2817,7 @@ func TestE2EInitWritesOverrideLockfile(t *testing.T) {
 	}
 }
 
-func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
+func TestE2ELockAndServeLayeredConfigs(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {

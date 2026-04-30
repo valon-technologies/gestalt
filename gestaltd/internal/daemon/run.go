@@ -55,8 +55,6 @@ func run(args []string, version string) error {
 			return runLock(args[1:])
 		case "sync":
 			return runSync(args[1:])
-		case "init":
-			return runInit(args[1:])
 		case "validate":
 			return runValidate(args[1:])
 		case "__sandbox":
@@ -131,30 +129,6 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 	return server.Run(env.Ctx, env.Config, env.Result)
-}
-
-func runInit(args []string) error {
-	fs := flag.NewFlagSet("gestaltd init", flag.ContinueOnError)
-	fs.Usage = func() { printInitUsage(fs.Output()) }
-	var configPaths repeatedStringFlag
-	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
-	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
-	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch or \"all\")")
-	check := fs.Bool("check", false, "fail if the lockfile would change")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	if strings.TrimSpace(*artifactsDir) != "" {
-		return fmt.Errorf("gestaltd init no longer accepts --artifacts-dir because it only writes lock metadata; run `gestaltd lock` followed by `gestaltd sync --locked --artifacts-dir %s`", *artifactsDir)
-	}
-
-	return lockConfigWithStatePaths(configPaths, operator.StatePaths{
-		LockfilePath: *lockfilePath,
-	}, *platformFlag, *check)
 }
 
 func runLock(args []string) error {
@@ -304,14 +278,12 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
-	writeUsageLine(w, "  gestaltd init [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
 	writeUsageLine(w, "  sync        Materialize prepared artifacts from lock state")
-	writeUsageLine(w, "  init        Legacy alias for lock")
 	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
@@ -333,21 +305,6 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")
 	writeUsageLine(w, "When repeated, --config files merge left-to-right. Maps deep-merge,")
 	writeUsageLine(w, "later scalars win, lists replace, and null deletes inherited keys.")
-}
-
-func printInitUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd init [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Legacy alias for `gestaltd lock`; writes lock metadata only.")
-	writeUsageLine(w, "Use `gestaltd sync --locked` to materialize prepared artifacts.")
-	writeUsageLine(w, "When repeated, --config files merge left-to-right.")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Flags:")
-	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
-	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch or \"all\")")
-	writeUsageLine(w, "  --check           Fail if the lockfile would change")
 }
 
 func printLockUsage(w io.Writer) {

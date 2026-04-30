@@ -17,7 +17,6 @@ import { Callout } from 'nextra/components'
 | `gestaltd lock --check --config PATH` | Verify that the checked-in lockfile matches the current config without rewriting it. |
 | `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. |
 | `gestaltd sync --locked --check --config PATH` | Verify that prepared artifacts exist and match the lockfile without rewriting them. |
-| `gestaltd init --config PATH` | Legacy alias for `gestaltd lock`; writes lock metadata only. |
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
 | `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `lock`, `sync`, and `serve` without mutating it. |
 | `gestaltd --version` | Print the server version. |
