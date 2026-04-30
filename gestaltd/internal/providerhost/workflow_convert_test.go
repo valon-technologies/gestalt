@@ -5,6 +5,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -84,6 +85,19 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	target, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 		ProviderName: "managed",
 		Prompt:       "Sync roadmap",
+		OutputDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "reply",
+				Input:      map[string]any{"format": "plain"},
+			},
+			CredentialMode: core.ConnectionModeNone,
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				{InputField: "ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+				{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
+			},
+		},
 	}})
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
@@ -91,9 +105,30 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	if target.GetAgent() == nil {
 		t.Fatal("nested agent target is nil")
 	}
+	if target.GetAgent().GetOutputDelivery().GetTarget().GetPluginName() != "notification" {
+		t.Fatalf("output delivery = %#v", target.GetAgent().GetOutputDelivery())
+	}
+	if target.GetAgent().GetOutputDelivery().GetCredentialMode() != string(core.ConnectionModeNone) {
+		t.Fatalf("output delivery credential mode = %q", target.GetAgent().GetOutputDelivery().GetCredentialMode())
+	}
 	roundTrip := workflowTargetFromProto(target)
 	if roundTrip.Agent == nil || roundTrip.Agent.ProviderName != "managed" {
 		t.Fatalf("round trip agent target = %#v", roundTrip.Agent)
+	}
+	if roundTrip.Agent.OutputDelivery == nil {
+		t.Fatalf("round trip output delivery is nil")
+	}
+	if got := roundTrip.Agent.OutputDelivery.Target.Input["format"]; got != "plain" {
+		t.Fatalf("round trip output delivery input = %#v", roundTrip.Agent.OutputDelivery.Target.Input)
+	}
+	if len(roundTrip.Agent.OutputDelivery.InputBindings) != 3 {
+		t.Fatalf("round trip output delivery bindings = %#v", roundTrip.Agent.OutputDelivery.InputBindings)
+	}
+	if got := roundTrip.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("round trip output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+	if got := roundTrip.Agent.OutputDelivery.InputBindings[2].Value.Literal; got != "workflow" {
+		t.Fatalf("round trip literal = %#v", got)
 	}
 }
 

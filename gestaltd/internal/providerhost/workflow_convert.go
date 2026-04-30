@@ -120,6 +120,10 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent provider_options: %w", err)
 	}
+	outputDelivery, err := workflowOutputDeliveryToProto(target.OutputDelivery)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.BoundWorkflowAgentTarget{
 		ProviderName:    target.ProviderName,
 		Model:           target.Model,
@@ -130,6 +134,7 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,
 		TimeoutSeconds:  int32(target.TimeoutSeconds),
+		OutputDelivery:  outputDelivery,
 	}, nil
 }
 
@@ -147,6 +152,114 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		Metadata:        mapFromStruct(target.GetMetadata()),
 		ProviderOptions: mapFromStruct(target.GetProviderOptions()),
 		TimeoutSeconds:  int(target.GetTimeoutSeconds()),
+		OutputDelivery:  workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+	}
+}
+
+func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery) (*proto.WorkflowOutputDelivery, error) {
+	if delivery == nil {
+		return nil, nil
+	}
+	bindings := make([]*proto.WorkflowOutputBinding, 0, len(delivery.InputBindings))
+	for i := range delivery.InputBindings {
+		binding := delivery.InputBindings[i]
+		value, err := workflowOutputValueSourceToProto(binding.Value)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent output_delivery.input_bindings[%d].value: %w", i, err)
+		}
+		bindings = append(bindings, &proto.WorkflowOutputBinding{
+			InputField: binding.InputField,
+			Value:      value,
+		})
+	}
+	target, err := workflowPluginTargetToProto(&delivery.Target)
+	if err != nil {
+		return nil, fmt.Errorf("workflow agent output_delivery.target: %w", err)
+	}
+	return &proto.WorkflowOutputDelivery{
+		Target:         target,
+		InputBindings:  bindings,
+		CredentialMode: string(delivery.CredentialMode),
+	}, nil
+}
+
+func workflowOutputDeliveryFromProto(delivery *proto.WorkflowOutputDelivery) *coreworkflow.OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := &coreworkflow.OutputDelivery{
+		Target:         workflowPluginTargetFromProto(delivery.GetTarget()),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.GetCredentialMode()))),
+	}
+	for _, binding := range delivery.GetInputBindings() {
+		if binding == nil {
+			continue
+		}
+		out.InputBindings = append(out.InputBindings, coreworkflow.OutputBinding{
+			InputField: strings.TrimSpace(binding.GetInputField()),
+			Value:      workflowOutputValueSourceFromProto(binding.GetValue()),
+		})
+	}
+	return out
+}
+
+func workflowOutputValueSourceToProto(source coreworkflow.OutputValueSource) (*proto.WorkflowOutputValueSource, error) {
+	set := 0
+	if strings.TrimSpace(source.AgentOutput) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalPayload) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalMetadata) != "" {
+		set++
+	}
+	if source.Literal != nil {
+		set++
+	}
+	if set != 1 {
+		return nil, fmt.Errorf("must set exactly one source")
+	}
+	switch {
+	case strings.TrimSpace(source.AgentOutput) != "":
+		return &proto.WorkflowOutputValueSource{
+			Kind: &proto.WorkflowOutputValueSource_AgentOutput{AgentOutput: source.AgentOutput},
+		}, nil
+	case strings.TrimSpace(source.SignalPayload) != "":
+		return &proto.WorkflowOutputValueSource{
+			Kind: &proto.WorkflowOutputValueSource_SignalPayload{SignalPayload: source.SignalPayload},
+		}, nil
+	case strings.TrimSpace(source.SignalMetadata) != "":
+		return &proto.WorkflowOutputValueSource{
+			Kind: &proto.WorkflowOutputValueSource_SignalMetadata{SignalMetadata: source.SignalMetadata},
+		}, nil
+	case source.Literal != nil:
+		value, err := protoValueFromAny(source.Literal)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowOutputValueSource{
+			Kind: &proto.WorkflowOutputValueSource_Literal{Literal: value},
+		}, nil
+	}
+	return nil, fmt.Errorf("must set exactly one source")
+}
+
+func workflowOutputValueSourceFromProto(source *proto.WorkflowOutputValueSource) coreworkflow.OutputValueSource {
+	if source == nil {
+		return coreworkflow.OutputValueSource{}
+	}
+	switch typed := source.GetKind().(type) {
+	case *proto.WorkflowOutputValueSource_AgentOutput:
+		return coreworkflow.OutputValueSource{AgentOutput: strings.TrimSpace(typed.AgentOutput)}
+	case *proto.WorkflowOutputValueSource_SignalPayload:
+		return coreworkflow.OutputValueSource{SignalPayload: strings.TrimSpace(typed.SignalPayload)}
+	case *proto.WorkflowOutputValueSource_SignalMetadata:
+		return coreworkflow.OutputValueSource{SignalMetadata: strings.TrimSpace(typed.SignalMetadata)}
+	case *proto.WorkflowOutputValueSource_Literal:
+		return coreworkflow.OutputValueSource{Literal: protoValueToAny(typed.Literal)}
+	default:
+		return coreworkflow.OutputValueSource{}
 	}
 }
 

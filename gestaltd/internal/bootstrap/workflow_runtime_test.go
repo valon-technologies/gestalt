@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"net/http"
 	"slices"
@@ -135,6 +136,12 @@ func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 		agent.ResponseSchema = cloneMapAny(agent.ResponseSchema)
 		agent.ProviderOptions = cloneMapAny(agent.ProviderOptions)
 		agent.Metadata = cloneMapAny(agent.Metadata)
+		if agent.OutputDelivery != nil {
+			delivery := *agent.OutputDelivery
+			delivery.Target.Input = cloneMapAny(delivery.Target.Input)
+			delivery.InputBindings = slices.Clone(delivery.InputBindings)
+			agent.OutputDelivery = &delivery
+		}
 		clone.Agent = &agent
 	}
 	return clone
@@ -613,6 +620,108 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+
+	var gotProvider string
+	var gotOperation string
+	var gotParams map[string]any
+	var gotIdempotencyKey string
+	var gotCredentialMode core.ConnectionMode
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			gotProvider = providerName
+			gotOperation = operation
+			gotParams = maps.Clone(params)
+			gotIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
+			gotCredentialMode = invocation.CredentialModeOverrideFromContext(ctx)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-delivery-123",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "reply",
+					Input:      map[string]any{"format": "plain"},
+				},
+				CredentialMode: core.ConnectionModeNone,
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
+					{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
+				},
+			},
+		}},
+		Signals: []coreworkflow.Signal{
+			{
+				ID:             "signal-1",
+				IdempotencyKey: "evt-1",
+				Payload:        map[string]any{"reply_ref": "older-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "message"}},
+			},
+			{
+				ID:             "signal-2",
+				IdempotencyKey: "evt-2",
+				Payload:        map[string]any{"reply_ref": "newer-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "app_mention"}},
+			},
+		},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "notification",
+			Operations: []string{"reply"},
+		}}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if gotProvider != "notification" || gotOperation != "reply" {
+		t.Fatalf("delivery target = %s.%s, want notification.reply", gotProvider, gotOperation)
+	}
+	if gotParams["format"] != "plain" || gotParams["text"] != "turn completed" || gotParams["reply_ref"] != "newer-ref" || gotParams["event_type"] != "app_mention" || gotParams["source"] != "workflow" {
+		t.Fatalf("delivery params = %#v", gotParams)
+	}
+	if !strings.HasPrefix(gotIdempotencyKey, "workflow:temporal:run-agent-delivery-123:output:signal-batch-") {
+		t.Fatalf("delivery idempotency key = %q", gotIdempotencyKey)
+	}
+	if gotCredentialMode != core.ConnectionModeNone {
+		t.Fatalf("delivery credential mode = %q, want %q", gotCredentialMode, core.ConnectionModeNone)
+	}
+
+	req.Target.Agent.OutputDelivery.CredentialMode = ""
+	gotCredentialMode = core.ConnectionMode("unexpected")
+	resp, err = runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke without delivery credential mode: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("response without delivery credential mode = %#v", resp)
+	}
+	if gotCredentialMode != "" {
+		t.Fatalf("delivery credential mode without override = %q, want empty", gotCredentialMode)
 	}
 }
 

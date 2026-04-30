@@ -627,15 +627,34 @@ type WorkflowPluginTargetConfig struct {
 }
 
 type WorkflowAgentConfig struct {
-	Provider        string                 `yaml:"provider,omitempty"`
-	Model           string                 `yaml:"model,omitempty"`
-	Prompt          string                 `yaml:"prompt,omitempty"`
-	Messages        []WorkflowAgentMessage `yaml:"messages,omitempty"`
-	Tools           []WorkflowAgentToolRef `yaml:"tools,omitempty"`
-	ResponseSchema  map[string]any         `yaml:"responseSchema,omitempty"`
-	Metadata        map[string]any         `yaml:"metadata,omitempty"`
-	ProviderOptions map[string]any         `yaml:"providerOptions,omitempty"`
-	Timeout         string                 `yaml:"timeout,omitempty"`
+	Provider        string                        `yaml:"provider,omitempty"`
+	Model           string                        `yaml:"model,omitempty"`
+	Prompt          string                        `yaml:"prompt,omitempty"`
+	Messages        []WorkflowAgentMessage        `yaml:"messages,omitempty"`
+	Tools           []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
+	OutputDelivery  *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
+	ResponseSchema  map[string]any                `yaml:"responseSchema,omitempty"`
+	Metadata        map[string]any                `yaml:"metadata,omitempty"`
+	ProviderOptions map[string]any                `yaml:"providerOptions,omitempty"`
+	Timeout         string                        `yaml:"timeout,omitempty"`
+}
+
+type WorkflowOutputDeliveryConfig struct {
+	Target         WorkflowPluginTargetConfig        `yaml:"target,omitempty"`
+	InputBindings  []WorkflowOutputBindingConfig     `yaml:"inputBindings,omitempty"`
+	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+}
+
+type WorkflowOutputBindingConfig struct {
+	InputField string                          `yaml:"inputField,omitempty"`
+	Value      WorkflowOutputValueSourceConfig `yaml:"value,omitempty"`
+}
+
+type WorkflowOutputValueSourceConfig struct {
+	AgentOutput    string `yaml:"agentOutput,omitempty"`
+	SignalPayload  string `yaml:"signalPayload,omitempty"`
+	SignalMetadata string `yaml:"signalMetadata,omitempty"`
+	Literal        any    `yaml:"literal,omitempty"`
 }
 
 type WorkflowAgentMessage struct {

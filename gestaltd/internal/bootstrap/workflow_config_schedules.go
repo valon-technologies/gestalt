@@ -268,11 +268,41 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		Prompt:          strings.TrimSpace(agent.Prompt),
 		Messages:        messages,
 		ToolRefs:        tools,
+		OutputDelivery:  workflowConfigOutputDelivery(agent.OutputDelivery),
 		ResponseSchema:  maps.Clone(agent.ResponseSchema),
 		Metadata:        maps.Clone(agent.Metadata),
 		ProviderOptions: maps.Clone(agent.ProviderOptions),
 		TimeoutSeconds:  timeoutSeconds,
 	}
+}
+
+func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig) *coreworkflow.OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := &coreworkflow.OutputDelivery{
+		Target: coreworkflow.PluginTarget{
+			PluginName: strings.TrimSpace(delivery.Target.Name),
+			Operation:  strings.TrimSpace(delivery.Target.Operation),
+			Connection: strings.TrimSpace(delivery.Target.Connection),
+			Instance:   strings.TrimSpace(delivery.Target.Instance),
+			Input:      maps.Clone(delivery.Target.Input),
+		},
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode)))),
+		InputBindings:  make([]coreworkflow.OutputBinding, 0, len(delivery.InputBindings)),
+	}
+	for _, binding := range delivery.InputBindings {
+		out.InputBindings = append(out.InputBindings, coreworkflow.OutputBinding{
+			InputField: strings.TrimSpace(binding.InputField),
+			Value: coreworkflow.OutputValueSource{
+				AgentOutput:    strings.TrimSpace(binding.Value.AgentOutput),
+				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
+				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
+				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
 }
 
 func workflowConfigActor() coreworkflow.Actor {
@@ -345,6 +375,16 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 				Operations: []string{operation},
 			})
 		}
+		if delivery := target.Agent.OutputDelivery; delivery != nil {
+			pluginName := strings.TrimSpace(delivery.Target.PluginName)
+			operation := strings.TrimSpace(delivery.Target.Operation)
+			if pluginName != "" && operation != "" {
+				out = append(out, core.AccessPermission{
+					Plugin:     pluginName,
+					Operations: []string{operation},
+				})
+			}
+		}
 		return out
 	}
 	if target.Plugin == nil {
@@ -380,6 +420,11 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				continue
 			}
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, tool.Plugin); err != nil {
+				return nil, err
+			}
+		}
+		if delivery := target.Agent.OutputDelivery; delivery != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target.PluginName); err != nil {
 				return nil, err
 			}
 		}
