@@ -71,7 +71,7 @@ extraEnv:
         name: gestalt-secrets
         key: database-url
 
-pluginInit:
+preparation:
   enabled: true
 ```
 
@@ -92,8 +92,8 @@ helm upgrade --install gestalt \
 | `config` | Rendered as `/etc/gestalt/config.yaml`. |
 | `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
 | `persistence` | PVC settings for SQLite or other local state. |
-| `pluginInit.enabled` | Runs `gestaltd lock` and `gestaltd sync --locked` in an init container before the main server starts. Use it when the chart should prepare locked state for published provider packages or packaged UI bundles. |
-| `lockedServe.enabled` | Adds `--locked` to the main container without enabling the chart init container. Use it when lock state and prepared artifacts are baked into the image or mounted by external automation. |
+| `preparation.enabled` | Runs `gestaltd lock` and `gestaltd sync --locked` in a preparation container before the main server starts. Use it when the chart should prepare locked state for published provider packages or packaged UI bundles. |
+| `lockedServe.enabled` | Adds `--locked` to the main container without enabling the chart preparation container. Use it when lock state and prepared artifacts are baked into the image or mounted by external automation. |
 | `ingress` | Standard ingress settings. |
 | `ingress.hosts[].paths` | Per-host ingress paths and path types. |
 | `managementService` | Optional internal Service for a separate management listener. |
@@ -165,7 +165,7 @@ extraEnv:
         name: gestalt-secrets
         key: database-url
 
-pluginInit:
+preparation:
   enabled: true
 ```
 
@@ -175,15 +175,15 @@ on port `9090`. If operators need browser access to `/admin`, place an
 internal-only ingress, VPN, or identity-aware proxy in front of that management
 Service rather than exposing it on the public ingress.
 
-## When to enable `pluginInit`
+## When to enable `preparation`
 
-Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the preparation container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The preparation container copies the rendered config and runs:
 
 `/gestaltd lock --config /etc/gestalt/config.yaml && /gestaltd sync --locked --config /etc/gestalt/config.yaml`
 
 The main container then starts in locked mode against the prepared state.
 
-If you prepare lock state outside the chart, leave `pluginInit.enabled: false`
+If you prepare lock state outside the chart, leave `preparation.enabled: false`
 and set `lockedServe.enabled: true` so the main container still starts with
 `serve --locked`.
 

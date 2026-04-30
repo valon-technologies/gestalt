@@ -66,7 +66,7 @@ For Google OAuth:
   GOOGLE_CLIENT_SECRET     Google OAuth client secret
 
 For OIDC, override config.auth.plugin in your values file.
-{{- if .Values.pluginInit.enabled }}
+{{- if .Values.preparation.enabled }}
 
 Plugin preparation is enabled. A preparation container runs `gestaltd lock` followed by
 `gestaltd sync --locked` before the main server starts, preparing locked state

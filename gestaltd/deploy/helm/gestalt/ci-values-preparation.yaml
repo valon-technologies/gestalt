@@ -10,5 +10,5 @@ config:
 image:
   tag: "ci-test"
 
-pluginInit:
+preparation:
   enabled: true
