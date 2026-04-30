@@ -1904,8 +1904,8 @@ func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 			configDir := t.TempDir()
 			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseServer.URL+"/provider-release.yaml", "/create-customer-roadmap-review")
 			lc := operator.NewLifecycle().WithHTTPClient(releaseServer.Client())
-			if _, err := lc.InitAtPath(configPath); err != nil {
-				t.Fatalf("InitAtPath: %v", err)
+			if _, err := lc.PrepareAtPath(configPath); err != nil {
+				t.Fatalf("PrepareAtPath: %v", err)
 			}
 
 			loaded, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -1937,7 +1937,7 @@ func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 				t.Fatalf("ResolvedAssetRoot = %q, want owned-ui asset root suffix %q", got, tc.wantAssetRoot)
 			}
 
-			lock, err := operator.ReadLockfile(filepath.Join(configDir, operator.InitLockfileName))
+			lock, err := operator.ReadLockfile(filepath.Join(configDir, operator.LockfileName))
 			if err != nil {
 				t.Fatalf("ReadLockfile: %v", err)
 			}

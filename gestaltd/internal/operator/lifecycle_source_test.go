@@ -302,7 +302,7 @@ func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) st
 	return manifestPath
 }
 
-func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
+func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -602,7 +602,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 			}
 
 			lc := NewLifecycle()
-			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{
+			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{
 				{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
 			})
 			if err == nil {
@@ -611,7 +611,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 				}
 			}
 			if err != nil {
-				t.Fatalf("InitAtPathWithPlatforms: %v", err)
+				t.Fatalf("PrepareAtPathWithPlatforms: %v", err)
 			}
 			if handlerErr := nextHandlerErr(); handlerErr != nil {
 				t.Fatal(handlerErr)
@@ -659,7 +659,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 				}
 			}
 
-			lockData, err := os.ReadFile(filepath.Join(dir, InitLockfileName))
+			lockData, err := os.ReadFile(filepath.Join(dir, LockfileName))
 			if err != nil {
 				t.Fatalf("ReadFile lockfile: %v", err)
 			}
@@ -758,7 +758,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
+func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -852,14 +852,14 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -925,7 +925,7 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
+func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1020,14 +1020,14 @@ func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -1093,7 +1093,7 @@ func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
+func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1198,14 +1198,14 @@ func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -1277,7 +1277,7 @@ func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
+func TestSourcePluginPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1345,13 +1345,13 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	_, err = lc.InitAtPath(configPath)
+	_, err = lc.PrepareAtPath(configPath)
 	if err == nil {
-		t.Fatal("InitAtPath unexpectedly succeeded")
+		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
 	}
 	if !strings.Contains(err.Error(), `manifest source "github.com/acme/tools/other-gadget" does not match metadata package "github.com/acme/tools/gadget"`) {
-		t.Fatalf("InitAtPath error = %v, want manifest source mismatch", err)
+		t.Fatalf("PrepareAtPath error = %v, want manifest source mismatch", err)
 	}
 }
 
@@ -1472,14 +1472,14 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -1675,9 +1675,9 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	}
 
 	lc := NewLifecycle().WithHTTPClient(client)
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	entry, ok := lock.Providers["alpha"]
 	if !ok {
@@ -1799,8 +1799,8 @@ func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(configPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := lc.PrepareAtPath(configPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -1874,16 +1874,16 @@ func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	}
 
 	lc := NewLifecycle()
-	_, err := lc.InitAtPath(configPath)
+	_, err := lc.PrepareAtPath(configPath)
 	if err == nil {
-		t.Fatal("InitAtPath unexpectedly succeeded")
+		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
 	if !strings.Contains(err.Error(), fmt.Sprintf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)) {
-		t.Fatalf("InitAtPath error = %v, want metadata size limit", err)
+		t.Fatalf("PrepareAtPath error = %v, want metadata size limit", err)
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -2007,14 +2007,14 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
@@ -2057,7 +2057,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 		t.Fatalf("resolved manifest version after unlocked refresh = %q, want %q", got, updatedVersion)
 	}
 
-	updatedLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	updatedLock, err := ReadLockfile(filepath.Join(dir, LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
@@ -2121,7 +2121,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
-			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
+			if err := lc.materializeLockedComponent(context.Background(), lifecyclePaths{}, kind, "default", providerEntry, entry, destDir); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
 			}
 			install, err := inspectPreparedInstall(destDir)
@@ -2206,11 +2206,11 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.InitAtPath(configPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	if _, err := lc.PrepareAtPath(configPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
-	lock, err := ReadLockfile(filepath.Join(filepath.Dir(configPath), InitLockfileName))
+	lock, err := ReadLockfile(filepath.Join(filepath.Dir(configPath), LockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
@@ -2369,9 +2369,9 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
 	if authLockEntry.Source != srv.URL+metadataPath {
@@ -2443,7 +2443,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 }
 
-func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *testing.T) {
+func TestSourceAuthPluginPrepareAllowsMissingEnvPlaceholderInNonStringField(t *testing.T) {
 	dir := t.TempDir()
 	source := "github.com/acme/tools/auth-widget"
 	version := "2.0.0"
@@ -2546,9 +2546,9 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
 	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
@@ -2606,9 +2606,9 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 
 	lc := NewLifecycle()
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if len(lock.IndexedDBs) != 2 {
 		t.Fatalf("lock.IndexedDBs = %#v, want 2 entries", lock.IndexedDBs)
@@ -2711,9 +2711,9 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	if len(lock.Caches) != 2 {
 		t.Fatalf("lock.Caches = %#v, want 2 entries", lock.Caches)
@@ -2724,7 +2724,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	if _, ok := lock.Caches["rate_limit"]; !ok {
 		t.Fatal(`lock.Caches["rate_limit"] not found`)
 	}
-	lockPath := filepath.Join(dir, InitLockfileName)
+	lockPath := filepath.Join(dir, LockfileName)
 	lockData, err := os.ReadFile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadFile lockfile: %v", err)
@@ -2777,7 +2777,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	}
 }
 
-func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t *testing.T) {
+func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchives(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -2925,9 +2925,9 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 			if client != nil {
 				lc = lc.WithHTTPClient(client)
 			}
-			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{extraPlatform})
+			lock, err := lc.PrepareAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH string }{extraPlatform})
 			if err != nil {
-				t.Fatalf("InitAtPathWithPlatforms: %v", err)
+				t.Fatalf("PrepareAtPathWithPlatforms: %v", err)
 			}
 
 			entry, ok := lock.Caches["session"]
@@ -2949,7 +2949,7 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 				t.Fatalf("lock extra-platform URL = %q, want %q", got, wantExtraArchiveURL)
 			}
 
-			readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+			readBack, err := ReadLockfile(filepath.Join(dir, LockfileName))
 			if err != nil {
 				t.Fatalf("ReadLockfile: %v", err)
 			}
@@ -3177,9 +3177,9 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	})
 	lc = lc.WithHTTPClient(srv.Client())
 
-	lock, err := lc.InitAtPath(configPath)
+	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, "secrets")
 	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
@@ -3254,7 +3254,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	}
 }
 
-func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *testing.T) {
+func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()

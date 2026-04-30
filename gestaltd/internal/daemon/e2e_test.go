@@ -752,13 +752,13 @@ plugins:
 	if !strings.Contains(string(out), "config ok") {
 		t.Fatalf("expected validate output to mention success, got: %s", out)
 	}
-	if _, err := os.Stat(filepath.Join(dir, operator.InitLockfileName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, operator.LockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("validate should not write lockfile, got err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("validate should not leave prepared artifacts in config dir, got err=%v", err)
 	}
-	overrideLockfilePath := filepath.Join(dir, "state", "validate", operator.InitLockfileName)
+	overrideLockfilePath := filepath.Join(dir, "state", "validate", operator.LockfileName)
 	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", overrideLockfilePath).CombinedOutput()
 	if err != nil {
 		t.Fatalf("expected validate with --lockfile to succeed: %v\n%s", err, out)
