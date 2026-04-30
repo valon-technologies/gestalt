@@ -31,13 +31,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -1664,9 +1665,9 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	}
 	hostServices := []runtimehost.HostService{{
 		Name:   "workflow_host",
-		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
+		EnvVar: workflowservice.DefaultHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke))
+			proto.RegisterWorkflowHostServer(srv, workflowservice.NewHostServer(name, deps.WorkflowRuntime.Invoke))
 		},
 	}}
 	var cleanup func()
@@ -1723,9 +1724,9 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	}
 	hostServices := []runtimehost.HostService{{
 		Name:   "agent_host",
-		EnvVar: providerhost.DefaultAgentHostSocketEnv,
+		EnvVar: agentservice.DefaultHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.SearchTools, deps.AgentRuntime.ExecuteTool))
+			proto.RegisterAgentHostServer(srv, agentservice.NewHostServer(name, deps.AgentRuntime.SearchTools, deps.AgentRuntime.ExecuteTool))
 		},
 	}}
 	var cleanup func()

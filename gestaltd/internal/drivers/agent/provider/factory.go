@@ -7,8 +7,8 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
@@ -29,7 +29,7 @@ var Factory bootstrap.AgentFactory = func(ctx context.Context, name string, node
 	}
 	cfg = prepared.YAMLConfig
 
-	return providerhost.NewExecutableAgent(ctx, providerhost.AgentExecConfig{
+	return agentservice.NewExecutable(ctx, agentservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,

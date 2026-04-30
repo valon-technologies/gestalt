@@ -28,6 +28,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"gopkg.in/yaml.v3"
 )
@@ -1693,8 +1694,8 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	if len(bindRequests) != 1 {
 		t.Fatalf("bind host service requests = %d, want 1", len(bindRequests))
 	}
-	if bindRequests[0].EnvVar != providerhost.DefaultAgentHostSocketEnv {
-		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultAgentHostSocketEnv)
+	if bindRequests[0].EnvVar != agentservice.DefaultHostSocketEnv {
+		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, agentservice.DefaultHostSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
 		t.Fatalf("BindHostService relay target = %q, want unix relay target", got)
@@ -2296,8 +2297,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	if len(bindRequests) != 1 {
 		t.Fatalf("bind host service requests = %d, want 1", len(bindRequests))
 	}
-	if bindRequests[0].EnvVar != providerhost.DefaultAgentHostSocketEnv {
-		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultAgentHostSocketEnv)
+	if bindRequests[0].EnvVar != agentservice.DefaultHostSocketEnv {
+		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, agentservice.DefaultHostSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; got != "tls://"+relaySrv.Listener.Addr().String() {
 		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
@@ -2307,8 +2308,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("start plugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.DefaultAgentHostSocketEnv+"_TOKEN"]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s_TOKEN: %#v", providerhost.DefaultAgentHostSocketEnv, startRequests[0].Env)
+	if got := startRequests[0].Env[agentservice.HostSocketTokenEnv()]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing %s_TOKEN: %#v", agentservice.DefaultHostSocketEnv, startRequests[0].Env)
 	}
 }
 

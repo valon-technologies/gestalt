@@ -51,6 +51,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
@@ -58,6 +59,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -971,13 +973,13 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 }
 
 func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[providerhost.DefaultWorkflowManagerSocketEnv])
+	target := strings.TrimSpace(env[workflowservice.DefaultManagerSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing workflow manager relay target in %s", providerhost.DefaultWorkflowManagerSocketEnv)
+		return nil, fmt.Errorf("missing workflow manager relay target in %s", workflowservice.DefaultManagerSocketEnv)
 	}
-	token := strings.TrimSpace(env[providerhost.WorkflowManagerSocketTokenEnv()])
+	token := strings.TrimSpace(env[workflowservice.ManagerSocketTokenEnv()])
 	if token == "" {
-		return nil, fmt.Errorf("missing workflow manager relay token in %s", providerhost.WorkflowManagerSocketTokenEnv())
+		return nil, fmt.Errorf("missing workflow manager relay token in %s", workflowservice.ManagerSocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -1101,13 +1103,13 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 }
 
 func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[providerhost.DefaultAgentManagerSocketEnv])
+	target := strings.TrimSpace(env[agentservice.DefaultManagerSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing agent manager relay target in %s", providerhost.DefaultAgentManagerSocketEnv)
+		return nil, fmt.Errorf("missing agent manager relay target in %s", agentservice.DefaultManagerSocketEnv)
 	}
-	token := strings.TrimSpace(env[providerhost.AgentManagerSocketTokenEnv()])
+	token := strings.TrimSpace(env[agentservice.ManagerSocketTokenEnv()])
 	if token == "" {
-		return nil, fmt.Errorf("missing agent manager relay token in %s", providerhost.AgentManagerSocketTokenEnv())
+		return nil, fmt.Errorf("missing agent manager relay token in %s", agentservice.ManagerSocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -3760,7 +3762,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultWorkflowManagerSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": workflowservice.DefaultManagerSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3773,7 +3775,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("workflow manager env %q should be set for executable plugins", providerhost.DefaultWorkflowManagerSocketEnv)
+		t.Fatalf("workflow manager env %q should be set for executable plugins", workflowservice.DefaultManagerSocketEnv)
 	}
 }
 
@@ -3813,7 +3815,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAgentManagerSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": agentservice.DefaultManagerSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3826,7 +3828,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("agent manager env %q should be set for executable plugins", providerhost.DefaultAgentManagerSocketEnv)
+		t.Fatalf("agent manager env %q should be set for executable plugins", agentservice.DefaultManagerSocketEnv)
 	}
 }
 
@@ -7079,19 +7081,19 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(providerhost.DefaultWorkflowManagerSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", providerhost.DefaultWorkflowManagerSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(workflowservice.DefaultManagerSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", workflowservice.DefaultManagerSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(providerhost.WorkflowManagerSocketTokenEnv()); !found || got == "" {
-		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", providerhost.WorkflowManagerSocketTokenEnv(), got, found)
+	if got, found := checkEnv(workflowservice.ManagerSocketTokenEnv()); !found || got == "" {
+		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", workflowservice.ManagerSocketTokenEnv(), got, found)
 	}
 
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {
 		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
 	}
-	if bindRequests[0].EnvVar != providerhost.DefaultWorkflowManagerSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultWorkflowManagerSocketEnv)
+	if bindRequests[0].EnvVar != workflowservice.DefaultManagerSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, workflowservice.DefaultManagerSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
@@ -7101,7 +7103,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
+	if got := startRequests[0].Env[workflowservice.ManagerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the workflow manager relay token")
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
@@ -7611,7 +7613,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
+	if got := startRequests[0].Env[workflowservice.ManagerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the workflow manager relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()

@@ -43,8 +43,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -921,7 +923,7 @@ func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callb
 	}
 	var socketPath string
 	for _, binding := range started.Bindings() {
-		if binding.EnvVar == providerhost.DefaultAgentHostSocketEnv {
+		if binding.EnvVar == agentservice.DefaultHostSocketEnv {
 			socketPath = binding.SocketPath
 			break
 		}
@@ -2325,8 +2327,8 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing workflow runtime name %q in %v", name, seen)
 		}
-		if got := hostSockets[name]; got != providerhost.DefaultWorkflowHostSocketEnv {
-			t.Fatalf("workflow host env for %q = %q, want %q", name, got, providerhost.DefaultWorkflowHostSocketEnv)
+		if got := hostSockets[name]; got != workflowservice.DefaultHostSocketEnv {
+			t.Fatalf("workflow host env for %q = %q, want %q", name, got, workflowservice.DefaultHostSocketEnv)
 		}
 	}
 }
@@ -2375,8 +2377,8 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing agent runtime name %q in %v", name, seen)
 		}
-		if got := hostSockets[name]; got != providerhost.DefaultAgentHostSocketEnv {
-			t.Fatalf("agent host env for %q = %q, want %q", name, got, providerhost.DefaultAgentHostSocketEnv)
+		if got := hostSockets[name]; got != agentservice.DefaultHostSocketEnv {
+			t.Fatalf("agent host env for %q = %q, want %q", name, got, agentservice.DefaultHostSocketEnv)
 		}
 	}
 	if got := result.AgentControl.ProviderNames(); !reflect.DeepEqual(got, []string{"cleanup", "reviewer"}) {
@@ -3842,8 +3844,8 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("workflow host services = %v, want 2 entries", got)
 	}
-	if got[0] != providerhost.DefaultWorkflowHostSocketEnv {
-		t.Fatalf("workflow host env = %q, want %q", got[0], providerhost.DefaultWorkflowHostSocketEnv)
+	if got[0] != workflowservice.DefaultHostSocketEnv {
+		t.Fatalf("workflow host env = %q, want %q", got[0], workflowservice.DefaultHostSocketEnv)
 	}
 	if got[1] != indexeddbservice.DefaultSocketEnv {
 		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], indexeddbservice.DefaultSocketEnv)
@@ -3890,8 +3892,8 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	if len(hostServices) != 2 {
 		t.Fatalf("agent host services = %d, want 2", len(hostServices))
 	}
-	if hostServices[0].EnvVar != providerhost.DefaultAgentHostSocketEnv {
-		t.Fatalf("agent host env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultAgentHostSocketEnv)
+	if hostServices[0].EnvVar != agentservice.DefaultHostSocketEnv {
+		t.Fatalf("agent host env = %q, want %q", hostServices[0].EnvVar, agentservice.DefaultHostSocketEnv)
 	}
 	if hostServices[1].EnvVar != indexeddbservice.DefaultSocketEnv {
 		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].EnvVar, indexeddbservice.DefaultSocketEnv)
