@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
 
@@ -27,11 +26,11 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 	runtimeProvider, err := NewExecutableProvider(ctx, ExecutableConfig{
 		Name:    "modal",
 		Command: runtimeBin,
-		HostServices: []providerhost.HostService{{
+		HostServices: []runtimehost.HostService{{
 			Name:   "runtime_logs",
-			EnvVar: providerhost.DefaultRuntimeLogHostSocketEnv,
+			EnvVar: runtimehost.DefaultRuntimeLogHostSocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterPluginRuntimeLogHostServer(srv, providerhost.NewRuntimeLogHostServer("modal", services.RuntimeSessionLogs.AppendSessionLogs))
+				runtimehost.RegisterRuntimeLogHostServer(srv, "modal", services.RuntimeSessionLogs.AppendSessionLogs)
 			},
 		}},
 		SessionLogs: services.RuntimeSessionLogs,

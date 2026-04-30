@@ -46,6 +46,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -888,10 +889,10 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, err
 	}
 	cleanup = chainCleanup(cleanup, runtimeCleanup, publicHostServicesCleanup)
-	startedHostServices, err := providerhost.StartHostServices(
+	startedHostServices, err := runtimehost.StartHostServices(
 		hostServices,
-		providerhost.WithHostServicesProviderName(name),
-		providerhost.WithHostServicesTelemetry(deps.Telemetry),
+		runtimehost.WithHostServicesProviderName(name),
+		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("start runtime host services: %w", err)
@@ -975,7 +976,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	return prov, nil
 }
 
-func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreagent.Provider, error) {
+func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error) {
 	launch, err := prepareHostedAgentProviderLaunch(ctx, name, entry, node, deps)
 	if err != nil {
 		return nil, err
@@ -1115,7 +1116,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 	return preparedLaunch, nil
 }
 
-func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
+func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
@@ -1163,10 +1164,10 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, nil)
 
 	phaseStarted = time.Now()
-	startedHostServices, err := providerhost.StartHostServices(
+	startedHostServices, err := runtimehost.StartHostServices(
 		hostServices,
-		providerhost.WithHostServicesProviderName(name),
-		providerhost.WithHostServicesTelemetry(deps.Telemetry),
+		runtimehost.WithHostServicesProviderName(name),
+		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
 	)
 	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_start", phaseStarted, err)
 	if err != nil {
@@ -1504,13 +1505,13 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, allowDirectBindings bool) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, allowDirectBindings bool) ([]runtimehost.HostService, *providerhost.InvocationTokenManager, func(), error) {
 	var (
-		hostServices []providerhost.HostService
+		hostServices []runtimehost.HostService
 		cleanup      func()
 		invTokens    *providerhost.InvocationTokenManager
 	)
-	fail := func(err error) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+	fail := func(err error) ([]runtimehost.HostService, *providerhost.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -1578,7 +1579,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	return hostServices, invTokens, cleanup, nil
 }
 
-func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService providerhost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService runtimehost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
 	if !allowUnixRelay {
 		var (
 			serviceKey   string
@@ -1682,7 +1683,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []providerhost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.Provider) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
@@ -1730,7 +1731,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	}, nil
 }
 
-func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService runtimehost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
 	}
@@ -1856,7 +1857,7 @@ func isLoopbackAllowedHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -1866,7 +1867,7 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 		return nil, nil, err
 	}
 
-	hostServices := []providerhost.HostService{{
+	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -1880,12 +1881,12 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 	}, nil
 }
 
-func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.CacheFactory == nil || len(deps.CacheDefs) == 0 {
 		return nil, nil, fmt.Errorf("cache host services are not available")
 	}
 
-	hostServices := make([]providerhost.HostService, 0, len(entry.Cache)+1)
+	hostServices := make([]runtimehost.HostService, 0, len(entry.Cache)+1)
 	boundCaches := make([]corecache.Cache, 0, len(entry.Cache))
 	for _, bindingName := range entry.Cache {
 		def, ok := deps.CacheDefs[bindingName]
@@ -1899,7 +1900,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 			return nil, nil, fmt.Errorf("cache %q: %w", bindingName, err)
 		}
 		boundCaches = append(boundCaches, value)
-		hostServices = append(hostServices, providerhost.HostService{
+		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "cache",
 			EnvVar: providerhost.CacheSocketEnv(bindingName),
 			Register: func(cacheValue corecache.Cache) func(*grpc.Server) {
@@ -1911,7 +1912,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 	}
 	if len(boundCaches) == 1 {
 		value := boundCaches[0]
-		hostServices = append(hostServices, providerhost.HostService{
+		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "cache",
 			EnvVar: providerhost.DefaultCacheSocketEnv,
 			Register: func(srv *grpc.Server) {
@@ -1924,7 +1925,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 	}, nil
 }
 
-func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, error) {
+func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, error) {
 	if len(deps.S3) == 0 {
 		return nil, fmt.Errorf("s3 host services are not available")
 	}
@@ -1938,13 +1939,13 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		}
 	}
 
-	hostServices := make([]providerhost.HostService, 0, len(entry.S3)+1)
+	hostServices := make([]runtimehost.HostService, 0, len(entry.S3)+1)
 	for _, binding := range entry.S3 {
 		client, ok := deps.S3[binding]
 		if !ok || client == nil {
 			return nil, fmt.Errorf("s3 %q is not available", binding)
 		}
-		hostServices = append(hostServices, providerhost.HostService{
+		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "s3",
 			EnvVar: providerhost.S3SocketEnv(binding),
 			Register: func(client s3store.Client, binding string) func(*grpc.Server) {
@@ -1961,7 +1962,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 	if len(entry.S3) == 1 {
 		binding := entry.S3[0]
 		client := deps.S3[binding]
-		hostServices = append(hostServices, providerhost.HostService{
+		hostServices = append(hostServices, runtimehost.HostService{
 			Name:   "s3",
 			EnvVar: providerhost.DefaultS3SocketEnv,
 			Register: func(srv *grpc.Server) {
@@ -1976,7 +1977,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 	return hostServices, nil
 }
 
-func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -1986,7 +1987,7 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveH
 		return nil, nil, err
 	}
 
-	hostServices := []providerhost.HostService{{
+	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -2000,7 +2001,7 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveH
 	}, nil
 }
 
-func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -2010,7 +2011,7 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 		return nil, nil, err
 	}
 
-	hostServices := []providerhost.HostService{{
+	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -2024,12 +2025,12 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 	}, nil
 }
 
-func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
+func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
 	}
-	return providerhost.HostService{
+	return runtimehost.HostService{
 		Name:   "workflow_manager",
 		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -2038,12 +2039,12 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 	}
 }
 
-func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
+func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
 	}
-	return providerhost.HostService{
+	return runtimehost.HostService{
 		Name:   "agent_manager",
 		EnvVar: providerhost.DefaultAgentManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -2052,8 +2053,8 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pr
 	}
 }
 
-func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) providerhost.HostService {
-	return providerhost.HostService{
+func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
+	return runtimehost.HostService{
 		Name:   "authorization",
 		EnvVar: providerhost.DefaultAuthorizationSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -2062,12 +2063,12 @@ func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) pr
 	}
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
+func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *providerhost.InvocationTokenManager) runtimehost.HostService {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
 		invoker = unavailablePluginInvoker{}
 	}
-	return providerhost.HostService{
+	return runtimehost.HostService{
 		Name:   "plugin_invoker",
 		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
 		Register: func(srv *grpc.Server) {

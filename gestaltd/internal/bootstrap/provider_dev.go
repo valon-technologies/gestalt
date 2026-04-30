@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap[core.Provider], deps Deps) (*providerdev.Manager, error) {
@@ -166,10 +167,10 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 	}
 
 	env := map[string]string{}
-	startedHostServices, err := providerhost.StartHostServices(
+	startedHostServices, err := runtimehost.StartHostServices(
 		hostServices,
-		providerhost.WithHostServicesProviderName(name),
-		providerhost.WithHostServicesTelemetry(deps.Telemetry),
+		runtimehost.WithHostServicesProviderName(name),
+		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
 	)
 	if err != nil {
 		return providerdev.RuntimeEnv{}, fmt.Errorf("start host services: %w", err)

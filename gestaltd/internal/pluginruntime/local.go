@@ -15,8 +15,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 type LocalProvider struct {
@@ -50,7 +50,7 @@ type localBinding struct {
 type localPlugin struct {
 	id      string
 	name    string
-	process *providerhost.PluginProcess
+	process *runtimehost.PluginProcess
 }
 
 type LocalOption func(*LocalProvider)
@@ -93,7 +93,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 		return nil, fmt.Errorf("plugin runtime is not configured")
 	}
 
-	rootDir, err := providerhost.NewPluginTempDir("gestalt-plugin-runtime-*")
+	rootDir, err := runtimehost.NewPluginTempDir("gestalt-plugin-runtime-*")
 	if err != nil {
 		return nil, fmt.Errorf("create runtime session dir: %w", err)
 	}
@@ -174,7 +174,7 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 		return nil
 	}
 
-	var plugin *providerhost.PluginProcess
+	var plugin *runtimehost.PluginProcess
 	var rootDir string
 
 	p.mu.Lock()
@@ -286,7 +286,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		}})
 	}
 
-	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
+	process, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command: req.Command,
 		Args:    req.Args,
 		Env:     env,

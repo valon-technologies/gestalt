@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
 
@@ -19,10 +20,10 @@ type hostServiceHandlerKey struct {
 
 type hostServiceHandlerEntry struct {
 	handler  http.Handler
-	verifier providerhost.PublicHostServiceSessionVerifier
+	verifier runtimehost.PublicHostServiceSessionVerifier
 }
 
-func newPublicHostServiceHandlers(services []providerhost.PublicHostService) (map[hostServiceHandlerKey]hostServiceHandlerEntry, error) {
+func newPublicHostServiceHandlers(services []runtimehost.PublicHostService) (map[hostServiceHandlerKey]hostServiceHandlerEntry, error) {
 	if len(services) == 0 {
 		return nil, nil
 	}
@@ -43,7 +44,7 @@ func newPublicHostServiceHandlers(services []providerhost.PublicHostService) (ma
 	return handlers, nil
 }
 
-func newPublicHostServiceHandlerEntry(service providerhost.PublicHostService) (hostServiceHandlerKey, hostServiceHandlerEntry, bool) {
+func newPublicHostServiceHandlerEntry(service runtimehost.PublicHostService) (hostServiceHandlerKey, hostServiceHandlerEntry, bool) {
 	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(service.PluginName),
 		sessionID:  strings.TrimSpace(service.SessionID),
@@ -118,7 +119,7 @@ func (s *Server) hostServiceHandlerEntry(key hostServiceHandlerKey) (hostService
 		s.hostServiceMu.Unlock()
 
 		services, snapshotVersion := s.publicHostServices.Snapshot()
-		var found *providerhost.PublicHostService
+		var found *runtimehost.PublicHostService
 		for _, service := range services {
 			serviceKey := hostServiceHandlerKey{
 				pluginName: strings.TrimSpace(service.PluginName),

@@ -36,6 +36,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -162,19 +163,19 @@ type Deps struct {
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
 	PluginRuntimeRegistry *pluginRuntimeRegistry
-	PublicHostServices    *providerhost.PublicHostServiceRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	Telemetry             core.TelemetryProvider
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.AuthorizationProvider, error)
-type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
+type AuthorizationFactory func(node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error)
+type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
-type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error)
-type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreagent.Provider, error)
+type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
+type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
@@ -228,7 +229,7 @@ type Result struct {
 	Telemetry             core.TelemetryProvider
 	PluginRuntimes        RuntimeInspector
 	ProviderDevSessions   *providerdev.Manager
-	PublicHostServices    *providerhost.PublicHostServiceRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
 	pluginRuntimeRegistry *pluginRuntimeRegistry
 	auditClose            func(context.Context) error
@@ -822,7 +823,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	svc, svcErr := coredata.NewWithContext(providerhost.WithProviderMigrationTimeout(ctx), store)
+	svc, svcErr := coredata.NewWithContext(runtimehost.WithProviderMigrationTimeout(ctx), store)
 	if svcErr != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
@@ -971,7 +972,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
@@ -1384,11 +1385,11 @@ func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.Provid
 	return mapToYAMLNode(cfg)
 }
 
-func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhost.HostService, error) {
+func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
 	if len(deps.IndexedDBs) == 0 || deps.SelectedIndexedDBName == "" {
 		return nil, fmt.Errorf("indexeddb host services are not available")
 	}
-	hostServices := make([]providerhost.HostService, 0, len(deps.IndexedDBs)+1)
+	hostServices := make([]runtimehost.HostService, 0, len(deps.IndexedDBs)+1)
 	if ds := deps.IndexedDBs[deps.SelectedIndexedDBName]; ds != nil {
 		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, name, ds))
 	}
@@ -1405,8 +1406,8 @@ func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhos
 	return hostServices, nil
 }
 
-func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) providerhost.HostService {
-	return providerhost.HostService{
+func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) runtimehost.HostService {
+	return runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -1571,12 +1572,12 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 	return ds, nil
 }
 
-func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]indexeddb.IndexedDB) []providerhost.HostService {
+func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]indexeddb.IndexedDB) []runtimehost.HostService {
 	if len(indexeddbs) == 0 {
 		return nil
 	}
 
-	hostServices := make([]providerhost.HostService, 0, len(indexeddbs)+1)
+	hostServices := make([]runtimehost.HostService, 0, len(indexeddbs)+1)
 	if selected := indexeddbs[selectedName]; strings.TrimSpace(selectedName) != "" && selected != nil {
 		hostServices = append(hostServices, indexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, selectedName, selected))
 	}
@@ -1591,8 +1592,8 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 	return hostServices
 }
 
-func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) providerhost.HostService {
-	return providerhost.HostService{
+func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) runtimehost.HostService {
+	return runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -1660,7 +1661,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	hostServices := []providerhost.HostService{{
+	hostServices := []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -1719,7 +1720,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}
 	}
-	hostServices := []providerhost.HostService{{
+	hostServices := []runtimehost.HostService{{
 		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
