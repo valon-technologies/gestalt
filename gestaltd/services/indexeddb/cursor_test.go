@@ -1,4 +1,4 @@
-package providerhost
+package indexeddb
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "", IndexedDBServerOptions{}))
+		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{
 		client: proto.NewIndexedDBClient(conn),
@@ -91,7 +91,7 @@ func TestCursor_EmptyCursor(t *testing.T) {
 	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "", IndexedDBServerOptions{}))
+		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
@@ -564,7 +564,7 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "", IndexedDBServerOptions{}))
+		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
@@ -619,7 +619,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "", IndexedDBServerOptions{}))
+		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 

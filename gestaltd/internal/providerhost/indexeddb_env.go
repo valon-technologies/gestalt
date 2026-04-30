@@ -1,31 +1,13 @@
 package providerhost
 
-import "strings"
+import indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 
-const DefaultIndexedDBSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
-const defaultIndexedDBSocketTokenSuffix = "_TOKEN"
+const DefaultIndexedDBSocketEnv = indexeddbservice.DefaultSocketEnv
 
 func IndexedDBSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return DefaultIndexedDBSocketEnv
-	}
-	var b strings.Builder
-	b.WriteString(DefaultIndexedDBSocketEnv)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return indexeddbservice.SocketEnv(name)
 }
 
 func IndexedDBSocketTokenEnv(name string) string {
-	return IndexedDBSocketEnv(name) + defaultIndexedDBSocketTokenSuffix
+	return indexeddbservice.SocketTokenEnv(name)
 }

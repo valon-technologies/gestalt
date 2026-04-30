@@ -1,31 +1,13 @@
 package providerhost
 
-import "strings"
+import cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 
-const DefaultCacheSocketEnv = "GESTALT_CACHE_SOCKET"
-const defaultCacheTokenEnvSuffix = "_TOKEN"
+const DefaultCacheSocketEnv = cacheservice.DefaultSocketEnv
 
 func CacheSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return DefaultCacheSocketEnv
-	}
-	var b strings.Builder
-	b.WriteString(DefaultCacheSocketEnv)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return cacheservice.SocketEnv(name)
 }
 
 func CacheSocketTokenEnv(name string) string {
-	return CacheSocketEnv(name) + defaultCacheTokenEnvSuffix
+	return cacheservice.SocketTokenEnv(name)
 }

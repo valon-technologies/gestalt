@@ -1,13 +1,13 @@
 package providerhost
 
-import "github.com/valon-technologies/gestalt/server/internal/providerenv"
+import s3service "github.com/valon-technologies/gestalt/server/services/s3"
 
-const DefaultS3SocketEnv = providerenv.DefaultS3SocketEnv
+const DefaultS3SocketEnv = s3service.DefaultSocketEnv
 
 func S3SocketEnv(name string) string {
-	return providerenv.S3SocketEnv(name)
+	return s3service.SocketEnv(name)
 }
 
 func S3SocketTokenEnv(name string) string {
-	return providerenv.S3SocketTokenEnv(name)
+	return s3service.SocketTokenEnv(name)
 }

@@ -1,4 +1,4 @@
-package providerhost
+package s3
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
-	srv := NewS3Server(store, "roadmap")
+	srv := NewServer(store, "roadmap")
 	ctx := context.Background()
 
 	stream := newStubS3WriteObjectServer(ctx, []*proto.WriteObjectRequest{
@@ -63,7 +63,7 @@ func TestS3ServerLeavesEmptyStartAfterUnset(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
-	srv := NewS3Server(store, "roadmap").(*s3Server)
+	srv := NewServer(store, "roadmap").(*s3Server)
 
 	got, gotErr := srv.namespacedListRequest(&proto.ListObjectsRequest{
 		Bucket: "docs",
@@ -85,7 +85,7 @@ func TestS3ServerListWrapsContinuationTokensForNamespacedPlugins(t *testing.T) {
 	t.Parallel()
 
 	store := &coretesting.StubS3{}
-	srv := NewS3Server(store, "roadmap").(*s3Server)
+	srv := NewServer(store, "roadmap").(*s3Server)
 	ctx := context.Background()
 	for _, key := range []string{
 		s3NamespacePrefix("roadmap") + "plans/a.txt",
@@ -157,7 +157,7 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 			{},
 		},
 	}
-	srv := NewS3Server(client, "roadmap")
+	srv := NewServer(client, "roadmap")
 
 	first, err := srv.ListObjects(context.Background(), &proto.ListObjectsRequest{
 		Bucket:  "docs",
@@ -197,7 +197,7 @@ func TestS3ServerListRoundTripsOpaqueBackendContinuationTokens(t *testing.T) {
 func TestS3ServerWriteObjectReturnsWhenProviderStopsReadingEarly(t *testing.T) {
 	t.Parallel()
 
-	srv := NewS3Server(shortReadS3Client{}, "roadmap")
+	srv := NewServer(shortReadS3Client{}, "roadmap")
 	stream := newStubS3WriteObjectServer(context.Background(), []*proto.WriteObjectRequest{
 		{
 			Msg: &proto.WriteObjectRequest_Open{
@@ -228,7 +228,7 @@ func TestS3ServerWriteObjectReturnsWhenProviderStopsReadingEarly(t *testing.T) {
 func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *testing.T) {
 	t.Parallel()
 
-	srv := NewS3Server(funcS3Client{
+	srv := NewServer(funcS3Client{
 		writeObject: func(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
 			return s3store.ObjectMeta{}, s3store.ErrPreconditionFailed
 		},
@@ -263,7 +263,7 @@ func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *tes
 func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *testing.T) {
 	t.Parallel()
 
-	srv := NewS3Server(shortReadS3Client{}, "roadmap")
+	srv := NewServer(shortReadS3Client{}, "roadmap")
 	sendStarted := make(chan struct{})
 	recvDone := make(chan struct{})
 	recvStep := 0
@@ -307,7 +307,7 @@ func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *tes
 func TestS3ServerListDropsKeysOutsidePluginNamespace(t *testing.T) {
 	t.Parallel()
 
-	srv := NewS3Server(listResultS3Client{
+	srv := NewServer(listResultS3Client{
 		page: s3store.ListPage{
 			Objects: []s3store.ObjectMeta{
 				{Ref: s3store.ObjectRef{Bucket: "docs", Key: s3NamespacePrefix("roadmap") + "plans/a.txt"}},
@@ -342,7 +342,7 @@ func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
 	t.Run("head", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewS3Server(funcS3Client{
+		srv := NewServer(funcS3Client{
 			headObject: func(context.Context, s3store.ObjectRef) (s3store.ObjectMeta, error) {
 				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
 			},
@@ -359,7 +359,7 @@ func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewS3Server(funcS3Client{
+		srv := NewServer(funcS3Client{
 			readObject: func(context.Context, s3store.ReadRequest) (s3store.ReadResult, error) {
 				return s3store.ReadResult{
 					Meta: s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}},
@@ -383,7 +383,7 @@ func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
 	t.Run("write", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewS3Server(funcS3Client{
+		srv := NewServer(funcS3Client{
 			writeObject: func(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
 				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: req.Ref.Bucket, Key: "plans/escape.txt"}}, nil
 			},
@@ -408,7 +408,7 @@ func TestS3ServerRejectsForeignMetadataOutsidePluginNamespace(t *testing.T) {
 	t.Run("copy", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewS3Server(funcS3Client{
+		srv := NewServer(funcS3Client{
 			copyObject: func(context.Context, s3store.CopyRequest) (s3store.ObjectMeta, error) {
 				return s3store.ObjectMeta{Ref: s3store.ObjectRef{Bucket: "docs", Key: "plans/escape.txt"}}, nil
 			},
@@ -428,7 +428,7 @@ func TestS3ServerRejectsPluginScopedPresign(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	srv := NewS3Server(funcS3Client{
+	srv := NewServer(funcS3Client{
 		presignObject: func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
 			called = true
 			return s3store.PresignResult{}, nil
@@ -449,17 +449,17 @@ func TestS3ServerRejectsPluginScopedPresign(t *testing.T) {
 func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	t.Parallel()
 
-	manager, err := NewS3ObjectAccessURLManager([]byte("0123456789abcdef0123456789abcdef"), "https://gestalt.example.test")
+	manager, err := NewObjectAccessURLManager([]byte("0123456789abcdef0123456789abcdef"), "https://gestalt.example.test")
 	if err != nil {
-		t.Fatalf("NewS3ObjectAccessURLManager: %v", err)
+		t.Fatalf("NewObjectAccessURLManager: %v", err)
 	}
 	called := false
-	srv := NewS3ServerWithOptions(funcS3Client{
+	srv := NewServerWithOptions(funcS3Client{
 		presignObject: func(context.Context, s3store.PresignRequest) (s3store.PresignResult, error) {
 			called = true
 			return s3store.PresignResult{}, nil
 		},
-	}, "roadmap", S3ServerOptions{BindingName: "docs", AccessURLs: manager})
+	}, "roadmap", ServerOptions{BindingName: "docs", AccessURLs: manager})
 
 	resp, err := srv.PresignObject(context.Background(), &proto.PresignObjectRequest{
 		Ref:            &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
@@ -474,7 +474,7 @@ func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	if called {
 		t.Fatal("PresignObject called backend for plugin-scoped binding")
 	}
-	if !strings.HasPrefix(resp.GetUrl(), "https://gestalt.example.test"+S3ObjectAccessPathPrefix) {
+	if !strings.HasPrefix(resp.GetUrl(), "https://gestalt.example.test"+ObjectAccessPathPrefix) {
 		t.Fatalf("url = %q, want hosted object access URL", resp.GetUrl())
 	}
 	if strings.Contains(resp.GetUrl(), s3NamespacePrefix("roadmap")) || strings.Contains(resp.GetUrl(), "plans/q2.txt") {
@@ -491,7 +491,7 @@ func TestS3ServerPluginScopedPresignReturnsHostedObjectAccessURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}
-	token := strings.TrimPrefix(parsed.Path, S3ObjectAccessPathPrefix)
+	token := strings.TrimPrefix(parsed.Path, ObjectAccessPathPrefix)
 	target, err := manager.ResolveToken(token)
 	if err != nil {
 		t.Fatalf("ResolveToken: %v", err)

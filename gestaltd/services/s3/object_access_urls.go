@@ -1,4 +1,4 @@
-package providerhost
+package s3
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	S3ObjectAccessPathPrefix = "/api/v1/s3/object-access/"
+	ObjectAccessPathPrefix = "/api/v1/s3/object-access/"
 
 	s3ObjectAccessAudience   = "gestalt-s3-object-access"
 	s3ObjectAccessVersion    = 1
@@ -24,7 +24,7 @@ const (
 	maxS3ObjectAccessTTL     = 24 * time.Hour
 )
 
-type S3ObjectAccessURLManager struct {
+type ObjectAccessURLManager struct {
 	encryptor  *cryptoutil.AESGCMEncryptor
 	baseURL    string
 	now        func() time.Time
@@ -32,7 +32,7 @@ type S3ObjectAccessURLManager struct {
 	maxTTL     time.Duration
 }
 
-type S3ObjectAccessURLRequest struct {
+type ObjectAccessURLRequest struct {
 	PluginName         string
 	BindingName        string
 	Ref                s3store.ObjectRef
@@ -43,7 +43,7 @@ type S3ObjectAccessURLRequest struct {
 	Headers            map[string]string
 }
 
-type S3ObjectAccessTarget struct {
+type ObjectAccessTarget struct {
 	PluginName         string
 	BindingName        string
 	Ref                s3store.ObjectRef
@@ -69,7 +69,7 @@ type s3ObjectAccessURLClaims struct {
 	Headers            map[string]string `json:"headers,omitempty"`
 }
 
-func NewS3ObjectAccessURLManager(secret []byte, baseURL string) (*S3ObjectAccessURLManager, error) {
+func NewObjectAccessURLManager(secret []byte, baseURL string) (*ObjectAccessURLManager, error) {
 	if len(secret) == 0 {
 		return nil, fmt.Errorf("s3 object access secret is required")
 	}
@@ -77,7 +77,7 @@ func NewS3ObjectAccessURLManager(secret []byte, baseURL string) (*S3ObjectAccess
 	if err != nil {
 		return nil, err
 	}
-	return &S3ObjectAccessURLManager{
+	return &ObjectAccessURLManager{
 		encryptor:  encryptor,
 		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		now:        time.Now,
@@ -86,7 +86,7 @@ func NewS3ObjectAccessURLManager(secret []byte, baseURL string) (*S3ObjectAccess
 	}, nil
 }
 
-func (m *S3ObjectAccessURLManager) MintURL(req S3ObjectAccessURLRequest) (s3store.PresignResult, error) {
+func (m *ObjectAccessURLManager) MintURL(req ObjectAccessURLRequest) (s3store.PresignResult, error) {
 	if m == nil {
 		return s3store.PresignResult{}, fmt.Errorf("s3 object access URLs are not available")
 	}
@@ -120,37 +120,37 @@ func (m *S3ObjectAccessURLManager) MintURL(req S3ObjectAccessURLRequest) (s3stor
 		return s3store.PresignResult{}, err
 	}
 	return s3store.PresignResult{
-		URL:       m.baseURL + S3ObjectAccessPathPrefix + token,
+		URL:       m.baseURL + ObjectAccessPathPrefix + token,
 		Method:    target.Method,
 		ExpiresAt: target.ExpiresAt,
 		Headers:   s3store.CloneStringMap(target.Headers),
 	}, nil
 }
 
-func (m *S3ObjectAccessURLManager) ResolveToken(token string) (S3ObjectAccessTarget, error) {
+func (m *ObjectAccessURLManager) ResolveToken(token string) (ObjectAccessTarget, error) {
 	if m == nil {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access URLs are not available")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access URLs are not available")
 	}
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access token is required")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is required")
 	}
 	plaintext, err := m.encryptor.DecryptURLSafe(token)
 	if err != nil {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
 	}
 	var claims s3ObjectAccessURLClaims
 	if err := json.Unmarshal([]byte(plaintext), &claims); err != nil {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
 	}
 	if claims.Version != s3ObjectAccessVersion || claims.Audience != s3ObjectAccessAudience {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
 	}
 	expiresAt := time.Unix(claims.ExpiresAt, 0).UTC()
 	if !m.now().Before(expiresAt) {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object access token is invalid or expired")
 	}
-	return normalizeS3ObjectAccessRequest(S3ObjectAccessURLRequest{
+	return normalizeS3ObjectAccessRequest(ObjectAccessURLRequest{
 		PluginName:         claims.PluginName,
 		BindingName:        claims.BindingName,
 		Ref:                s3store.ObjectRef{Bucket: claims.Bucket, Key: claims.Key, VersionID: claims.VersionID},
@@ -161,7 +161,7 @@ func (m *S3ObjectAccessURLManager) ResolveToken(token string) (S3ObjectAccessTar
 	}, expiresAt)
 }
 
-func (m *S3ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
+func (m *ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return m.defaultTTL
 	}
@@ -171,32 +171,32 @@ func (m *S3ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
 	return ttl
 }
 
-func S3PluginObjectKey(pluginName, key string) string {
+func PluginObjectKey(pluginName, key string) string {
 	return s3NamespacePrefix(pluginName) + key
 }
 
-func normalizeS3ObjectAccessRequest(req S3ObjectAccessURLRequest, expiresAt time.Time) (S3ObjectAccessTarget, error) {
+func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.Time) (ObjectAccessTarget, error) {
 	pluginName := strings.TrimSpace(req.PluginName)
 	if pluginName == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("plugin name is required")
+		return ObjectAccessTarget{}, fmt.Errorf("plugin name is required")
 	}
 	bindingName := strings.TrimSpace(req.BindingName)
 	if bindingName == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 binding name is required")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 binding name is required")
 	}
 	ref := req.Ref
 	ref.Bucket = strings.TrimSpace(ref.Bucket)
 	if ref.Bucket == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object bucket is required")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object bucket is required")
 	}
 	if ref.Key == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("s3 object key is required")
+		return ObjectAccessTarget{}, fmt.Errorf("s3 object key is required")
 	}
 	method := normalizeS3ObjectAccessMethod(req.Method)
 	if method == "" {
-		return S3ObjectAccessTarget{}, fmt.Errorf("unsupported s3 object access method %q", req.Method)
+		return ObjectAccessTarget{}, fmt.Errorf("unsupported s3 object access method %q", req.Method)
 	}
-	return S3ObjectAccessTarget{
+	return ObjectAccessTarget{
 		PluginName:         pluginName,
 		BindingName:        bindingName,
 		Ref:                ref,
@@ -225,12 +225,12 @@ func normalizeS3ObjectAccessMethod(method s3store.PresignMethod) s3store.Presign
 
 type s3ObjectAccessServer struct {
 	proto.UnimplementedS3ObjectAccessServer
-	manager     *S3ObjectAccessURLManager
+	manager     *ObjectAccessURLManager
 	pluginName  string
 	bindingName string
 }
 
-func NewS3ObjectAccessServer(manager *S3ObjectAccessURLManager, pluginName, bindingName string) proto.S3ObjectAccessServer {
+func NewObjectAccessServer(manager *ObjectAccessURLManager, pluginName, bindingName string) proto.S3ObjectAccessServer {
 	return &s3ObjectAccessServer{
 		manager:     manager,
 		pluginName:  strings.TrimSpace(pluginName),
@@ -242,7 +242,7 @@ func (s *s3ObjectAccessServer) CreateObjectAccessURL(_ context.Context, req *pro
 	if s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "s3 object access URLs are not available")
 	}
-	result, err := s.manager.MintURL(S3ObjectAccessURLRequest{
+	result, err := s.manager.MintURL(ObjectAccessURLRequest{
 		PluginName:         s.pluginName,
 		BindingName:        s.bindingName,
 		Ref:                objectRefFromProto(req.GetRef()),

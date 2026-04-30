@@ -1,4 +1,4 @@
-package providerhost
+package cache
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type cacheServer struct {
 	plugin string
 }
 
-func NewCacheServer(cache corecache.Cache, pluginName string) proto.CacheServer {
+func NewServer(cache corecache.Cache, pluginName string) proto.CacheServer {
 	return &cacheServer{cache: cache, plugin: pluginName}
 }
 

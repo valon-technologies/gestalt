@@ -1,4 +1,4 @@
-package providerhost
+package indexeddb
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package providerhost
+package s3
 
 import (
 	"context"
@@ -23,21 +23,21 @@ type s3Server struct {
 	keyPrefix   string
 	pluginName  string
 	bindingName string
-	accessURLs  *S3ObjectAccessURLManager
+	accessURLs  *ObjectAccessURLManager
 }
 
 const s3ContinuationTokenPrefix = "gestalt_s3_ct_"
 
-type S3ServerOptions struct {
+type ServerOptions struct {
 	BindingName string
-	AccessURLs  *S3ObjectAccessURLManager
+	AccessURLs  *ObjectAccessURLManager
 }
 
-func NewS3Server(client s3store.Client, pluginName string) proto.S3Server {
-	return NewS3ServerWithOptions(client, pluginName, S3ServerOptions{})
+func NewServer(client s3store.Client, pluginName string) proto.S3Server {
+	return NewServerWithOptions(client, pluginName, ServerOptions{})
 }
 
-func NewS3ServerWithOptions(client s3store.Client, pluginName string, opts S3ServerOptions) proto.S3Server {
+func NewServerWithOptions(client s3store.Client, pluginName string, opts ServerOptions) proto.S3Server {
 	return &s3Server{
 		client:      client,
 		keyPrefix:   s3NamespacePrefix(pluginName),
@@ -219,7 +219,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 		if s.accessURLs == nil || s.bindingName == "" {
 			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
 		}
-		result, err := s.accessURLs.MintURL(S3ObjectAccessURLRequest{
+		result, err := s.accessURLs.MintURL(ObjectAccessURLRequest{
 			PluginName:         s.pluginName,
 			BindingName:        s.bindingName,
 			Ref:                objectRefFromProto(req.GetRef()),

@@ -1,4 +1,4 @@
-package providerhost
+package indexeddb
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
-	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	srv := NewServer(db, "roadmap", ServerOptions{})
 	ctx := context.Background()
 	record, err := gestalt.RecordToProto(map[string]any{"id": "snap-1"})
 	if err != nil {
@@ -44,7 +44,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 
 	db := metricutil.InstrumentIndexedDB(&coretesting.StubIndexedDB{}, "system")
-	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	srv := NewServer(db, "roadmap", ServerOptions{})
 	if err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "snapshots", indexeddb.ObjectStoreSchema{
 		Indexes: []indexeddb.IndexSchema{{Name: "by_type", KeyPath: []string{"type"}}},
 	}); err != nil {
@@ -118,7 +118,7 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 		t.Fatalf("seed events record: %v", err)
 	}
 
-	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{
+	srv := NewServer(db, "roadmap", ServerOptions{
 		AllowedStores: []string{"tasks"},
 	})
 	record, err := gestalt.RecordToProto(map[string]any{"id": "evt-1"})
@@ -213,7 +213,7 @@ func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 		t.Fatalf("seed user-2: %v", err)
 	}
 
-	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	srv := NewServer(db, "roadmap", ServerOptions{})
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterIndexedDBServer(server, srv)
 	})
@@ -239,7 +239,7 @@ func TestIndexedDBTransactionPreservesSentinelErrors(t *testing.T) {
 	if err := db.CreateObjectStore(ctx, "events", indexeddb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore events: %v", err)
 	}
-	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
+	srv := NewServer(db, "roadmap", ServerOptions{})
 	conn := newBufconnConn(t, func(server *grpc.Server) {
 		proto.RegisterIndexedDBServer(server, srv)
 	})
