@@ -238,7 +238,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	role, ok, err := a.resolveProviderRole(ctx, provider, p)
 	if err != nil {
 		a.logProviderEvalError("plugin", provider, err)
-		if policy.DefaultAllow {
+		if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 			access.Role = defaultSubjectRole
 			return access, true
 		}
@@ -248,7 +248,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -272,7 +272,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	role, ok, err := a.resolvePolicyStaticRole(ctx, policyName, p)
 	if err != nil {
 		a.logProviderEvalError("policy", policyName, err)
-		if policy.DefaultAllow {
+		if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 			access.Role = defaultSubjectRole
 			return access, true
 		}
@@ -282,7 +282,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -306,7 +306,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	role, ok, err := a.resolveAdminStaticRole(ctx, policyName, p)
 	if err != nil {
 		a.logProviderEvalError("admin_policy", policyName, err)
-		if policy.DefaultAllow {
+		if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 			access.Role = defaultSubjectRole
 			return access, true
 		}
@@ -319,7 +319,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	role, ok, err = a.resolveAdminDynamicRole(ctx, p)
 	if err != nil {
 		a.logProviderEvalError("admin_dynamic", policyName, err)
-		if policy.DefaultAllow {
+		if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 			access.Role = defaultSubjectRole
 			return access, true
 		}
@@ -329,7 +329,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 		access.Role = role
 		return access, true
 	}
-	if policy.DefaultAllow {
+	if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 		access.Role = defaultSubjectRole
 		return access, true
 	}
@@ -588,6 +588,15 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			addDesiredRelationship(desired, rel)
+		case resourceTypeManagedSubject:
+			relation := strings.TrimSpace(rel.GetRelation())
+			if !managedSubjectManagementRelation(relation) || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+				continue
+			}
+			if strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeSubject {
+				continue
+			}
+			addDesiredRelationship(desired, rel)
 		}
 	}
 
@@ -699,6 +708,15 @@ func ensureRoleSet(target map[string]map[string]struct{}, key string) map[string
 		target[key] = values
 	}
 	return values
+}
+
+func managedSubjectManagementRelation(relation string) bool {
+	switch strings.TrimSpace(relation) {
+	case relationManagedSubjectViewer, relationManagedSubjectEditor, relationManagedSubjectAdmin:
+		return true
+	default:
+		return false
+	}
 }
 
 func roleSortKey(role string) string {

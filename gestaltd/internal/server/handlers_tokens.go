@@ -51,28 +51,9 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		auditErr = errors.New("name is required")
-		writeError(w, http.StatusBadRequest, "name is required")
-		return
-	}
 	auditTarget = apiTokenAuditTarget("", req.Name)
 
-	if req.Scopes != "" && len(req.Permissions) > 0 {
-		auditErr = errors.New("scopes and permissions are mutually exclusive")
-		writeError(w, http.StatusBadRequest, "scopes and permissions are mutually exclusive")
-		return
-	}
-	if req.Scopes != "" {
-		for _, scope := range strings.Fields(req.Scopes) {
-			if _, err := s.providers.Get(scope); err != nil {
-				auditErr = fmt.Errorf("unknown scope %q", scope)
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown scope %q", scope))
-				return
-			}
-		}
-	}
-	permissions, err := s.normalizeAPITokenPermissions(req.Permissions)
+	permissions, err := s.validateCreateAPITokenRequest(req)
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -96,6 +77,23 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		Permissions: cloneAccessPermissions(apiToken.Permissions),
 		ExpiresAt:   apiToken.ExpiresAt,
 	})
+}
+
+func (s *Server) validateCreateAPITokenRequest(req createTokenRequest) ([]core.AccessPermission, error) {
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, errors.New("name is required")
+	}
+	if req.Scopes != "" && len(req.Permissions) > 0 {
+		return nil, errors.New("scopes and permissions are mutually exclusive")
+	}
+	if req.Scopes != "" {
+		for _, scope := range strings.Fields(req.Scopes) {
+			if _, err := s.providers.Get(scope); err != nil {
+				return nil, fmt.Errorf("unknown scope %q", scope)
+			}
+		}
+	}
+	return s.normalizeAPITokenPermissions(req.Permissions)
 }
 
 func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([]core.AccessPermission, error) {

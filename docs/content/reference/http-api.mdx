@@ -121,6 +121,30 @@ still honor each event's `visibility`.
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 | `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
 
+### Managed Subjects
+
+Managed subjects are service-account identities for release bots, service accounts, and shared automation. Their canonical subject ID is always `service_account:<id>`, and their upstream credentials and subject-owned API tokens use that same `credentialSubjectId`. These management routes require a browser session or an unscoped user-owned API token; scoped API tokens and subject-owned API tokens cannot manage managed subjects.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/authorization/subjects` | List managed subjects the current user can view. |
+| `POST` | `/api/v1/authorization/subjects` | Create a managed subject. The creator becomes an `admin` of that managed subject. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}` | Inspect one managed subject. |
+| `PATCH` | `/api/v1/authorization/subjects/{subjectID}` | Update display metadata. Requires managed subject `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}` | Delete one managed subject, revoke its API tokens, remove its external credentials, and delete its authorization relationships. Requires managed subject `admin`. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}/members` | List users or subjects that can manage the managed subject. |
+| `PUT` | `/api/v1/authorization/subjects/{subjectID}/members` | Upsert a managed subject member by canonical `subjectId` or user `email`; role must be `viewer`, `editor`, or `admin`. Requires managed subject `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/members/{memberSubjectID}` | Remove a managed subject member. Requires managed subject `admin`. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}/grants` | List plugin authorization grants for the managed subject. |
+| `PUT` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Grant a plugin role to the managed subject. Requires managed subject `admin` and the caller must already hold the requested plugin role, or plugin `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Remove a plugin authorization grant from the managed subject. Requires managed subject `admin`. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}/tokens` | List API tokens owned by the managed subject. |
+| `POST` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Create a subject-owned API token. Plaintext is returned once. Requires managed subject `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens/{id}` | Revoke one subject-owned API token. Requires managed subject `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Revoke all API tokens owned by the managed subject. Requires managed subject `admin`. |
+
+The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects.
+
 ### Operator Surfaces
 
 | Method | Path | Purpose |
@@ -396,4 +420,20 @@ curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/cancel \
 curl -X PUT http://localhost:9090/admin/api/v1/authorization/plugins/sample_plugin/members \
   -H 'Content-Type: application/json' \
   -d '{"email":"user@example.com","role":"viewer"}'
+
+# Create a managed subject and grant it viewer access to a plugin
+curl -X POST http://localhost:8080/api/v1/authorization/subjects \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"release-bot","displayName":"Release Bot"}'
+
+curl -X PUT http://localhost:8080/api/v1/authorization/subjects/service_account:release-bot/grants/github \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"viewer"}'
+
+curl -X POST http://localhost:8080/api/v1/authorization/subjects/service_account:release-bot/tokens \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"release-bot","permissions":[{"plugin":"github","operations":["issues.list"]}]}'
 ```

@@ -570,7 +570,7 @@ func TestPollSessionDropsCanceledQueuedCall(t *testing.T) {
 		t.Fatalf("invoke error = %v, want %v", err, context.Canceled)
 	}
 
-	pollCtx, pollCancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), time.Second)
 	defer pollCancel()
 	resp, ok, err := manager.PollSessionWithDispatcherSecretOnly(pollCtx, "session-1", dispatcherSecret)
 	if err != nil {

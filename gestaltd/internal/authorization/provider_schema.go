@@ -8,14 +8,23 @@ import (
 )
 
 const (
-	ProviderResourceTypePolicyStatic       = "policy_static"
-	ProviderResourceTypePluginStatic       = "plugin_static"
-	ProviderResourceTypePluginDynamic      = "plugin_dynamic"
-	ProviderResourceTypeAdminPolicyStatic  = "admin_policy_static"
-	ProviderResourceTypeAdminDynamic       = "admin_dynamic"
-	ProviderResourceTypeExternalIdentity   = "external_identity"
-	ProviderResourceIDAdminDynamicGlobal   = "global"
-	ProviderExternalIdentityRelationAssume = "assume"
+	ProviderResourceTypePolicyStatic        = "policy_static"
+	ProviderResourceTypePluginStatic        = "plugin_static"
+	ProviderResourceTypePluginDynamic       = "plugin_dynamic"
+	ProviderResourceTypeAdminPolicyStatic   = "admin_policy_static"
+	ProviderResourceTypeAdminDynamic        = "admin_dynamic"
+	ProviderResourceTypeExternalIdentity    = "external_identity"
+	ProviderResourceTypeManagedSubject      = "managed_subject"
+	ProviderResourceIDAdminDynamicGlobal    = "global"
+	ProviderExternalIdentityRelationAssume  = "assume"
+	ProviderManagedSubjectRelationViewer    = "viewer"
+	ProviderManagedSubjectRelationEditor    = "editor"
+	ProviderManagedSubjectRelationAdmin     = "admin"
+	ProviderManagedSubjectActionView        = "view"
+	ProviderManagedSubjectActionManage      = "manage"
+	ProviderManagedSubjectActionCreateToken = "create_token"
+	ProviderManagedSubjectActionGrant       = "grant"
+	ProviderManagedSubjectActionConnect     = "connect"
 
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
@@ -28,8 +37,12 @@ const (
 	resourceTypeAdminPolicyStatic  = ProviderResourceTypeAdminPolicyStatic
 	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
+	resourceTypeManagedSubject     = ProviderResourceTypeManagedSubject
 	resourceIDAdminDynamicGlobal   = ProviderResourceIDAdminDynamicGlobal
 	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
+	relationManagedSubjectViewer   = ProviderManagedSubjectRelationViewer
+	relationManagedSubjectEditor   = ProviderManagedSubjectRelationEditor
+	relationManagedSubjectAdmin    = ProviderManagedSubjectRelationAdmin
 
 	subjectTypeSubject = ProviderSubjectTypeSubject
 	subjectTypeUser    = ProviderSubjectTypeUser
@@ -45,7 +58,8 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 		ProviderResourceTypePluginDynamic,
 		ProviderResourceTypeAdminPolicyStatic,
 		ProviderResourceTypeAdminDynamic,
-		ProviderResourceTypeExternalIdentity:
+		ProviderResourceTypeExternalIdentity,
+		ProviderResourceTypeManagedSubject:
 		return true
 	default:
 		return false
@@ -118,6 +132,26 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 				Name:      relationExternalIdentityAssume,
 				Relations: []string{relationExternalIdentityAssume},
 			}},
+		},
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		&core.AuthorizationModelResourceType{
+			Name: resourceTypeManagedSubject,
+			Relations: []*core.AuthorizationModelRelation{
+				{Name: relationManagedSubjectViewer, SubjectTypes: []string{subjectTypeSubject}},
+				{Name: relationManagedSubjectEditor, SubjectTypes: []string{subjectTypeSubject}},
+				{Name: relationManagedSubjectAdmin, SubjectTypes: []string{subjectTypeSubject}},
+			},
+			Actions: []*core.AuthorizationModelAction{
+				{Name: relationManagedSubjectViewer, Relations: []string{relationManagedSubjectViewer, relationManagedSubjectEditor, relationManagedSubjectAdmin}},
+				{Name: relationManagedSubjectEditor, Relations: []string{relationManagedSubjectEditor, relationManagedSubjectAdmin}},
+				{Name: relationManagedSubjectAdmin, Relations: []string{relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionView, Relations: []string{relationManagedSubjectViewer, relationManagedSubjectEditor, relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionManage, Relations: []string{relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionCreateToken, Relations: []string{relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionGrant, Relations: []string{relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionConnect, Relations: []string{relationManagedSubjectEditor, relationManagedSubjectAdmin}},
+			},
 		},
 	)
 
