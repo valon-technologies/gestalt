@@ -172,8 +172,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
-| `providerDev.remoteAttach` | `false` | Enables private remote provider-dev attach routes. Requires `providerDev.attachmentState: processLocal`. |
-| `providerDev.attachmentState` | | Required when `providerDev.remoteAttach` is true. Use `processLocal` to acknowledge that remote attach v1 stores attachment state in this `gestaltd` process and therefore requires single-replica operation or sticky routing for provider-dev traffic. |
+| `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. Use `indexeddb` for shared or load-balanced servers. Use `processLocal` only for local demos and single-process development servers. |
 | `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
@@ -1012,7 +1011,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `providerDev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
+| `dev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
 | `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Supported providers derive plugin scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
@@ -1093,9 +1092,8 @@ on shared remotes:
 
 ```yaml
 server:
-  providerDev:
-    remoteAttach: true
-    attachmentState: processLocal
+  dev:
+    attachmentState: indexeddb
 
 authorization:
   policies:
@@ -1108,7 +1106,7 @@ authorization:
 plugins:
   slack:
     authorizationPolicy: provider_devs
-    providerDev:
+    dev:
       attach:
         allowedRoles:
           - developer
@@ -1121,19 +1119,19 @@ return redacted attachment metadata and never return dispatcher secrets, runtime
 environment, host-service env, plugin config, access tokens, or browser binding
 URLs.
 
-Remote attach v1 stores attachments in the `gestaltd` process that accepted the
-create request. `attachmentState: processLocal` is required as an explicit
-operator acknowledgement of that model. For load-balanced deployments, treat
-single-replica operation or sticky routing for attach creation, poll/complete
-traffic, provider invocations, and provider-owned UI requests as a hard
-prerequisite before enabling `remoteAttach`.
+`attachmentState: indexeddb` stores attachment metadata and queued provider/UI
+calls in the selected host IndexedDB, so any `gestaltd` replica can accept
+attach creation, CLI poll/complete traffic, provider invocations, and
+provider-owned UI requests. `attachmentState: processLocal` stores the same
+state in this process only; reserve it for local demos and single-process
+development servers.
 
 Interactive attach creation uses a short-lived browser approval page plus a
 verification code shown in the initiating terminal. The approving browser
 session must satisfy the plugin runtime grant. For non-interactive/API-token
 attach, the caller must satisfy both the plugin runtime grant and a token action
 grant. The runtime grant comes from
-`plugins.<name>.providerDev.attach.allowedRoles` on a plugin with an
+`plugins.<name>.dev.attach.allowedRoles` on a plugin with an
 `authorizationPolicy`, or from a runtime authorizer that explicitly grants the
 same action. API tokens must carry `permissions[].actions:
 ["provider_dev.attach"]` for every attached plugin; normal provider scopes and

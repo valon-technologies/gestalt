@@ -848,9 +848,10 @@ gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 
 The remote URL is environment-agnostic; it can point at any `gestaltd` instance
 that exposes provider-dev attach targets and has opted in with
-`server.providerDev.remoteAttach: true` and
-`server.providerDev.attachmentState: processLocal`. The target plugin must also
-opt into private remote attach with `providerDev.attach.allowedRoles`. The CLI
+`server.dev.attachmentState`. Use `attachmentState: indexeddb` on shared or
+load-balanced servers so attachment metadata and queued provider/UI calls are
+available to every replica. The target plugin must also opt into private remote
+attach with `dev.attach.allowedRoles`. The CLI
 opens a browser approval page for the interactive happy path; approve it with
 your normal browser session and enter the verification code shown in your
 terminal. API-token callers must use a token with the `provider_dev.attach`
@@ -860,9 +861,8 @@ continue to run through the remote server and its existing configuration.
 
 ```yaml
 server:
-  providerDev:
-    remoteAttach: true
-    attachmentState: processLocal
+  dev:
+    attachmentState: indexeddb
 
 authorization:
   policies:
@@ -875,7 +875,7 @@ authorization:
 plugins:
   slack:
     authorizationPolicy: provider_devs
-    providerDev:
+    dev:
       attach:
         allowedRoles:
           - developer
@@ -896,12 +896,11 @@ enough, and this action does not grant normal invocation access:
   ]
 }
 ```
-Remote attach v1 is process-local, and the server requires
-`server.providerDev.attachmentState: processLocal` as an explicit operator
-acknowledgement. On a load-balanced remote, enable it only when the deployment
-is single-replica or sticky-routes attach creation, CLI poll/complete traffic,
-provider invocations, and provider-owned UI requests for the same authenticated
-owner to the same `gestaltd` process.
+`attachmentState: indexeddb` stores attachment metadata and queued provider/UI
+calls in the selected host IndexedDB, so attach traffic can move across
+`gestaltd` replicas. `attachmentState: processLocal` stores attachment state in
+the accepting process only; reserve it for local demos and single-process
+development servers.
 Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY` for
 non-interactive direct attach. Stored CLI credentials are intentionally not used
 for direct attach; without an explicit token, the CLI uses browser approval. An

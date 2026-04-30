@@ -58,6 +58,7 @@ type Target struct {
 	Source     string
 	Spec       pluginservice.StaticProviderSpec
 	Config     map[string]any
+	ConfigSet  bool
 	UI         bool
 	UIPath     string
 	RuntimeEnv RuntimeEnvBuilder
@@ -67,8 +68,13 @@ type Manager struct {
 	mu             sync.RWMutex
 	targets        map[string]Target
 	sessions       map[string]*Session
+	shared         *indexedDBSessionStore
+	sharedTargets  map[string]map[string]*attachedTarget
+	cleanups       []func()
 	authorizations map[string]*AttachAuthorization
 }
+
+type ManagerOption func(*Manager) error
 
 type CreateSessionRequest struct {
 	Providers []AttachProvider `json:"providers"`
@@ -214,10 +220,11 @@ type rpcResponse struct {
 	err     error
 }
 
-func NewManager(targets []Target) (*Manager, error) {
+func NewManager(targets []Target, opts ...ManagerOption) (*Manager, error) {
 	m := &Manager{
 		targets:        make(map[string]Target, len(targets)),
 		sessions:       map[string]*Session{},
+		sharedTargets:  map[string]map[string]*attachedTarget{},
 		authorizations: map[string]*AttachAuthorization{},
 	}
 	for i := range targets {
@@ -229,7 +236,24 @@ func NewManager(targets []Target) (*Manager, error) {
 		target.Name = name
 		m.targets[name] = target
 	}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		if err := opt(m); err != nil {
+			return nil, err
+		}
+	}
 	return m, nil
+}
+
+func (m *Manager) AddCleanup(cleanup func()) {
+	if m == nil || cleanup == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanups = append(m.cleanups, cleanup)
 }
 
 func (m *Manager) HasTargets() bool {
@@ -271,6 +295,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	dispatcherSecret, dispatcherSecretHash, err := newDispatcherSecret()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "create provider dev dispatcher secret: %v", err)
+	}
+	if m.shared != nil {
+		return m.createSharedSession(ctx, owner, sessionID, dispatcherSecret, dispatcherSecretHash, targets)
 	}
 	session := &Session{
 		id:                   sessionID,
@@ -327,7 +354,61 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	return resp, nil
 }
 
+func (m *Manager) createSharedSession(ctx context.Context, owner, sessionID, dispatcherSecret, dispatcherSecretHash string, targets []Target) (*CreateSessionResponse, error) {
+	resp := &CreateSessionResponse{
+		AttachID:         sessionID,
+		DispatcherSecret: dispatcherSecret,
+		Providers:        make([]CreateSessionProvider, 0, len(targets)),
+	}
+	var cleanups []func()
+	runCleanups := func() {
+		for _, cleanup := range cleanups {
+			if cleanup != nil {
+				cleanup()
+			}
+		}
+		cleanups = nil
+	}
+	cleanupOnError := true
+	defer func() {
+		if cleanupOnError {
+			runCleanups()
+		}
+	}()
+	for i := range targets {
+		target := targets[i]
+		runtimeEnv := RuntimeEnv{}
+		if target.RuntimeEnv != nil {
+			var err error
+			runtimeEnv, err = target.RuntimeEnv(sessionID)
+			if err != nil {
+				return nil, status.Errorf(codes.FailedPrecondition, "prepare provider %q runtime env: %v", target.Name, err)
+			}
+		}
+		cleanups = append(cleanups, runtimeEnv.Cleanup)
+		targets[i].RuntimeEnv = nil
+		resp.Providers = append(resp.Providers, CreateSessionProvider{
+			Name:   target.Name,
+			Env:    cloneStringMap(runtimeEnv.Env),
+			Source: target.Source,
+			UI:     target.UI,
+			UIPath: target.UIPath,
+		})
+	}
+	if err := m.shared.createSession(ctx, owner, sessionID, dispatcherSecretHash, targets, time.Now()); err != nil {
+		return nil, err
+	}
+	cleanupOnError = false
+	// Shared sessions return durable relay metadata to the local dispatcher. Any
+	// per-replica resources from runtime env synthesis must be released now.
+	runCleanups()
+	return resp, nil
+}
+
 func (m *Manager) PollSessionWithDispatcherSecretOnly(ctx context.Context, sessionID, dispatcherSecret string) (*PollResponse, bool, error) {
+	if m != nil && m.shared != nil {
+		return m.shared.poll(ctx, sessionID, dispatcherSecret)
+	}
 	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	if err != nil {
 		return nil, false, err
@@ -422,6 +503,20 @@ func (m *Manager) CreateAttachAuthorization(req CreateSessionRequest, now time.T
 	if now.IsZero() {
 		now = time.Now()
 	}
+	if m.shared != nil {
+		info, err := m.shared.createAttachAuthorization(context.Background(), AttachAuthorization{
+			id:               id,
+			clientSecretHash: clientSecretHash,
+			verificationHash: verificationHash,
+			requestHash:      requestHash,
+			providers:        slices.Clone(names),
+			expiresAt:        now.Add(5 * time.Minute),
+		}, now)
+		if err != nil {
+			return nil, "", "", err
+		}
+		return info, clientSecret, verificationCode, nil
+	}
 	auth := &AttachAuthorization{
 		id:               id,
 		clientSecretHash: clientSecretHash,
@@ -443,6 +538,9 @@ func (m *Manager) CreateAttachAuthorization(req CreateSessionRequest, now time.T
 }
 
 func (m *Manager) GetAttachAuthorization(id string) (*AttachAuthorizationInfo, error) {
+	if m != nil && m.shared != nil {
+		return m.shared.getAttachAuthorization(context.Background(), id, time.Now())
+	}
 	auth, err := m.attachAuthorization(id, time.Now())
 	if err != nil {
 		return nil, err
@@ -459,6 +557,9 @@ func (m *Manager) ApproveAttachAuthorization(id string, p *principal.Principal, 
 	verificationCode = normalizeAttachAuthorizationVerificationCode(verificationCode)
 	if verificationCode == "" {
 		return status.Error(codes.InvalidArgument, "provider dev attach verification code is required")
+	}
+	if m != nil && m.shared != nil {
+		return m.shared.approveAttachAuthorization(context.Background(), id, p, verificationCode, time.Now())
 	}
 	auth, err := m.attachAuthorization(id, time.Now())
 	if err != nil {
@@ -483,6 +584,9 @@ func (m *Manager) ApproveAttachAuthorization(id string, p *principal.Principal, 
 }
 
 func (m *Manager) PollAttachAuthorization(id, clientSecret string) (*PollAttachAuthorizationResponse, error) {
+	if m != nil && m.shared != nil {
+		return m.shared.pollAttachAuthorization(context.Background(), id, clientSecret, time.Now())
+	}
 	auth, err := m.attachAuthorizationWithClientSecret(id, clientSecret, time.Now())
 	if err != nil {
 		return nil, err
@@ -495,6 +599,13 @@ func (m *Manager) PollAttachAuthorization(id, clientSecret string) (*PollAttachA
 }
 
 func (m *Manager) ConsumeAttachAuthorization(id, clientSecret string, req CreateSessionRequest) (*principal.Principal, error) {
+	if m != nil && m.shared != nil {
+		requestHash, err := attachAuthorizationRequestHash(req)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "hash provider dev attach authorization request: %v", err)
+		}
+		return m.shared.consumeAttachAuthorization(context.Background(), id, clientSecret, requestHash, time.Now())
+	}
 	auth, err := m.attachAuthorizationWithClientSecret(id, clientSecret, time.Now())
 	if err != nil {
 		return nil, err
@@ -533,6 +644,7 @@ func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]T
 		target.Spec = buildAttachSpec(remoteTarget.Spec, requested.Spec)
 		if requested.Config != nil {
 			target.Config = cloneAnyMap(*requested.Config)
+			target.ConfigSet = true
 		}
 		target.UI = requested.UI
 		targets = append(targets, target)
@@ -576,6 +688,9 @@ func (m *Manager) resolveAttachTargetLocked(requested AttachProvider) (Target, e
 }
 
 func (m *Manager) CompleteCallWithDispatcherSecretOnly(sessionID, callID, dispatcherSecret string, req CompleteCallRequest) error {
+	if m != nil && m.shared != nil {
+		return m.shared.completeCall(context.Background(), sessionID, callID, dispatcherSecret, req)
+	}
 	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	if err != nil {
 		return err
@@ -584,11 +699,20 @@ func (m *Manager) CompleteCallWithDispatcherSecretOnly(sessionID, callID, dispat
 }
 
 func (m *Manager) VerifyDispatcherSecretOnly(sessionID, dispatcherSecret string) error {
+	if m != nil && m.shared != nil {
+		return m.shared.verifyDispatcherSecret(context.Background(), sessionID, dispatcherSecret)
+	}
 	_, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	return err
 }
 
 func (m *Manager) CloseSessionWithDispatcherSecret(sessionID, dispatcherSecret string) error {
+	if m != nil && m.shared != nil {
+		if err := m.shared.closeSessionWithDispatcherSecret(context.Background(), sessionID, dispatcherSecret); err != nil {
+			return err
+		}
+		return m.closeSharedTargets(sessionID)
+	}
 	session, err := m.sessionForDispatcherSecret(sessionID, dispatcherSecret)
 	if err != nil {
 		return err
@@ -652,6 +776,10 @@ func (m *Manager) ListSessions(p *principal.Principal) ([]AttachmentInfo, error)
 	if m == nil {
 		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
 	}
+	if m.shared != nil {
+		m.closeInactiveSharedTargets(context.Background(), time.Now())
+		return m.shared.listSessions(context.Background(), owner)
+	}
 	m.closeIdleSessions(time.Now())
 	sessions := m.sessionsForOwner(owner)
 	out := make([]AttachmentInfo, 0, len(sessions))
@@ -665,6 +793,14 @@ func (m *Manager) ListSessions(p *principal.Principal) ([]AttachmentInfo, error)
 }
 
 func (m *Manager) GetSession(p *principal.Principal, sessionID string) (*AttachmentInfo, error) {
+	if m != nil && m.shared != nil {
+		owner := principalSubjectID(p)
+		if owner == "" {
+			return nil, status.Error(codes.Unauthenticated, "provider dev requires an authenticated principal")
+		}
+		m.closeInactiveSharedTargets(context.Background(), time.Now())
+		return m.shared.getSession(context.Background(), owner, sessionID)
+	}
 	session, err := m.sessionForPrincipal(p, sessionID)
 	if err != nil {
 		return nil, err
@@ -674,6 +810,16 @@ func (m *Manager) GetSession(p *principal.Principal, sessionID string) (*Attachm
 }
 
 func (m *Manager) CloseSession(p *principal.Principal, sessionID string) error {
+	if m != nil && m.shared != nil {
+		owner := principalSubjectID(p)
+		if owner == "" {
+			return status.Error(codes.Unauthenticated, "provider dev requires an authenticated principal")
+		}
+		if err := m.shared.closeSession(context.Background(), owner, sessionID); err != nil {
+			return err
+		}
+		return m.closeSharedTargets(sessionID)
+	}
 	session, err := m.sessionForPrincipal(p, sessionID)
 	if err != nil {
 		return err
@@ -698,6 +844,23 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 	if providerName == "" {
 		return nil, false, nil
 	}
+	if m.shared != nil {
+		m.closeInactiveSharedTargets(ctx, time.Now())
+		session, target, ok, err := m.shared.latestTarget(ctx, owner, providerName)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, nil
+		}
+		target = m.hydrateSharedTarget(target)
+		attached := m.sharedTarget(session.id, target)
+		prov, err := attached.providerForSession(ctx, &sharedSession{id: session.id, owner: owner, store: m.shared}, providerName)
+		if err != nil {
+			return nil, false, err
+		}
+		return prov, true, nil
+	}
 
 	sessions := m.sessionsForOwner(owner)
 
@@ -719,6 +882,28 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 	return nil, false, nil
 }
 
+func (m *Manager) hydrateSharedTarget(target Target) Target {
+	if m == nil {
+		return target
+	}
+	m.mu.RLock()
+	base, ok := m.targets[target.Name]
+	m.mu.RUnlock()
+	if !ok {
+		return target
+	}
+	if target.Source == "" {
+		target.Source = base.Source
+	}
+	if target.UIPath == "" {
+		target.UIPath = base.UIPath
+	}
+	if !target.ConfigSet {
+		target.Config = cloneAnyMap(base.Config)
+	}
+	return target
+}
+
 func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, providerName string, req UIAssetRequest) (*UIAssetResponse, bool, error) {
 	if m == nil {
 		return nil, false, nil
@@ -731,6 +916,24 @@ func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, prov
 	providerName = strings.TrimSpace(providerName)
 	if providerName == "" {
 		return nil, false, nil
+	}
+	if m.shared != nil {
+		m.closeInactiveSharedTargets(ctx, time.Now())
+		session, target, ok, err := m.shared.latestTarget(ctx, owner, providerName)
+		if err != nil {
+			return nil, false, err
+		}
+		if !ok {
+			return nil, false, nil
+		}
+		if !target.UI {
+			return nil, false, nil
+		}
+		resp, err := (&sharedSession{id: session.id, owner: owner, store: m.shared}).serveUIAsset(ctx, providerName, req)
+		if err != nil {
+			return nil, true, err
+		}
+		return resp, true, nil
 	}
 
 	sessions := m.sessionsForOwner(owner)
@@ -762,15 +965,104 @@ func (m *Manager) Close() error {
 	for _, session := range m.sessions {
 		sessions = append(sessions, session)
 	}
+	sharedTargets := make([]*attachedTarget, 0, len(m.sharedTargets))
+	for _, targets := range m.sharedTargets {
+		for _, target := range targets {
+			sharedTargets = append(sharedTargets, target)
+		}
+	}
 	m.sessions = map[string]*Session{}
+	m.sharedTargets = map[string]map[string]*attachedTarget{}
 	m.authorizations = map[string]*AttachAuthorization{}
+	cleanups := slices.Clone(m.cleanups)
+	m.cleanups = nil
 	m.mu.Unlock()
 
 	var errs []error
 	for _, session := range sessions {
 		errs = append(errs, session.Close())
 	}
+	for _, target := range sharedTargets {
+		errs = append(errs, target.close())
+	}
+	for _, cleanup := range cleanups {
+		if cleanup != nil {
+			cleanup()
+		}
+	}
 	return errors.Join(errs...)
+}
+
+func (m *Manager) sharedTarget(sessionID string, target Target) *attachedTarget {
+	if m == nil {
+		return &attachedTarget{target: target}
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName := strings.TrimSpace(target.Name)
+	if sessionID == "" || providerName == "" {
+		return &attachedTarget{target: target}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sharedTargets == nil {
+		m.sharedTargets = map[string]map[string]*attachedTarget{}
+	}
+	targets := m.sharedTargets[sessionID]
+	if targets == nil {
+		targets = map[string]*attachedTarget{}
+		m.sharedTargets[sessionID] = targets
+	}
+	if existing := targets[providerName]; existing != nil {
+		return existing
+	}
+	target.Name = providerName
+	attached := &attachedTarget{target: target}
+	targets[providerName] = attached
+	return attached
+}
+
+func (m *Manager) closeSharedTargets(sessionID string) error {
+	if m == nil {
+		return nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	m.mu.Lock()
+	targets := m.sharedTargets[sessionID]
+	delete(m.sharedTargets, sessionID)
+	m.mu.Unlock()
+	var errs []error
+	for _, target := range targets {
+		errs = append(errs, target.close())
+	}
+	return errors.Join(errs...)
+}
+
+func (m *Manager) closeInactiveSharedTargets(ctx context.Context, now time.Time) {
+	if m == nil || m.shared == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	m.mu.RLock()
+	sessionIDs := make([]string, 0, len(m.sharedTargets))
+	for sessionID := range m.sharedTargets {
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	m.mu.RUnlock()
+	for _, sessionID := range sessionIDs {
+		active, err := m.shared.sessionActive(ctx, sessionID, now)
+		if err != nil || active {
+			continue
+		}
+		_ = m.closeSharedTargets(sessionID)
+	}
 }
 
 func (m *Manager) closeIdleSessions(now time.Time) {
@@ -1155,7 +1447,11 @@ func (s *Session) invokeRaw(ctx context.Context, providerName, method string, pa
 	}
 }
 
-func (t *attachedTarget) providerForSession(ctx context.Context, session *Session, providerName string) (core.Provider, error) {
+type providerDevSession interface {
+	invoke(ctx context.Context, providerName, method string, req gproto.Message, resp gproto.Message) error
+}
+
+func (t *attachedTarget) providerForSession(ctx context.Context, session providerDevSession, providerName string) (core.Provider, error) {
 	t.providerMu.Lock()
 	defer t.providerMu.Unlock()
 	if t.closed {
@@ -1266,7 +1562,7 @@ func (t *attachedTarget) close() error {
 }
 
 type sessionProviderClient struct {
-	session  *Session
+	session  providerDevSession
 	provider string
 }
 

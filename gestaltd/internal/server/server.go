@@ -120,7 +120,7 @@ type Server struct {
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
 	hostServiceMu          sync.Mutex
-	hostServiceHandlers    map[hostServiceHandlerKey]hostServiceHandlerEntry
+	hostServiceHandlers    map[hostServiceHandlerKey][]hostServiceHandlerEntry
 	hostServiceVersion     uint64
 	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3store.Client

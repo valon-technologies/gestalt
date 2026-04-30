@@ -22,25 +22,45 @@ type hostServiceHandlerEntry struct {
 	verifier runtimehost.PublicHostServiceSessionVerifier
 }
 
-func newPublicHostServiceHandlers(services []runtimehost.PublicHostService) (map[hostServiceHandlerKey]hostServiceHandlerEntry, error) {
+func newPublicHostServiceHandlers(services []runtimehost.PublicHostService) (map[hostServiceHandlerKey][]hostServiceHandlerEntry, error) {
 	if len(services) == 0 {
 		return nil, nil
 	}
-	handlers := make(map[hostServiceHandlerKey]hostServiceHandlerEntry, len(services))
+	handlers := make(map[hostServiceHandlerKey][]hostServiceHandlerEntry, len(services))
 	for _, service := range services {
 		key, entry, ok := newPublicHostServiceHandlerEntry(service)
 		if !ok {
 			continue
 		}
-		if _, ok := handlers[key]; ok {
-			return nil, fmt.Errorf("duplicate public host service %s", key.String())
+		if err := appendHostServiceHandlerEntry(handlers, key, entry); err != nil {
+			return nil, err
 		}
-		handlers[key] = entry
 	}
 	if len(handlers) == 0 {
 		return nil, nil
 	}
 	return handlers, nil
+}
+
+func appendHostServiceHandlerEntry(handlers map[hostServiceHandlerKey][]hostServiceHandlerEntry, key hostServiceHandlerKey, entry hostServiceHandlerEntry) error {
+	if handlers == nil {
+		return nil
+	}
+	entries := handlers[key]
+	if err := checkHostServiceHandlerDuplicate(key, entries, entry); err != nil {
+		return err
+	}
+	handlers[key] = append(entries, entry)
+	return nil
+}
+
+func checkHostServiceHandlerDuplicate(key hostServiceHandlerKey, entries []hostServiceHandlerEntry, entry hostServiceHandlerEntry) error {
+	for _, existing := range entries {
+		if existing.verifier == nil || entry.verifier == nil {
+			return fmt.Errorf("duplicate public host service %s", key.String())
+		}
+	}
+	return nil
 }
 
 func newPublicHostServiceHandlerEntry(service runtimehost.PublicHostService) (hostServiceHandlerKey, hostServiceHandlerEntry, bool) {
@@ -82,28 +102,24 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 	providerKey := exactKey
 	providerKey.sessionID = ""
 
-	entry, ok, err := s.hostServiceHandlerEntry(exactKey)
-	if err != nil {
-		return nil, err
-	}
+	entry, ok, err := s.hostServiceHandlerEntry(ctx, exactKey, exactKey.sessionID)
+	exactErr := err
 	if !ok && exactKey.sessionID != "" {
-		entry, ok, err = s.hostServiceHandlerEntry(providerKey)
+		entry, ok, err = s.hostServiceHandlerEntry(ctx, providerKey, exactKey.sessionID)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if !ok && exactErr != nil {
+		return nil, exactErr
+	}
 	if !ok {
 		return nil, nil
-	}
-	if entry.verifier != nil {
-		if err := entry.verifier.VerifyHostServiceSession(ctx, exactKey.sessionID); err != nil {
-			return nil, err
-		}
 	}
 	return entry.handler, nil
 }
 
-func (s *Server) hostServiceHandlerEntry(key hostServiceHandlerKey) (hostServiceHandlerEntry, bool, error) {
+func (s *Server) hostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKey, sessionID string) (hostServiceHandlerEntry, bool, error) {
 	if key.pluginName == "" || key.service == "" || key.envVar == "" {
 		return hostServiceHandlerEntry{}, false, nil
 	}
@@ -111,14 +127,14 @@ func (s *Server) hostServiceHandlerEntry(key hostServiceHandlerKey) (hostService
 	for {
 		s.hostServiceMu.Lock()
 		s.refreshHostServiceHandlerCacheLocked()
-		if entry, ok := s.hostServiceHandlers[key]; ok {
+		if entries, ok := s.hostServiceHandlers[key]; ok {
 			s.hostServiceMu.Unlock()
-			return entry, true, nil
+			return selectHostServiceHandlerEntry(ctx, key, sessionID, entries)
 		}
 		s.hostServiceMu.Unlock()
 
 		services, snapshotVersion := s.publicHostServices.Snapshot()
-		var found *runtimehost.PublicHostService
+		var entries []hostServiceHandlerEntry
 		for _, service := range services {
 			serviceKey := hostServiceHandlerKey{
 				pluginName: strings.TrimSpace(service.PluginName),
@@ -129,17 +145,16 @@ func (s *Server) hostServiceHandlerEntry(key hostServiceHandlerKey) (hostService
 			if serviceKey != key || service.Service.Register == nil {
 				continue
 			}
-			if found != nil {
-				return hostServiceHandlerEntry{}, false, fmt.Errorf("duplicate public host service %s", key.String())
+			entryKey, entry, ok := newPublicHostServiceHandlerEntry(service)
+			if !ok || entryKey != key {
+				continue
 			}
-			serviceCopy := service
-			found = &serviceCopy
+			if err := checkHostServiceHandlerDuplicate(key, entries, entry); err != nil {
+				return hostServiceHandlerEntry{}, false, err
+			}
+			entries = append(entries, entry)
 		}
-		if found == nil {
-			return hostServiceHandlerEntry{}, false, nil
-		}
-		entryKey, entry, ok := newPublicHostServiceHandlerEntry(*found)
-		if !ok || entryKey != key {
+		if len(entries) == 0 {
 			return hostServiceHandlerEntry{}, false, nil
 		}
 
@@ -154,15 +169,36 @@ func (s *Server) hostServiceHandlerEntry(key hostServiceHandlerKey) (hostService
 		s.hostServiceVersion = snapshotVersion
 		if existing, ok := s.hostServiceHandlers[key]; ok {
 			s.hostServiceMu.Unlock()
-			return existing, true, nil
+			return selectHostServiceHandlerEntry(ctx, key, sessionID, existing)
 		}
 		if s.hostServiceHandlers == nil {
-			s.hostServiceHandlers = make(map[hostServiceHandlerKey]hostServiceHandlerEntry)
+			s.hostServiceHandlers = make(map[hostServiceHandlerKey][]hostServiceHandlerEntry)
 		}
-		s.hostServiceHandlers[key] = entry
+		s.hostServiceHandlers[key] = entries
 		s.hostServiceMu.Unlock()
+		return selectHostServiceHandlerEntry(ctx, key, sessionID, entries)
+	}
+}
+
+func selectHostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKey, sessionID string, entries []hostServiceHandlerEntry) (hostServiceHandlerEntry, bool, error) {
+	if len(entries) == 0 {
+		return hostServiceHandlerEntry{}, false, nil
+	}
+	var lastErr error
+	for _, entry := range entries {
+		if entry.verifier == nil {
+			return entry, true, nil
+		}
+		if err := entry.verifier.VerifyHostServiceSession(ctx, sessionID); err != nil {
+			lastErr = err
+			continue
+		}
 		return entry, true, nil
 	}
+	if lastErr != nil {
+		return hostServiceHandlerEntry{}, false, lastErr
+	}
+	return hostServiceHandlerEntry{}, false, nil
 }
 
 func (s *Server) refreshHostServiceHandlerCacheLocked() {

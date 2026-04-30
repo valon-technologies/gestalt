@@ -138,46 +138,37 @@ func TestLoadConfigValidatesProviderDevAttachmentState(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name    string
-		yaml    string
-		wantErr string
+		name      string
+		yaml      string
+		wantErr   string
+		wantState DevAttachmentState
 	}{
-		{
-			name: "remote attach requires explicit process local state",
-			yaml: `
-server:
-  providerDev:
-    remoteAttach: true
-`,
-			wantErr: `server.providerDev.remoteAttach requires server.providerDev.attachmentState: "processLocal"`,
-		},
 		{
 			name: "unsupported attachment state",
 			yaml: `
 server:
-  providerDev:
-    remoteAttach: true
+  dev:
     attachmentState: sharedRelay
 `,
-			wantErr: `server.providerDev.attachmentState "sharedRelay" is not supported`,
-		},
-		{
-			name: "attachment state requires remote attach",
-			yaml: `
-server:
-  providerDev:
-    attachmentState: processLocal
-`,
-			wantErr: `server.providerDev.attachmentState requires server.providerDev.remoteAttach`,
+			wantErr: `server.dev.attachmentState "sharedRelay" is not supported`,
 		},
 		{
 			name: "process local remote attach",
 			yaml: `
 server:
-  providerDev:
-    remoteAttach: true
+  dev:
     attachmentState: processLocal
 `,
+			wantState: DevAttachmentStateProcessLocal,
+		},
+		{
+			name: "indexeddb remote attach",
+			yaml: `
+server:
+  dev:
+    attachmentState: indexeddb
+`,
+			wantState: DevAttachmentStateIndexedDB,
 		},
 	}
 
@@ -198,8 +189,8 @@ server:
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
-			if got := cfg.Server.ProviderDev.AttachmentState; got != ProviderDevAttachmentStateProcessLocal {
-				t.Fatalf("providerDev.attachmentState = %q, want %q", got, ProviderDevAttachmentStateProcessLocal)
+			if got := cfg.Server.Dev.AttachmentState; got != tc.wantState {
+				t.Fatalf("dev.attachmentState = %q, want %q", got, tc.wantState)
 			}
 		})
 	}

@@ -471,16 +471,16 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		Surface:        metricutil.InvocationSurfaceHTTP,
 	})
 	p := PrincipalFromContext(r.Context())
+	if !s.allowProviderContext(r.Context(), p, name) {
+		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
+		return
+	}
 	if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if ok {
 		prov = override
-	}
-	if !s.allowProviderContext(r.Context(), p, name) {
-		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return
 	}
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
@@ -555,13 +555,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	surfaceProv := prov
-	if override, ok, err := s.providerOverrideForContext(r.Context(), p, providerName); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	} else if ok {
-		surfaceProv = override
-	}
 	access := s.providerAccessContextWithContext(r.Context(), p, providerName)
 	providerAllowed := s.allowProviderContext(r.Context(), p, providerName)
 	operationAllowed := s.authorizer == nil || s.authorizer.AllowOperation(r.Context(), p, providerName, operationName)
@@ -578,6 +571,13 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPAuthorizationEvent(r.Context(), p, providerName, operationName, false, errOperationAccess, authz)
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
+	}
+	surfaceProv := prov
+	if override, ok, err := s.providerOverrideForContext(r.Context(), p, providerName); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if ok {
+		surfaceProv = override
 	}
 
 	requestedConnectionInput := r.URL.Query().Get(httpConnectionParam)

@@ -28,7 +28,7 @@ func (s *Server) allowProviderActionContext(ctx context.Context, p *principal.Pr
 		return false
 	}
 	entry := s.pluginDefs[provider]
-	if entry == nil || entry.ProviderDev == nil || len(entry.ProviderDev.Attach.AllowedRoles) == 0 {
+	if entry == nil || entry.Dev == nil || len(entry.Dev.Attach.AllowedRoles) == 0 {
 		return false
 	}
 	if strings.TrimSpace(entry.AuthorizationPolicy) == "" || s.authorizer == nil {
@@ -38,7 +38,7 @@ func (s *Server) allowProviderActionContext(ctx context.Context, p *principal.Pr
 	if !ok || strings.TrimSpace(access.Policy) == "" || strings.TrimSpace(access.Role) == "" {
 		return false
 	}
-	for _, role := range entry.ProviderDev.Attach.AllowedRoles {
+	for _, role := range entry.Dev.Attach.AllowedRoles {
 		if strings.TrimSpace(role) == access.Role {
 			return true
 		}
