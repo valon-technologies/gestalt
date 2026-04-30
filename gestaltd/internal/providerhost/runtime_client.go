@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	providerRPCTimeout     = 10 * time.Second
-	providerMigrateTimeout = 2 * time.Minute
+	providerRPCTimeout = 10 * time.Second
 )
 
 var providerConfigureTimeout = 30 * time.Second
@@ -149,31 +148,6 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
-type providerMigrationTimeoutContextKey struct{}
-
-func WithProviderMigrationTimeout(ctx context.Context) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, providerMigrationTimeoutContextKey{}, true)
-}
-
-func providerSchemaChangeContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent != nil {
-		if useMigrationTimeout, _ := parent.Value(providerMigrationTimeoutContextKey{}).(bool); useMigrationTimeout {
-			return providerMigrationContext(parent)
-		}
-	}
-	return providerCallContext(parent)
-}
-
-func providerMigrationContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	return context.WithTimeout(parent, providerMigrateTimeout)
-}
-
 func providerStreamContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
@@ -184,9 +158,6 @@ func providerStreamContext(parent context.Context) (context.Context, context.Can
 func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
-	}
-	if useMigrationTimeout, _ := parent.Value(providerMigrationTimeoutContextKey{}).(bool); useMigrationTimeout {
-		return providerMigrationContext(parent)
 	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
 }

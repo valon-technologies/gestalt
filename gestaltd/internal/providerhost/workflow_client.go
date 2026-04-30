@@ -49,8 +49,7 @@ func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (corewor
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	workflowClient := proto.NewWorkflowProviderClient(proc.conn)
-	configureCtx := WithProviderMigrationTimeout(ctx)
-	if _, err := ConfigureRuntimeProvider(configureCtx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
+	if _, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}
