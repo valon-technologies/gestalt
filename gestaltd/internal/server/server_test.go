@@ -568,6 +568,72 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	}
 }
 
+func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	cacheSrv1 := &relayTestCacheServer{}
+	cacheSrv2 := &relayTestCacheServer{}
+	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	hostService1 := providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv1)
+		},
+	}
+	hostService2 := providerhost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv2)
+		},
+	}
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), hostService1)
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-2"), hostService2)
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-2",
+		Service:      "cache",
+		EnvVar:       envVar,
+		MethodPrefix: "/gestalt.provider.v1.Cache/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "selected"}); err != nil {
+		t.Fatalf("Cache.Get via duplicate relay: %v", err)
+	}
+	if got := cacheSrv1.calls(); got != 0 {
+		t.Fatalf("first backend calls = %d, want 0", got)
+	}
+	if got := cacheSrv2.calls(); got != 1 {
+		t.Fatalf("second backend calls = %d, want 1", got)
+	}
+}
+
 func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 	t.Parallel()
 
@@ -6164,7 +6230,7 @@ func TestProviderDevAttachmentRoutesEnforceGateDispatcherSecretAndRedaction(t *t
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
-				ProviderDev: &config.ProviderEntryDevConfig{
+				Dev: &config.ProviderEntryDevConfig{
 					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
 				},
 			},
@@ -6375,7 +6441,7 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
-				ProviderDev: &config.ProviderEntryDevConfig{
+				Dev: &config.ProviderEntryDevConfig{
 					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
 				},
 			},
@@ -6457,7 +6523,7 @@ func TestProviderDevAttachAuthorizationBrowserApprovalCreatesDispatcherSession(t
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"roadmap": {
 				AuthorizationPolicy: "provider_devs",
-				ProviderDev: &config.ProviderEntryDevConfig{
+				Dev: &config.ProviderEntryDevConfig{
 					Attach: config.ProviderEntryDevAttachConfig{AllowedRoles: []string{"viewer"}},
 				},
 			},

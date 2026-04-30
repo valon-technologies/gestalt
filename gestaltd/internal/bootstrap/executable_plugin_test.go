@@ -5998,7 +5998,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 		S3: map[string]s3store.Client{
 			"main": &coretesting.StubS3{},
 		},
-	}, "provider-dev-session")
+	}, "provider-dev-session", false)
 	if err != nil {
 		t.Fatalf("buildProviderDevRuntimeEnv: %v", err)
 	}

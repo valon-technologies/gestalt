@@ -358,7 +358,7 @@ type ProviderEntry struct {
 	HTTP            map[string]*HTTPBinding        `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
-	ProviderDev         *ProviderEntryDevConfig `yaml:"providerDev,omitempty"`
+	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
 
 	// Plugin-specific runtime fields populated from the canonical ui object.
 	MountPath         string                        `yaml:"-"`
@@ -812,7 +812,7 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
 	e.Execution = cloneExecutionConfig(e.Execution)
-	e.ProviderDev = cloneProviderEntryDevConfig(e.ProviderDev)
+	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
 }
@@ -836,8 +836,8 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	if entry.Execution != nil {
 		entry.Execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
 	}
-	if entry.ProviderDev != nil {
-		entry.ProviderDev.Attach.AllowedRoles = trimStringSlice(entry.ProviderDev.Attach.AllowedRoles)
+	if entry.Dev != nil {
+		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
 	}
 }
 
@@ -1396,20 +1396,22 @@ type ServerConfig struct {
 	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
-	ProviderDev   ProviderDevConfig        `yaml:"providerDev,omitempty"`
+	Dev           DevConfig                `yaml:"dev,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 }
 
-type ProviderDevConfig struct {
-	RemoteAttach    bool                       `yaml:"remoteAttach,omitempty"`
-	AttachmentState ProviderDevAttachmentState `yaml:"attachmentState,omitempty"`
+type DevConfig struct {
+	AttachmentState DevAttachmentState `yaml:"attachmentState,omitempty"`
 }
 
-type ProviderDevAttachmentState string
+type DevAttachmentState string
 
-const ProviderDevAttachmentStateProcessLocal ProviderDevAttachmentState = "processLocal"
+const (
+	DevAttachmentStateProcessLocal DevAttachmentState = "processLocal"
+	DevAttachmentStateIndexedDB    DevAttachmentState = "indexeddb"
+)
 
 type ServerRuntimeConfig struct {
 	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`

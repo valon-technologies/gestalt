@@ -246,6 +246,325 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 }
 
+func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	targets := []Target{{
+		Name: "roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name:           "roadmap",
+			DisplayName:    "Roadmap",
+			ConnectionMode: core.ConnectionModeUser,
+			Catalog: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{{
+					ID:        "echo",
+					Transport: catalog.TransportPlugin,
+				}},
+			},
+		},
+		Config: map[string]any{"remote": true},
+	}}
+	managerA, err := NewManager(targets, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager A: %v", err)
+	}
+	managerB, err := NewManager(targets, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager B: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	createTS := httptest.NewServer(providerDevTestHandler(t, managerA, p))
+	t.Cleanup(createTS.Close)
+	dispatchTS := httptest.NewServer(providerDevTestHandler(t, managerB, p))
+	t.Cleanup(dispatchTS.Close)
+
+	createClient := Client{BaseURL: createTS.URL, HTTPClient: createTS.Client()}
+	dispatchClient := Client{BaseURL: dispatchTS.URL, HTTPClient: dispatchTS.Client()}
+	session, err := createClient.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
+		Name: "roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name: "roadmap",
+			Catalog: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{{
+					ID:        "echo",
+					Transport: catalog.TransportPlugin,
+				}},
+			},
+		},
+	}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	record, err := db.ObjectStore(indexedDBAttachmentStore).Get(ctx, session.AttachID)
+	if err != nil {
+		t.Fatalf("load shared attachment: %v", err)
+	}
+	targetsJSON := fmt.Sprint(record["targets_json"])
+	if strings.Contains(targetsJSON, "remote") {
+		t.Fatalf("shared attachment targets persisted remote config: %s", targetsJSON)
+	}
+	listed, err := dispatchClient.ListAttachments(ctx)
+	if err != nil {
+		t.Fatalf("ListAttachments from second transport: %v", err)
+	}
+	if len(listed) != 1 || listed[0].AttachID != session.AttachID {
+		t.Fatalf("ListAttachments from second transport = %#v, want attachment %q", listed, session.AttachID)
+	}
+	gotInfo, err := dispatchClient.GetAttachment(ctx, session.AttachID)
+	if err != nil {
+		t.Fatalf("GetAttachment from second transport: %v", err)
+	}
+	if gotInfo.AttachID != session.AttachID {
+		t.Fatalf("GetAttachment from second transport = %#v, want %q", gotInfo, session.AttachID)
+	}
+	if err := managerB.VerifyHostServiceSession(context.Background(), "roadmap", session.AttachID); err != nil {
+		t.Fatalf("VerifyHostServiceSession: %v", err)
+	}
+
+	dispatchCtx, dispatchCancel := context.WithCancel(context.Background())
+	defer dispatchCancel()
+	dispatchDone := make(chan error, 1)
+	local := &recordingIntegrationClient{}
+	dispatchClient.DispatcherSecret = session.DispatcherSecret
+	go func() {
+		dispatchDone <- dispatchClient.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.IntegrationProviderClient{
+			"roadmap": local,
+		})
+	}()
+
+	resolveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	prov, ok, err := managerB.ResolveProviderOverride(resolveCtx, p, "roadmap")
+	if err != nil {
+		t.Fatalf("ResolveProviderOverride from second manager: %v", err)
+	}
+	if !ok {
+		t.Fatal("ResolveProviderOverride from second manager ok = false, want true")
+	}
+	result, err := prov.Execute(resolveCtx, "echo", map[string]any{"message": "hello"}, "remote-token")
+	if err != nil {
+		t.Fatalf("Execute through shared attachment state: %v", err)
+	}
+	if result.Body != `{"message":"hello","operation":"echo","token":"remote-token"}` {
+		t.Fatalf("Execute body = %s", result.Body)
+	}
+	result, err = prov.Execute(resolveCtx, "echo", map[string]any{"message": "again"}, "remote-token")
+	if err != nil {
+		t.Fatalf("second Execute through shared attachment state: %v", err)
+	}
+	if result.Body != `{"message":"again","operation":"echo","token":"remote-token"}` {
+		t.Fatalf("second Execute body = %s", result.Body)
+	}
+	local.mu.Lock()
+	startCalls := local.startCalls
+	startConfig := fmt.Sprint(local.startConfig)
+	local.mu.Unlock()
+	if startCalls != 1 {
+		t.Fatalf("StartProvider calls = %d, want 1 cached shared provider", startCalls)
+	}
+	if !strings.Contains(startConfig, "remote:true") {
+		t.Fatalf("StartProvider config = %s, want remote:true rehydrated from replica config", startConfig)
+	}
+
+	dispatchCancel()
+	select {
+	case err := <-dispatchDone:
+		if err != nil {
+			t.Fatalf("dispatcher error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatcher did not stop")
+	}
+}
+
+func TestIndexedDBAttachmentStateExpiresIdleAttachmentWithOpenCall(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	manager, err := NewManager([]Target{{Name: "roadmap"}}, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	session, err := manager.CreateSession(ctx, p, CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	callID, err := manager.shared.enqueueCall(ctx, session.AttachID, p.SubjectID, "roadmap", "Execute", []byte("payload"))
+	if err != nil {
+		t.Fatalf("enqueueCall: %v", err)
+	}
+	record, err := db.ObjectStore(indexedDBAttachmentStore).Get(ctx, session.AttachID)
+	if err != nil {
+		t.Fatalf("load attachment: %v", err)
+	}
+	record["last_seen_at"] = unixNano(time.Now().Add(-2 * DefaultSessionIdleTimeout))
+	if err := db.ObjectStore(indexedDBAttachmentStore).Put(ctx, record); err != nil {
+		t.Fatalf("expire attachment: %v", err)
+	}
+
+	active, err := manager.shared.sessionActive(ctx, session.AttachID, time.Now())
+	if err != nil {
+		t.Fatalf("sessionActive: %v", err)
+	}
+	if active {
+		t.Fatal("expired attachment stayed active because of an open call")
+	}
+	if err := manager.shared.cleanupExpired(ctx, time.Now()); err != nil {
+		t.Fatalf("cleanupExpired: %v", err)
+	}
+	_, err = manager.shared.waitCall(ctx, session.AttachID, callID)
+	if got := status.Code(err); got != codes.Unavailable {
+		t.Fatalf("waitCall after idle cleanup code = %s, want %s (err=%v)", got, codes.Unavailable, err)
+	}
+}
+
+func TestIndexedDBAttachmentStateClosesCachedSharedTargetsAfterIdleExpiry(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	targets := []Target{{Name: "roadmap"}}
+	managerA, err := NewManager(targets, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager A: %v", err)
+	}
+	managerB, err := NewManager(targets, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager B: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+
+	session, err := managerA.CreateSession(ctx, p, CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_ = managerB.sharedTarget(session.AttachID, Target{Name: "roadmap"})
+	managerB.mu.RLock()
+	_, cached := managerB.sharedTargets[session.AttachID]
+	managerB.mu.RUnlock()
+	if !cached {
+		t.Fatal("shared target was not cached")
+	}
+
+	record, err := db.ObjectStore(indexedDBAttachmentStore).Get(ctx, session.AttachID)
+	if err != nil {
+		t.Fatalf("load attachment: %v", err)
+	}
+	record["last_seen_at"] = unixNano(time.Now().Add(-2 * DefaultSessionIdleTimeout))
+	if err := db.ObjectStore(indexedDBAttachmentStore).Put(ctx, record); err != nil {
+		t.Fatalf("expire attachment: %v", err)
+	}
+
+	prov, ok, err := managerB.ResolveProviderOverride(ctx, p, "roadmap")
+	if err != nil {
+		t.Fatalf("ResolveProviderOverride: %v", err)
+	}
+	if ok || prov != nil {
+		t.Fatalf("ResolveProviderOverride = (%v, %v), want no override for expired attachment", prov, ok)
+	}
+	managerB.mu.RLock()
+	_, cached = managerB.sharedTargets[session.AttachID]
+	managerB.mu.RUnlock()
+	if cached {
+		t.Fatal("cached shared target survived attachment idle expiry")
+	}
+}
+
+func TestIndexedDBAttachmentStateRunsRuntimeEnvCleanupAfterCreate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cleanupCalls := 0
+	manager, err := NewManager([]Target{{
+		Name: "roadmap",
+		RuntimeEnv: func(string) (RuntimeEnv, error) {
+			return RuntimeEnv{
+				Env: map[string]string{"GESTALT_TEST_SOCKET": "relay://example"},
+				Cleanup: func() {
+					cleanupCalls++
+				},
+			}, nil
+		},
+	}}, WithIndexedDBAttachmentState(ctx, &coretesting.StubIndexedDB{}))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	resp, err := manager.CreateSession(ctx, p, CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if got := resp.Providers[0].Env["GESTALT_TEST_SOCKET"]; got != "relay://example" {
+		t.Fatalf("runtime env = %q, want relay://example", got)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
+	}
+	if err := manager.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if cleanupCalls != 1 {
+		t.Fatalf("cleanup calls after manager close = %d, want 1", cleanupCalls)
+	}
+}
+
+func TestIndexedDBAttachAuthorizationApprovesAcrossManagers(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	targets := []Target{{Name: "roadmap"}}
+	managerA, err := NewManager(targets, WithIndexedDBAttachmentState(context.Background(), db))
+	if err != nil {
+		t.Fatalf("NewManager A: %v", err)
+	}
+	managerB, err := NewManager(targets, WithIndexedDBAttachmentState(context.Background(), db))
+	if err != nil {
+		t.Fatalf("NewManager B: %v", err)
+	}
+
+	req := CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}}
+	info, clientSecret, verificationCode, err := managerA.CreateAttachAuthorization(req, time.Now())
+	if err != nil {
+		t.Fatalf("CreateAttachAuthorization: %v", err)
+	}
+	if info.AuthorizationID == "" || clientSecret == "" || verificationCode == "" {
+		t.Fatalf("authorization response = %#v secret=%q code=%q, want populated values", info, clientSecret, verificationCode)
+	}
+	gotInfo, err := managerB.GetAttachAuthorization(info.AuthorizationID)
+	if err != nil {
+		t.Fatalf("GetAttachAuthorization from second manager: %v", err)
+	}
+	if gotInfo.AuthorizationID != info.AuthorizationID {
+		t.Fatalf("authorization id = %q, want %q", gotInfo.AuthorizationID, info.AuthorizationID)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	if err := managerB.ApproveAttachAuthorization(info.AuthorizationID, p, verificationCode); err != nil {
+		t.Fatalf("ApproveAttachAuthorization from second manager: %v", err)
+	}
+	poll, err := managerA.PollAttachAuthorization(info.AuthorizationID, clientSecret)
+	if err != nil {
+		t.Fatalf("PollAttachAuthorization from first manager: %v", err)
+	}
+	if poll == nil || !poll.Approved {
+		t.Fatalf("PollAttachAuthorization = %#v, want approved", poll)
+	}
+	approvedBy, err := managerA.ConsumeAttachAuthorization(info.AuthorizationID, clientSecret, req)
+	if err != nil {
+		t.Fatalf("ConsumeAttachAuthorization from first manager: %v", err)
+	}
+	if approvedBy == nil || approvedBy.SubjectID != p.SubjectID {
+		t.Fatalf("approved principal = %#v, want subject %q", approvedBy, p.SubjectID)
+	}
+}
+
 func TestCompleteCallTreatsOKErrorCodeAsProtocolError(t *testing.T) {
 	t.Parallel()
 
@@ -752,6 +1071,8 @@ func writeProviderDevTestError(w http.ResponseWriter, err error) {
 
 type recordingIntegrationClient struct {
 	mu                     sync.Mutex
+	metadataCalls          int
+	startCalls             int
 	startName              string
 	startConfig            map[string]any
 	supportsSessionCatalog bool
@@ -759,11 +1080,15 @@ type recordingIntegrationClient struct {
 }
 
 func (c *recordingIntegrationClient) GetMetadata(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ProviderMetadata, error) {
+	c.mu.Lock()
+	c.metadataCalls++
+	c.mu.Unlock()
 	return &proto.ProviderMetadata{SupportsSessionCatalog: c.supportsSessionCatalog}, nil
 }
 
 func (c *recordingIntegrationClient) StartProvider(_ context.Context, req *proto.StartProviderRequest, _ ...grpc.CallOption) (*proto.StartProviderResponse, error) {
 	c.mu.Lock()
+	c.startCalls++
 	c.startName = req.GetName()
 	if req.GetConfig() != nil {
 		c.startConfig = req.GetConfig().AsMap()

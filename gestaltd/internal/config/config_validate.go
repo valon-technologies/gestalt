@@ -153,22 +153,13 @@ func validateProviderDevConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	providerDev := cfg.Server.ProviderDev
-	state := ProviderDevAttachmentState(strings.TrimSpace(string(providerDev.AttachmentState)))
-	cfg.Server.ProviderDev.AttachmentState = state
-	if !providerDev.RemoteAttach {
-		if state != "" {
-			return fmt.Errorf("config validation: server.providerDev.attachmentState requires server.providerDev.remoteAttach")
-		}
-		return nil
-	}
+	state := DevAttachmentState(strings.TrimSpace(string(cfg.Server.Dev.AttachmentState)))
+	cfg.Server.Dev.AttachmentState = state
 	switch state {
-	case ProviderDevAttachmentStateProcessLocal:
+	case "", DevAttachmentStateProcessLocal, DevAttachmentStateIndexedDB:
 		return nil
-	case "":
-		return fmt.Errorf("config validation: server.providerDev.remoteAttach requires server.providerDev.attachmentState: %q because remote attach v1 stores attachments in process memory; enable only on single-replica deployments or deployments with sticky routing for provider-dev traffic", ProviderDevAttachmentStateProcessLocal)
 	default:
-		return fmt.Errorf("config validation: server.providerDev.attachmentState %q is not supported; use %q", state, ProviderDevAttachmentStateProcessLocal)
+		return fmt.Errorf("config validation: server.dev.attachmentState %q is not supported; use %q or %q", state, DevAttachmentStateProcessLocal, DevAttachmentStateIndexedDB)
 	}
 }
 

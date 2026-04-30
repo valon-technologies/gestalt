@@ -182,7 +182,7 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 
 	if err := writeComponentProviderDir(filepath.Join(providersDir, "indexeddb", "relationaldb"), indexedDBBin, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindIndexedDB,
-		Source:      "github.com/test/providers/indexeddb-relationaldb",
+		Source:      "github.com/test/providers/indexeddb/relationaldb",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},

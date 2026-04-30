@@ -98,7 +98,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Readiness:             runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
 		PrometheusMetrics:     result.Telemetry.PrometheusHandler(),
 		ProviderDevSessions:   result.ProviderDevSessions,
-		ProviderDevAttach:     cfg.Server.ProviderDev.RemoteAttach,
+		ProviderDevAttach:     cfg.Server.Dev.AttachmentState != "",
 		PublicHostServices:    result.PublicHostServices,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,

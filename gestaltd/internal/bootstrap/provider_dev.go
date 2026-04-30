@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,9 +23,10 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 		return nil, nil
 	}
 
+	sharedAttachmentState := cfg.Server.Dev.AttachmentState == config.DevAttachmentStateIndexedDB
 	targets := make([]providerdev.Target, 0, len(cfg.Plugins))
 	for name, entry := range cfg.Plugins {
-		result := deriveProviderDevTarget(name, entry, providers, deps)
+		result := deriveProviderDevTarget(name, entry, providers, deps, sharedAttachmentState)
 		switch result.state {
 		case providerDevTargetAttachable:
 			targets = append(targets, result.target)
@@ -41,7 +43,24 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 	if len(targets) == 0 {
 		return nil, nil
 	}
-	return providerdev.NewManager(targets)
+	var opts []providerdev.ManagerOption
+	if sharedAttachmentState {
+		if deps.Services == nil || deps.Services.DB == nil {
+			return nil, fmt.Errorf("provider dev indexeddb attachment state requires core services IndexedDB")
+		}
+		opts = append(opts, providerdev.WithIndexedDBAttachmentState(context.Background(), deps.Services.DB))
+	}
+	manager, err := providerdev.NewManager(targets, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if sharedAttachmentState {
+		if err := registerProviderDevPublicHostServices(cfg, manager, deps, targets); err != nil {
+			_ = manager.Close()
+			return nil, err
+		}
+	}
+	return manager, nil
 }
 
 type providerDevTargetState int
@@ -59,7 +78,7 @@ type providerDevTargetResult struct {
 	err    error
 }
 
-func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps) providerDevTargetResult {
+func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps, sharedAttachmentState bool) providerDevTargetResult {
 	if entry == nil {
 		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "missing config entry"}
 	}
@@ -104,7 +123,7 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 			Config: pluginConfig,
 			UIPath: strings.TrimSpace(entry.MountPath),
 			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
-				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID)
+				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID, sharedAttachmentState)
 			},
 		},
 	}
@@ -148,7 +167,7 @@ func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
-func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string) (providerdev.RuntimeEnv, error) {
+func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string, sharedAttachmentState bool) (providerdev.RuntimeEnv, error) {
 	hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps, false)
 	if err != nil {
 		return providerdev.RuntimeEnv{}, err
@@ -159,14 +178,41 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			cleanup()
 		}
 	}()
+	env := map[string]string{}
+	if sharedAttachmentState {
+		for _, hostService := range hostServices {
+			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, runtimehost.StartedHostService{
+				Name:   hostService.Name,
+				EnvVar: hostService.EnvVar,
+			}, deps, false)
+			if err != nil {
+				return providerdev.RuntimeEnv{}, err
+			}
+			if bindingReq.EnvVar != "" && bindingReq.Relay.DialTarget != "" {
+				env[bindingReq.EnvVar] = bindingReq.Relay.DialTarget
+			}
+			maps.Copy(env, bindingEnv)
+		}
+		if deps.Egress.DefaultAction == egress.PolicyDeny {
+			proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.EffectiveAllowedHosts(), deps.Egress.DefaultAction, deps)
+			if err != nil {
+				return providerdev.RuntimeEnv{}, err
+			}
+			maps.Copy(env, proxyEnv)
+		}
+		if cleanup != nil {
+			cleanup()
+			cleanup = nil
+		}
+		cleanupOnError = false
+		return providerdev.RuntimeEnv{Env: env}, nil
+	}
 	if deps.PublicHostServices != nil {
 		deps.PublicHostServices.RegisterSession(name, sessionID, hostServices...)
 		cleanup = chainCleanup(cleanup, func() {
 			deps.PublicHostServices.UnregisterSession(name, sessionID, hostServices...)
 		})
 	}
-
-	env := map[string]string{}
 	startedHostServices, err := runtimehost.StartHostServices(
 		hostServices,
 		runtimehost.WithHostServicesProviderName(name),
@@ -203,4 +249,55 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 		Env:     env,
 		Cleanup: cleanup,
 	}, nil
+}
+
+type providerDevHostServiceVerifier struct {
+	manager  *providerdev.Manager
+	provider string
+}
+
+func (v providerDevHostServiceVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
+	if v.manager == nil {
+		return fmt.Errorf("provider dev manager is not configured")
+	}
+	return v.manager.VerifyHostServiceSession(ctx, v.provider, sessionID)
+}
+
+func registerProviderDevPublicHostServices(cfg *config.Config, manager *providerdev.Manager, deps Deps, targets []providerdev.Target) error {
+	if cfg == nil || manager == nil || deps.PublicHostServices == nil {
+		return nil
+	}
+	targetNames := make(map[string]struct{}, len(targets))
+	for i := range targets {
+		targetNames[targets[i].Name] = struct{}{}
+	}
+	for name, entry := range cfg.Plugins {
+		if _, ok := targetNames[name]; !ok {
+			continue
+		}
+		if entry == nil || !entry.HasResolvedManifest() {
+			continue
+		}
+		hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps, false)
+		if err != nil {
+			if cleanup != nil {
+				cleanup()
+			}
+			return fmt.Errorf("provider dev public host services %q: %w", name, err)
+		}
+		if len(hostServices) == 0 {
+			if cleanup != nil {
+				cleanup()
+			}
+			continue
+		}
+		deps.PublicHostServices.RegisterVerified(name, providerDevHostServiceVerifier{manager: manager, provider: name}, hostServices...)
+		manager.AddCleanup(func() {
+			deps.PublicHostServices.Unregister(name, hostServices...)
+			if cleanup != nil {
+				cleanup()
+			}
+		})
+	}
+	return nil
 }
