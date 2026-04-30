@@ -8,12 +8,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )

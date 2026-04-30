@@ -10,10 +10,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"go.opentelemetry.io/otel/attribute"
 )
 
