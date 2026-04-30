@@ -9,10 +9,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
 
-var Factory bootstrap.WorkflowFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+var Factory bootstrap.WorkflowFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("workflow provider: parsing config: %w", err)

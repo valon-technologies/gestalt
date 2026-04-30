@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -120,7 +121,7 @@ type Server struct {
 	hostServiceMu          sync.Mutex
 	hostServiceHandlers    map[hostServiceHandlerKey]hostServiceHandlerEntry
 	hostServiceVersion     uint64
-	publicHostServices     *providerhost.PublicHostServiceRegistry
+	publicHostServices     *runtimehost.PublicHostServiceRegistry
 	s3                     map[string]s3store.Client
 	s3ObjectAccessURLs     *providerhost.S3ObjectAccessURLManager
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
@@ -170,7 +171,7 @@ type Config struct {
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
-	PublicHostServices    *providerhost.PublicHostServiceRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	S3                    map[string]s3store.Client
 	ProviderDevSessions   *providerdev.Manager
 	ProviderDevAttach     bool

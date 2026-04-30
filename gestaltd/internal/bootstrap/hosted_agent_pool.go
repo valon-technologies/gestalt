@@ -14,7 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -24,7 +24,7 @@ const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
 type hostedAgentProviderPool struct {
 	name         string
 	launch       *hostedAgentProviderLaunch
-	hostServices []providerhost.HostService
+	hostServices []runtimehost.HostService
 	deps         Deps
 	policy       config.HostedRuntimeLifecyclePolicy
 
@@ -60,7 +60,7 @@ type hostedAgentPoolBackend struct {
 	closed           bool
 }
 
-func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreagent.Provider, error) {
+func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreagent.Provider, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
@@ -68,7 +68,7 @@ func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProvider
 	pool := &hostedAgentProviderPool{
 		name:                launch.name,
 		launch:              launch,
-		hostServices:        append([]providerhost.HostService(nil), hostServices...),
+		hostServices:        append([]runtimehost.HostService(nil), hostServices...),
 		deps:                deps,
 		policy:              policy,
 		ctx:                 poolCtx,

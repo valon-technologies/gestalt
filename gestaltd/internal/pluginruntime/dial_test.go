@@ -11,6 +11,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -21,7 +22,7 @@ func TestDialHostedPluginRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T
 	metrics := metrictest.NewManualMeterProvider(t)
 	const providerName = "hosted-metrics"
 
-	dir, err := providerhost.NewPluginTempDir("grpc-metrics-")
+	dir, err := runtimehost.NewPluginTempDir("grpc-metrics-")
 	if err != nil {
 		t.Fatalf("NewPluginTempDir: %v", err)
 	}

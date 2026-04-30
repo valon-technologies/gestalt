@@ -12,8 +12,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -28,13 +28,13 @@ type ExecutableConfig struct {
 	Config       map[string]any
 	Egress       egress.Policy
 	HostBinary   string
-	HostServices []providerhost.HostService
+	HostServices []runtimehost.HostService
 	Telemetry    metricutil.TelemetryProviders
 	SessionLogs  runtimelogs.Store
 }
 
 type executableProvider struct {
-	proc      *providerhost.PluginProcess
+	proc      *runtimehost.PluginProcess
 	runtime   proto.PluginRuntimeProviderClient
 	lifecycle proto.ProviderLifecycleClient
 
@@ -46,7 +46,7 @@ type executableProvider struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
-	proc, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
+	proc, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -61,7 +61,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}
 
 	lifecycle := proto.NewProviderLifecycleClient(proc.Conn())
-	if _, err := providerhost.ConfigureRuntimeProvider(ctx, lifecycle, proto.ProviderKind_PROVIDER_KIND_RUNTIME, cfg.Name, cfg.Config); err != nil {
+	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, lifecycle, proto.ProviderKind_PROVIDER_KIND_RUNTIME, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}
