@@ -2747,7 +2747,7 @@ func TestE2ELockSyncPluginOwnedUI(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config-owned-ui-lock-sync.yaml")
-	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v3
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   public:
     port: 0

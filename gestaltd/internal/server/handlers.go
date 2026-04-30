@@ -67,6 +67,16 @@ type connectionDefInfo struct {
 	Connectable      bool                  `json:"connectable"`
 	AuthTypes        []string              `json:"authTypes"`
 	CredentialFields []credentialFieldInfo `json:"credentialFields"`
+	Status           string                `json:"status"`
+	CredentialState  string                `json:"credentialState"`
+	HealthState      string                `json:"healthState"`
+	Actions          []string              `json:"actions"`
+	CredentialMode   string                `json:"credentialMode"`
+	OwnerKind        string                `json:"ownerKind"`
+	Disconnectable   bool                  `json:"disconnectable"`
+	Instances        []instanceInfo        `json:"instances"`
+	StatusCode       string                `json:"statusCode,omitempty"`
+	StatusReason     string                `json:"statusReason,omitempty"`
 }
 
 type integrationInfo struct {
@@ -81,6 +91,10 @@ type integrationInfo struct {
 	ConnectionParams map[string]connectionParamInfo `json:"connectionParams"`
 	Connections      []connectionDefInfo            `json:"connections"`
 	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
+	Status           string                         `json:"status"`
+	CredentialState  string                         `json:"credentialState"`
+	HealthState      string                         `json:"healthState"`
+	Actions          []string                       `json:"actions"`
 }
 
 type connectionParamInfo struct {
@@ -177,6 +191,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			ConnectionParams: map[string]connectionParamInfo{},
 			Connections:      []connectionDefInfo{},
 			CredentialFields: []credentialFieldInfo{},
+			Status:           connectionStatusUnknown,
+			CredentialState:  credentialStateUnknown,
+			HealthState:      healthStateUnknown,
+			Actions:          []string{},
 		}
 		if cat := surfaceProv.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
@@ -185,10 +203,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
 		instances := connected[name]
-		providerMode := core.NormalizeConnectionMode(prov.ConnectionMode())
-		info.Connected = len(instances) > 0 || providerMode == core.ConnectionModeNone || s.hasConfiguredPlatformConnection(name)
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
-		s.populateIntegrationSettings(&info, prov, instances)
+		s.populateIntegrationSettings(&info, prov, instances, p)
+		s.applyIntegrationConnectionStatus(&info, prov, instances, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
 			continue
@@ -738,6 +755,16 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	case errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential):
+		if deploymentCredentialRequired(err) {
+			writeTypedError(
+				w,
+				http.StatusPreconditionFailed,
+				"admin_configuration_required",
+				providerName,
+				fmt.Sprintf("deployment/admin configuration is required for integration %q", providerName),
+			)
+			return
+		}
 		writeTypedError(
 			w,
 			http.StatusPreconditionFailed,
@@ -754,7 +781,13 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 			fmt.Sprintf("OAuth token for integration %q expired or was revoked; reconnect it", providerName),
 		)
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
-		writeError(w, http.StatusConflict, err.Error())
+		writeTypedError(
+			w,
+			http.StatusConflict,
+			"instance_selection_required",
+			providerName,
+			err.Error(),
+		)
 	case errors.Is(err, invocation.ErrUserResolution):
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 	case errors.Is(err, invocation.ErrInternal):
@@ -799,6 +832,15 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 		writeError(w, http.StatusBadGateway, "operation failed")
 	}
+}
+
+func deploymentCredentialRequired(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "deployment credential configured") ||
+		strings.Contains(message, "deployment-managed connection")
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

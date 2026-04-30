@@ -136,6 +136,41 @@ fn test_connect_uses_defined_plugin_connection_name_on_the_wire() {
 }
 
 #[test]
+fn test_connect_platform_connection_uses_admin_copy_without_starting_flow() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+                "name":"platform_svc",
+                "status":"needs_admin_configuration",
+                "connections":[{
+                    "name":"plugin",
+                    "displayName":"Plugin",
+                    "authTypes":[],
+                    "status":"needs_admin_configuration",
+                    "credentialMode":"platform"
+                }]
+            }]"#,
+            )
+            .create();
+
+    let client = create_client(&server);
+    let err = gestalt::commands::plugins::connect_with_browser_opener(
+        &client,
+        "platform_svc",
+        Some("plugin"),
+        None,
+        |_| Ok(()),
+    )
+    .unwrap_err();
+    let message = format!("{err:#}");
+
+    assert!(message.contains("requires deployment/admin configuration"));
+    assert!(!message.contains("OAuth"));
+}
+
+#[test]
 fn test_connect_preserves_requested_plugin_connection_when_no_definitions_exist() {
     let mut server = Server::new();
     let _integrations =
@@ -563,7 +598,7 @@ fn test_cli_plugins_list_table_output() {
     );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
+            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true,"status":"ready","connections":[{"name":"workspace","status":"ready"}]}]"#,
         )
         .create();
 
@@ -573,11 +608,10 @@ fn test_cli_plugins_list_table_output() {
         .success()
         .stdout(predicate::str::contains("ACME_CRM").or(predicate::str::contains("acme_crm")))
         .stdout(predicate::str::contains("Acme CRM plugin"))
-        .stdout(
-            predicate::str::contains("Connected")
-                .or(predicate::str::contains("CONNECTED"))
-                .or(predicate::str::contains("connected")),
-        );
+        .stdout(predicate::str::contains("Status"))
+        .stdout(predicate::str::contains("Connections"))
+        .stdout(predicate::str::contains("ready"))
+        .stdout(predicate::str::contains("workspace: ready"));
 
     mock.assert();
 

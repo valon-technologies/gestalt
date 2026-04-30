@@ -58,21 +58,58 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
                 .unwrap_or(&Vec::new())
                 .iter()
                 .map(|item| {
-                    let connected = match item["connected"].as_bool() {
-                        Some(true) => "yes",
-                        _ => "no",
-                    };
                     vec![
                         item["name"].as_str().unwrap_or("-").to_string(),
                         item["description"].as_str().unwrap_or("-").to_string(),
-                        connected.into(),
+                        plugin_status(item),
+                        plugin_connections(item),
                     ]
                 })
                 .collect();
-            output::print_table(&["Name", "Description", "Connected"], &rows);
+            output::print_table(&["Name", "Description", "Status", "Connections"], &rows);
         }
     }
     Ok(())
+}
+
+fn plugin_status(item: &serde_json::Value) -> String {
+    item["status"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| match item["connected"].as_bool() {
+            Some(true) => "ready".to_string(),
+            _ => "needs_user_connection".to_string(),
+        })
+}
+
+fn plugin_connections(item: &serde_json::Value) -> String {
+    if let Some(connections) = item["connections"]
+        .as_array()
+        .filter(|connections| !connections.is_empty())
+    {
+        return connections
+            .iter()
+            .map(|connection| {
+                let name = connection["name"].as_str().unwrap_or("-");
+                let status = connection["status"]
+                    .as_str()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| match connection["connected"].as_bool() {
+                        Some(true) => "ready".to_string(),
+                        _ => "needs_user_connection".to_string(),
+                    });
+                format!("{name}: {status}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+    }
+
+    let instance_count = item["instances"].as_array().map(Vec::len).unwrap_or(0);
+    match instance_count {
+        0 => "-".to_string(),
+        1 => "1 instance".to_string(),
+        n => format!("{n} instances"),
+    }
 }
 
 pub fn disconnect(

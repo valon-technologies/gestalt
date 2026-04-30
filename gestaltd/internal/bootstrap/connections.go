@@ -88,7 +88,13 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 }
 
 func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
-	mode := config.ConnectionModeForConnection(*conn)
+	return StaticConnectionRuntimeInfo(integration, connection, *conn)
+}
+
+// StaticConnectionRuntimeInfo validates and materializes deployment-owned
+// connection material using the same rules as invocation bootstrap.
+func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
+	mode := config.ConnectionModeForConnection(conn)
 	info := invocation.ConnectionRuntimeInfo{Mode: mode}
 	if mode != core.ConnectionModePlatform {
 		return info, nil
