@@ -52,6 +52,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -741,7 +742,7 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewIndexedDBClient(conn)
 	if _, err := client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{Name: store}); err != nil {
@@ -800,7 +801,7 @@ func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewCacheClient(conn)
 	if _, err := client.Set(ctx, &proto.CacheSetRequest{
@@ -881,7 +882,7 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewS3Client(conn)
 	writeStream, err := client.WriteObject(ctx)
@@ -993,7 +994,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewWorkflowManagerHostClient(conn)
 	created, err := client.CreateSchedule(ctx, &proto.WorkflowManagerCreateScheduleRequest{
@@ -1063,7 +1064,7 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewAuthorizationProviderClient(conn)
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
@@ -1123,7 +1124,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewAgentManagerHostClient(conn)
 	session, err := client.CreateSession(ctx, &proto.AgentManagerCreateSessionRequest{
@@ -1269,7 +1270,7 @@ func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken strin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	resp, err := proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
 		InvocationToken: invocationToken,
@@ -7219,12 +7220,12 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *providerhost.PublicHostServiceRegistry) http.Handler {
 	t.Helper()
 
-	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(stateSecret)
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(stateSecret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimSpace(r.Header.Get(providerhost.HostServiceRelayTokenHeader))
+		token := strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader))
 		target, err := tokenManager.ResolveToken(token)
 		if err != nil {
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
@@ -7245,12 +7246,12 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 		}
 		relayReq := r.Clone(r.Context())
 		relayReq.Header = r.Header.Clone()
-		relayReq.Header.Del(providerhost.HostServiceRelayTokenHeader)
+		relayReq.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		handler.ServeHTTP(w, relayReq)
 	})
 }
 
-func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target providerhost.HostServiceRelayTarget) (http.Handler, error) {
+func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
 	handler, err := runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, target.SessionID)
 	if handler != nil || err != nil || strings.TrimSpace(target.SessionID) == "" {
 		return handler, err
@@ -7258,7 +7259,7 @@ func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *provide
 	return runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, "")
 }
 
-func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target providerhost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
+func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
 	if registry == nil {
 		return nil, nil
 	}

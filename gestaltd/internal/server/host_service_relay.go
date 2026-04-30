@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 )
 
@@ -42,7 +42,7 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 		}
 		relayReq := r.Clone(r.Context())
 		relayReq.Header = r.Header.Clone()
-		relayReq.Header.Del(providerhost.HostServiceRelayTokenHeader)
+		relayReq.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		handler.ServeHTTP(w, relayReq)
 	})
 }
@@ -51,7 +51,7 @@ func (s *Server) hostServiceRelayToken(r *http.Request) string {
 	if s == nil || r == nil {
 		return ""
 	}
-	return strings.TrimSpace(r.Header.Get(providerhost.HostServiceRelayTokenHeader))
+	return strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader))
 }
 
 func isGRPCRequest(r *http.Request) bool {
