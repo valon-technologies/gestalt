@@ -57,6 +57,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -622,7 +623,7 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 			case "invoke_plugin":
 				targetPlugin, _ := params["plugin"].(string)
 				targetOperation, _ := params["operation"].(string)
-				envelope, err := fakeHostedInvokePlugin(targetPlugin, targetOperation, providerhost.InvocationTokenFromContext(ctx), env)
+				envelope, err := fakeHostedInvokePlugin(targetPlugin, targetOperation, plugininvokerservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					envelope = invokePluginEnvelope{
 						OK:              false,
@@ -637,7 +638,7 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "workflow_manager_roundtrip":
-				record, err := fakeHostedWorkflowManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedWorkflowManagerRoundTrip(plugininvokerservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -647,7 +648,7 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "agent_manager_roundtrip":
-				record, err := fakeHostedAgentManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedAgentManagerRoundTrip(plugininvokerservice.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -1249,13 +1250,13 @@ func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken strin
 		TargetPlugin:    targetPlugin,
 		TargetOperation: targetOperation,
 	}
-	target := strings.TrimSpace(env[providerhost.DefaultPluginInvokerSocketEnv])
+	target := strings.TrimSpace(env[plugininvokerservice.DefaultSocketEnv])
 	if target == "" {
-		return envelope, fmt.Errorf("missing plugin invoker relay target in %s", providerhost.DefaultPluginInvokerSocketEnv)
+		return envelope, fmt.Errorf("missing plugin invoker relay target in %s", plugininvokerservice.DefaultSocketEnv)
 	}
-	token := strings.TrimSpace(env[providerhost.PluginInvokerSocketTokenEnv()])
+	token := strings.TrimSpace(env[plugininvokerservice.SocketTokenEnv()])
 	if token == "" {
-		return envelope, fmt.Errorf("missing plugin invoker relay token in %s", providerhost.PluginInvokerSocketTokenEnv())
+		return envelope, fmt.Errorf("missing plugin invoker relay token in %s", plugininvokerservice.SocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -3709,7 +3710,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(caller): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultPluginInvokerSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": plugininvokerservice.DefaultSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3722,7 +3723,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("plugin invoker env %q should be set when plugin declares invokes", providerhost.DefaultPluginInvokerSocketEnv)
+		t.Fatalf("plugin invoker env %q should be set when plugin declares invokes", plugininvokerservice.DefaultSocketEnv)
 	}
 }
 
@@ -6989,7 +6990,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[providerhost.PluginInvokerSocketTokenEnv()]; got == "" {
+	if got := startRequests[0].Env[plugininvokerservice.SocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the plugin invoker relay token")
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, relayURL.Hostname()) {
@@ -6999,8 +7000,8 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if len(bindRequests) != 1 {
 		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
 	}
-	if bindRequests[0].EnvVar != providerhost.DefaultPluginInvokerSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultPluginInvokerSocketEnv)
+	if bindRequests[0].EnvVar != plugininvokerservice.DefaultSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, plugininvokerservice.DefaultSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
