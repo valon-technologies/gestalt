@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 )
 
 // NewProviderRegistry creates a ProviderMap populated with the given providers.
