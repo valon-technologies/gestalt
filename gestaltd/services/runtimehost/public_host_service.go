@@ -2,9 +2,14 @@ package runtimehost
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 )
+
+// ErrProviderNotHostedRuntime means a public host-service callback did not
+// belong to a provider backed by a hosted runtime.
+var ErrProviderNotHostedRuntime = errors.New("provider does not use a hosted runtime")
 
 type PublicHostServiceSessionVerifier interface {
 	VerifyHostServiceSession(context.Context, string) error
@@ -30,15 +35,18 @@ func NewPublicHostServiceRegistry() *PublicHostServiceRegistry {
 	return &PublicHostServiceRegistry{}
 }
 
-func (r *PublicHostServiceRegistry) Register(pluginName string, services ...HostService) {
-	r.RegisterVerified(pluginName, nil, services...)
-}
-
 func (r *PublicHostServiceRegistry) RegisterVerified(pluginName string, verifier PublicHostServiceSessionVerifier, services ...HostService) {
+	if verifier == nil {
+		return
+	}
 	r.register(pluginName, "", verifier, services...)
 }
 
 func (r *PublicHostServiceRegistry) RegisterSession(pluginName, sessionID string, services ...HostService) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
 	r.register(pluginName, sessionID, nil, services...)
 }
 

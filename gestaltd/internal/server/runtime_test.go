@@ -107,7 +107,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 	cacheSrv := &runtimeTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("relay-plugin", runtimehost.HostService{
+	publicHostServices.RegisterVerified("relay-plugin", allowHostServiceSessionVerifier{}, runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {

@@ -32,15 +32,14 @@ func TestHostServiceHandlerDoesNotFallbackWhenExactSessionEntryFails(t *testing.
 	}
 }
 
-func TestValidatePublicHostServicesRejectsDuplicateUnverifiedServices(t *testing.T) {
+func TestValidatePublicHostServicesRejectsProviderWideServiceWithoutVerifier(t *testing.T) {
 	t.Parallel()
 
 	err := validatePublicHostServices([]runtimehost.PublicHostService{
 		testPublicHostService("support", nil),
-		testPublicHostService("support", nil),
 	})
-	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET") {
-		t.Fatalf("validatePublicHostServices err = %v, want duplicate public host service", err)
+	if err == nil || !strings.Contains(err.Error(), "public host service support/cache/GESTALT_TEST_CACHE_SOCKET requires a session verifier") {
+		t.Fatalf("validatePublicHostServices err = %v, want missing verifier failure", err)
 	}
 }
 
@@ -56,20 +55,37 @@ func TestValidatePublicHostServicesAllowsDuplicateVerifiedServices(t *testing.T)
 	}
 }
 
-func TestHostServiceHandlerEntryRejectsDynamicDuplicateUnverifiedServices(t *testing.T) {
+func TestValidatePublicHostServicesAllowsSessionServiceWithoutVerifier(t *testing.T) {
+	t.Parallel()
+
+	err := validatePublicHostServices([]runtimehost.PublicHostService{{
+		PluginName: "support",
+		SessionID:  "session-1",
+		Service:    testHostService(),
+	}})
+	if err != nil {
+		t.Fatalf("validatePublicHostServices: %v", err)
+	}
+}
+
+func TestRegisterSessionRejectsBlankSessionID(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
-	registry.Register("support", testHostService(), testHostService())
+	registry.RegisterSession("support", "", testHostService())
 	s := &Server{publicHostServices: registry}
 	key := hostServiceHandlerKey{
 		pluginName: "support",
 		service:    "cache",
 		envVar:     "GESTALT_TEST_CACHE_SOCKET",
 	}
-	_, _, _, err := s.hostServiceHandlerEntry(context.Background(), key, "")
-	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET") {
-		t.Fatalf("hostServiceHandlerEntry err = %v, want duplicate public host service", err)
+
+	_, found, ok, err := s.hostServiceHandlerEntry(context.Background(), key, "session-1")
+	if err != nil {
+		t.Fatalf("hostServiceHandlerEntry: %v", err)
+	}
+	if found || ok {
+		t.Fatalf("hostServiceHandlerEntry found=%v ok=%v, want no dynamic provider-wide registration", found, ok)
 	}
 }
 

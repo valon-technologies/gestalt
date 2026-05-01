@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -37,6 +38,9 @@ func validatePublicHostServices(services []runtimehost.PublicHostService) error 
 		key, ok := publicHostServiceHandlerKey(service)
 		if !ok {
 			continue
+		}
+		if key.sessionID == "" && service.SessionVerifier == nil {
+			return fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		entry := hostServiceHandlerEntry{verifier: service.SessionVerifier}
 		if err := appendHostServiceHandlerEntry(handlers, key, entry); err != nil {
@@ -180,16 +184,17 @@ func (s *Server) coreRoutableHostServiceHandlerEntry(ctx context.Context, target
 }
 
 func (s *Server) verifyCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) error {
+	pluginName := strings.TrimSpace(target.PluginName)
+	verifier, ok := s.pluginRuntimes.(pluginRuntimeSessionVerifier)
+	if ok && verifier != nil {
+		if err := verifier.VerifyPluginRuntimeSession(ctx, pluginName, target.SessionID); !errors.Is(err, runtimehost.ErrProviderNotHostedRuntime) {
+			return err
+		}
+	}
 	if ok, err := s.verifyRegisteredCoreRoutableHostServiceSession(ctx, target); ok || err != nil {
 		return err
 	}
-
-	pluginName := strings.TrimSpace(target.PluginName)
-	verifier, ok := s.pluginRuntimes.(pluginRuntimeSessionVerifier)
-	if !ok || verifier == nil {
-		return fmt.Errorf("plugin runtime session verifier is not configured")
-	}
-	return verifier.VerifyPluginRuntimeSession(ctx, pluginName, target.SessionID)
+	return fmt.Errorf("plugin runtime session verifier is not configured")
 }
 
 func (s *Server) verifyRegisteredCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) (bool, error) {
@@ -327,6 +332,9 @@ func (s *Server) hostServiceHandlerEntry(ctx context.Context, key hostServiceHan
 		serviceKey, ok := publicHostServiceHandlerKey(service)
 		if !ok || serviceKey != key {
 			continue
+		}
+		if serviceKey.sessionID == "" && service.SessionVerifier == nil {
+			return hostServiceHandlerEntry{}, true, false, fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		entry, ok := s.publicHostServiceHandlerEntry(service)
 		if !ok {

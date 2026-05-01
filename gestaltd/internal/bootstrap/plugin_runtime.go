@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 type pluginRuntimeRegistry struct {
@@ -55,7 +56,7 @@ func (r *pluginRuntimeRegistry) VerifyPluginRuntimeSession(ctx context.Context, 
 		return fmt.Errorf("runtime provider owner is required")
 	}
 	if r == nil || r.cfg == nil {
-		return fmt.Errorf("plugin runtime registry is not configured")
+		return fmt.Errorf("%w: plugin runtime registry is not configured", runtimehost.ErrProviderNotHostedRuntime)
 	}
 
 	effective, err := r.effectiveHostedRuntimeForProvider(providerName)
@@ -63,7 +64,7 @@ func (r *pluginRuntimeRegistry) VerifyPluginRuntimeSession(ctx context.Context, 
 		return err
 	}
 	if !effective.Enabled || strings.TrimSpace(effective.ProviderName) == "" {
-		return fmt.Errorf("provider %q does not use a hosted runtime", providerName)
+		return fmt.Errorf("%w: provider %q", runtimehost.ErrProviderNotHostedRuntime, providerName)
 	}
 
 	r.mu.Lock()
@@ -93,7 +94,7 @@ func (r *pluginRuntimeRegistry) effectiveHostedRuntimeForProvider(providerName s
 	if entry := r.cfg.Providers.Agent[providerName]; entry != nil {
 		return r.cfg.EffectiveHostedRuntime("providers.agent."+providerName, entry)
 	}
-	return config.EffectiveHostedRuntime{}, fmt.Errorf("provider %q does not have a hosted runtime configuration", providerName)
+	return config.EffectiveHostedRuntime{}, fmt.Errorf("%w: provider %q does not have a hosted runtime configuration", runtimehost.ErrProviderNotHostedRuntime, providerName)
 }
 
 func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveHostedRuntime) (pluginruntime.Provider, error) {
