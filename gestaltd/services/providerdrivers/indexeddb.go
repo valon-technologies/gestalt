@@ -5,14 +5,13 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"gopkg.in/yaml.v3"
 )
 
-var IndexedDBFactory bootstrap.IndexedDBFactory = func(node yaml.Node) (indexeddb.IndexedDB, error) {
+func IndexedDBFactory(node yaml.Node) (indexeddb.IndexedDB, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("datastore provider: parsing config: %w", err)

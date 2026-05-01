@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
@@ -13,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var AuthorizationFactory bootstrap.AuthorizationFactory = func(node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+func AuthorizationFactory(node yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("authorization provider: parsing config: %w", err)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -13,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var WorkflowFactory bootstrap.WorkflowFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+func WorkflowFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps WorkflowDeps) (coreworkflow.Provider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("workflow provider: parsing config: %w", err)
@@ -34,7 +33,7 @@ var WorkflowFactory bootstrap.WorkflowFactory = func(ctx context.Context, name s
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		Egress:       cfg.EgressPolicy(deps.Egress.DefaultAction),
+		Egress:       cfg.EgressPolicy(deps.EgressDefaultAction),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
