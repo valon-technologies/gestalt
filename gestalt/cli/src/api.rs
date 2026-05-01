@@ -264,6 +264,9 @@ impl ApiClient {
                 None => return Err(err),
             },
         };
+        if let Some(creds) = stored_credentials.as_ref() {
+            ensure_stored_credentials_match_url(&base_url, creds)?;
+        }
         let (token, source) = match env_api_key {
             Some(key) => (key, TokenSource::EnvVar),
             None => match stored_credentials.as_ref() {
@@ -510,6 +513,29 @@ impl ApiClient {
         }
         Ok(())
     }
+}
+
+fn ensure_stored_credentials_match_url(
+    base_url: &str,
+    creds: &crate::credentials::Credentials,
+) -> Result<()> {
+    let Some(credentials_url) = creds.api_url().map(normalize_url) else {
+        bail!(
+            "refusing to send stored CLI token without a recorded server URL to {}; run 'gestalt auth login' for this server or set {} for an explicit token override",
+            normalize_url(base_url),
+            ENV_API_KEY
+        );
+    };
+    let target_url = normalize_url(base_url);
+    if credentials_url != target_url {
+        bail!(
+            "refusing to send stored CLI token for {} to {}; run 'gestalt auth login' for this server or set {} for an explicit token override",
+            credentials_url,
+            target_url,
+            ENV_API_KEY
+        );
+    }
+    Ok(())
 }
 
 fn extract_api_error(value: &serde_json::Value) -> Option<ApiError> {

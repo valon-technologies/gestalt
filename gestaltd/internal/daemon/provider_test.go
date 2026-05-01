@@ -3104,8 +3104,8 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	if scheme.SignaturePrefix != "v0=" {
 		t.Fatalf("scheme.SignaturePrefix = %q, want %q", scheme.SignaturePrefix, "v0=")
 	}
-	if scheme.PayloadTemplate != "v0:{header:X-Request-Timestamp}:{raw_body}" {
-		t.Fatalf("scheme.PayloadTemplate = %q, want %q", scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}")
+	if scheme.PayloadTemplate != "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}" {
+		t.Fatalf("scheme.PayloadTemplate = %q, want %q", scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}")
 	}
 	if scheme.TimestampHeader != "X-Request-Timestamp" {
 		t.Fatalf("scheme.TimestampHeader = %q, want %q", scheme.TimestampHeader, "X-Request-Timestamp")
@@ -3342,7 +3342,7 @@ func hostedHTTPMetadataSpec(target string) *providermanifestv1.Spec {
 				Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
 				SignatureHeader: "X-Request-Signature",
 				SignaturePrefix: "v0=",
-				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}",
 				TimestampHeader: "X-Request-Timestamp",
 				MaxAgeSeconds:   300,
 			},

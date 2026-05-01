@@ -259,6 +259,54 @@ func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
 	if getResp.Header.Get("Content-Type") != "text/plain" {
 		t.Fatalf("GET Content-Type = %q, want text/plain", getResp.Header.Get("Content-Type"))
 	}
+	if getResp.Header.Get("Content-Disposition") != "attachment" {
+		t.Fatalf("GET Content-Disposition = %q, want attachment", getResp.Header.Get("Content-Disposition"))
+	}
+	if getResp.Header.Get("Content-Security-Policy") != "default-src 'none'; sandbox; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" {
+		t.Fatalf("GET Content-Security-Policy = %q, want hardened object access policy", getResp.Header.Get("Content-Security-Policy"))
+	}
+
+	inlineGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
+		PluginName:         "brain",
+		BindingName:        "brainStorage",
+		Ref:                targetRef,
+		Method:             s3store.PresignMethodGet,
+		Expires:            time.Minute,
+		ContentType:        "text/plain",
+		ContentDisposition: "inline; filename=brain.txt",
+	})
+	if err != nil {
+		t.Fatalf("MintURL(inline get): %v", err)
+	}
+	inlineGetResp, err := ts.Client().Get(inlineGetURL.URL)
+	if err != nil {
+		t.Fatalf("GET inline object access URL: %v", err)
+	}
+	_ = inlineGetResp.Body.Close()
+	if got := inlineGetResp.Header.Get("Content-Disposition"); !strings.HasPrefix(got, "inline") {
+		t.Fatalf("inline GET Content-Disposition = %q, want inline", got)
+	}
+
+	unsafeInlineGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
+		PluginName:         "brain",
+		BindingName:        "brainStorage",
+		Ref:                targetRef,
+		Method:             s3store.PresignMethodGet,
+		Expires:            time.Minute,
+		ContentType:        "text/html",
+		ContentDisposition: "inline",
+	})
+	if err != nil {
+		t.Fatalf("MintURL(unsafe inline get): %v", err)
+	}
+	unsafeInlineGetResp, err := ts.Client().Get(unsafeInlineGetURL.URL)
+	if err != nil {
+		t.Fatalf("GET unsafe inline object access URL: %v", err)
+	}
+	_ = unsafeInlineGetResp.Body.Close()
+	if got := unsafeInlineGetResp.Header.Get("Content-Disposition"); got != "attachment" {
+		t.Fatalf("unsafe inline GET Content-Disposition = %q, want attachment", got)
+	}
 
 	constrainedGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
 		PluginName:  "brain",
@@ -16537,7 +16585,18 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 						},
 						SignatureHeader: "X-Request-Signature",
 						SignaturePrefix: "v0=",
-						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{request_target}:{raw_body}",
+						TimestampHeader: "X-Request-Timestamp",
+						MaxAgeSeconds:   300,
+					},
+					"unsignedQuery": {
+						Type: providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret: &providermanifestv1.HTTPSecretRef{
+							Env: "REQUEST_SIGNING_SECRET",
+						},
+						SignatureHeader: "X-Request-Signature",
+						SignaturePrefix: "v0=",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}",
 						TimestampHeader: "X-Request-Timestamp",
 						MaxAgeSeconds:   300,
 					},
@@ -16560,6 +16619,18 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 							},
 						},
 					},
+					"unsigned-query": {
+						Path:   "/unsigned-query",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "unsignedQuery",
+						Target:   "handle_command",
+					},
 				},
 			},
 		}
@@ -16569,14 +16640,16 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 
 	body := "text=hello&callback_url=https%3A%2F%2Fhooks.example.test%2Fresponse"
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+	contentType := "application/x-www-form-urlencoded"
+	requestTarget := "/api/v1/signed/command?source=query"
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+contentType+":"+requestTarget+":"+body)
 
 	makeRequest := func() *http.Request {
-		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command?source=query", strings.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, ts.URL+requestTarget, strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("NewRequest: %v", err)
 		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("X-Request-Timestamp", timestamp)
 		req.Header.Set("X-Request-Signature", signature)
 		return req
@@ -16641,6 +16714,24 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 	if got, want := duplicateAck["status"], "accepted"; got != want {
 		t.Fatalf("duplicate status = %#v, want %q", got, want)
 	}
+
+	unsignedQuerySignature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+contentType+":"+body)
+	unsignedQueryReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/unsigned-query?source=query", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest(unsigned query): %v", err)
+	}
+	unsignedQueryReq.Header.Set("Content-Type", contentType)
+	unsignedQueryReq.Header.Set("X-Request-Timestamp", timestamp)
+	unsignedQueryReq.Header.Set("X-Request-Signature", unsignedQuerySignature)
+	unsignedQueryResp, err := http.DefaultClient.Do(unsignedQueryReq)
+	if err != nil {
+		t.Fatalf("unsigned query hmac request: %v", err)
+	}
+	_ = unsignedQueryResp.Body.Close()
+	if unsignedQueryResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unsigned query status = %d, want %d", unsignedQueryResp.StatusCode, http.StatusUnauthorized)
+	}
+
 	select {
 	case invocation := <-invocations:
 		t.Fatalf("unexpected duplicate async dispatch: %#v", invocation)
@@ -16678,7 +16769,7 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 								Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
 								SignatureHeader: "X-Request-Signature",
 								SignaturePrefix: "v0=",
-								PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+								PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}",
 								TimestampHeader: "X-Request-Timestamp",
 								MaxAgeSeconds:   300,
 							},
@@ -16721,13 +16812,14 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 
 	body := "text=hello"
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+	contentType := "application/x-www-form-urlencoded"
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+contentType+":"+body)
 
 	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Request-Timestamp", timestamp)
 	req.Header.Set("X-Request-Signature", signature)
 
@@ -16757,7 +16849,7 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	}
 }
 
-func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
+func TestHostedHTTPBinding_HMACSyncRejectsReplay(t *testing.T) {
 	t.Setenv("REQUEST_SIGNING_SECRET", "super-secret")
 
 	invocations := make(chan map[string]any, 2)
@@ -16786,7 +16878,7 @@ func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
 						Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
 						SignatureHeader: "X-Request-Signature",
 						SignaturePrefix: "v0=",
-						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}",
 						TimestampHeader: "X-Request-Timestamp",
 						MaxAgeSeconds:   300,
 					},
@@ -16813,47 +16905,58 @@ func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
 
 	body := "text=ping"
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+	contentType := "application/x-www-form-urlencoded"
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+contentType+":"+body)
 
 	makeRequest := func() *http.Request {
 		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command", strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("NewRequest: %v", err)
 		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("X-Request-Timestamp", timestamp)
 		req.Header.Set("X-Request-Signature", signature)
 		return req
 	}
 
-	for i := 0; i < 2; i++ {
-		resp, err := http.DefaultClient.Do(makeRequest())
-		if err != nil {
-			t.Fatalf("sync hmac request %d: %v", i, err)
-		}
-		var result map[string]any
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			_ = resp.Body.Close()
-			t.Fatalf("decode sync result %d: %v", i, err)
-		}
+	resp, err := http.DefaultClient.Do(makeRequest())
+	if err != nil {
+		t.Fatalf("sync hmac request: %v", err)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("sync status %d = %d, want %d", i, resp.StatusCode, http.StatusOK)
-		}
-		if got, want := result["text"], "pong"; got != want {
-			t.Fatalf("sync result %d text = %#v, want %q", i, got, want)
-		}
+		t.Fatalf("decode sync result: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sync status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got, want := result["text"], "pong"; got != want {
+		t.Fatalf("sync result text = %#v, want %q", got, want)
 	}
 
-	for i := 0; i < 2; i++ {
-		select {
-		case params := <-invocations:
-			if got, want := params["text"], "ping"; got != want {
-				t.Fatalf("invocation %d text = %#v, want %q", i, got, want)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timed out waiting for sync invocation %d", i)
+	resp, err = http.DefaultClient.Do(makeRequest())
+	if err != nil {
+		t.Fatalf("duplicate sync hmac request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("duplicate sync status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+
+	select {
+	case params := <-invocations:
+		if got, want := params["text"], "ping"; got != want {
+			t.Fatalf("invocation text = %#v, want %q", got, want)
 		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sync invocation")
+	}
+	select {
+	case params := <-invocations:
+		t.Fatalf("unexpected duplicate invocation: %#v", params)
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 
@@ -17765,6 +17868,82 @@ func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 				},
 			},
 			wantErr: "signatureHeader is required",
+		},
+		{
+			name: "missing hmac timestamp replay protection",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret:          &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+						SignatureHeader: "X-Request-Signature",
+						PayloadTemplate: "{raw_body}",
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "timestampHeader is required for replay protection",
+		},
+		{
+			name: "hmac request body content type not signed",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret:          &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+						SignatureHeader: "X-Request-Signature",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						TimestampHeader: "X-Request-Timestamp",
+						MaxAgeSeconds:   300,
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:   "/event",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/json":                  {},
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "payloadTemplate must include {header:Content-Type}",
+		},
+		{
+			name: "hmac implicit body parser content type not signed",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret:          &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+						SignatureHeader: "X-Request-Signature",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						TimestampHeader: "X-Request-Timestamp",
+						MaxAgeSeconds:   300,
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "payloadTemplate must include {header:Content-Type}",
 		},
 		{
 			name: "duplicate normalized content types",

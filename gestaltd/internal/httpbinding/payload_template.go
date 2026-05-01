@@ -20,6 +20,8 @@ func ValidatePayloadTemplate(template, timestampHeader string) error {
 		switch {
 		case token == "raw_body":
 			return nil
+		case token == "request_target":
+			return nil
 		case strings.HasPrefix(strings.ToLower(token), "header:"):
 			headerName := strings.TrimSpace(token[len("header:"):])
 			if headerName == "" {
@@ -42,7 +44,48 @@ func ValidatePayloadTemplate(template, timestampHeader string) error {
 	return nil
 }
 
-func RenderPayloadTemplate(template string, headers http.Header, rawBody []byte) (string, error) {
+func PayloadTemplateReferencesHeader(template, name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	found := false
+	_ = visitPayloadTemplate(strings.TrimSpace(template), func(string) error {
+		return nil
+	}, func(token string) error {
+		if strings.HasPrefix(strings.ToLower(token), "header:") {
+			headerName := strings.TrimSpace(token[len("header:"):])
+			if strings.EqualFold(headerName, name) {
+				found = true
+			}
+		}
+		return nil
+	})
+	return found
+}
+
+func PayloadTemplateReferencesRequestTarget(template string) bool {
+	found := false
+	_ = visitPayloadTemplate(strings.TrimSpace(template), func(string) error {
+		return nil
+	}, func(token string) error {
+		if token == "request_target" {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
+func RenderPayloadTemplate(template string, r *http.Request, rawBody []byte) (string, error) {
+	var headers http.Header
+	var requestTarget string
+	if r != nil {
+		headers = r.Header
+		if r.URL != nil {
+			requestTarget = r.URL.RequestURI()
+		}
+	}
 	var out strings.Builder
 	err := visitPayloadTemplate(strings.TrimSpace(template), func(literal string) error {
 		out.WriteString(literal)
@@ -51,6 +94,9 @@ func RenderPayloadTemplate(template string, headers http.Header, rawBody []byte)
 		switch {
 		case token == "raw_body":
 			_, _ = out.Write(rawBody)
+			return nil
+		case token == "request_target":
+			out.WriteString(requestTarget)
 			return nil
 		case strings.HasPrefix(strings.ToLower(token), "header:"):
 			headerName := strings.TrimSpace(token[len("header:"):])

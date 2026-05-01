@@ -22,11 +22,11 @@ func ValidateHTTPSecurityScheme(path string, scheme *providermanifestv1.HTTPSecu
 		if scheme.Secret == nil {
 			return fmt.Errorf("%s.secret is required", path)
 		}
-		if strings.TrimSpace(scheme.TimestampHeader) == "" && scheme.MaxAgeSeconds != 0 {
-			return fmt.Errorf("%s.maxAgeSeconds requires %s.timestampHeader to be set", path, path)
+		if strings.TrimSpace(scheme.TimestampHeader) == "" {
+			return fmt.Errorf("%s.timestampHeader is required for replay protection", path)
 		}
-		if strings.TrimSpace(scheme.TimestampHeader) != "" && scheme.MaxAgeSeconds <= 0 {
-			return fmt.Errorf("%s.timestampHeader requires %s.maxAgeSeconds to be greater than zero", path, path)
+		if scheme.MaxAgeSeconds <= 0 {
+			return fmt.Errorf("%s.maxAgeSeconds is required for replay protection", path)
 		}
 		if err := ValidatePayloadTemplate(scheme.PayloadTemplate, scheme.TimestampHeader); err != nil {
 			return fmt.Errorf("%s.payloadTemplate %s", path, err)
@@ -60,4 +60,25 @@ func ValidateHTTPSecurityScheme(path string, scheme *providermanifestv1.HTTPSecu
 		return fmt.Errorf("%s.secret must set env or secret", path)
 	}
 	return nil
+}
+
+func ValidateHTTPBindingHMACCoverage(path string, binding *providermanifestv1.HTTPBinding, scheme *providermanifestv1.HTTPSecurityScheme) error {
+	if binding == nil || scheme == nil || scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		return nil
+	}
+	if httpBindingContentTypeAffectsParsing(binding.RequestBody) && !PayloadTemplateReferencesHeader(scheme.PayloadTemplate, "Content-Type") {
+		return fmt.Errorf("%s.security %q uses hmac with content-type-dependent body parsing; payloadTemplate must include {header:Content-Type}", path, binding.Security)
+	}
+	return nil
+}
+
+func httpBindingContentTypeAffectsParsing(requestBody *providermanifestv1.HTTPRequestBody) bool {
+	if requestBody == nil || len(requestBody.Content) == 0 {
+		return true
+	}
+	if len(requestBody.Content) != 1 {
+		return true
+	}
+	_, ok := requestBody.Content["*/*"]
+	return ok
 }

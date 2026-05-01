@@ -569,7 +569,7 @@ spec:
         env: REQUEST_SIGNING_SECRET
       signatureHeader: X-Request-Signature
       signaturePrefix: v0=
-      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}"
       timestampHeader: X-Request-Timestamp
       maxAgeSeconds: 300
   http:
@@ -741,6 +741,46 @@ spec:
 	}
 }
 
+func TestManifestWorkflow_RejectsHMACRequestBodyWithoutSignedContentType(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/bad-http-template
+version: 1.0.0
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      security: signed
+      target: handle_command
+      requestBody:
+        content:
+          application/json: {}
+          application/x-www-form-urlencoded: {}
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.http.command.security "signed" uses hmac with content-type-dependent body parsing; payloadTemplate must include {header:Content-Type}`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestManifestWorkflow_RejectsInvalidHTTPSecuritySchemes(t *testing.T) {
 	t.Parallel()
 
@@ -805,6 +845,17 @@ func TestManifestWorkflow_RejectsInvalidHTTPSecuritySchemes(t *testing.T) {
       payloadTemplate: "{raw_body}"
 `,
 			wantErrPart: `provider.securitySchemes.bad.signatureHeader is required`,
+		},
+		{
+			name: "missing hmac timestamp replay protection",
+			schemeYAML: `
+      type: hmac
+      secret:
+        secret: shared-key
+      signatureHeader: X-Request-Signature
+      payloadTemplate: "{raw_body}"
+`,
+			wantErrPart: `provider.securitySchemes.bad.timestampHeader is required for replay protection`,
 		},
 	}
 

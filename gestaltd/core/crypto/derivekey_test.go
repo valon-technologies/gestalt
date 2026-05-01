@@ -59,6 +59,43 @@ func TestDeriveKeyHexKeyEncryptRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDeriveKeyExplicitRawHexKey(t *testing.T) {
+	t.Parallel()
+	hexKey := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	key := crypto.DeriveKey("raw-hex:" + hexKey)
+	want, _ := hex.DecodeString(hexKey)
+	if !bytes.Equal(key, want) {
+		t.Fatalf("explicit raw hex key not passed through: got %x, want %x", key, want)
+	}
+}
+
+func TestDeriveKeyExplicitArgon2idForHexShapedPassphrase(t *testing.T) {
+	t.Parallel()
+	passphrase := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	key := crypto.DeriveKey("argon2id:" + passphrase)
+	raw, _ := hex.DecodeString(passphrase)
+	if bytes.Equal(key, raw) {
+		t.Fatal("argon2id-prefixed hex-shaped passphrase bypassed KDF")
+	}
+	if len(key) != 32 {
+		t.Fatalf("key length = %d, want 32", len(key))
+	}
+}
+
+func TestDeriveKeyMalformedExplicitRawHexReturnsNil(t *testing.T) {
+	t.Parallel()
+	if key := crypto.DeriveKey("raw-hex:not-a-32-byte-key"); key != nil {
+		t.Fatalf("key = %x, want nil", key)
+	}
+}
+
+func TestDeriveKeyEmptyExplicitArgon2idReturnsNil(t *testing.T) {
+	t.Parallel()
+	if key := crypto.DeriveKey("argon2id:"); key != nil {
+		t.Fatalf("key = %x, want nil", key)
+	}
+}
+
 func TestDeriveKeySamePassphraseProducesSameEncryption(t *testing.T) {
 	t.Parallel()
 	passphrase := "deterministic-dummy-phrase"
