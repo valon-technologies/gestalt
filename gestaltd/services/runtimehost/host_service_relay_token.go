@@ -31,6 +31,7 @@ type HostServiceRelayTokenRequest struct {
 	Service      string
 	EnvVar       string
 	MethodPrefix string
+	CoreRoutable bool
 	TTL          time.Duration
 }
 
@@ -40,6 +41,7 @@ type HostServiceRelayTarget struct {
 	Service      string
 	EnvVar       string
 	MethodPrefix string
+	CoreRoutable bool
 }
 
 type hostServiceRelayTokenClaims struct {
@@ -49,6 +51,7 @@ type hostServiceRelayTokenClaims struct {
 	Service      string `json:"service,omitempty"`
 	EnvVar       string `json:"env_var,omitempty"`
 	MethodPrefix string `json:"method_prefix,omitempty"`
+	CoreRoutable bool   `json:"core_routable,omitempty"`
 }
 
 func NewHostServiceRelayTokenManager(secret []byte) (*HostServiceRelayTokenManager, error) {
@@ -100,6 +103,7 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 		Service:      service,
 		EnvVar:       envVar,
 		MethodPrefix: methodPrefix,
+		CoreRoutable: req.CoreRoutable,
 	})
 }
 
@@ -121,6 +125,7 @@ func (m *HostServiceRelayTokenManager) ResolveToken(token string) (HostServiceRe
 		Service:      service,
 		EnvVar:       envVar,
 		MethodPrefix: methodPrefix,
+		CoreRoutable: claims.CoreRoutable,
 	}, nil
 }
 
