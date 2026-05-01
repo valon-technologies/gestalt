@@ -582,6 +582,11 @@ workflows:
           instance: tenant-a
           input:
             mode: incremental
+      permissions:
+        - plugin: slack
+          operations:
+            - conversations.list
+            - conversations.history
       paused: false
 
   eventTriggers:
@@ -596,6 +601,10 @@ workflows:
           operation: sync_items
           input:
             reason: sync
+      permissions:
+        - plugin: slack
+          operations:
+            - chat.postMessage
       paused: false
 ```
 
@@ -610,6 +619,7 @@ workflows:
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `providerOptions`, and `timeout`. |
+| `permissions` | Optional additional plugin-operation permissions granted to the config-owned execution principal. The direct target operation is always included. These scopes do not grant credentials; invoked operations still resolve credentials through their configured connection. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
 | `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
@@ -624,6 +634,7 @@ workflows:
 | `target.plugin.connection` | Optional target connection name. |
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
+| `permissions` | Optional additional plugin-operation permissions granted to the config-owned execution principal. The direct target operation is always included. These scopes do not grant credentials; invoked operations still resolve credentials through their configured connection. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |

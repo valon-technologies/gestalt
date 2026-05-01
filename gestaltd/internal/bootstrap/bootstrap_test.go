@@ -4257,6 +4257,26 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModePlatform,
+		Auth: &config.ConnectionAuthDef{
+			Type:  providermanifestv1.AuthTypeBearer,
+			Token: "platform-token",
+		},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.list", Method: http.MethodPost, Path: "/conversations.list"},
+							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
+						},
+					},
+				},
+			},
+		},
+	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
@@ -4270,6 +4290,15 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 			},
 		},
 	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Permissions = []core.AccessPermission{{
+		Plugin: "slack",
+		Operations: []string{
+			"conversations.list",
+			"conversations.history",
+		},
+	}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
@@ -4324,8 +4353,125 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if ref.SubjectID != "system:config" {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
-	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
-		t.Fatalf("permissions = %#v", ref.Permissions)
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"conversations.list", "conversations.history"}},
+	}
+	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+	}
+}
+
+func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissionsChange(t *testing.T) {
+	t.Parallel()
+
+	factories := validFactories()
+	recorders := []*recordingWorkflowProvider{}
+	sharedSchedules := map[string]*coreworkflow.Schedule{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{
+			schedules:     sharedSchedules,
+			executionRefs: sharedExecutionRefs,
+		}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	<-result.ProvidersReady
+	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
+		t.Fatalf("initial upserts = %#v", recorders)
+	}
+	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
+	if strings.TrimSpace(initialExecutionRef) == "" {
+		t.Fatal("initial execution ref = empty")
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModePlatform,
+		Auth: &config.ConnectionAuthDef{
+			Type:  providermanifestv1.AuthTypeBearer,
+			Token: "platform-token",
+		},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
+						},
+					},
+				},
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Permissions = []core.AccessPermission{{
+		Plugin:     "slack",
+		Operations: []string{"conversations.history"},
+	}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap with permissions: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 || len(recorders[1].upsertedSchedules) != 1 {
+		t.Fatalf("second upserts = %#v", recorders)
+	}
+	nextExecutionRef := recorders[1].upsertedSchedules[0].ExecutionRef
+	if nextExecutionRef == initialExecutionRef {
+		t.Fatalf("execution ref = %q, want recreated after permissions change", nextExecutionRef)
+	}
+	oldRef, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get old execution ref: %v", err)
+	}
+	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
+		t.Fatalf("old execution ref revokedAt = %#v, want set", oldRef.RevokedAt)
+	}
+	nextRef, err := recorders[1].GetExecutionReference(context.Background(), nextExecutionRef)
+	if err != nil {
+		t.Fatalf("Get new execution ref: %v", err)
+	}
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"conversations.history"}},
+	}
+	if !reflect.DeepEqual(nextRef.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", nextRef.Permissions, wantPermissions)
 	}
 }
 
@@ -4400,6 +4546,127 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	}
 	if !strings.Contains(err.Error(), `config-managed workflows do not support user-credentialed plugin "roadmap"`) {
 		t.Fatalf("Bootstrap error = %v", err)
+	}
+}
+
+func TestBootstrapAppliesConfiguredWorkflowSchedulesForPlatformConnectionOnUserDefaultPlugin(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Plugins["roadmap"].Connections = map[string]*config.ConnectionDef{
+		"bot": {
+			Mode: providermanifestv1.ConnectionModePlatform,
+			Auth: config.ConnectionAuthDef{
+				Type:  providermanifestv1.AuthTypeBearer,
+				Token: "platform-token",
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Target.Plugin.Connection = "bot"
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	gotPlugin := requireCoreWorkflowPluginTarget(t, recorder.upsertedSchedules[0].Target)
+	if gotPlugin.Connection != "bot" {
+		t.Fatalf("target connection = %q, want bot", gotPlugin.Connection)
+	}
+}
+
+func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredentialedPlugins(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModeUser,
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.list", Method: http.MethodPost, Path: "/conversations.list"},
+						},
+					},
+				},
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Permissions = []core.AccessPermission{{
+		Plugin:     "slack",
+		Operations: []string{"conversations.list"},
+	}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"conversations.list"}},
+	}
+	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
 	}
 }
 
@@ -5109,6 +5376,25 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModePlatform,
+		Auth: &config.ConnectionAuthDef{
+			Type:  providermanifestv1.AuthTypeBearer,
+			Token: "platform-token",
+		},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
+						},
+					},
+				},
+			},
+		},
+	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
 		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
@@ -5124,6 +5410,12 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 			},
 		},
 	})
+	taskUpdated := cfg.Workflows.EventTriggers["task_updated"]
+	taskUpdated.Permissions = []core.AccessPermission{{
+		Plugin:     "slack",
+		Operations: []string{"conversations.history"},
+	}}
+	cfg.Workflows.EventTriggers["task_updated"] = taskUpdated
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
@@ -5177,6 +5469,13 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	}
 	if ref.SubjectID != "system:config" {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
+	}
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"conversations.history"}},
+	}
+	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
 	}
 }
 

@@ -117,10 +117,20 @@ workflows:
           input:
             mode: incremental
             includeArchived: false
+      permissions:
+        - plugin: slack
+          operations:
+            - conversations.list
+            - conversations.history
 ```
 
 This creates a durable schedule named `nightly_sync` that invokes
-`roadmap.sync` every day at 3:00 AM New York time.
+`roadmap.sync` every day at 3:00 AM New York time. `permissions` grants the
+config-owned execution principal additional plugin operations the target may
+invoke while it runs; Gestalt always includes the direct target operation.
+The extra scopes do not grant credentials. The invoked plugin still resolves
+its own connection, and config-owned workflow targets must resolve to non-user
+credentials.
 
 ### Triggers
 
@@ -142,6 +152,10 @@ workflows:
           input:
             channel: C123456
             text: "A roadmap item changed."
+      permissions:
+        - plugin: roadmap
+          operations:
+            - items.get
 ```
 
 This creates a durable trigger that listens for published events with:

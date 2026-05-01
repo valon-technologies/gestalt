@@ -15,6 +15,7 @@ import (
 	"time"
 
 	cronv3 "github.com/robfig/cron/v3"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -1157,6 +1158,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
 				return err
 			}
+			permissions, err := normalizeWorkflowExecutionPermissions(cfg, "workflows.schedules."+key+".permissions", schedule.Permissions)
+			if err != nil {
+				return err
+			}
+			schedule.Permissions = permissions
 			schedule.Provider = strings.TrimSpace(schedule.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
 			if err != nil {
@@ -1198,6 +1204,11 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
 				return err
 			}
+			permissions, err := normalizeWorkflowExecutionPermissions(cfg, "workflows.eventTriggers."+key+".permissions", trigger.Permissions)
+			if err != nil {
+				return err
+			}
+			trigger.Permissions = permissions
 			trigger.Provider = strings.TrimSpace(trigger.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
 			if err != nil {
@@ -1251,6 +1262,64 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return nil
 	}
 	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
+}
+
+func normalizeWorkflowExecutionPermissions(cfg *Config, path string, values []core.AccessPermission) ([]core.AccessPermission, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]core.AccessPermission, 0, len(values))
+	pluginIndexes := make(map[string]int, len(values))
+	seenOperations := make(map[string]map[string]struct{}, len(values))
+	for i, value := range values {
+		plugin := strings.TrimSpace(value.Plugin)
+		if plugin == "" {
+			return nil, fmt.Errorf("config validation: %s[%d].plugin is required", path, i)
+		}
+		if _, ok := cfg.Plugins[plugin]; !ok {
+			return nil, fmt.Errorf("config validation: %s[%d].plugin references unknown plugin %q", path, i, plugin)
+		}
+		if len(value.Actions) > 0 {
+			return nil, fmt.Errorf("config validation: %s[%d].actions is not supported", path, i)
+		}
+		operations, err := normalizeWorkflowExecutionPermissionNames(fmt.Sprintf("%s[%d].operations", path, i), value.Operations)
+		if err != nil {
+			return nil, err
+		}
+		if len(operations) == 0 {
+			return nil, fmt.Errorf("config validation: %s[%d].operations is required", path, i)
+		}
+		idx, ok := pluginIndexes[plugin]
+		if !ok {
+			idx = len(out)
+			pluginIndexes[plugin] = idx
+			seenOperations[plugin] = map[string]struct{}{}
+			out = append(out, core.AccessPermission{Plugin: plugin})
+		}
+		for _, operation := range operations {
+			if _, exists := seenOperations[plugin][operation]; exists {
+				continue
+			}
+			seenOperations[plugin][operation] = struct{}{}
+			out[idx].Operations = append(out[idx].Operations, operation)
+		}
+	}
+	return out, nil
+}
+
+func normalizeWorkflowExecutionPermissionNames(path string, values []string) ([]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(values))
+	for i, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, fmt.Errorf("config validation: %s[%d] is required", path, i)
+		}
+		out = append(out, value)
+	}
+	return out, nil
 }
 
 func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {

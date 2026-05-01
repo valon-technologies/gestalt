@@ -18,6 +18,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -66,7 +67,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if existing != nil {
 			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, schedule.Permissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
@@ -360,9 +361,10 @@ func workflowEnsureConfigExecutionRef(
 	return refID, true, nil
 }
 
-func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
+func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
+	var base []core.AccessPermission
 	if target.Agent != nil {
-		out := make([]core.AccessPermission, 0, len(target.Agent.ToolRefs))
+		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+1)
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
 			pluginName := strings.TrimSpace(tool.Plugin)
@@ -370,7 +372,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 			if pluginName == "" || operation == "" {
 				continue
 			}
-			out = append(out, core.AccessPermission{
+			base = append(base, core.AccessPermission{
 				Plugin:     pluginName,
 				Operations: []string{operation},
 			})
@@ -379,30 +381,72 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 			pluginName := strings.TrimSpace(delivery.Target.PluginName)
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
-				out = append(out, core.AccessPermission{
+				base = append(base, core.AccessPermission{
 					Plugin:     pluginName,
 					Operations: []string{operation},
 				})
 			}
 		}
-		return out
+		return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 	}
 	if target.Plugin == nil {
-		return nil
+		return workflowMergeExecutionRefPermissions(explicit...)
 	}
 	pluginTarget := *target.Plugin
 	pluginName := pluginTarget.PluginName
 	operation := strings.TrimSpace(pluginTarget.Operation)
-	if pluginName == "" || operation == "" {
-		return nil
+	if pluginName != "" && operation != "" {
+		base = []core.AccessPermission{{
+			Plugin:     pluginName,
+			Operations: []string{operation},
+		}}
 	}
-	return []core.AccessPermission{{
-		Plugin:     pluginName,
-		Operations: []string{operation},
-	}}
+	return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 }
 
-func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target) (*coreworkflow.ExecutionReference, error) {
+func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []core.AccessPermission {
+	out := make([]core.AccessPermission, 0)
+	pluginIndexes := map[string]int{}
+	seenOperations := map[string]map[string]struct{}{}
+	for _, group := range groups {
+		for _, value := range group {
+			plugin := strings.TrimSpace(value.Plugin)
+			if plugin == "" {
+				continue
+			}
+			operations := make([]string, 0, len(value.Operations))
+			for _, operation := range value.Operations {
+				operation = strings.TrimSpace(operation)
+				if operation != "" {
+					operations = append(operations, operation)
+				}
+			}
+			if len(operations) == 0 {
+				continue
+			}
+			idx, ok := pluginIndexes[plugin]
+			if !ok {
+				idx = len(out)
+				pluginIndexes[plugin] = idx
+				seenOperations[plugin] = map[string]struct{}{}
+				out = append(out, core.AccessPermission{Plugin: plugin})
+			}
+			for _, operation := range operations {
+				if _, exists := seenOperations[plugin][operation]; exists {
+					continue
+				}
+				seenOperations[plugin][operation] = struct{}{}
+				out[idx].Operations = append(out[idx].Operations, operation)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	ref := &coreworkflow.ExecutionReference{
 		ProviderName:        providerName,
 		Target:              target,
@@ -411,7 +455,7 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		DisplayName:         "Gestalt config",
 		AuthSource:          "config",
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
-		Permissions:         workflowExecutionRefPermissionsForTarget(target),
+		Permissions:         workflowExecutionRefPermissionsForTarget(target, permissions),
 	}
 	if target.Agent != nil {
 		for i := range target.Agent.ToolRefs {
@@ -419,12 +463,17 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 			if strings.TrimSpace(tool.System) != "" {
 				continue
 			}
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, tool.Plugin); err != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.PluginTarget{
+				PluginName: strings.TrimSpace(tool.Plugin),
+				Operation:  strings.TrimSpace(tool.Operation),
+				Connection: strings.TrimSpace(tool.Connection),
+				Instance:   strings.TrimSpace(tool.Instance),
+			}); err != nil {
 				return nil, err
 			}
 		}
 		if delivery := target.Agent.OutputDelivery; delivery != nil {
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target.PluginName); err != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target); err != nil {
 				return nil, err
 			}
 		}
@@ -433,37 +482,126 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 	if target.Plugin == nil {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	if err := workflowConfigValidateNoUserCredentialTarget(cfg, target.Plugin.PluginName); err != nil {
+	if err := workflowConfigValidateNoUserCredentialTarget(cfg, *target.Plugin); err != nil {
 		return nil, err
 	}
 	return ref, nil
 }
 
-func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, pluginName string) error {
-	mode, err := workflowConfigTargetConnectionMode(cfg, pluginName)
+func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget) error {
+	mode, err := workflowConfigTargetConnectionMode(cfg, target)
 	if err != nil {
 		return err
 	}
+	pluginName := strings.TrimSpace(target.PluginName)
 	switch mode {
 	case core.ConnectionModeNone, core.ConnectionModePlatform:
 		return nil
 	case core.ConnectionModeUser:
-		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(pluginName))
+		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", pluginName)
 	default:
-		return fmt.Errorf("unsupported connection mode %q for config-managed workflow target %q", mode, strings.TrimSpace(pluginName))
+		return fmt.Errorf("unsupported connection mode %q for config-managed workflow target %q", mode, pluginName)
 	}
 }
 
-func workflowConfigTargetConnectionMode(cfg *config.Config, pluginName string) (core.ConnectionMode, error) {
+func workflowConfigTargetConnectionMode(cfg *config.Config, target coreworkflow.PluginTarget) (core.ConnectionMode, error) {
 	if cfg == nil {
 		return core.ConnectionModeNone, fmt.Errorf("workflow config is not available")
 	}
-	pluginName = strings.TrimSpace(pluginName)
+	pluginName := strings.TrimSpace(target.PluginName)
 	entry := cfg.Plugins[pluginName]
 	if entry == nil {
 		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q is not configured", pluginName)
 	}
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q connection plan: %w", pluginName, err)
+	}
+
+	if connection := strings.TrimSpace(target.Connection); connection != "" {
+		return workflowConfigConnectionModeForName(plan, pluginName, connection)
+	}
+	if operation := strings.TrimSpace(target.Operation); operation != "" {
+		mode, ok, err := workflowConfigOperationConnectionMode(plan, entry.ManifestSpec(), target)
+		if err != nil {
+			return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q operation %q connection plan: %w", pluginName, operation, err)
+		}
+		if ok {
+			return mode, nil
+		}
+	}
 	return core.NormalizeConnectionMode(core.ConnectionMode(entry.ConnectionMode)), nil
+}
+
+func workflowConfigOperationConnectionMode(plan config.StaticConnectionPlan, manifestPlugin *providermanifestv1.Spec, target coreworkflow.PluginTarget) (core.ConnectionMode, bool, error) {
+	connections, selectors, _, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+	if err != nil {
+		return core.ConnectionModeNone, false, err
+	}
+	operation := strings.TrimSpace(target.Operation)
+	if selector, ok := selectors[operation]; ok {
+		connectionName, resolved := workflowConfigConnectionSelectorTargetConnection(selector, target.Input)
+		if resolved {
+			mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+			return mode, true, err
+		}
+		if connectionName := strings.TrimSpace(connections[operation]); connectionName != "" {
+			mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+			return mode, true, err
+		}
+		mode, err := workflowConfigConnectionSelectorMode(plan, target.PluginName, selector)
+		return mode, true, err
+	}
+	if connectionName := strings.TrimSpace(connections[operation]); connectionName != "" {
+		mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+		return mode, true, err
+	}
+	return core.ConnectionModeNone, false, nil
+}
+
+func workflowConfigConnectionSelectorTargetConnection(selector core.OperationConnectionSelector, input map[string]any) (string, bool) {
+	parameter := strings.TrimSpace(selector.Parameter)
+	if parameter == "" || len(input) == 0 {
+		return "", false
+	}
+	value, ok := input[parameter]
+	if !ok {
+		return "", false
+	}
+	selectorValue, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	connectionName := selector.Values[strings.TrimSpace(selectorValue)]
+	return strings.TrimSpace(connectionName), strings.TrimSpace(connectionName) != ""
+}
+
+func workflowConfigConnectionSelectorMode(plan config.StaticConnectionPlan, pluginName string, selector core.OperationConnectionSelector) (core.ConnectionMode, error) {
+	hasPlatform := false
+	for _, connectionName := range selector.Values {
+		mode, err := workflowConfigConnectionModeForName(plan, pluginName, connectionName)
+		if err != nil {
+			return core.ConnectionModeNone, err
+		}
+		switch mode {
+		case core.ConnectionModeUser:
+			return core.ConnectionModeUser, nil
+		case core.ConnectionModePlatform:
+			hasPlatform = true
+		}
+	}
+	if hasPlatform {
+		return core.ConnectionModePlatform, nil
+	}
+	return core.ConnectionModeNone, nil
+}
+
+func workflowConfigConnectionModeForName(plan config.StaticConnectionPlan, pluginName, connectionName string) (core.ConnectionMode, error) {
+	conn, ok := plan.LookupConnection(connectionName)
+	if !ok {
+		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q connection %q is not configured", strings.TrimSpace(pluginName), strings.TrimSpace(connectionName))
+	}
+	return config.ConnectionModeForConnection(conn), nil
 }
 
 func workflowConfigOwnerSubjectID() string {
