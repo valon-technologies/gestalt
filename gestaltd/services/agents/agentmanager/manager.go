@@ -49,9 +49,9 @@ const (
 	agentToolSearchAdaptiveMaxResults = 3
 	agentToolSearchMaxResults         = 20
 	agentToolSearchMaxCandidates      = 20
-	agentToolListDefaultPageSize      = 100
-	agentToolListMaxPageSize          = 500
-	agentToolInputSchemaMaxBytes      = 128 * 1024
+	agentToolListDefaultPageSize      = 10
+	agentToolListMaxPageSize          = 10
+	agentToolSchemaMaxBytes           = 128 * 1024
 	maxAgentRouteCacheEntries         = 20_000
 	AgentListSummaryDefaultLimit      = 100
 	AgentListMaxLimit                 = 500
@@ -2291,7 +2291,7 @@ func paginateListedAgentTools(tools []coreagent.ListedTool, pageSize, offset int
 }
 
 func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
-	if len(op.InputSchema) <= agentToolInputSchemaMaxBytes {
+	if len(op.InputSchema) <= agentToolSchemaMaxBytes {
 		return op.InputSchema
 	}
 	if synthesized := integration.SynthesizeInputSchema(op.Parameters); len(synthesized) > 0 {
@@ -2306,6 +2306,13 @@ func agentToolInputSchemaJSON(op catalog.CatalogOperation) string {
 		return `{"type":"object","additionalProperties":true}`
 	}
 	return string(raw)
+}
+
+func agentToolOutputSchemaJSON(op catalog.CatalogOperation) string {
+	if len(op.OutputSchema) == 0 || len(op.OutputSchema) > agentToolSchemaMaxBytes {
+		return ""
+	}
+	return string(op.OutputSchema)
 }
 
 func agentToolSchemaJSON(schema map[string]any) (string, error) {
@@ -2347,7 +2354,7 @@ func listedAgentPluginTool(tool coreagent.Tool, candidate agentToolSearchCandida
 		Title:            tool.Name,
 		Description:      tool.Description,
 		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
-		OutputSchemaJSON: string(candidate.operation.OutputSchema),
+		OutputSchemaJSON: agentToolOutputSchemaJSON(candidate.operation),
 		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),
 		Ref:              ref,
 		Target:           tool.Target,

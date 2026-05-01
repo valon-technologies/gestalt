@@ -629,7 +629,7 @@ func TestSearchToolsCompactsOversizedInputSchemaFromParameters(t *testing.T) {
 				ID:          "pulls.list",
 				Title:       "List Pull Requests",
 				Description: "List pull requests for a repository.",
-				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolInputSchemaMaxBytes) + `"}}}`),
+				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolSchemaMaxBytes) + `"}}}`),
 				Parameters: []catalog.CatalogParameter{
 					{Name: "owner", Type: "string", Description: "Repository owner.", Required: true},
 					{Name: "repo", Type: "string", Description: "Repository name.", Required: true},
@@ -679,7 +679,7 @@ func TestSearchToolsUsesOpenObjectSchemaForOversizedInputSchemaWithoutParameters
 				ID:          "search.code",
 				Title:       "Search Code",
 				Description: "Search code.",
-				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolInputSchemaMaxBytes) + `"}}}`),
+				InputSchema: []byte(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", agentToolSchemaMaxBytes) + `"}}}`),
 				ReadOnly:    true,
 			}}},
 		},

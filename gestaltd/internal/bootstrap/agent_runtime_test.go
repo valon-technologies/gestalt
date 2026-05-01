@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -2136,7 +2137,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	invoker := &recordingAgentRuntimeInvoker{}
 	toolGrants := newTestAgentToolGrants(t)
 	readOnly := true
-	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+	roadmapProvider := &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
 		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
@@ -2162,7 +2163,32 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
 			},
 		}},
-	})
+	}
+	docsOps := make([]catalog.CatalogOperation, 12)
+	docsRefs := make([]coreagent.ToolRef, 12)
+	docsPermissions := make([]string, 12)
+	oversizedOutputSchema := json.RawMessage(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", 129*1024) + `"}}}`)
+	for i := range docsOps {
+		id := fmt.Sprintf("fetch_%02d", i+1)
+		docsOps[i] = catalog.CatalogOperation{
+			ID:           id,
+			Title:        fmt.Sprintf("Fetch docs %02d", i+1),
+			Description:  "Fetch a docs page",
+			InputSchema:  json.RawMessage(`{"type":"object"}`),
+			OutputSchema: oversizedOutputSchema,
+		}
+		docsRefs[i] = coreagent.ToolRef{Plugin: "docs", Operation: id}
+		docsPermissions[i] = id
+	}
+	docsProvider := &coretesting.StubIntegration{
+		N:        "docs",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name:       "docs",
+			Operations: docsOps,
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, roadmapProvider, docsProvider)
 	manager := agentmanager.New(agentmanager.Config{
 		Providers:  providers,
 		ToolGrants: toolGrants,
@@ -2278,6 +2304,61 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	if len(emptyListResp.Tools) != 0 || emptyListResp.NextPageToken != "" {
 		t.Fatalf("ListTools empty grant = %#v, want no tools", emptyListResp)
 	}
+
+	manyDocsGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "docs",
+			Operations: docsPermissions,
+		}},
+		ToolRefs:   docsRefs,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint docs grant: %v", err)
+	}
+	pagedDocs, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     100,
+		ToolGrant:    manyDocsGrant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools with oversized page size: %v", err)
+	}
+	if len(pagedDocs.Tools) != 10 || pagedDocs.NextPageToken != "10" {
+		t.Fatalf("ListTools oversized page = %d tools, next %q; want 10 tools and token 10", len(pagedDocs.Tools), pagedDocs.NextPageToken)
+	}
+	for _, listed := range pagedDocs.Tools {
+		if listed.OutputSchemaJSON != "" {
+			t.Fatalf("listed output schema for %q is %d bytes, want omitted oversized schema", listed.MCPName, len(listed.OutputSchemaJSON))
+		}
+	}
+	finalDocs, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     100,
+		PageToken:    pagedDocs.NextPageToken,
+		ToolGrant:    manyDocsGrant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools final oversized page: %v", err)
+	}
+	if len(finalDocs.Tools) != 2 || finalDocs.NextPageToken != "" {
+		t.Fatalf("ListTools final oversized page = %d tools, next %q; want 2 tools and no token", len(finalDocs.Tools), finalDocs.NextPageToken)
+	}
+	for _, listed := range finalDocs.Tools {
+		if listed.OutputSchemaJSON != "" {
+			t.Fatalf("listed final output schema for %q is %d bytes, want omitted oversized schema", listed.MCPName, len(listed.OutputSchemaJSON))
+		}
+	}
+
 	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
