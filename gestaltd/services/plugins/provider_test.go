@@ -2,9 +2,11 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -191,8 +193,14 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if _, ok := prov.(core.SessionCatalogProvider); !ok {
 		t.Fatal("expected remote provider to implement SessionCatalogProvider")
 	}
+	if !core.SupportsSessionCatalog(prov) {
+		t.Fatal("expected remote provider to support session catalogs")
+	}
 	if _, ok := prov.(core.PostConnectCapable); !ok {
 		t.Fatal("expected remote provider to implement PostConnectCapable")
+	}
+	if !core.SupportsPostConnect(prov) {
+		t.Fatal("expected remote provider to support post-connect")
 	}
 	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("unexpected auth types: %#v", got)
@@ -266,10 +274,12 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				t.Fatalf("unexpected static catalog allowedRoles: %#v", got)
 			}
 
-			scp := prov.(core.SessionCatalogProvider)
-			sessionCat, err := scp.CatalogForRequest(ctx, "token-123")
+			sessionCat, attempted, err := core.CatalogForRequest(ctx, prov, "token-123")
 			if err != nil {
 				t.Fatalf("CatalogForRequest: %v", err)
+			}
+			if !attempted {
+				t.Fatal("expected core.CatalogForRequest to report attempted")
 			}
 			if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != tc.wantSessionCatalog {
 				t.Fatalf("unexpected session catalog: %+v", sessionCat)
@@ -281,14 +291,16 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				t.Fatalf("unexpected session catalog tags: %#v", got)
 			}
 
-			pcp := prov.(core.PostConnectCapable)
-			metadata, err := pcp.PostConnect(ctx, &core.ExternalCredential{
+			metadata, supported, err := core.PostConnect(ctx, prov, &core.ExternalCredential{
 				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
 				Connection: "workspace",
 				Instance:   "default",
 			})
 			if err != nil {
 				t.Fatalf("PostConnect: %v", err)
+			}
+			if !supported {
+				t.Fatal("expected core.PostConnect to report support")
 			}
 			if !reflect.DeepEqual(metadata, map[string]string{
 				"subject":    principal.EffectiveCredentialSubjectID(tc.principal),
@@ -447,6 +459,38 @@ func (s *metadataFailureProviderServer) GetMetadata(context.Context, *emptypb.Em
 	return nil, status.Error(codes.Unknown, "provider metadata: metadata exploded")
 }
 
+type unsupportedCapabilityProviderServer struct {
+	proto.UnimplementedIntegrationProviderServer
+	metadataErr         error
+	sessionCatalogCalls atomic.Int32
+	postConnectCalls    atomic.Int32
+}
+
+func (s *unsupportedCapabilityProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	if s.metadataErr != nil {
+		return nil, s.metadataErr
+	}
+	return &proto.ProviderMetadata{}, nil
+}
+
+func (s *unsupportedCapabilityProviderServer) StartProvider(context.Context, *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
+	return &proto.StartProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+}
+
+func (s *unsupportedCapabilityProviderServer) Execute(context.Context, *proto.ExecuteRequest) (*proto.OperationResult, error) {
+	return &proto.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+}
+
+func (s *unsupportedCapabilityProviderServer) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
+	s.sessionCatalogCalls.Add(1)
+	return nil, status.Error(codes.Unimplemented, "session catalog is not implemented")
+}
+
+func (s *unsupportedCapabilityProviderServer) PostConnect(context.Context, *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {
+	s.postConnectCalls.Add(1)
+	return nil, status.Error(codes.Unimplemented, "post connect is not implemented")
+}
+
 type unavailableMetadataProviderServer struct {
 	cancel context.CancelFunc
 }
@@ -476,6 +520,84 @@ func (*unavailableMetadataProviderServer) GetSessionCatalog(context.Context, *pr
 
 func (*unavailableMetadataProviderServer) PostConnect(context.Context, *proto.PostConnectRequest, ...grpc.CallOption) (*proto.PostConnectResponse, error) {
 	panic("unexpected PostConnect call")
+}
+
+func TestRemoteProviderUnsupportedCapabilitiesDoNotDispatchRPCs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		metadataErr error
+	}{
+		{name: "metadata false"},
+		{name: "metadata unimplemented", metadataErr: status.Error(codes.Unimplemented, "metadata is not implemented")},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := &unsupportedCapabilityProviderServer{metadataErr: tc.metadataErr}
+			prov, err := NewRemoteProvider(context.Background(), newIntegrationProviderClient(t, server), manualOnlyStaticSpec(), nil)
+			if err != nil {
+				t.Fatalf("NewRemoteProvider: %v", err)
+			}
+			if _, ok := prov.(core.SessionCatalogProvider); !ok {
+				t.Fatal("expected remote provider to implement SessionCatalogProvider")
+			}
+			if _, ok := prov.(core.PostConnectCapable); !ok {
+				t.Fatal("expected remote provider to implement PostConnectCapable")
+			}
+
+			if core.SupportsSessionCatalog(prov) {
+				t.Fatal("expected remote provider to report no session catalog support")
+			}
+			cat, attempted, err := core.CatalogForRequest(context.Background(), prov, "tok")
+			if err != nil {
+				t.Fatalf("CatalogForRequest: %v", err)
+			}
+			if attempted {
+				t.Fatal("expected core.CatalogForRequest to report no attempt")
+			}
+			if cat != nil {
+				t.Fatalf("CatalogForRequest catalog = %#v, want nil", cat)
+			}
+
+			scp := prov.(core.SessionCatalogProvider)
+			_, err = scp.CatalogForRequest(context.Background(), "tok")
+			if !errors.Is(err, core.ErrSessionCatalogUnsupported) {
+				t.Fatalf("direct CatalogForRequest error = %v, want ErrSessionCatalogUnsupported", err)
+			}
+
+			if core.SupportsPostConnect(prov) {
+				t.Fatal("expected remote provider to report no post-connect support")
+			}
+			metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{})
+			if err != nil {
+				t.Fatalf("PostConnect: %v", err)
+			}
+			if supported {
+				t.Fatal("expected core.PostConnect to report unsupported")
+			}
+			if metadata != nil {
+				t.Fatalf("PostConnect metadata = %#v, want nil", metadata)
+			}
+
+			pcp := prov.(core.PostConnectCapable)
+			_, err = pcp.PostConnect(context.Background(), &core.ExternalCredential{})
+			if !errors.Is(err, core.ErrPostConnectUnsupported) {
+				t.Fatalf("direct PostConnect error = %v, want ErrPostConnectUnsupported", err)
+			}
+
+			if got := server.sessionCatalogCalls.Load(); got != 0 {
+				t.Fatalf("GetSessionCatalog calls = %d, want 0", got)
+			}
+			if got := server.postConnectCalls.Load(); got != 0 {
+				t.Fatalf("PostConnect calls = %d, want 0", got)
+			}
+		})
+	}
 }
 
 func TestNewRemoteProviderLabelsMetadataFailures(t *testing.T) {
