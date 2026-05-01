@@ -11,10 +11,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 )
 
 func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap[core.Provider], deps Deps) (*providerdev.Manager, error) {
