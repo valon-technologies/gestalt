@@ -46,7 +46,7 @@ type hostedAgentProviderPool struct {
 type hostedAgentPoolBackend struct {
 	id               int
 	provider         coreagent.Provider
-	runtimeProvider  pluginruntime.Provider
+	runtimeProvider  pluginruntime.SessionGetter
 	runtimeSessionID string
 	runtimeSession   *pluginruntime.Session
 	startedAt        time.Time

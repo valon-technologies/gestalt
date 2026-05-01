@@ -2,6 +2,7 @@ package pluginruntime
 
 import (
 	"context"
+	"io"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -113,12 +114,36 @@ type HostedAgentConn interface {
 	Close() error
 }
 
-type Provider interface {
+type SupportProvider interface {
 	Support(ctx context.Context) (Support, error)
+}
+
+type SessionLister interface {
 	ListSessions(ctx context.Context) ([]Session, error)
+}
+
+type SessionStarter interface {
 	StartSession(ctx context.Context, req StartSessionRequest) (*Session, error)
+}
+
+type SessionGetter interface {
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
+}
+
+type SessionStopper interface {
 	StopSession(ctx context.Context, req StopSessionRequest) error
+}
+
+type PluginStarter interface {
 	StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error)
-	Close() error
+}
+
+type Provider interface {
+	SupportProvider
+	SessionLister
+	SessionStarter
+	SessionGetter
+	SessionStopper
+	PluginStarter
+	io.Closer
 }

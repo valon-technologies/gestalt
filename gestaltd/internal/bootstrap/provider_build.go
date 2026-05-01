@@ -1016,7 +1016,7 @@ type hostedAgentProviderLaunch struct {
 
 type hostedAgentProviderInstance struct {
 	provider         coreagent.Provider
-	runtimeProvider  pluginruntime.Provider
+	runtimeProvider  pluginruntime.SessionGetter
 	runtimeSessionID string
 	runtimeSession   *pluginruntime.Session
 }
@@ -1424,9 +1424,14 @@ func buildHostedRuntimeEgressLaunchPlan(providerName, sessionID string, policy e
 
 const pluginRuntimeStopTimeout = 3 * time.Second
 
+type runtimeSessionCloser interface {
+	pluginruntime.SessionStopper
+	io.Closer
+}
+
 type runtimeBackedHostedCloser struct {
 	conn         io.Closer
-	runtime      pluginruntime.Provider
+	runtime      runtimeSessionCloser
 	sessionID    string
 	closeRuntime bool
 	cleanup      func()
@@ -1452,7 +1457,7 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	return errors.Join(errs...)
 }
 
-func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID string) error {
+func stopPluginRuntimeSession(runtimeProvider pluginruntime.SessionStopper, sessionID string) error {
 	if runtimeProvider == nil || sessionID == "" {
 		return nil
 	}
@@ -1472,7 +1477,7 @@ func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID 
 	}
 }
 
-func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.Provider, sessionID string) (*pluginruntime.Session, error) {
+func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.SessionGetter, sessionID string) (*pluginruntime.Session, error) {
 	for {
 		session, err := runtimeProvider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
 		if err != nil {
@@ -1702,7 +1707,7 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 
 type runtimeHostServiceSessionVerifier struct {
 	providerName string
-	provider     pluginruntime.Provider
+	provider     pluginruntime.SessionGetter
 }
 
 func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
@@ -1739,7 +1744,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.SessionGetter) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
