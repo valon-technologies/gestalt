@@ -8,6 +8,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 type closableProvider struct {
@@ -48,7 +49,7 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 				return nil
 			},
 		}),
-		Services: coretesting.NewStubServices(t),
+		Services: testutil.NewStubServices(t),
 		SecretManager: &closableSecretManager{
 			closeFn: func() error {
 				secretManagerClosed = true

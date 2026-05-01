@@ -46,7 +46,7 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv, err := server.New(server.Config{
@@ -146,7 +146,7 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv, err := server.New(server.Config{
@@ -203,7 +203,7 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mut
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
 	agentProvider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "docs",
 		ConnMode: core.ConnectionModeNone,

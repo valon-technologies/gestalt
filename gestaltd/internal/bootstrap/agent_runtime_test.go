@@ -377,7 +377,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 			},
 		},
 	}
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
@@ -517,7 +517,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 			},
 		},
 	}
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
@@ -1408,7 +1408,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(services)
+	testutil.AttachStubExternalCredentials(services)
 	invoker := &recordingAgentRuntimeInvoker{}
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetInvoker(invoker)

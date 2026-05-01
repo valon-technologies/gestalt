@@ -50,7 +50,7 @@ func workflowPluginTargetWithRouting(pluginName, operation, connection, instance
 func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	other := seedUser(t, services, "grace@example.test")
 	provider := newMemoryWorkflowProvider()
@@ -185,7 +185,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
@@ -299,7 +299,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 

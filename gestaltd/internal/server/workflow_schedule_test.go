@@ -639,7 +639,7 @@ func requireCanonicalPluginTargetJSON(t *testing.T, body []byte) workflowPluginT
 func TestWorkflowScheduleCRUD(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -822,7 +822,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada-agent@example.test")
 	provider := newMemoryWorkflowProvider()
 	agentProvider := newMemoryAgentProvider()
@@ -936,7 +936,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada-agent-system@example.test")
 	provider := newMemoryWorkflowProvider()
 	agentProvider := newMemoryAgentProvider()
@@ -1022,7 +1022,7 @@ func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T
 func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ada := seedUser(t, services, "ada@example.test")
 	grace := seedUser(t, services, "grace@example.test")
 	provider := newMemoryWorkflowProvider()
@@ -1183,7 +1183,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1236,7 +1236,7 @@ func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
@@ -1379,7 +1379,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	oldTarget := coreworkflow.Target{
@@ -1482,7 +1482,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 func TestWorkflowScheduleCreateFailureHidesInternalError(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	provider.nextUpsertErr = errors.New("boom")
@@ -1548,7 +1548,7 @@ func TestWorkflowScheduleCreateFailureHidesInternalError(t *testing.T) {
 func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	seedToken(t, services, &core.ExternalCredential{
 		ID:          "roadmap-default-tenant-a",
@@ -1624,7 +1624,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	basicProvider := newMemoryWorkflowProvider()
 	advancedProvider := newMemoryWorkflowProvider()
@@ -1727,7 +1727,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
@@ -1795,7 +1795,7 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	seedToken(t, services, &core.ExternalCredential{
 		ID:          "roadmap-default-token",
@@ -2015,7 +2015,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ada := seedUser(t, services, "ada@example.test")
 	grace := seedUser(t, services, "grace@example.test")
 	basicProvider := newMemoryWorkflowProvider()
@@ -2174,7 +2174,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ada := seedUser(t, services, "ada@example.test")
 	basicProvider := newMemoryWorkflowProvider()
 	advancedProvider := newMemoryWorkflowProvider()
@@ -2381,7 +2381,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 func TestGlobalWorkflowRejectsInvalidJSONBodies(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ada := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 
@@ -2452,7 +2452,7 @@ func TestGlobalWorkflowRejectsInvalidJSONBodies(t *testing.T) {
 func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ada := seedUser(t, services, "ada@example.test")
 	grace := seedUser(t, services, "grace@example.test")
 	basicProvider := newMemoryWorkflowProvider()
@@ -2611,7 +2611,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2666,7 +2666,7 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	basicProvider := newMemoryWorkflowProvider()
 	advancedProvider := newMemoryWorkflowProvider()
@@ -2782,7 +2782,7 @@ func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 func TestWorkflowEventPublishRequiresType(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {

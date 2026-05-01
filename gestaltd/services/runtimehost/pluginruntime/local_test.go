@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	runtime := NewLocalProvider(WithLocalRuntimeSessionLogs("local", services.RuntimeSessionLogs))
 	t.Cleanup(func() {
 		_ = runtime.Close()

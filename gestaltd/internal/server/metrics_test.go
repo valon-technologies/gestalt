@@ -151,7 +151,7 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth(providerName, handler)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, oauthServer)
 
@@ -245,7 +245,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
-	successSvc := coretesting.NewStubServices(t)
+	successSvc := testutil.NewStubServices(t)
 	u := seedUser(t, successSvc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, successSvc, &core.ExternalCredential{
@@ -286,7 +286,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
-	errorSvc := coretesting.NewStubServices(t)
+	errorSvc := testutil.NewStubServices(t)
 	u2 := seedUser(t, errorSvc, "anonymous@gestalt")
 	seedToken(t, errorSvc, &core.ExternalCredential{
 		ID: "tok2", SubjectID: principal.UserSubjectID(u2.ID), Integration: providerName,
@@ -365,7 +365,7 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithCatalog{
 			StubIntegration: coretesting.StubIntegration{
 				N:        providerName,
@@ -477,7 +477,7 @@ func TestManualConnectionMetrics(t *testing.T) {
 
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &manualMetricsProvider{name: providerName})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 	})
@@ -583,7 +583,7 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		cfg.Auth = &metricsHostIssuedSessionAuth{secret: secret, name: "metrics-host-issued"}
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.StateSecret = secret
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, srv)
 
@@ -846,7 +846,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "user@example.com")
 	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -906,7 +906,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "user@example.com")
 	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {

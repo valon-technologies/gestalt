@@ -109,7 +109,7 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	t.Helper()
 	cfg := server.Config{
 		Auth:     &coretesting.StubAuthProvider{N: "none"},
-		Services: coretesting.NewStubServices(t),
+		Services: testutil.NewStubServices(t),
 		Providers: func() *registry.ProviderMap[core.Provider] {
 			reg := registry.New()
 			return &reg.Providers
@@ -2312,7 +2312,7 @@ func seedToken(t *testing.T, svc *coredata.Services, tok *core.ExternalCredentia
 
 func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 	t.Parallel()
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -2362,7 +2362,7 @@ func TestNewServerAdminAuthorizationRequiresValidSplitBaseURLs(t *testing.T) {
 	t.Parallel()
 
 	makeConfig := func() server.Config {
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		reg := registry.New()
 		return server.Config{
 			Auth:      &coretesting.StubAuthProvider{N: "google"},
@@ -2614,7 +2614,7 @@ func TestMountedUIRoutes_HumanAuthorization(t *testing.T) {
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -2743,7 +2743,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -2891,7 +2891,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
@@ -2995,7 +2995,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	adminUser := seedUser(t, svc, "admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
@@ -3107,7 +3107,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
@@ -3182,7 +3182,7 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -3322,7 +3322,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -3446,7 +3446,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	auth := &stubHostIssuedSessionAuth{secret: secret}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
@@ -3846,7 +3846,7 @@ func TestBuiltInAdminRoute_ProviderBackedAdminUIDoesNotAutoDiscoverNonRootUI(t *
 func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -4381,7 +4381,7 @@ func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(
 func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -4462,7 +4462,7 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -4547,7 +4547,7 @@ func TestAdminAPIRoutes_HiddenOnPublicProfile(t *testing.T) {
 func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
@@ -4764,7 +4764,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	scopedToken, scopedHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -5335,7 +5335,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -5518,7 +5518,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -5573,7 +5573,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -5771,7 +5771,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
@@ -5857,7 +5857,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 	t.Run("plugin members", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
@@ -5922,7 +5922,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 	t.Run("admin members", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		seedUser(t, svc, "static-admin@example.test")
 		baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -5981,7 +5981,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	seedUser(t, svc, "viewer@example.test")
 	const adminRole = "ops-admin"
@@ -6072,7 +6072,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
@@ -6153,7 +6153,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 	t.Run("authorization provider missing", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		seedUser(t, svc, "admin@example.test")
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
@@ -6227,7 +6227,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 	t.Run("admin policy unset", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
@@ -6266,7 +6266,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6313,7 +6313,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -6395,7 +6395,7 @@ func TestMountedUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing.T)
 	t.Parallel()
 
 	makeConfig := func(mounted server.MountedUI) server.Config {
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"sample_policy": {
@@ -6478,7 +6478,7 @@ func TestMountedUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t 
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6549,7 +6549,7 @@ func TestMountedUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testing.T
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6625,7 +6625,7 @@ func TestMountedUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) 
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6706,7 +6706,7 @@ func TestMountedUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(t *
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6776,7 +6776,7 @@ func TestMountedUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t *te
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6851,7 +6851,7 @@ func TestMountedUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testing.
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -6927,7 +6927,7 @@ func TestMountedUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *testing
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -7316,7 +7316,7 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 				return nil, fmt.Errorf("invalid token")
 			},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -7590,7 +7590,7 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 		}
 		return plaintext, hashed
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	broadToken, broadHash := newToken(t)
 	seedAPIToken(t, svc, broadToken, broadHash, "broad-user")
 	invokeToken, invokeHash := newToken(t)
@@ -8046,7 +8046,7 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "api-user")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -8080,7 +8080,7 @@ func TestAuthMiddleware_ValidSubjectOwnedAPIToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, hashed, "service_account:weather-bot", "weather-bot")
 
 	stub := &stubIntegrationWithOps{
@@ -8124,7 +8124,7 @@ func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	now := time.Now()
 	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), indexeddb.Record{
 		"id":                    "api-tok-borrowed-credential",
@@ -8200,7 +8200,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "api-user")
 	openProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -8357,7 +8357,7 @@ func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 				return nil, fmt.Errorf("not a session token")
 			},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8382,7 +8382,7 @@ func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "api-user")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -8418,7 +8418,7 @@ func TestMetricsEndpointsRequireAuth(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "api-user")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -8474,7 +8474,7 @@ func TestMetricsSessionAuthDoesNotRequireUserLookup(t *testing.T) {
 				return &core.UserIdentity{Email: "metrics@example.test"}, nil
 			},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 			_, _ = w.Write([]byte("gestaltd_operation_count_total 1\n"))
@@ -8504,7 +8504,7 @@ func TestListIntegrations(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8562,7 +8562,7 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 			Path:       "/github",
 			Handler:    handler,
 		}}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8598,7 +8598,7 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOperations(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	policyMembers := []config.SubjectPolicyMemberDef{
 		{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
@@ -8803,7 +8803,7 @@ func TestListIntegrations_HidesProviderWithOnlyInternalHTTPOperations(t *testing
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"internal-only": {ResolvedManifest: manifest},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8854,7 +8854,7 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	seedSubjectToken(t, svc, "service_account:triage-bot", "svc", "workspace", "default", "identity-svc-token")
 
@@ -9005,7 +9005,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	authSvc := coretesting.NewStubServices(t)
+	authSvc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, authSvc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 
 	provider := &stubIntegrationWithCatalog{
@@ -9061,7 +9061,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 		t.Fatalf("operations = %+v, want only run", ops)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	seedSubjectToken(t, svc, "service_account:triage-bot", "svc-session", testDefaultConnection, "team-a", "session-bound-token")
 
@@ -9129,7 +9129,7 @@ func TestSubjectAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors
 func TestListIntegrationsShowsConnected(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
@@ -9172,7 +9172,7 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	subjectID := principal.UserSubjectID(u.ID)
 	seedSubjectToken(t, svc, subjectID, "manual-connected", testDefaultConnection, "default", "connected-token")
@@ -9357,7 +9357,7 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub, mcpStub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -9419,7 +9419,7 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"example": plugin,
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -9494,7 +9494,7 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"launchdarkly": plugin,
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -9554,7 +9554,7 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"linear": {},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -9669,7 +9669,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"example": plugin,
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -9810,7 +9810,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"example": plugin,
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -9874,7 +9874,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"docs": {},
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -9970,7 +9970,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"clickhouse": plugin,
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 			cfg.MountedUIs = []server.MountedUI{{
 				Name:       "clickhouse",
 				PluginName: "clickhouse",
@@ -10043,7 +10043,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"clickhouse": plugin,
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -10113,7 +10113,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"httpbin": plugin,
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -10169,7 +10169,7 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 				},
 			}
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -10342,7 +10342,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				cfg.PluginDefs = map[string]*config.ProviderEntry{
 					"example": tc.plugin,
 				}
-				cfg.Services = coretesting.NewStubServices(t)
+				cfg.Services = testutil.NewStubServices(t)
 			})
 			testutil.CloseOnCleanup(t, ts)
 
@@ -10417,7 +10417,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 		t.Helper()
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, prov)
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		defer ts.Close()
 
@@ -10462,7 +10462,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
@@ -10529,7 +10529,7 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 		t.Run(email, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			seedUserRecord(t, svc, "user-a", "User@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 			seedUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
 
@@ -10567,7 +10567,7 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	stubDB := svc.DB.(*coretesting.StubIndexedDB)
 
 	stub := &coretesting.StubIntegration{N: "test-integ", DN: "Test"}
@@ -10595,7 +10595,7 @@ func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 func TestListIntegrations_ListCredentialsError(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	stubDB := svc.DB.(*coretesting.StubIndexedDB)
 	seedUser(t, svc, "anonymous@gestalt")
 
@@ -10627,7 +10627,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("default token", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		u := seedUser(t, svc, "anonymous@gestalt")
@@ -10712,7 +10712,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("shared external identity remains linked while another token still exists", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
@@ -10797,7 +10797,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("disconnect restores token when authz unlink fails", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
@@ -10890,7 +10890,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("bare disconnect remains ambiguous when multiple connections exist", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
@@ -10923,7 +10923,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("underscored parameters", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
@@ -10952,7 +10952,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("plain selectors are rejected for disconnect", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
@@ -10988,7 +10988,7 @@ func TestDisconnectIntegration(t *testing.T) {
 	t.Run("ambiguous error uses canonical hint", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.ExternalCredential{
@@ -11048,7 +11048,7 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -11098,7 +11098,7 @@ func TestListOperations(t *testing.T) {
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -11203,7 +11203,7 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-cat", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -11322,7 +11322,7 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
@@ -11399,7 +11399,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -11470,7 +11470,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -11522,7 +11522,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.ExternalCredential{
@@ -11617,7 +11617,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.ExternalCredential{
@@ -11711,7 +11711,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.ExternalCredential{
@@ -11805,7 +11805,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCanonicalSubjectOnCollision(t *t
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.ExternalCredential{
@@ -11918,7 +11918,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -11956,7 +11956,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 	t.Run("ambiguous_instance", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -12021,7 +12021,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -12042,7 +12042,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 func TestExecuteOperation(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -12164,7 +12164,7 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	user, err := svc.Users.FindOrCreateUser(context.Background(), "wrapped@test.local")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
@@ -12287,7 +12287,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, prov)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12324,7 +12324,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	user, err := svc.Users.FindOrCreateUser(context.Background(), "alias@test.local")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
@@ -12418,7 +12418,7 @@ func TestExecuteOperation_PlatformMissingRuntimeMaterialUsesAdminConfigurationEr
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12604,7 +12604,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		t.Fatalf("NewDeclarativeProvider: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	user, err := svc.Users.FindOrCreateUser(context.Background(), "selector@test.local")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
@@ -12899,7 +12899,7 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12927,7 +12927,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -12957,7 +12957,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-team-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -12996,7 +12996,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13020,7 +13020,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	ts = newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
 		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13034,7 +13034,7 @@ func TestSubjectAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSe
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	seedSubjectToken(t, svc, "service_account:triage-bot", "svc", "workspace", "team-a", "identity-bound-token")
 
@@ -13127,7 +13127,7 @@ func TestSubjectAuthorization_ExecuteOperation_AllowsPolicylessPlugin(t *testing
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -13169,7 +13169,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 
@@ -13304,7 +13304,7 @@ func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUser
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 
@@ -13438,7 +13438,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 
@@ -13597,7 +13597,7 @@ func TestSubjectAuthorization_ExecuteOperation_MissingSubjectCredentialReturns41
 		},
 	}, map[string]*config.ProviderEntry{"svc": {AuthorizationPolicy: "svc_policy"}})
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
@@ -13641,7 +13641,7 @@ func TestSubjectAuthorization_UserOnlyRoutesReturn403ForNonUserSubjects(t *testi
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 
 	stub := &stubIntegrationWithOps{
@@ -13715,7 +13715,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 	t.Run("default session catalog connection", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-cat", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -13792,7 +13792,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		}
 
 		providers := testutil.NewProviderRegistry(t, sessionStub)
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -13869,7 +13869,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 	}
 
 	providers := testutil.NewProviderRegistry(t, sessionStub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -13958,7 +13958,7 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	}
 
 	providers := testutil.NewProviderRegistry(t, sessionStub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -14033,7 +14033,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 	}
 
 	providers := testutil.NewProviderRegistry(t, sessionStub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -14116,7 +14116,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 	}
 
 	providers := testutil.NewProviderRegistry(t, sessionStub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -14192,7 +14192,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 	}
 
 	providers := testutil.NewProviderRegistry(t, sessionStub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
@@ -14447,7 +14447,7 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	existing := seedUserRecord(t, svc, "user-existing", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
@@ -14618,7 +14618,7 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 func TestLoginCallbackForCLI(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "user@example.com")
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -14733,7 +14733,7 @@ func TestLoginCallbackForCLI(t *testing.T) {
 func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "host@example.com")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &stubHostIssuedSessionAuth{secret: []byte("host-issued-secret")}
@@ -14969,7 +14969,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -15025,7 +15025,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.AuditSink = invocation.NewSlogAuditSink(&invalidAuditBuf)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, invalidTS)
 
@@ -15059,7 +15059,7 @@ func TestStartIntegrationOAuth_ServiceAccountDeniedByPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	stub := &stubIntegrationWithAuthURL{
 		StubIntegration: coretesting.StubIntegration{N: "slack"},
@@ -15109,7 +15109,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		t.Parallel()
 
 		var auditBuf bytes.Buffer
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
@@ -15315,7 +15315,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}))
 		testutil.CloseOnCleanup(t, discoverySrv)
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
@@ -15523,7 +15523,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Run("slack identity already linked", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
@@ -15737,7 +15737,7 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -15770,7 +15770,7 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
 			ConnMode: core.ConnectionModeNone,
@@ -15831,7 +15831,7 @@ func TestCreateAPIToken_WithActionPermissions(t *testing.T) {
 func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -15883,7 +15883,7 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 func TestRevokeAPIToken(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	var auditBuf bytes.Buffer
 	ctx := context.Background()
@@ -15933,7 +15933,7 @@ func TestRevokeAPIToken_WrongUser(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -15954,7 +15954,7 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	t.Parallel()
 
 	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	existing := seedUser(t, svc, "user@example.com")
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
@@ -16061,7 +16061,7 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	stubDB := svc.DB.(*coretesting.StubIndexedDB)
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
@@ -16125,7 +16125,7 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Now = func() time.Time { return fixedNow }
 		cfg.APITokenTTL = customTTL
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -16164,7 +16164,7 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 func TestRevokeAllAPITokens(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	var auditBuf bytes.Buffer
 	ctx := context.Background()
@@ -16217,7 +16217,7 @@ func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -16244,7 +16244,7 @@ func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
 func TestExecuteOperation_POST(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -16872,7 +16872,7 @@ func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *test
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	seedUser(t, svc, "viewer-user@test.local")
 
@@ -17350,7 +17350,7 @@ func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t 
 func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "reports",
@@ -17397,7 +17397,7 @@ func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 	t.Parallel()
 
 	baseConfig := func(t *testing.T) server.Config {
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "events",
@@ -17912,7 +17912,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"gitlab": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("gitlab", handler)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18095,7 +18095,7 @@ func httpBindingTestSignature(secret, payload string) string {
 func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 	svc.ExternalCredentials = recordingCreds
 	u := seedUser(t, svc, "anonymous@gestalt")
@@ -18158,7 +18158,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	almostExpired := time.Now().Add(2 * time.Minute)
 	seedToken(t, svc, &core.ExternalCredential{
@@ -18258,7 +18258,7 @@ func TestExecuteOperation_RefreshPassesThroughStoredTokenWhenRefreshDoesNotApply
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			token := tc.token
 			token.SubjectID = principal.UserSubjectID(u.ID)
@@ -18355,7 +18355,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			expired := time.Now().Add(-1 * time.Hour)
 			seedToken(t, svc, &core.ExternalCredential{
@@ -18447,7 +18447,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			seedToken(t, svc, &core.ExternalCredential{
 				ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
@@ -18503,7 +18503,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.ExternalCredential{
@@ -18561,7 +18561,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 func TestExecuteOperation_PutCredentialFailureReturnsError(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	provider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
@@ -18642,7 +18642,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18680,7 +18680,7 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, echoProvider)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -18726,7 +18726,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, echoProvider)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 
 	httpSrv := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = providers
@@ -18911,7 +18911,7 @@ func TestConnectManual(t *testing.T) {
 		t.Parallel()
 
 		var auditBuf bytes.Buffer
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		ts := newTestServer(t, func(cfg *server.Config) {
@@ -18986,7 +18986,7 @@ func TestConnectManual(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateToken: %v", err)
 		}
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
@@ -19035,7 +19035,7 @@ func TestConnectManual(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateToken: %v", err)
 		}
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		base, err := newTestAuthorizer(config.AuthorizationConfig{
@@ -19108,7 +19108,7 @@ func TestConnectManual(t *testing.T) {
 	t.Run("reconnect replaces prior external identity authorization", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
@@ -19203,7 +19203,7 @@ func TestConnectManual(t *testing.T) {
 	t.Run("reconnect rolls back existing token when authz sync fails", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
@@ -19307,7 +19307,7 @@ func TestConnectManual(t *testing.T) {
 
 		var auditBuf bytes.Buffer
 		auditSink := invocation.NewSlogAuditSink(&auditBuf)
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
 				N: "stub",
@@ -19550,7 +19550,7 @@ func TestConnectManual(t *testing.T) {
 				"manual-svc": {},
 			}
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -19593,7 +19593,7 @@ func TestConnectManual(t *testing.T) {
 			cfg.PluginDefs = map[string]*config.ProviderEntry{
 				"manual-svc": {},
 			}
-			cfg.Services = coretesting.NewStubServices(t)
+			cfg.Services = testutil.NewStubServices(t)
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -19629,7 +19629,7 @@ func TestConnectManual(t *testing.T) {
 		}))
 		testutil.CloseOnCleanup(t, discoverySrv)
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		apiProv := &stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
@@ -19711,7 +19711,7 @@ func TestConnectManual(t *testing.T) {
 		}))
 		testutil.CloseOnCleanup(t, discoverySrv)
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		prov := declarative.NewRestricted(&stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
@@ -19902,7 +19902,7 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 				},
 			}
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -19947,7 +19947,7 @@ func TestStartOAuth_MultiConnectionWithoutDefaultRequiresExplicitConnection(t *t
 				},
 			}
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -19989,7 +19989,7 @@ func TestStartOAuth_MissingConnection_FailsCleanly(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"myint": "conn-a"}
 		cfg.ConnectionAuth = testConnectionAuth("myint", handler)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -20043,7 +20043,7 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 				},
 			}
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -20109,7 +20109,7 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			expired := time.Now().Add(-1 * time.Hour)
 			seedToken(t, svc, &core.ExternalCredential{
@@ -20193,7 +20193,7 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.ExternalCredential{
@@ -20322,7 +20322,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 			{Name: "search_issues", Description: "Search issues", Method: http.MethodGet},
 		},
 	}
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, stub)
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
@@ -20383,7 +20383,7 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 		reg := registry.New()
 		return &reg.Providers
 	}()
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -20422,7 +20422,7 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 func TestMCPProtectedResourceMetadata(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -20501,7 +20501,7 @@ func TestMCPProtectedResourceMetadataRoute_PrecedesRootMountedUIFallback(t *test
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -20544,7 +20544,7 @@ func TestMCPProtectedResourceMetadataRoute_PrecedesRootMountedUIFallback(t *test
 func TestMCPAuthorizationServerMetadata(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -20603,7 +20603,7 @@ func TestMCPAuthorizationServerMetadataRoute_PrecedesRootMountedUIFallback(t *te
 		t.Fatalf("ui handler: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -20647,7 +20647,7 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
@@ -20906,7 +20906,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, prov)
 	mcpHandler := newMCPHandler(t, providers, svc, auditSink, nil)
 
@@ -21104,7 +21104,7 @@ func TestMCPEndpoint_ServiceAccountAuthorizationAndAudit(t *testing.T) {
 		},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -21281,7 +21281,7 @@ func TestMaxBodySize(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -21303,7 +21303,7 @@ func TestMaxBodySize(t *testing.T) {
 func TestErrorSanitization(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -21474,7 +21474,7 @@ func TestExecuteOperation_UpstreamUnauthorizedRequiresReconnect(t *testing.T) {
 func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -21580,7 +21580,7 @@ func TestExecuteOperation_ReconnectRequiredMessage(t *testing.T) {
 func TestExecuteOperation_WrappedOperationErrorMessage(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -21633,7 +21633,7 @@ func TestExecuteOperation_WrappedOperationErrorMessage(t *testing.T) {
 func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
@@ -21811,7 +21811,7 @@ func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = auth
 		cfg.StateSecret = secret
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -21947,7 +21947,7 @@ func TestBrowserLoginRedirect_RedirectsBackToNextPath(t *testing.T) {
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Auth = auth
 				cfg.StateSecret = secret
-				cfg.Services = coretesting.NewStubServices(t)
+				cfg.Services = testutil.NewStubServices(t)
 				cfg.PublicBaseURL = tc.publicBaseURL
 				cfg.ManagementBaseURL = tc.managementBaseURL
 				cfg.RouteProfile = tc.routeProfile
@@ -22026,7 +22026,7 @@ func TestLogout(t *testing.T) {
 				return &core.UserIdentity{Email: "user@example.com"}, nil
 			},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.AuditSink = auditSink
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -22134,7 +22134,7 @@ func TestExecuteOperation_ConnectionModeUserUsesSubjectCredential(t *testing.T) 
 	t.Run("prefers subject token", func(t *testing.T) {
 		t.Parallel()
 
-		svc := coretesting.NewStubServices(t)
+		svc := testutil.NewStubServices(t)
 		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 		if err != nil {
 			t.Fatalf("GenerateToken: %v", err)
@@ -22259,7 +22259,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := coretesting.NewStubServices(t)
+			svc := testutil.NewStubServices(t)
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider())
 				cfg.DefaultConnection = map[string]string{tc.integration: config.PluginConnectionName}
@@ -22322,7 +22322,7 @@ func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -22390,7 +22390,7 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -22431,7 +22431,7 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -22451,7 +22451,7 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 func TestServerAllowsProviderNamedIdentities(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedUser(t, svc, "admin@example.test")
 
 	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{

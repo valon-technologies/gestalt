@@ -94,7 +94,7 @@ func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
 	provider := newMemoryAgentProvider()
 	var createSessionCalled atomic.Bool
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
@@ -150,7 +150,7 @@ func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
 	authz := &dynamicProviderAuthorizer{}
 	authz.allowed.Store(true)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
@@ -213,7 +213,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
@@ -789,7 +789,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
@@ -1055,7 +1055,7 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -1140,7 +1140,7 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 
 	provider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
 	metrics := metrictest.NewManualMeterProvider(t)
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
@@ -1212,7 +1212,7 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
@@ -1262,7 +1262,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 
 	provider := newMemoryAgentProvider()
 	ts := newTestServer(t, func(cfg *server.Config) {
-		services := coretesting.NewStubServices(t)
+		services := testutil.NewStubServices(t)
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "stub",
 			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -380,7 +379,7 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 			}, nil
 		},
 	}
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	if err := services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		SubjectID:   principal.UserSubjectID("metrics-user"),
 		Integration: "metric-api",

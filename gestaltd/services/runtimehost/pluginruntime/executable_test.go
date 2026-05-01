@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 	"google.golang.org/grpc"
 )
 
@@ -47,7 +47,7 @@ func TestExecutableProviderReadsRuntimeSupport(t *testing.T) {
 func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 

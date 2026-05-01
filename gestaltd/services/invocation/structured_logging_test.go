@@ -34,7 +34,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	ctx := context.Background()
 	u, err := svc.Users.FindOrCreateUser(ctx, "test@example.com")
 	if err != nil {
