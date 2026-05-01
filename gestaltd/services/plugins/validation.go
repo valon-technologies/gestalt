@@ -4,15 +4,10 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/openapi"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
@@ -33,7 +28,7 @@ func newCatalogResolutionCache(size int) *catalogResolutionCache {
 	return &catalogResolutionCache{entries: make(map[string]resolvedDependencyCatalog, size)}
 }
 
-func (c *catalogResolutionCache) resolve(ctx context.Context, name string, entry *config.ProviderEntry) resolvedDependencyCatalog {
+func (c *catalogResolutionCache) resolve(ctx context.Context, name string, entry *ValidationPlugin) resolvedDependencyCatalog {
 	if c == nil {
 		resolved := resolvedDependencyCatalog{}
 		resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, name, entry)
@@ -48,7 +43,7 @@ func (c *catalogResolutionCache) resolve(ctx context.Context, name string, entry
 	return resolved
 }
 
-func ValidateEffectiveCatalog(ctx context.Context, name string, entry *config.ProviderEntry) error {
+func ValidateEffectiveCatalog(ctx context.Context, name string, entry *ValidationPlugin) error {
 	if entry == nil {
 		return nil
 	}
@@ -56,11 +51,17 @@ func ValidateEffectiveCatalog(ctx context.Context, name string, entry *config.Pr
 	return err
 }
 
-func ValidateEffectiveCatalogs(ctx context.Context, cfg *config.Config) error {
+func ValidateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig) error {
+	if cfg == nil {
+		return nil
+	}
 	return validateEffectiveCatalogs(ctx, cfg, newCatalogResolutionCache(len(cfg.Plugins)))
 }
 
-func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *config.Config) error {
+func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *ValidationConfig) error {
+	if cfg == nil {
+		return nil
+	}
 	cache := newCatalogResolutionCache(len(cfg.Plugins))
 	if err := validateEffectiveCatalogs(ctx, cfg, cache); err != nil {
 		return err
@@ -68,7 +69,7 @@ func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *config.C
 	return validateDependencies(ctx, cfg, cache)
 }
 
-func validateEffectiveCatalogs(ctx context.Context, cfg *config.Config, cache *catalogResolutionCache) error {
+func validateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig, cache *catalogResolutionCache) error {
 	if cfg == nil {
 		return nil
 	}
@@ -85,11 +86,14 @@ func validateEffectiveCatalogs(ctx context.Context, cfg *config.Config, cache *c
 	return nil
 }
 
-func ValidateDependencies(ctx context.Context, cfg *config.Config) error {
+func ValidateDependencies(ctx context.Context, cfg *ValidationConfig) error {
+	if cfg == nil {
+		return nil
+	}
 	return validateDependencies(ctx, cfg, newCatalogResolutionCache(len(cfg.Plugins)))
 }
 
-func validateDependencies(ctx context.Context, cfg *config.Config, cache *catalogResolutionCache) error {
+func validateDependencies(ctx context.Context, cfg *ValidationConfig, cache *catalogResolutionCache) error {
 	if cfg == nil {
 		return nil
 	}
@@ -106,7 +110,7 @@ func validateDependencies(ctx context.Context, cfg *config.Config, cache *catalo
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d] references unknown plugin %q", callerName, i, dependency.Plugin)
 			}
 			if dependency.Surface != "" {
-				if !pluginSupportsSurface(targetEntry, config.SpecSurface(dependency.Surface)) {
+				if !pluginSupportsSurface(targetEntry, dependency.Surface) {
 					return fmt.Errorf("config validation: plugins.%s.invokes[%d] references plugin %q surface %q, but that surface is not configured", callerName, i, dependency.Plugin, dependency.Surface)
 				}
 				continue
@@ -127,12 +131,12 @@ func validateDependencies(ctx context.Context, cfg *config.Config, cache *catalo
 	return nil
 }
 
-func isExecutablePlugin(entry *config.ProviderEntry) bool {
+func isExecutablePlugin(entry *ValidationPlugin) bool {
 	if entry == nil {
 		return false
 	}
-	manifest := entry.ResolvedManifest
-	spec := entry.ManifestSpec()
+	manifest := entry.Manifest
+	spec := entry.manifestSpec()
 	if manifest == nil || spec == nil {
 		return false
 	}
@@ -145,11 +149,11 @@ func isExecutablePlugin(entry *config.ProviderEntry) bool {
 	return true
 }
 
-func pluginSupportsSurface(entry *config.ProviderEntry, surface config.SpecSurface) bool {
+func pluginSupportsSurface(entry *ValidationPlugin, surface SpecSurface) bool {
 	if entry == nil {
 		return false
 	}
-	spec := entry.ManifestSpec()
+	spec := entry.manifestSpec()
 	if spec == nil {
 		return false
 	}
@@ -157,9 +161,9 @@ func pluginSupportsSurface(entry *config.ProviderEntry, surface config.SpecSurfa
 	return ok
 }
 
-func resolveStaticCatalog(ctx context.Context, name string, entry *config.ProviderEntry) (*catalog.Catalog, bool, error) {
-	manifest := entry.ResolvedManifest
-	spec := entry.ManifestSpec()
+func resolveStaticCatalog(ctx context.Context, name string, entry *ValidationPlugin) (*catalog.Catalog, bool, error) {
+	manifest := entry.Manifest
+	spec := entry.manifestSpec()
 	if manifest == nil || spec == nil {
 		return nil, false, fmt.Errorf("plugin %q does not have a resolved manifest", name)
 	}
@@ -174,16 +178,16 @@ func resolveStaticCatalog(ctx context.Context, name string, entry *config.Provid
 	}
 }
 
-func resolveSpecLoadedCatalog(ctx context.Context, name string, entry *config.ProviderEntry, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
+func resolveSpecLoadedCatalog(ctx context.Context, name string, entry *ValidationPlugin, spec *providermanifestv1.Spec, allowed map[string]*OperationOverride) (*catalog.Catalog, bool, error) {
 	apiCatalog, err := loadConfiguredAPICatalog(ctx, name, entry, spec, allowed)
 	if err != nil {
 		return nil, false, err
 	}
-	_, hasMCP := resolvedSurfaceURL(entry, spec, config.SpecSurfaceMCP)
+	_, hasMCP := resolvedSurfaceURL(entry, spec, SpecSurfaceMCP)
 	return apiCatalog, hasMCP && apiCatalog == nil, nil
 }
 
-func resolveDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
+func resolveDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest, allowed map[string]*OperationOverride) (*catalog.Catalog, bool, error) {
 	rawCatalog, err := loadDeclarativeCatalog(name, manifest)
 	if err != nil {
 		return nil, false, err
@@ -203,7 +207,7 @@ func loadDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest) 
 	return prov.Catalog(), nil
 }
 
-func resolveExecutableCatalog(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
+func resolveExecutableCatalog(ctx context.Context, name string, entry *ValidationPlugin, manifest *providermanifestv1.Manifest, spec *providermanifestv1.Spec, allowed map[string]*OperationOverride) (*catalog.Catalog, bool, error) {
 	pluginCatalog, err := readStaticCatalog(name, entry, manifest)
 	if err != nil {
 		return nil, false, err
@@ -252,7 +256,7 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *config.Pr
 	if err != nil {
 		return nil, false, fmt.Errorf("plugin %q API catalog: %w", name, err)
 	}
-	_, hasMCP := resolvedSurfaceURL(entry, spec, config.SpecSurfaceMCP)
+	_, hasMCP := resolvedSurfaceURL(entry, spec, SpecSurfaceMCP)
 	merged, err := mergeCatalogs(name, filteredPluginCatalog, filteredAPICatalog)
 	if err != nil {
 		return nil, false, err
@@ -260,42 +264,41 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *config.Pr
 	return merged, hasMCP && merged == nil, nil
 }
 
-func readStaticCatalog(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
-	if entry == nil || entry.ResolvedManifestPath == "" {
-		if providerpkg.StaticCatalogRequired(manifest) {
-			return nil, fmt.Errorf("plugin %q requires %s", name, providerpkg.StaticCatalogFile)
+func readStaticCatalog(name string, entry *ValidationPlugin, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
+	if entry == nil || entry.ReadStaticCatalog == nil {
+		if staticCatalogRequired(manifest) {
+			return nil, fmt.Errorf("plugin %q requires %s", name, StaticCatalogFile)
 		}
 		return nil, nil
 	}
-	cat, err := providerpkg.ReadStaticCatalog(filepath.Dir(entry.ResolvedManifestPath), name)
+	cat, err := entry.ReadStaticCatalog(name)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q static catalog: %w", name, err)
 	}
-	if cat == nil && providerpkg.StaticCatalogRequired(manifest) {
-		return nil, fmt.Errorf("plugin %q requires %s", name, providerpkg.StaticCatalogFile)
+	if cat == nil && staticCatalogRequired(manifest) {
+		return nil, fmt.Errorf("plugin %q requires %s", name, StaticCatalogFile)
 	}
 	return cat, nil
 }
 
-func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.ProviderEntry, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, error) {
+func loadConfiguredAPICatalog(ctx context.Context, name string, entry *ValidationPlugin, spec *providermanifestv1.Spec, allowed map[string]*OperationOverride) (*catalog.Catalog, error) {
 	var merged *catalog.Catalog
-	for _, surface := range []config.SpecSurface{config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL} {
+	for _, surface := range []SpecSurface{SpecSurfaceOpenAPI, SpecSurfaceGraphQL} {
 		url, ok := resolvedSurfaceURL(entry, spec, surface)
 		if !ok {
 			continue
 		}
-		if surface == config.SpecSurfaceGraphQL {
+		if surface == SpecSurfaceGraphQL {
 			continue
 		}
-		var (
-			def *declarative.Definition
-			err error
-		)
-		def, err = openapi.LoadDefinition(ctx, name, url, allowed)
+		if entry == nil || entry.LoadAPICatalog == nil {
+			return nil, fmt.Errorf("plugin %q %s catalog loader is not configured", name, surface)
+		}
+		apiCatalog, err := entry.LoadAPICatalog(ctx, name, surface, url, allowed)
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)
 		}
-		merged, err = mergeCatalogs(name, merged, declarative.CatalogFromDefinition(def))
+		merged, err = mergeCatalogs(name, merged, apiCatalog)
 		if err != nil {
 			return nil, err
 		}
@@ -303,18 +306,11 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.Pr
 	return merged, nil
 }
 
-func resolvedSurfaceURL(entry *config.ProviderEntry, spec *providermanifestv1.Spec, surface config.SpecSurface) (string, bool) {
-	if url := config.ProviderSurfaceURLOverride(entry, surface); url != "" {
-		return url, true
-	}
-	url := config.ManifestProviderSurfaceURL(spec, surface)
-	if url == "" {
-		return "", false
-	}
-	return config.ResolveManifestRelativeSpecURL(entry, url), true
+func resolvedSurfaceURL(entry *ValidationPlugin, spec *providermanifestv1.Spec, surface SpecSurface) (string, bool) {
+	return entry.surfaceURL(spec, surface)
 }
 
-func applyOperationExposure(cat *catalog.Catalog, allowed map[string]*config.OperationOverride) (*catalog.Catalog, error) {
+func applyOperationExposure(cat *catalog.Catalog, allowed map[string]*OperationOverride) (*catalog.Catalog, error) {
 	if cat == nil {
 		return nil, nil
 	}
@@ -331,7 +327,7 @@ func applyOperationExposure(cat *catalog.Catalog, allowed map[string]*config.Ope
 	return policy.ApplyCatalog(cat), nil
 }
 
-func validateAllowedOperationCoverage(name string, allowed map[string]*config.OperationOverride, catalogs ...*catalog.Catalog) error {
+func validateAllowedOperationCoverage(name string, allowed map[string]*OperationOverride, catalogs ...*catalog.Catalog) error {
 	if len(allowed) == 0 {
 		return nil
 	}
@@ -388,7 +384,7 @@ func hasCatalogOperation(cat *catalog.Catalog, operation string) bool {
 	return false
 }
 
-func effectiveAllowedOperations(entry *config.ProviderEntry, spec *providermanifestv1.Spec) map[string]*config.OperationOverride {
+func effectiveAllowedOperations(entry *ValidationPlugin, spec *providermanifestv1.Spec) map[string]*OperationOverride {
 	if entry != nil && entry.AllowedOperations != nil {
 		return entry.AllowedOperations
 	}
