@@ -142,6 +142,7 @@ message PluginInvokeGraphQLRequest {
   string instance = 5;
   string invocation_token = 6;
   string idempotency_key = 7;
+  string operation = 8;
 }
 
 // PostConnectCredential is the host-managed credential payload passed into

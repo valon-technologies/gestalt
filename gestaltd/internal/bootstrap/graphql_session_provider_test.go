@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -129,6 +130,115 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 	}
 	if got := executionCalls.Load(); got != 1 {
 		t.Fatalf("execution calls after Execute = %d, want 1", got)
+	}
+}
+
+func TestGraphQLSessionCatalogProviderInvokeGraphQLRequiresAllowedOperation(t *testing.T) {
+	t.Parallel()
+
+	schema := graphql.Schema{
+		QueryType: &graphql.TypeName{Name: "Query"},
+		Types: []graphql.FullType{
+			{
+				Kind: "OBJECT",
+				Name: "Query",
+				Fields: []graphql.Field{
+					{
+						Name: "viewer",
+						Type: graphql.TypeRef{Kind: "OBJECT", Name: stringPtr("Viewer")},
+					},
+					{
+						Name: "adminUsers",
+						Type: graphql.TypeRef{Kind: "OBJECT", Name: stringPtr("Viewer")},
+					},
+				},
+			},
+			{
+				Kind: "OBJECT",
+				Name: "Viewer",
+				Fields: []graphql.Field{
+					{Name: "id", Type: graphql.TypeRef{Kind: "SCALAR", Name: stringPtr("ID")}},
+				},
+			},
+			{Kind: "SCALAR", Name: "ID"},
+		},
+	}
+
+	var (
+		mu                 sync.Mutex
+		introspectionCalls atomic.Int32
+		executionCalls     atomic.Int32
+		lastQuery          string
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			introspectionCalls.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		executionCalls.Add(1)
+		mu.Lock()
+		lastQuery = payload.Query
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"viewer": map[string]any{"id": "user-123"},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	base, err := declarative.Build(graphql.StaticDefinition("linear", srv.URL), config.ConnectionDef{})
+	if err != nil {
+		t.Fatalf("declarative.Build: %v", err)
+	}
+	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{
+		"viewer": nil,
+	}, nil)
+	gql, ok := wrapped.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		t.Fatal("expected wrapped provider to implement GraphQLSurfaceInvoker")
+	}
+
+	maliciousDocument := "query AdminUsers { adminUsers { id } }"
+	_, err = gql.InvokeGraphQL(context.Background(), core.GraphQLRequest{
+		Document: maliciousDocument,
+	}, "test-token")
+	if err == nil || !strings.Contains(err.Error(), "allowed catalog operation") {
+		t.Fatalf("InvokeGraphQL without operation err = %v, want allowed catalog operation error", err)
+	}
+	if got := introspectionCalls.Load(); got != 0 {
+		t.Fatalf("introspection calls after unnamed request = %d, want 0", got)
+	}
+	if got := executionCalls.Load(); got != 0 {
+		t.Fatalf("execution calls after unnamed request = %d, want 0", got)
+	}
+
+	if _, err := gql.InvokeGraphQL(context.Background(), core.GraphQLRequest{
+		Operation: "viewer",
+		Document:  maliciousDocument,
+	}, "test-token"); err != nil {
+		t.Fatalf("InvokeGraphQL(viewer): %v", err)
+	}
+	if got := executionCalls.Load(); got != 1 {
+		t.Fatalf("execution calls after allowed request = %d, want 1", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if lastQuery == maliciousDocument || !strings.Contains(lastQuery, "viewer") {
+		t.Fatalf("executed query = %q, want generated viewer query", lastQuery)
 	}
 }
 

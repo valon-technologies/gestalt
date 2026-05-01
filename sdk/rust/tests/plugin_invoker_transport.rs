@@ -43,6 +43,7 @@ struct SeenGraphQlRequest {
     connection: String,
     instance: String,
     idempotency_key: String,
+    operation: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -141,6 +142,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 connection: request.connection.clone(),
                 instance: request.instance.clone(),
                 idempotency_key: request.idempotency_key.clone(),
+                operation: request.operation.clone(),
             });
 
         Ok(GrpcResponse::new(OperationResult {
@@ -153,6 +155,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 "connection": request.connection,
                 "instance": request.instance,
                 "idempotency_key": request.idempotency_key,
+                "operation": request.operation,
             })
             .to_string(),
         }))
@@ -188,6 +191,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
                 connection: "work".to_string(),
                 instance: "secondary".to_string(),
                 idempotency_key: " issue-42-create ".to_string(),
+                graphql_operation: String::new(),
             }),
         )
         .await
@@ -347,6 +351,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
                 connection: "workspace".to_string(),
                 instance: "secondary".to_string(),
                 idempotency_key: " graphql-call-42 ".to_string(),
+                graphql_operation: "viewer".to_string(),
             }),
         )
         .await
@@ -363,6 +368,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
             "connection": "workspace",
             "instance": "secondary",
             "idempotency_key": "graphql-call-42",
+            "operation": "viewer",
         })
     );
 
@@ -384,6 +390,7 @@ async fn plugin_invoker_invokes_graphql_surface() {
             connection: "workspace".to_string(),
             instance: "secondary".to_string(),
             idempotency_key: "graphql-call-42".to_string(),
+            operation: "viewer".to_string(),
         }
     );
 

@@ -23,6 +23,7 @@ export interface PluginInvocationGrant {
 }
 
 export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
+  operation?: string;
   variables?: Record<string, unknown>;
 }
 
@@ -89,6 +90,7 @@ export class PluginInvoker {
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
+      operation: options?.operation?.trim() ?? "",
     });
     return {
       status: response.status,

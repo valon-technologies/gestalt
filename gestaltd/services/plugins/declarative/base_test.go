@@ -11,10 +11,17 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 type mockAuth struct{}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
 
 func (m mockAuth) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/auth?state=" + state
@@ -60,6 +67,84 @@ func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {
 	}
 	if resp["auth"] != "Bearer test-token" {
 		t.Fatalf("auth = %v, want Bearer test-token", resp["auth"])
+	}
+}
+
+func TestBaseExecuteEscapesPathParameterSegments(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURI := r.RequestURI
+		escapedPath := r.URL.EscapedPath()
+		if escapedPath == "/admin/users" {
+			t.Fatalf("path parameter escaped its segment: %q", escapedPath)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"request_uri":  requestURI,
+			"escaped_path": escapedPath,
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+	}
+	setTestCatalog(b, restCatalogOp(
+		"get_doc",
+		http.MethodGet,
+		"/docs/{docId}",
+		catalog.CatalogParameter{Name: "docId", Type: "string", Location: "path", Required: true},
+	))
+
+	result, err := b.Execute(context.Background(), "get_doc", map[string]any{
+		"docId": "../../admin/users",
+	}, "test-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["request_uri"] != "/docs/..%2F..%2Fadmin%2Fusers" {
+		t.Fatalf("request_uri = %v, want escaped path segment", resp["request_uri"])
+	}
+	if resp["escaped_path"] != "/docs/..%2F..%2Fadmin%2Fusers" {
+		t.Fatalf("escaped_path = %v, want escaped path segment", resp["escaped_path"])
+	}
+	if resp["request_uri"] == "/admin/users" || resp["escaped_path"] == "/admin/users" {
+		t.Fatalf("upstream path traversed: requestURI=%q escapedPath=%q", resp["request_uri"], resp["escaped_path"])
+	}
+}
+
+func TestBaseExecuteRejectsUnsafeConnectionParamURLTemplate(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: "https://{tenant}.example.com",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				called = true
+				t.Fatal("unsafe interpolated URL reached transport")
+				return nil, nil
+			}),
+		},
+	}
+	setTestCatalog(b, restCatalogOp("list_items", http.MethodGet, "/api/items"))
+
+	ctx := core.WithConnectionParams(context.Background(), map[string]string{
+		"tenant": "evil.com/x",
+	})
+	if _, err := b.Execute(ctx, "list_items", nil, "test-token"); err == nil {
+		t.Fatal("expected unsafe connection parameter to be rejected")
+	}
+	if called {
+		t.Fatal("upstream was called")
 	}
 }
 

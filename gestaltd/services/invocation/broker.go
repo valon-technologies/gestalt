@@ -358,7 +358,13 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
-	metricOperation := metricutil.AttrValue("graphql")
+	operation := strings.TrimSpace(request.Operation)
+	if operation == "" {
+		operation = graphQLOperationID
+	} else {
+		request.Operation = operation
+	}
+	metricOperation := metricutil.AttrValue(operation)
 	metricTransport := metricutil.AttrValue("graphql")
 	metricConnectionMode := metricutil.UnknownAttrValue
 
@@ -382,7 +388,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 
 	span.SetAttributes(
 		attrProvider.String(providerName),
-		attrOperation.String(graphQLOperationID),
+		attrOperation.String(operation),
 		attrTransport.String(metricTransport),
 	)
 
@@ -428,9 +434,6 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
-	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return fail(err)
 	}
@@ -446,6 +449,27 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		if !allowed {
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
 		}
+	}
+
+	if operation != graphQLOperationID {
+		opMeta, _, _, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
+		if err != nil {
+			return fail(err)
+		}
+		if strings.TrimSpace(opMeta.Query) == "" {
+			return fail(fmt.Errorf("%w: %s.%s is not a graphql catalog operation", ErrOperationNotFound, providerName, operation))
+		}
+		if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
+			return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
+		}
+		if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
+			return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+		}
+		request.Operation = opMeta.ID
+		request.Document = opMeta.Query
+		metricOperation = metricutil.AttrValue(operation)
+	} else if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
 	}
 
 	if conn == "" && b.connMapper != nil {
@@ -905,6 +929,9 @@ func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher
 func (b *Broker) refreshOAuth(ctx context.Context, refresher OAuthRefresher, refreshToken string) (*core.TokenResponse, error) {
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		raw := refresher.TokenURL()
+		if err := paraminterp.ValidateURLTemplateParams(raw, cp); err != nil {
+			return nil, err
+		}
 		resolved := paraminterp.Interpolate(raw, cp)
 		if resolved != raw {
 			return refresher.RefreshTokenWithURL(ctx, refreshToken, resolved)

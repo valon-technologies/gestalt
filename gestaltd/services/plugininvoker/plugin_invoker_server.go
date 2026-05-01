@@ -118,6 +118,7 @@ func (s *PluginInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.Plug
 	if document == "" {
 		return nil, status.Error(codes.InvalidArgument, "document is required")
 	}
+	operation := strings.TrimSpace(req.GetOperation())
 	tokenCtx, err := s.tokenContextForSurfaceInvoke(req, targetPlugin, "graphql")
 	if err != nil {
 		return nil, err
@@ -140,6 +141,7 @@ func (s *PluginInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.Plug
 		variables = raw.AsMap()
 	}
 	result, err := graphQLInvoker.InvokeGraphQL(invokeCtx, tokenCtx.principal, targetPlugin, instance, invocation.GraphQLRequest{
+		Operation: operation,
 		Document:  document,
 		Variables: variables,
 	})

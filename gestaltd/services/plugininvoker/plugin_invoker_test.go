@@ -21,6 +21,7 @@ type recordingPluginInvoker struct {
 	graphQLIdempotencyKey string
 	graphQLProviderName   string
 	graphQLInstance       string
+	graphQLOperation      string
 	graphQLDocument       string
 	graphQLVariables      map[string]any
 }
@@ -38,6 +39,7 @@ func (i *recordingPluginInvoker) InvokeGraphQL(ctx context.Context, _ *principal
 	i.graphQLIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.graphQLProviderName = providerName
 	i.graphQLInstance = instance
+	i.graphQLOperation = request.Operation
 	i.graphQLDocument = request.Document
 	i.graphQLVariables = request.Variables
 	return &core.OperationResult{Status: 208, Body: "graphql-accepted"}, nil
@@ -112,6 +114,7 @@ func TestPluginInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	graphQLResp, err := client.InvokeGraphQL(context.Background(), &proto.PluginInvokeGraphQLRequest{
 		InvocationToken: rootToken,
 		Plugin:          " linear ",
+		Operation:       " viewer ",
 		Document:        " query Viewer { viewer { id } } ",
 		Instance:        " prod ",
 		IdempotencyKey:  " graphql-call-123 ",
@@ -131,6 +134,9 @@ func TestPluginInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	}
 	if invoker.graphQLDocument != "query Viewer { viewer { id } }" {
 		t.Fatalf("graphql document = %q, want trimmed document", invoker.graphQLDocument)
+	}
+	if invoker.graphQLOperation != "viewer" {
+		t.Fatalf("graphql operation = %q, want viewer", invoker.graphQLOperation)
 	}
 	if invoker.graphQLVariables["team"] != "eng" {
 		t.Fatalf("graphql variables = %#v, want team=eng", invoker.graphQLVariables)

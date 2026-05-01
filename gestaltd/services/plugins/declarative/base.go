@@ -129,16 +129,19 @@ func (b *Base) RefreshToken(ctx context.Context, refreshToken string) (*core.Tok
 	return b.Auth.RefreshToken(ctx, refreshToken)
 }
 
-func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string) {
+func (b *Base) resolvedURLAndHeaders(ctx context.Context) (string, map[string]string, error) {
 	baseURL := b.BaseURL
 	headers := maps.Clone(b.Headers)
 	if cp := core.ConnectionParams(ctx); cp != nil {
+		if err := paraminterp.ValidateURLTemplateParams(baseURL, cp); err != nil {
+			return "", nil, err
+		}
 		baseURL = paraminterp.Interpolate(baseURL, cp)
 		for k, v := range headers {
 			headers[k] = paraminterp.Interpolate(v, cp)
 		}
 	}
-	return baseURL, headers
+	return baseURL, headers, nil
 }
 
 func (b *Base) httpClient() *http.Client {

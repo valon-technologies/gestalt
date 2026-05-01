@@ -107,6 +107,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                 "connection": request.connection,
                 "instance": request.instance,
                 "idempotency_key": request.idempotency_key,
+                "operation": request.operation,
             }
         )
         return plugin_pb2.OperationResult(
@@ -121,6 +122,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                     "connection": request.connection,
                     "instance": request.instance,
                     "idempotency_key": request.idempotency_key,
+                    "operation": request.operation,
                 }
             ),
         )
@@ -240,6 +242,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 {"team": "eng"},
                 connection="workspace",
                 idempotency_key=" graphql-call-123 ",
+                operation=" viewer ",
             )
 
         self.assertEqual(response.status, 208)
@@ -256,6 +259,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "connection": "workspace",
                 "instance": "",
                 "idempotency_key": "graphql-call-123",
+                "operation": "viewer",
             },
         )
         self.assertEqual(
@@ -272,6 +276,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                     "connection": "workspace",
                     "instance": "",
                     "idempotency_key": "graphql-call-123",
+                    "operation": "viewer",
                 }
             ],
         )

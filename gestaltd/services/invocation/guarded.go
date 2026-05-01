@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -131,10 +132,15 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 		p = &principal.Principal{}
 	}
 
-	entry := buildAuditEntry(ctx, p, g.source, providerName, "graphql", meta)
+	operation := strings.TrimSpace(request.Operation)
+	if operation == "" {
+		operation = graphQLOperationID
+	}
+
+	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
 	ctx = withAuditEntry(ctx, &entry)
 
-	if err := g.check(meta, providerName, instance, "graphql"); err != nil {
+	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
 		entry.Error = err.Error()
 		g.logAudit(ctx, entry)
@@ -150,7 +156,7 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 	if chainInstance == "" {
 		chainInstance = "default"
 	}
-	chainKey := providerName + "/" + chainInstance + "/graphql"
+	chainKey := providerName + "/" + chainInstance + "/" + operation
 	next := &InvocationMeta{
 		RequestID: meta.RequestID,
 		Depth:     meta.Depth + 1,

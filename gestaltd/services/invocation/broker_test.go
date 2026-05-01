@@ -9,6 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -47,6 +48,61 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	}
 	if got := CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeNone {
 		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+}
+
+func TestBrokerInvokeGraphQLAuthorizesCatalogOperation(t *testing.T) {
+	t.Parallel()
+
+	prov := &brokerGraphQLProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "linear",
+				Operations: []catalog.CatalogOperation{
+					{ID: "viewer", Transport: "graphql", Query: "query Viewer { viewer { id } }"},
+				},
+			},
+		},
+	}
+	svc := coretesting.NewStubServices(t)
+	authorizer := &brokerGraphQLAuthorizer{allowedOperation: "viewer"}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, prov),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithAuthorizer(authorizer),
+	)
+	p := &principal.Principal{
+		Identity: &core.UserIdentity{Email: "viewer@example.com"},
+		Kind:     principal.KindUser,
+		Source:   principal.SourceSession,
+	}
+
+	result, err := broker.InvokeGraphQL(context.Background(), p, "linear", "", GraphQLRequest{
+		Operation: "viewer",
+		Document:  "query AdminUsers { adminUsers { id } }",
+	})
+	if err != nil {
+		t.Fatalf("InvokeGraphQL(viewer): %v", err)
+	}
+	if result.Body != "viewer" || prov.lastOperation != "viewer" {
+		t.Fatalf("graphql operation = result %q capture %q, want viewer", result.Body, prov.lastOperation)
+	}
+	if prov.lastDocument != "query Viewer { viewer { id } }" {
+		t.Fatalf("graphql document = %q, want catalog query", prov.lastDocument)
+	}
+	if authorizer.catalogOperation != "viewer" {
+		t.Fatalf("authorized operation = %q, want viewer", authorizer.catalogOperation)
+	}
+
+	authorizer.allowedOperation = "other"
+	if _, err := broker.InvokeGraphQL(context.Background(), p, "linear", "", GraphQLRequest{
+		Operation: "viewer",
+		Document:  "query Viewer { viewer { id } }",
+	}); err == nil {
+		t.Fatal("expected graphQL catalog operation authorization denial")
 	}
 }
 
@@ -219,4 +275,68 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 		return "", fmt.Errorf("unsupported selector value %q", selected)
 	}
 	return connection, nil
+}
+
+type brokerGraphQLProvider struct {
+	coretesting.StubIntegration
+	lastOperation string
+	lastDocument  string
+}
+
+func (p *brokerGraphQLProvider) InvokeGraphQL(_ context.Context, request GraphQLRequest, _ string) (*core.OperationResult, error) {
+	p.lastOperation = request.Operation
+	p.lastDocument = request.Document
+	return &core.OperationResult{Status: 200, Body: request.Operation}, nil
+}
+
+type brokerGraphQLAuthorizer struct {
+	allowedOperation string
+	catalogOperation string
+}
+
+func (a *brokerGraphQLAuthorizer) Start(context.Context) error                    { return nil }
+func (a *brokerGraphQLAuthorizer) Close() error                                   { return nil }
+func (a *brokerGraphQLAuthorizer) ReloadAuthorizationState(context.Context) error { return nil }
+
+func (a *brokerGraphQLAuthorizer) AllowProvider(context.Context, *principal.Principal, string) bool {
+	return true
+}
+
+func (a *brokerGraphQLAuthorizer) AllowOperation(context.Context, *principal.Principal, string, string) bool {
+	return true
+}
+
+func (a *brokerGraphQLAuthorizer) ResolveAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, true
+}
+
+func (a *brokerGraphQLAuthorizer) ResolvePolicyAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, true
+}
+
+func (a *brokerGraphQLAuthorizer) ResolveAdminAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, true
+}
+
+func (a *brokerGraphQLAuthorizer) AllowCatalogOperation(_ context.Context, _ *principal.Principal, _ string, op catalog.CatalogOperation) bool {
+	a.catalogOperation = op.ID
+	return op.ID == a.allowedOperation
+}
+
+func (a *brokerGraphQLAuthorizer) PolicyNameForProvider(string) string { return "" }
+
+func (a *brokerGraphQLAuthorizer) StaticRoleForPolicyIdentity(string, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, false
+}
+
+func (a *brokerGraphQLAuthorizer) StaticRoleForProviderIdentity(string, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, false
+}
+
+func (a *brokerGraphQLAuthorizer) StaticMembersForPolicy(string) ([]authorization.StaticSubjectMember, bool) {
+	return nil, false
+}
+
+func (a *brokerGraphQLAuthorizer) StaticMembersForProvider(string) (string, []authorization.StaticSubjectMember, bool) {
+	return "", nil, false
 }

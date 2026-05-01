@@ -455,7 +455,7 @@ func substitutePath(path string, params map[string]any) (string, error) {
 			return match
 		}
 		delete(params, key)
-		return fmt.Sprintf("%v", v)
+		return url.PathEscape(fmt.Sprintf("%v", v))
 	})
 	if missingErr != nil {
 		return "", missingErr

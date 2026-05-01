@@ -42,7 +42,7 @@ func validateExternalIdentityRef(ref externalIdentityRef) error {
 	if !safeParamValue.MatchString(ref.Type) {
 		return fmt.Errorf("external identity type %q contains invalid characters", ref.Type)
 	}
-	if !safeTokenResponseValue.MatchString(ref.ID) {
+	if !safeProviderMetadataValue.MatchString(ref.ID) {
 		return fmt.Errorf("external identity id %q contains invalid characters", ref.ID)
 	}
 	return nil

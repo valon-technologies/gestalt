@@ -44,8 +44,8 @@ var (
 )
 
 var (
-	safeParamValue         = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-	safeTokenResponseValue = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
+	safeParamValue            = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	safeProviderMetadataValue = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 )
 
 type instanceInfo struct {

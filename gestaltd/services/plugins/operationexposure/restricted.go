@@ -3,6 +3,7 @@ package operationexposure
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -122,11 +123,22 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 }
 
 func (r *Restricted) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
-	invoker, ok := r.inner.(core.GraphQLSurfaceInvoker)
-	if !ok {
-		return nil, fmt.Errorf("graphql surface is not available")
+	operation := strings.TrimSpace(request.Operation)
+	if operation == "" {
+		return nil, fmt.Errorf("graphql invocation requires an allowed catalog operation")
 	}
-	return invoker.InvokeGraphQL(ctx, request, token)
+	innerName, ok := r.innerOperationName(operation)
+	if !ok {
+		return nil, fmt.Errorf("operation %q is not allowed", operation)
+	}
+	op, ok, err := r.graphQLOperation(ctx, innerName, token)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || strings.TrimSpace(op.Query) == "" {
+		return nil, fmt.Errorf("operation %q is not a graphql catalog operation", operation)
+	}
+	return r.inner.Execute(ctx, innerName, request.Variables, token)
 }
 
 func (r *Restricted) Catalog() *catalog.Catalog {
@@ -159,6 +171,43 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		}
 	}
 	return &filtered
+}
+
+func (r *Restricted) innerOperationName(operation string) (string, bool) {
+	if _, ok := r.allowed[operation]; !ok {
+		return "", false
+	}
+	if alias, ok := r.aliases[operation]; ok {
+		return alias, true
+	}
+	return operation, true
+}
+
+func (r *Restricted) graphQLOperation(ctx context.Context, operation, token string) (catalog.CatalogOperation, bool, error) {
+	if op, ok := catalogOperation(r.inner.Catalog(), operation); ok {
+		return op, true, nil
+	}
+	if scp, ok := r.inner.(core.SessionCatalogProvider); ok {
+		cat, err := scp.CatalogForRequest(ctx, token)
+		if err != nil {
+			return catalog.CatalogOperation{}, false, err
+		}
+		op, ok := catalogOperation(cat, operation)
+		return op, ok, nil
+	}
+	return catalog.CatalogOperation{}, false, nil
+}
+
+func catalogOperation(cat *catalog.Catalog, operation string) (catalog.CatalogOperation, bool) {
+	if cat == nil {
+		return catalog.CatalogOperation{}, false
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == operation {
+			return cat.Operations[i], true
+		}
+	}
+	return catalog.CatalogOperation{}, false
 }
 
 func (r *Restricted) Close() error {
