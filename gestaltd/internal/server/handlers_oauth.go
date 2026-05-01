@@ -79,6 +79,12 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
 		return
 	}
+	browserNonce, err := newIntegrationOAuthBrowserNonce()
+	if err != nil {
+		auditErr = errors.New("failed to generate oauth nonce")
+		writeError(w, http.StatusInternalServerError, "failed to generate oauth nonce")
+		return
+	}
 
 	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
 	if err != nil {
@@ -121,6 +127,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		Connection:       connection,
 		Instance:         instance,
 		Verifier:         verifier,
+		BrowserNonce:     browserNonce,
 		ConnectionParams: connParams,
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
@@ -134,6 +141,12 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		auditErr = errors.New("failed to prepare oauth URL")
 		writeError(w, http.StatusInternalServerError, "failed to prepare oauth URL")
+		return
+	}
+
+	if err := s.setIntegrationOAuthNonceCookie(w, browserNonce); err != nil {
+		auditErr = errors.New("failed to encode oauth nonce")
+		writeError(w, http.StatusInternalServerError, "failed to encode oauth nonce")
 		return
 	}
 
@@ -212,6 +225,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	auditSubjectID = state.SubjectID
 	stateAuthSource = state.AuthSource
 	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
+	if err := s.validateIntegrationOAuthNonceCookie(r, state); err != nil {
+		auditErr = errors.New("oauth callback validation failed")
+		writeCallbackError(
+			http.StatusForbidden,
+			"oauth callback validation failed",
+			"Connection failed",
+			"Gestalt could not validate this connection attempt. Start the connection again from Integrations.",
+		)
+		return
+	}
+	s.clearIntegrationOAuthNonceCookie(w, state.BrowserNonce)
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		auditErr = errors.New("oauth is not configured")
@@ -314,4 +338,55 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	auditAllowed = true
 	auditErr = nil
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
+}
+
+func (s *Server) setIntegrationOAuthNonceCookie(w http.ResponseWriter, nonce string) error {
+	if s.encryptor == nil {
+		return errors.New("oauth nonce encryption is not configured")
+	}
+	expiresAt := s.now().Add(integrationOAuthStateTTL).Unix()
+	encoded, err := encodeIntegrationOAuthNonceCookie(s.encryptor, integrationOAuthNonceCookieState{
+		Nonce:     nonce,
+		ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     integrationOAuthNonceCookieName(nonce),
+		Value:    encoded,
+		Path:     "/api/v1/auth",
+		MaxAge:   int(integrationOAuthStateTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return nil
+}
+
+func (s *Server) validateIntegrationOAuthNonceCookie(r *http.Request, state *integrationOAuthState) error {
+	if s.encryptor == nil {
+		return errors.New("oauth nonce encryption is not configured")
+	}
+	if state == nil || state.BrowserNonce == "" {
+		return errors.New("oauth state missing browser nonce")
+	}
+	cookie, err := r.Cookie(integrationOAuthNonceCookieName(state.BrowserNonce))
+	if err != nil {
+		return errors.New("missing oauth nonce cookie")
+	}
+	_, err = decodeIntegrationOAuthNonceCookie(s.encryptor, cookie.Value, state.BrowserNonce, s.now())
+	return err
+}
+
+func (s *Server) clearIntegrationOAuthNonceCookie(w http.ResponseWriter, nonce string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     integrationOAuthNonceCookieName(nonce),
+		Value:    "",
+		Path:     "/api/v1/auth",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.secureCookies,
+		SameSite: http.SameSiteLaxMode,
+	})
 }

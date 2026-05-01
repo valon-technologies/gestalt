@@ -1,6 +1,8 @@
 package server
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 
 const integrationOAuthStateTTL = 10 * time.Minute
 const pendingConnectionTTL = 30 * time.Minute
+const integrationOAuthNonceCookiePrefix = "oauth_state_"
 
 var errPendingConnectionExpired = errors.New("pending connection expired")
 
@@ -27,6 +30,7 @@ type integrationOAuthState struct {
 	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`
 	Verifier         string            `json:"ver,omitempty"`
+	BrowserNonce     string            `json:"bn,omitempty"`
 	ConnectionParams map[string]string `json:"cp,omitempty"`
 	ExpiresAt        int64             `json:"exp"`
 }
@@ -75,6 +79,9 @@ func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) 
 	if state.Integration == "" {
 		return fmt.Errorf("oauth state missing integration")
 	}
+	if state.BrowserNonce == "" {
+		return fmt.Errorf("oauth state missing browser nonce")
+	}
 	if state.ExpiresAt == 0 {
 		return fmt.Errorf("oauth state missing expiration")
 	}
@@ -101,6 +108,8 @@ func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*int
 
 const loginStateTTL = 10 * time.Minute
 const loginStateCookieName = "login_state"
+const loginModeBrowser = "browser"
+const loginModeCLI = "cli"
 const mcpOAuthClientRegistrationTTL = 365 * 24 * time.Hour
 const mcpOAuthAuthorizationCodeTTL = 5 * time.Minute
 const mcpOAuthRefreshTokenTTL = 30 * 24 * time.Hour
@@ -115,6 +124,12 @@ type loginState struct {
 	State     string `json:"s"`
 	Provider  string `json:"p,omitempty"`
 	NextPath  string `json:"n,omitempty"`
+	Mode      string `json:"m,omitempty"`
+	ExpiresAt int64  `json:"exp"`
+}
+
+type integrationOAuthNonceCookieState struct {
+	Nonce     string `json:"n"`
 	ExpiresAt int64  `json:"exp"`
 }
 
@@ -166,6 +181,11 @@ func validateLoginState(state *loginState, now time.Time) error {
 	if state.State == "" {
 		return fmt.Errorf("login state missing state value")
 	}
+	switch strings.TrimSpace(state.Mode) {
+	case "", loginModeBrowser, loginModeCLI:
+	default:
+		return fmt.Errorf("login state has invalid mode")
+	}
 	if state.ExpiresAt == 0 {
 		return fmt.Errorf("login state missing expiration")
 	}
@@ -181,6 +201,68 @@ func decodeLoginState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.
 		return nil, err
 	}
 	if err := validateLoginState(state, now); err != nil {
+		return nil, err
+	}
+	state.Mode = normalizeLoginMode(state.Mode, state.State)
+	return state, nil
+}
+
+func normalizeLoginMode(mode, state string) string {
+	switch strings.TrimSpace(mode) {
+	case loginModeCLI:
+		return loginModeCLI
+	case loginModeBrowser:
+		return loginModeBrowser
+	case "":
+		if _, ok := stripCLIStatePrefix(state); ok {
+			return loginModeCLI
+		}
+	}
+	return loginModeBrowser
+}
+
+func newIntegrationOAuthBrowserNonce() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
+}
+
+func integrationOAuthNonceCookieName(nonce string) string {
+	nonce = strings.TrimSpace(nonce)
+	if nonce == "" {
+		return integrationOAuthNonceCookiePrefix
+	}
+	return integrationOAuthNonceCookiePrefix + nonce
+}
+
+func encodeIntegrationOAuthNonceCookie(enc *cryptoutil.AESGCMEncryptor, state integrationOAuthNonceCookieState) (string, error) {
+	return encodeEncryptedState(enc, "oauth nonce cookie", state)
+}
+
+func validateIntegrationOAuthNonceCookieState(state *integrationOAuthNonceCookieState, expectedNonce string, now time.Time) error {
+	if state.Nonce == "" {
+		return fmt.Errorf("oauth nonce cookie missing nonce")
+	}
+	if state.Nonce != expectedNonce {
+		return fmt.Errorf("oauth nonce cookie mismatch")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("oauth nonce cookie missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("oauth nonce cookie expired")
+	}
+	return nil
+}
+
+func decodeIntegrationOAuthNonceCookie(enc *cryptoutil.AESGCMEncryptor, encoded, expectedNonce string, now time.Time) (*integrationOAuthNonceCookieState, error) {
+	state, err := decodeEncryptedState[integrationOAuthNonceCookieState](enc, "oauth nonce cookie", encoded)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateIntegrationOAuthNonceCookieState(state, expectedNonce, now); err != nil {
 		return nil, err
 	}
 	return state, nil

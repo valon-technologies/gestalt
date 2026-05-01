@@ -269,11 +269,12 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
+		protectedNext := s.cookieCSRFMiddleware(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			pluginName := strings.TrimSpace(chi.URLParam(r, pluginParam))
 			if pluginName == "" {
 				auth := s.serverAuthRuntime()
-				s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
+				s.serveAuthenticated(w, r, protectedNext, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
 				return
 			}
 
@@ -284,7 +285,7 @@ func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler
 				return
 			}
 
-			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
+			s.serveAuthenticated(w, r, protectedNext, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
 		})
 	}
 }

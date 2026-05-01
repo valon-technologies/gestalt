@@ -12,6 +12,7 @@ import (
 func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
+		r.Use(s.cookieCSRFMiddleware)
 
 		pluginshttp.MountAuthenticated(r, pluginshttp.AuthenticatedHandlers{
 			ListIntegrations:      s.listIntegrations,
