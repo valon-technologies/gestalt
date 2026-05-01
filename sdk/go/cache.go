@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
@@ -115,13 +114,13 @@ func Cache(name ...string) (*CacheClient, error) {
 		if splitErr != nil {
 			return nil, fmt.Errorf("cache: parse tls target %q: %w", address, splitErr)
 		}
+		tlsConfig, tlsErr := hostServiceTLSConfig("cache", host)
+		if tlsErr != nil {
+			return nil, tlsErr
+		}
 		conn, err = grpc.DialContext(ctx, address,
 			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-					MinVersion: tls.VersionTLS12,
-					ServerName: host,
-					NextProtos: []string{"h2"},
-				})),
+				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 				grpc.WithBlock(),
 			), opts...)...,
 		)

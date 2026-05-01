@@ -102,6 +102,9 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 		}
 		return entry.handler, nil
 	}
+	if coreRoutableHostServiceTarget(target) {
+		return nil, nil
+	}
 
 	exactKey := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(target.PluginName),
@@ -147,7 +150,7 @@ func (s *Server) coreRoutableHostServiceHandlerEntry(ctx context.Context, target
 	if !ok {
 		return hostServiceHandlerEntry{}, false, nil
 	}
-	if err := s.verifyCoreRoutableHostServiceSession(ctx, pluginName, target.SessionID); err != nil {
+	if err := s.verifyCoreRoutableHostServiceSession(ctx, target); err != nil {
 		return hostServiceHandlerEntry{}, false, err
 	}
 	s.hostServiceMu.Lock()
@@ -176,12 +179,64 @@ func (s *Server) coreRoutableHostServiceHandlerEntry(ctx context.Context, target
 	return entry, true, nil
 }
 
-func (s *Server) verifyCoreRoutableHostServiceSession(ctx context.Context, pluginName, sessionID string) error {
+func (s *Server) verifyCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) error {
+	if ok, err := s.verifyRegisteredCoreRoutableHostServiceSession(ctx, target); ok || err != nil {
+		return err
+	}
+
+	pluginName := strings.TrimSpace(target.PluginName)
 	verifier, ok := s.pluginRuntimes.(pluginRuntimeSessionVerifier)
 	if !ok || verifier == nil {
 		return fmt.Errorf("plugin runtime session verifier is not configured")
 	}
-	return verifier.VerifyPluginRuntimeSession(ctx, pluginName, sessionID)
+	return verifier.VerifyPluginRuntimeSession(ctx, pluginName, target.SessionID)
+}
+
+func (s *Server) verifyRegisteredCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) (bool, error) {
+	if s == nil || s.publicHostServices == nil {
+		return false, nil
+	}
+	pluginName := strings.TrimSpace(target.PluginName)
+	serviceName := strings.TrimSpace(target.Service)
+	envVar := strings.TrimSpace(target.EnvVar)
+	sessionID := strings.TrimSpace(target.SessionID)
+	if pluginName == "" || serviceName == "" || envVar == "" {
+		return false, nil
+	}
+
+	var lastErr error
+	for _, service := range s.publicHostServices.Snapshot() {
+		key, ok := publicHostServiceHandlerKey(service)
+		if !ok || key.pluginName != pluginName || key.service != serviceName || key.envVar != envVar {
+			continue
+		}
+		if key.sessionID != "" {
+			if key.sessionID != sessionID {
+				continue
+			}
+			if service.SessionVerifier == nil {
+				return true, nil
+			}
+			return true, service.SessionVerifier.VerifyHostServiceSession(ctx, sessionID)
+		}
+		if service.SessionVerifier == nil {
+			continue
+		}
+		if err := service.SessionVerifier.VerifyHostServiceSession(ctx, sessionID); err != nil {
+			lastErr = err
+			continue
+		}
+		return true, nil
+	}
+	if lastErr != nil {
+		return true, lastErr
+	}
+	return false, nil
+}
+
+func coreRoutableHostServiceTarget(target runtimehost.HostServiceRelayTarget) bool {
+	_, ok := coreRoutableHostServiceHandlerKey(strings.TrimSpace(target.PluginName), target)
+	return ok
 }
 
 func coreRoutableHostServiceHandlerKey(pluginName string, target runtimehost.HostServiceRelayTarget) (hostServiceHandlerKey, bool) {

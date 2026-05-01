@@ -163,6 +163,7 @@ func workflowStartupTestConfig() *config.Config {
 			},
 		},
 		Server: config.ServerConfig{
+			BaseURL:       "https://gestalt.example.test",
 			Public:        config.ListenerConfig{Port: 8080},
 			EncryptionKey: "test-key",
 			Providers:     config.ServerProvidersConfig{IndexedDB: "test"},

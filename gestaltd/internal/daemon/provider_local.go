@@ -1134,6 +1134,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
 		"server": map[string]any{
+			"baseUrl": providerLocalBaseURL(port),
 			"public": map[string]any{
 				"host": providerDevHost,
 				"port": port,
@@ -1179,6 +1180,7 @@ func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port in
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
 		"server": map[string]any{
+			"baseUrl": providerLocalBaseURL(port),
 			"public": map[string]any{
 				"host": providerDevHost,
 				"port": port,
@@ -1315,6 +1317,13 @@ func providerLocalPublicURL(cfg *config.Config) string {
 		return ""
 	}
 	return (&url.URL{Scheme: "http", Host: addr}).String()
+}
+
+func providerLocalBaseURL(port int) string {
+	return (&url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(providerDevHost, fmt.Sprint(port)),
+	}).String()
 }
 
 func mountedPublicUIPaths(cfg *config.Config) []string {

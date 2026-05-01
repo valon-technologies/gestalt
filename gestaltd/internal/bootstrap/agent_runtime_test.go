@@ -295,9 +295,11 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	}
 
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:  &agentRuntime{providers: map[string]coreagent.Provider{}},
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	buildCtx := context.WithValue(context.Background(), agentRuntimeFactoryContextKey{}, ctxSentinel)
 	agents, err := buildAgents(buildCtx, cfg, factories, deps)
 	if err != nil {
@@ -378,10 +380,12 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
-		Services:              services,
-		AgentRuntime:          agentRuntime,
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Services:      services,
+		AgentRuntime:  agentRuntime,
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -516,10 +520,12 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
 	deps := Deps{
-		Services:              services,
-		AgentRuntime:          agentRuntime,
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Services:      services,
+		AgentRuntime:  agentRuntime,
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -620,11 +626,13 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -709,11 +717,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -817,11 +827,13 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -924,11 +936,13 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1000,11 +1014,13 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1069,11 +1085,13 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		},
 	}
 	deps := Deps{
-		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
-		IndexedDBDefs:         testAgentRuntimeIndexedDBDefs(),
-		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+		BaseURL:          "https://gestalt.example.test",
+		EncryptionKey:    []byte("0123456789abcdef0123456789abcdef"),
+		AgentRuntime:     &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:    testAgentRuntimeIndexedDBDefs(),
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
 	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	agents, err := buildAgents(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildAgents: %v", err)
@@ -1374,10 +1392,16 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 	}
 }
 
-func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
+func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -1431,8 +1455,11 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 
 	deps := Deps{
-		Services:     services,
-		AgentRuntime: agentRuntime,
+		BaseURL:            relaySrv.URL,
+		EncryptionKey:      secret,
+		Services:           services,
+		AgentRuntime:       agentRuntime,
+		PublicHostServices: publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -1567,152 +1594,21 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 		t.Fatalf("GetSession(after CreateTurn) = %#v, want preserved client_ref cli-session-2", postTurnSession)
 	}
 
-	toolGrant, err := toolGrants.Mint(agentgrant.Grant{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
-		Permissions: []core.AccessPermission{{
-			Plugin:     "roadmap",
-			Operations: []string{"sync"},
-		}},
-		ToolRefs: []coreagent.ToolRef{{
-			Plugin:         "roadmap",
-			Operation:      "sync",
-			CredentialMode: core.ConnectionModeNone,
-		}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
-	})
-	if err != nil {
-		t.Fatalf("Mint tool grant: %v", err)
-	}
-	toolTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
-		TurnID:       "turn-1",
-		SessionID:    "session-1",
-		Model:        "gpt-test",
-		CreatedBy:    coreagent.Actor{SubjectID: "user:user-123"},
-		ExecutionRef: "exec-turn-1",
-		Messages:     []coreagent.Message{{Role: "user", Text: "Plan it"}},
-		ToolRefs: []coreagent.ToolRef{{
-			Plugin:         "roadmap",
-			Operation:      "sync",
-			CredentialMode: core.ConnectionModeNone,
-		}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
-		ToolGrant:  toolGrant,
-		Tools: []coreagent.Tool{{
-			ID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
-				Plugin:         "roadmap",
-				Operation:      "sync",
-				CredentialMode: core.ConnectionModeNone,
-			}),
-			Name: "Lookup roadmap task",
-			Target: coreagent.ToolTarget{
-				Plugin:         "roadmap",
-				Operation:      "sync",
-				CredentialMode: core.ConnectionModeNone,
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if toolTurn == nil {
-		t.Fatal("CreateTurn returned nil turn")
-		return
-	}
-
-	var output struct {
-		ProviderName string `json:"provider_name"`
-		ToolStatus   int    `json:"tool_status"`
-		ToolBody     string `json:"tool_body"`
-		EventEmitted bool   `json:"event_emitted"`
-		HostError    string `json:"host_error"`
-		ToolError    string `json:"tool_error"`
-		EventError   string `json:"event_error"`
-	}
-	if err := json.Unmarshal([]byte(toolTurn.OutputText), &output); err != nil {
-		t.Fatalf("json.Unmarshal(toolTurn.OutputText): %v", err)
-	}
-	if output.ProviderName != "simple" {
-		t.Fatalf("provider_name = %q, want simple", output.ProviderName)
-	}
-	if output.ToolStatus != http.StatusAccepted {
-		t.Fatalf("tool_status = %d, want %d (output=%s)", output.ToolStatus, http.StatusAccepted, toolTurn.OutputText)
-	}
-	if output.ToolBody != `{"taskId":"task-123"}` {
-		t.Fatalf("tool_body = %q, want %q", output.ToolBody, `{"taskId":"task-123"}`)
-	}
-	if !output.EventEmitted {
-		t.Fatal("event_emitted = false, want true")
-	}
-	if output.HostError != "" || output.ToolError != "" || output.EventError != "" {
-		t.Fatalf("runtime callback errors = %+v", output)
-	}
-
-	calls := invoker.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("invoker calls = %d, want 1", len(calls))
-	}
-	if calls[0].providerName != "roadmap" || calls[0].operation != "sync" {
-		t.Fatalf("invoker call = %+v", calls[0])
-	}
-	if calls[0].params["taskId"] != "task-123" {
-		t.Fatalf("invoker params = %#v, want taskId=task-123", calls[0].params)
-	}
-	if calls[0].subjectID != "user:user-123" {
-		t.Fatalf("invoker subject_id = %q, want user:user-123", calls[0].subjectID)
-	}
-	if calls[0].credentialModeOverride != core.ConnectionModeNone {
-		t.Fatalf("invoker credential mode override = %q, want %q", calls[0].credentialModeOverride, core.ConnectionModeNone)
-	}
-	if calls[0].idempotencyKey != "tool-call-key-1" {
-		t.Fatalf("invoker idempotency key = %q, want tool-call-key-1", calls[0].idempotencyKey)
-	}
-
-	events, err := agents[0].ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{
-		TurnID:   "turn-1",
-		AfterSeq: 0,
-		Limit:    10,
-	})
-	if err != nil {
-		t.Fatalf("ListTurnEvents: %v", err)
-	}
-	if len(events) == 0 {
-		t.Fatal("ListTurnEvents returned no events")
-	}
-	foundAgentTest := false
-	for _, event := range events {
-		if event.Type != "agent.test" {
-			continue
-		}
-		foundAgentTest = true
-		if event.Data["provider_name"] != "simple" {
-			t.Fatalf("agent.test event data = %#v, want provider_name=simple", event.Data)
-		}
-		if display := event.Display; display == nil || display.Kind != "status" || display.Label != "provider event" || display.Text != "simple" {
-			t.Fatalf("agent.test display = %#v, want provider event display for simple", display)
-		}
-	}
-	if !foundAgentTest {
-		t.Fatalf("events = %#v, want agent.test event", events)
-	}
-
 	bindRequests := capturingRuntime.bindHostServiceRequests()
 	foundAgentHost := false
 	foundRuntimeLogHost := false
+	wantRelayTarget := "tls://" + relaySrv.Listener.Addr().String()
 	for _, req := range bindRequests {
 		switch req.EnvVar {
 		case agentservice.DefaultHostSocketEnv:
 			foundAgentHost = true
-			if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
-				t.Fatalf("agent host relay target = %q, want unix relay target", got)
+			if got := req.Relay.DialTarget; got != wantRelayTarget {
+				t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 			}
 		case runtimehost.DefaultRuntimeLogHostSocketEnv:
 			foundRuntimeLogHost = true
-			if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
-				t.Fatalf("runtime log host relay target = %q, want unix relay target", got)
+			if got := req.Relay.DialTarget; got != wantRelayTarget {
+				t.Fatalf("runtime log host relay target = %q, want %q", got, wantRelayTarget)
 			}
 		}
 	}
@@ -2536,7 +2432,11 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 
 	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
 		"name": "simple",
-	}), Deps{PluginRuntime: runtimeProvider})
+	}), Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		PluginRuntime: runtimeProvider,
+	})
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
 	}
@@ -2615,11 +2515,17 @@ func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 		},
 	}
 
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
 	launch, err := prepareHostedAgentProviderLaunch(context.Background(), "simple", entry, mustNode(t, map[string]any{
 		"name":    "simple",
 		"command": "/host/only/agent",
 		"args":    []string{"host-arg"},
-	}), Deps{PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{})})
+	}), deps)
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
 	}
@@ -2656,7 +2562,10 @@ func TestAgentRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T)
 		"name":    "simple",
 		"command": "/host/only/agent",
 		"args":    []string{"host-arg"},
-	}), Deps{})
+	}), Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	})
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)
 	}

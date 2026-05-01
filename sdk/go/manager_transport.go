@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
@@ -92,13 +91,13 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 		if err != nil {
 			return nil, fmt.Errorf("%s: parse tls target %q: %w", serviceName, address, err)
 		}
+		tlsConfig, err := hostServiceTLSConfig(serviceName, host)
+		if err != nil {
+			return nil, err
+		}
 		return grpc.DialContext(ctx, address,
 			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-					MinVersion: tls.VersionTLS12,
-					ServerName: host,
-					NextProtos: []string{"h2"},
-				})),
+				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 				grpc.WithBlock(),
 			), opts...)...,
 		)

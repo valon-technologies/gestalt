@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -1395,8 +1396,8 @@ func assertHostServiceRelayBindings(t *testing.T, requests []pluginruntime.BindH
 	}
 	foundWantEnv := false
 	for _, req := range requests {
-		if !strings.HasPrefix(req.Relay.DialTarget, "unix://") {
-			t.Fatalf("BindHostService(%s) Relay.DialTarget = %q, want unix:// host relay target", req.EnvVar, req.Relay.DialTarget)
+		if !strings.HasPrefix(req.Relay.DialTarget, "tls://") {
+			t.Fatalf("BindHostService(%s) Relay.DialTarget = %q, want tls:// public relay target", req.EnvVar, req.Relay.DialTarget)
 		}
 		if req.EnvVar == wantEnvVar {
 			foundWantEnv = true
@@ -2976,6 +2977,13 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	}
 
 	bridge := newLazyInvoker()
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	callerInvokes := []config.PluginInvocationDependency{
+		{Plugin: "example", Operation: "request_context"},
+	}
+	exampleInvokes := []config.PluginInvocationDependency{
+		{Plugin: "example", Operation: "request_context"},
+	}
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"caller": {
@@ -2983,17 +2991,13 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 				Args:                 []string{"provider"},
 				ResolvedManifest:     callerManifest,
 				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "example", Operation: "request_context"},
-				},
+				Invokes:              callerInvokes,
 			},
 			"example": {
 				Command:              exampleBin,
 				ResolvedManifest:     exampleManifest,
 				ResolvedManifestPath: filepath.Join(exampleRoot, "manifest.yaml"),
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "example", Operation: "request_context"},
-				},
+				Invokes:              exampleInvokes,
 				Config: mustNode(t, map[string]any{
 					"greeting": "Hello from nested invoke",
 				}),
@@ -3001,9 +3005,18 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	pluginInvokerTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(plugin invoker): %v", err)
+	}
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey: secret,
 		PluginInvoker: bridge,
-	})
+	}, withRuntimeRelayPluginCoreHostService("caller", "plugin_invoker", plugininvokerservice.DefaultSocketEnv, "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+		proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("caller", pluginInvocationDependencies(callerInvokes), bridge, pluginInvokerTokens))
+	}), withRuntimeRelayPluginCoreHostService("example", "plugin_invoker", plugininvokerservice.DefaultSocketEnv, "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+		proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("example", pluginInvocationDependencies(exampleInvokes), bridge, pluginInvokerTokens))
+	})))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -3130,9 +3143,17 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	pluginInvokerTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(plugin invoker): %v", err)
+	}
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey: secret,
 		PluginInvoker: bridge,
-	})
+	}, withRuntimeRelayCoreHostService("plugin_invoker", plugininvokerservice.DefaultSocketEnv, "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+		proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("caller", pluginInvocationDependencies(callerInvokes), bridge, pluginInvokerTokens))
+	})))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -3626,13 +3647,13 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 
 	checkEnv := func(t *testing.T, indexedDB *config.HostIndexedDBBindingConfig, envName string) bool {
 		t.Helper()
-		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(indexedDB), NewFactoryRegistry(), Deps{
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(indexedDB), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 			SelectedIndexedDBName: "main",
 			IndexedDBDefs:         indexedDBDefs,
 			IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
 				return &coretesting.StubIndexedDB{}, nil
 			},
-		})
+		}))
 		if err != nil {
 			t.Fatalf("buildProvidersStrict: %v", err)
 		}
@@ -3700,7 +3721,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -3751,9 +3772,9 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		WorkflowManager: newStubWorkflowManager(),
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -3804,9 +3825,9 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		AgentRuntime: &agentRuntime{providers: map[string]coreagent.Provider{}},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -3960,7 +3981,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	defer func() { _ = CloseProviders(providers) }()
-	assertPublicHostServicesExclude(t, publicHostServices, "agent_manager", agentservice.DefaultManagerSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "agent_manager", agentservice.DefaultManagerSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -4098,9 +4119,9 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -4164,9 +4185,17 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	workflowManagerTokens, err := workflowservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(workflow manager): %v", err)
+	}
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey:   secret,
 		WorkflowManager: manager,
-	})
+	}, withRuntimeRelayCoreHostService("workflow_manager", workflowservice.DefaultManagerSocketEnv, "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+		proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer("echo", manager, workflowManagerTokens))
+	})))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -4544,9 +4573,18 @@ func TestPluginWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
-		WorkflowManager: newStubWorkflowManager(),
-	})
+	manager := newStubWorkflowManager()
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	workflowManagerTokens, err := workflowservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(workflow manager): %v", err)
+	}
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey:   secret,
+		WorkflowManager: manager,
+	}, withRuntimeRelayCoreHostService("workflow_manager", workflowservice.DefaultManagerSocketEnv, "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+		proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer("echo", manager, workflowManagerTokens))
+	})))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -5257,12 +5295,12 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 
 	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
 		t.Helper()
-		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 			CacheDefs: cacheBindings,
 			CacheFactory: func(yaml.Node) (corecache.Cache, error) {
 				return coretesting.NewStubCache(), nil
 			},
-		})
+		}))
 		if err != nil {
 			t.Fatalf("buildProvidersStrict: %v", err)
 		}
@@ -5442,9 +5480,9 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *t
 
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 			PluginRuntime: runtimeProvider,
-		})
+		}))
 		done <- err
 	}()
 
@@ -5914,6 +5952,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	deps := Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Egress:        newEgressDeps(cfg),
 		S3: map[string]s3store.Client{
 			"main":    &coretesting.StubS3{},
 			"archive": &coretesting.StubS3{},
@@ -6189,8 +6228,8 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	if got := startRequests[0].Env[authorizationservice.SocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
 }
 
@@ -6239,6 +6278,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	deps := Deps{
 		BaseURL:               "https://gestalt.example.test",
 		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		Egress:                newEgressDeps(cfg),
 		SelectedIndexedDBName: "memory",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"memory": {
@@ -6492,6 +6532,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 	deps := Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Egress:        newEgressDeps(cfg),
 		CacheDefs: map[string]*config.ProviderEntry{
 			"session":    {Config: mustNode(t, map[string]any{"namespace": "session"})},
 			"rate_limit": {Config: mustNode(t, map[string]any{"namespace": "rate_limit"})},
@@ -6942,7 +6983,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesExclude(t, publicHostServices, "plugin_invoker", plugininvokerservice.DefaultSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "plugin_invoker", plugininvokerservice.DefaultSocketEnv)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -7008,10 +7049,6 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 		t.Fatalf("nested credential.instance = %q, want %q", got.Body.Credential.Instance, "default")
 	}
 
-	relayURL, err := url.Parse(relaySrv.URL)
-	if err != nil {
-		t.Fatalf("url.Parse(relay URL): %v", err)
-	}
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
@@ -7019,8 +7056,8 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if got := startRequests[0].Env[plugininvokerservice.SocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the plugin invoker relay token")
 	}
-	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, relayURL.Hostname()) {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host %q", allowedHosts, relayURL.Hostname())
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {
@@ -7078,6 +7115,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	deps := Deps{
 		BaseURL:         "https://gestalt.example.test",
 		EncryptionKey:   []byte("0123456789abcdef0123456789abcdef"),
+		Egress:          newEgressDeps(cfg),
 		WorkflowManager: newStubWorkflowManager(),
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
@@ -7293,7 +7331,11 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 		t.Fatalf("coredata.New: %v", err)
 	}
 	t.Cleanup(func() { _ = services.Close() })
-	deps := Deps{Services: services}
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Services:      services,
+	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
@@ -7314,8 +7356,11 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 		if req.EnvVar != runtimehost.DefaultRuntimeLogHostSocketEnv {
 			continue
 		}
-		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
-			t.Fatalf("runtime log host relay target = %q, want unix direct dial target", got)
+		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+			t.Fatalf("runtime log host relay target = %q, want public relay target", got)
+		}
+		if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; got == "" {
+			t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
 		}
 		return
 	}
@@ -7329,12 +7374,17 @@ type runtimeRelayTestHandlerConfig struct {
 }
 
 type runtimeRelayTestCoreHandlerKey struct {
+	pluginName   string
 	service      string
 	envVar       string
 	methodPrefix string
 }
 
 func withRuntimeRelayCoreHostService(service, envVar, methodPrefix string, register func(*grpc.Server)) runtimeRelayTestHandlerOption {
+	return withRuntimeRelayPluginCoreHostService("", service, envVar, methodPrefix, register)
+}
+
+func withRuntimeRelayPluginCoreHostService(pluginName, service, envVar, methodPrefix string, register func(*grpc.Server)) runtimeRelayTestHandlerOption {
 	return func(cfg *runtimeRelayTestHandlerConfig) {
 		if cfg.coreHandlers == nil {
 			cfg.coreHandlers = make(map[runtimeRelayTestCoreHandlerKey]http.Handler)
@@ -7342,6 +7392,7 @@ func withRuntimeRelayCoreHostService(service, envVar, methodPrefix string, regis
 		srv := grpc.NewServer()
 		register(srv)
 		cfg.coreHandlers[runtimeRelayTestCoreHandlerKey{
+			pluginName:   strings.TrimSpace(pluginName),
 			service:      strings.TrimSpace(service),
 			envVar:       strings.TrimSpace(envVar),
 			methodPrefix: strings.TrimSpace(methodPrefix),
@@ -7349,12 +7400,13 @@ func withRuntimeRelayCoreHostService(service, envVar, methodPrefix string, regis
 	}
 }
 
-func assertPublicHostServicesExclude(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName, envVar string) {
+func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName, envVar string) {
 	t.Helper()
 
 	if registry == nil {
-		return
+		t.Fatalf("public host services registry is nil, want %s/%s verifier entry", serviceName, envVar)
 	}
+	found := false
 	for _, service := range registry.Services() {
 		if strings.TrimSpace(service.Service.Name) != strings.TrimSpace(serviceName) {
 			continue
@@ -7362,7 +7414,13 @@ func assertPublicHostServicesExclude(t *testing.T, registry *runtimehost.PublicH
 		if strings.TrimSpace(service.Service.EnvVar) != strings.TrimSpace(envVar) {
 			continue
 		}
-		t.Fatalf("public host services = %#v, want no %s/%s registry entry", registry.Services(), serviceName, envVar)
+		found = true
+		if service.SessionVerifier == nil {
+			t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Services(), serviceName, envVar)
+		}
+	}
+	if !found {
+		t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Services(), serviceName, envVar)
 	}
 }
 
@@ -7393,10 +7451,18 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 		var handler http.Handler
 		if target.CoreRoutable {
 			handler = cfg.coreHandlers[runtimeRelayTestCoreHandlerKey{
+				pluginName:   strings.TrimSpace(target.PluginName),
 				service:      strings.TrimSpace(target.Service),
 				envVar:       strings.TrimSpace(target.EnvVar),
 				methodPrefix: strings.TrimSpace(target.MethodPrefix),
 			}]
+			if handler == nil {
+				handler = cfg.coreHandlers[runtimeRelayTestCoreHandlerKey{
+					service:      strings.TrimSpace(target.Service),
+					envVar:       strings.TrimSpace(target.EnvVar),
+					methodPrefix: strings.TrimSpace(target.MethodPrefix),
+				}]
+			}
 		} else {
 			handler, err = runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target)
 			if err != nil {
@@ -7413,6 +7479,48 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 		relayReq.Header.Del(runtimehost.HostServiceRelayTokenHeader)
 		handler.ServeHTTP(w, relayReq)
 	})
+}
+
+func newRuntimePublicEndpointTestServer(t *testing.T, stateSecret []byte, publicHostServices *runtimehost.PublicHostServiceRegistry, opts ...runtimeRelayTestHandlerOption) *httptest.Server {
+	t.Helper()
+
+	relay := newRuntimeRelayTestHandler(t, stateSecret, publicHostServices, opts...)
+	proxy := newRuntimeEgressProxyTestHandler(t, stateSecret)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader)) != "" {
+			relay.ServeHTTP(w, r)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	testutil.CloseOnCleanup(t, srv)
+
+	cert := srv.Certificate()
+	if cert == nil {
+		t.Fatal("runtime public endpoint certificate is nil")
+	}
+	return srv
+}
+
+func testRuntimePublicEndpointDeps(t *testing.T, deps Deps, opts ...runtimeRelayTestHandlerOption) Deps {
+	t.Helper()
+
+	if len(deps.EncryptionKey) == 0 {
+		deps.EncryptionKey = []byte("0123456789abcdef0123456789abcdef")
+	}
+	if deps.PublicHostServices == nil {
+		deps.PublicHostServices = runtimehost.NewPublicHostServiceRegistry()
+	}
+	if strings.TrimSpace(deps.BaseURL) == "" {
+		srv := newRuntimePublicEndpointTestServer(t, deps.EncryptionKey, deps.PublicHostServices, opts...)
+		deps.BaseURL = srv.URL
+		if cert := srv.Certificate(); cert != nil && strings.TrimSpace(deps.HostServiceTLSCAFile) == "" && strings.TrimSpace(deps.HostServiceTLSCAPEM) == "" {
+			deps.HostServiceTLSCAPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
+		}
+	}
+	return deps
 }
 
 func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
@@ -7715,7 +7823,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesExclude(t, publicHostServices, "workflow_manager", workflowservice.DefaultManagerSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "workflow_manager", workflowservice.DefaultManagerSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -8090,7 +8198,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	}
 }
 
-func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressProxy(t *testing.T) {
+func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenRuntimeAdvertisesDirectHostServiceSupport(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8156,24 +8264,24 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env["HTTP_PROXY"]; got != "" {
-		t.Fatalf("StartPlugin HTTP_PROXY = %q, want empty when direct host service bindings are available", got)
+	if got := startRequests[0].Env["HTTP_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
+		t.Fatalf("StartPlugin HTTP_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	if got := startRequests[0].Env["HTTPS_PROXY"]; got != "" {
-		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want empty when direct host service bindings are available", got)
+	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
+		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("session")]; got != "" {
-		t.Fatalf("StartPlugin cache token env = %q, want empty for direct host service bindings", got)
+	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("session")]; got == "" {
+		t.Fatalf("StartPlugin cache token env = %q, want public relay token", got)
 	}
-	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com"}, pluginruntime.PolicyDeny)
+	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, pluginruntime.PolicyDeny)
 
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) == 0 {
-		t.Fatal("BindHostService requests = 0, want at least one direct host service binding")
+		t.Fatal("BindHostService requests = 0, want at least one public relay binding")
 	}
 	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
-			t.Fatalf("BindHostService(%s) relay target = %q, want unix direct dial target", req.EnvVar, got)
+		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+			t.Fatalf("BindHostService(%s) relay target = %q, want public relay target", req.EnvVar, got)
 		}
 	}
 }
@@ -8359,7 +8467,7 @@ func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
 		},
 	}
 
-	_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+	_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		CacheDefs: map[string]*config.ProviderEntry{
 			"session": {
 				Config: mustNode(t, map[string]any{"namespace": "session"}),
@@ -8368,7 +8476,7 @@ func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
 		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
 			return coretesting.NewStubCache(), nil
 		},
-	})
+	}))
 	if err == nil {
 		t.Fatal("buildProvidersStrict: expected error, got nil")
 	}
@@ -8450,7 +8558,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 							IndexedDB:            tc.indexedDB,
 						},
 					},
-				}, NewFactoryRegistry(), deps)
+				}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, deps))
 				if err != nil {
 					t.Fatalf("buildProvidersStrict: %v", err)
 				}
@@ -8596,7 +8704,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 
 			var closeCount atomic.Int32
 			var captured []capturedIndexedDBConfig
-			providers, _, err := buildProvidersStrict(context.Background(), makeConfig(tc.indexedDB), NewFactoryRegistry(), Deps{
+			providers, _, err := buildProvidersStrict(context.Background(), makeConfig(tc.indexedDB), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 				SelectedIndexedDBName: "postgres",
 				IndexedDBDefs:         indexedDBDefs,
 				IndexedDBFactory: func(node yaml.Node) (indexeddb.IndexedDB, error) {
@@ -8610,7 +8718,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 						onClose:       closeCount.Add,
 					}, nil
 				},
-			})
+			}))
 			if err != nil {
 				t.Fatalf("buildProvidersStrict: %v", err)
 			}
@@ -8744,7 +8852,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 						},
 					},
 				},
-			}, NewFactoryRegistry(), deps)
+			}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, deps))
 			if err != nil {
 				t.Fatalf("buildProvidersStrict: %v", err)
 			}
@@ -8828,7 +8936,7 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 				},
 			},
 		},
-	}, NewFactoryRegistry(), Deps{
+	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
@@ -8852,7 +8960,7 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 			boundDBs[bucket] = db
 			return db, nil
 		},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -8913,7 +9021,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 				S3:                   []string{"missing"},
 			},
 		},
-	}, NewFactoryRegistry(), Deps{
+	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		SelectedIndexedDBName: "main",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"main": {
@@ -8928,7 +9036,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 			}, nil
 		},
 		S3: map[string]s3store.Client{},
-	})
+	}))
 	if err == nil {
 		t.Fatal("expected buildProvidersStrict to fail for missing S3 binding")
 	}
@@ -8968,12 +9076,12 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 				S3:                   []string{"main"},
 			},
 		},
-	}, NewFactoryRegistry(), Deps{
+	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: coretesting.NewStubServices(t),
 		S3: map[string]s3store.Client{
 			"main": stubS3,
 		},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -9069,13 +9177,13 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 				S3:                   []string{"main", "archive"},
 			},
 		},
-	}, NewFactoryRegistry(), Deps{
+	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		Services: coretesting.NewStubServices(t),
 		S3: map[string]s3store.Client{
 			"main":    mainS3,
 			"archive": archiveS3,
 		},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -9142,10 +9250,10 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 
 	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
 		t.Helper()
-		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 			Services: services,
 			S3:       s3Bindings,
-		})
+		}))
 		if err != nil {
 			t.Fatalf("buildProvidersStrict: %v", err)
 		}

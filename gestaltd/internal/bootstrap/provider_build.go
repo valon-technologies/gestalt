@@ -890,36 +890,24 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
+	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
 	hostServices = appendRuntimeLogHostService(hostServices, runtimeConfig, deps, runtimePlan)
-	startHostServices, relayOnlyHostServices := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimePlan, runtimeProvider)
 	if err != nil {
 		return nil, err
 	}
 	cleanup = chainCleanup(cleanup, runtimeCleanup, publicHostServicesCleanup)
-	startedHostServices, err := runtimehost.StartHostServices(
-		startHostServices,
-		runtimehost.WithHostServicesProviderName(name),
-		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("start runtime host services: %w", err)
-	}
-	if startedHostServices != nil {
-		cleanup = chainCleanup(cleanup, func() {
-			_ = startedHostServices.Close()
-		})
-	}
 	startEnv := maps.Clone(env)
 	startEnv = withRuntimeSessionEnv(startEnv, sessionID)
+	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
+	egressPolicy := deps.Egress.ProviderPolicy(entry)
 	allowedHosts := entry.EffectiveAllowedHosts()
-	bindingTargets := append(hostServiceBindingDescriptorsFromStarted(startedHostServices), hostServiceBindingDescriptorsFromConfigured(relayOnlyHostServices)...)
+	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect, true)
+		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, true)
 		if err != nil {
 			return nil, err
 		}
@@ -932,9 +920,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			}
 			maps.Copy(startEnv, bindingEnv)
 		}
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+		if runtimePlan.RequiresHostnameEgress {
+			allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+		}
 	}
-	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.ProviderPolicy(entry), allowedHosts, runtimePlan, deps)
+	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, egressPolicy, allowedHosts, runtimePlan, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,31 +1168,17 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, nil)
 
-	startHostServices, relayOnlyHostServices := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
-	phaseStarted = time.Now()
-	startedHostServices, err := runtimehost.StartHostServices(
-		startHostServices,
-		runtimehost.WithHostServicesProviderName(name),
-		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
-	)
-	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_start", phaseStarted, err)
-	if err != nil {
-		return nil, fmt.Errorf("start agent runtime host services: %w", err)
-	}
-	cleanup = chainCleanup(cleanup, func() {
-		_ = startedHostServices.Close()
-	})
-
 	startEnv := withRuntimeSessionEnv(maps.Clone(cfg.Env), sessionID)
+	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
 	agentAllowedHosts := cfg.EgressPolicy("").AllowedHosts
 	if len(agentAllowedHosts) == 0 {
 		agentAllowedHosts = slices.Clone(launch.allowedHosts)
 	}
 	allowedHosts := hostedAgentAllowedHosts(agentAllowedHosts, runtimePlan)
 	phaseStarted = time.Now()
-	bindingTargets := append(hostServiceBindingDescriptorsFromStarted(startedHostServices), hostServiceBindingDescriptorsFromConfigured(relayOnlyHostServices)...)
+	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect, true)
+		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, true)
 		if err != nil {
 			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
 			return nil, err
@@ -1386,6 +1362,8 @@ func newLocalPluginRuntime(runtimeProviderName string, deps Deps) pluginruntime.
 const (
 	pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
 	pluginRuntimeEgressProxyTokenTTL      = 30 * 24 * time.Hour
+	hostServiceTLSCAFileEnv               = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
+	hostServiceTLSCAPEMEnv                = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
 type RuntimeEgressLaunchPlan struct {
@@ -1522,7 +1500,7 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, allowDirectBindings bool) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
@@ -1565,7 +1543,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	}
 	includeWorkflowManager := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
 	includeAgentManager := deps.AgentManager != nil || deps.AgentRuntime != nil
-	needInvocationTokens := allowDirectBindings || len(entry.Invokes) > 0
+	needInvocationTokens := len(entry.Invokes) > 0
 	if includeWorkflowManager || includeAgentManager {
 		needInvocationTokens = true
 	}
@@ -1583,12 +1561,6 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
-	}
-	if !allowDirectBindings {
-		if len(entry.Invokes) > 0 {
-			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
-		}
-		return hostServices, invTokens, cleanup, nil
 	}
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
@@ -1629,18 +1601,26 @@ func withRuntimeSessionEnv(env map[string]string, sessionID string) map[string]s
 	return env
 }
 
-type hostServiceBindingDescriptor struct {
-	Name       string
-	EnvVar     string
-	SocketPath string
+func withHostServiceTLSCAEnv(env map[string]string, deps Deps) map[string]string {
+	caPEM := strings.TrimSpace(deps.HostServiceTLSCAPEM)
+	caFile := strings.TrimSpace(deps.HostServiceTLSCAFile)
+	if caPEM == "" && caFile == "" {
+		return env
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	if caPEM != "" {
+		env[hostServiceTLSCAPEMEnv] = caPEM
+	} else {
+		env[hostServiceTLSCAFileEnv] = caFile
+	}
+	return env
 }
 
-func hostServiceBindingDescriptorFromStarted(hostService runtimehost.StartedHostService) hostServiceBindingDescriptor {
-	return hostServiceBindingDescriptor{
-		Name:       strings.TrimSpace(hostService.Name),
-		EnvVar:     strings.TrimSpace(hostService.EnvVar),
-		SocketPath: strings.TrimSpace(hostService.SocketPath),
-	}
+type hostServiceBindingDescriptor struct {
+	Name   string
+	EnvVar string
 }
 
 func hostServiceBindingDescriptorFromConfigured(hostService runtimehost.HostService) hostServiceBindingDescriptor {
@@ -1648,18 +1628,6 @@ func hostServiceBindingDescriptorFromConfigured(hostService runtimehost.HostServ
 		Name:   strings.TrimSpace(hostService.Name),
 		EnvVar: strings.TrimSpace(hostService.EnvVar),
 	}
-}
-
-func hostServiceBindingDescriptorsFromStarted(hostServices *runtimehost.StartedHostServices) []hostServiceBindingDescriptor {
-	started := hostServices.Bindings()
-	if len(started) == 0 {
-		return nil
-	}
-	out := make([]hostServiceBindingDescriptor, 0, len(started))
-	for _, hostService := range started {
-		out = append(out, hostServiceBindingDescriptorFromStarted(hostService))
-	}
-	return out
 }
 
 func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.HostService) []hostServiceBindingDescriptor {
@@ -1673,82 +1641,73 @@ func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.Host
 	return out
 }
 
-func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowUnixRelay bool, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
-	if !allowUnixRelay {
-		var (
-			serviceKey   string
-			serviceLabel string
-			methodPrefix string
-		)
-		switch {
-		case isIndexedDBHostServiceEnv(hostService.EnvVar):
-			serviceKey = "indexeddb"
-			serviceLabel = "IndexedDB"
-			methodPrefix = "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/"
-		case isCacheHostServiceEnv(hostService.EnvVar):
-			serviceKey = "cache"
-			serviceLabel = "cache"
-			methodPrefix = "/" + proto.Cache_ServiceDesc.ServiceName + "/"
-		case isS3HostServiceEnv(hostService.EnvVar):
-			serviceKey = "s3"
-			serviceLabel = "S3"
-			methodPrefix = "/" + proto.S3_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == workflowservice.DefaultManagerSocketEnv:
-			serviceKey = "workflow_manager"
-			serviceLabel = "workflow manager"
-			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == agentservice.DefaultHostSocketEnv:
-			serviceKey = "agent_host"
-			serviceLabel = "agent host"
-			methodPrefix = "/" + proto.AgentHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == agentservice.DefaultManagerSocketEnv:
-			serviceKey = "agent_manager"
-			serviceLabel = "agent manager"
-			methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == authorizationservice.DefaultSocketEnv:
-			serviceKey = "authorization"
-			serviceLabel = "authorization"
-			methodPrefix = "/" + proto.AuthorizationProvider_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == plugininvokerservice.DefaultSocketEnv:
-			serviceKey = "plugin_invoker"
-			serviceLabel = "plugin invoker"
-			methodPrefix = "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"
-		case hostService.EnvVar == runtimehost.DefaultRuntimeLogHostSocketEnv:
-			serviceKey = "runtime_log_host"
-			serviceLabel = "runtime log host"
-			methodPrefix = "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/"
-		default:
-			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
-		}
-		relay, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(
-			providerName,
-			sessionID,
-			hostService,
-			deps,
-			serviceKey,
-			serviceLabel,
-			methodPrefix,
-			allowCoreRoutable && isCoreRoutableHostedRuntimeHostService(hostService, serviceKey, methodPrefix),
-		)
-		if err != nil {
-			return pluginruntime.BindHostServiceRequest{}, nil, "", err
-		}
-		if !ok {
-			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s without host service tunnels", providerName, serviceLabel)
-		}
-		return pluginruntime.BindHostServiceRequest{
-			SessionID: sessionID,
-			EnvVar:    hostService.EnvVar,
-			Relay:     relay,
-		}, relayEnv, relayHost, nil
+func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+	var (
+		serviceKey   string
+		serviceLabel string
+		methodPrefix string
+	)
+	switch {
+	case isIndexedDBHostServiceEnv(hostService.EnvVar):
+		serviceKey = "indexeddb"
+		serviceLabel = "IndexedDB"
+		methodPrefix = "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/"
+	case isCacheHostServiceEnv(hostService.EnvVar):
+		serviceKey = "cache"
+		serviceLabel = "cache"
+		methodPrefix = "/" + proto.Cache_ServiceDesc.ServiceName + "/"
+	case isS3HostServiceEnv(hostService.EnvVar):
+		serviceKey = "s3"
+		serviceLabel = "S3"
+		methodPrefix = "/" + proto.S3_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == workflowservice.DefaultManagerSocketEnv:
+		serviceKey = "workflow_manager"
+		serviceLabel = "workflow manager"
+		methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == agentservice.DefaultHostSocketEnv:
+		serviceKey = "agent_host"
+		serviceLabel = "agent host"
+		methodPrefix = "/" + proto.AgentHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == agentservice.DefaultManagerSocketEnv:
+		serviceKey = "agent_manager"
+		serviceLabel = "agent manager"
+		methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == authorizationservice.DefaultSocketEnv:
+		serviceKey = "authorization"
+		serviceLabel = "authorization"
+		methodPrefix = "/" + proto.AuthorizationProvider_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == plugininvokerservice.DefaultSocketEnv:
+		serviceKey = "plugin_invoker"
+		serviceLabel = "plugin invoker"
+		methodPrefix = "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == runtimehost.DefaultRuntimeLogHostSocketEnv:
+		serviceKey = "runtime_log_host"
+		serviceLabel = "runtime log host"
+		methodPrefix = "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/"
+	default:
+		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires public host service relay support", hostService.EnvVar)
+	}
+	relay, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(
+		providerName,
+		sessionID,
+		hostService,
+		deps,
+		serviceKey,
+		serviceLabel,
+		methodPrefix,
+		allowCoreRoutable && isCoreRoutableHostedRuntimeHostService(hostService, serviceKey, methodPrefix),
+	)
+	if err != nil {
+		return pluginruntime.BindHostServiceRequest{}, nil, "", err
+	}
+	if !ok {
+		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s through the public host service relay", providerName, serviceLabel)
 	}
 	return pluginruntime.BindHostServiceRequest{
 		SessionID: sessionID,
 		EnvVar:    hostService.EnvVar,
-		Relay: pluginruntime.HostServiceRelay{
-			DialTarget: "unix://" + hostService.SocketPath,
-		},
-	}, nil, "", nil
+		Relay:     relay,
+	}, relayEnv, relayHost, nil
 }
 
 type runtimeHostServiceSessionVerifier struct {
@@ -1794,7 +1753,7 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
-	registerHostServices, _ := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
+	registerHostServices := publicRuntimeRegistryHostServices(hostServices)
 	if len(registerHostServices) == 0 {
 		return nil, nil
 	}
@@ -1814,7 +1773,7 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
-		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", providerName)
+		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress for hosted runtimes", providerName)
 	}
 	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
 	if err != nil {
@@ -1862,34 +1821,11 @@ func isCoreRoutableHostedRuntimeHostService(hostService hostServiceBindingDescri
 	}
 }
 
-func splitRelayOnlyCoreHostServices(hostServices []runtimehost.HostService, runtimePlan HostedRuntimePlan) ([]runtimehost.HostService, []runtimehost.HostService) {
-	if len(hostServices) == 0 || runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay {
-		return hostServices, nil
+func publicRuntimeRegistryHostServices(hostServices []runtimehost.HostService) []runtimehost.HostService {
+	if len(hostServices) == 0 {
+		return nil
 	}
-	startHostServices := make([]runtimehost.HostService, 0, len(hostServices))
-	relayOnlyHostServices := make([]runtimehost.HostService, 0, 3)
-	for _, hostService := range hostServices {
-		if isRelayOnlyCoreHostService(hostService) {
-			relayOnlyHostServices = append(relayOnlyHostServices, hostService)
-			continue
-		}
-		startHostServices = append(startHostServices, hostService)
-	}
-	return startHostServices, relayOnlyHostServices
-}
-
-func isRelayOnlyCoreHostService(hostService runtimehost.HostService) bool {
-	desc := hostServiceBindingDescriptorFromConfigured(hostService)
-	switch desc.EnvVar {
-	case workflowservice.DefaultManagerSocketEnv:
-		return isCoreRoutableHostedRuntimeHostService(desc, "workflow_manager", "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/")
-	case agentservice.DefaultManagerSocketEnv:
-		return isCoreRoutableHostedRuntimeHostService(desc, "agent_manager", "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/")
-	case plugininvokerservice.DefaultSocketEnv:
-		return isCoreRoutableHostedRuntimeHostService(desc, "plugin_invoker", "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/")
-	default:
-		return false
-	}
+	return append([]runtimehost.HostService(nil), hostServices...)
 }
 
 func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
@@ -1930,9 +1866,21 @@ func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
 	}
 	port := parsed.Port()
 	if port == "" {
-		port = "443"
+		if strings.EqualFold(parsed.Scheme, "http") {
+			port = "80"
+		} else {
+			port = "443"
+		}
 	}
-	return "tls://" + net.JoinHostPort(host, port), host, nil
+	target := net.JoinHostPort(host, port)
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return "tls://" + target, host, nil
+	case "http":
+		return "tcp://" + target, host, nil
+	default:
+		return "", "", fmt.Errorf("server.baseURL %q has unsupported public runtime relay scheme %q", baseURL, parsed.Scheme)
+	}
 }
 
 func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
@@ -1950,7 +1898,13 @@ func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, "", fmt.Errorf("server.baseURL %q must not include a query or fragment for public runtime relay", baseURL)
 	}
-	if !strings.EqualFold(parsed.Scheme, "https") {
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+	case "http":
+		if !isLoopbackAllowedHost(host) {
+			return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay unless it targets loopback", baseURL)
+		}
+	default:
 		return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay", baseURL)
 	}
 	parsed.Path = ""

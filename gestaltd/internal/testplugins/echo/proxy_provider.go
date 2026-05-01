@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -645,7 +647,10 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if proxyURL := os.Getenv("HTTP_PROXY"); proxyURL != "" {
 			parsed, err := url.Parse(proxyURL)
 			if err == nil {
-				client.Transport = &http.Transport{Proxy: http.ProxyURL(parsed)}
+				client.Transport = &http.Transport{
+					Proxy:           http.ProxyURL(parsed),
+					TLSClientConfig: testTLSConfigFromEnv(),
+				}
 			}
 		}
 		resp, err := client.Get(targetURL)
@@ -985,6 +990,32 @@ func decodeResultBody(body string) any {
 		return decoded
 	}
 	return body
+}
+
+func testTLSConfigFromEnv() *tls.Config {
+	pemBytes := []byte(strings.TrimSpace(os.Getenv(gestalt.EnvHostServiceTLSCAPEM)))
+	caFile := strings.TrimSpace(os.Getenv(gestalt.EnvHostServiceTLSCAFile))
+	if len(pemBytes) == 0 && caFile == "" {
+		return nil
+	}
+	if len(pemBytes) == 0 {
+		var err error
+		pemBytes, err = os.ReadFile(caFile)
+		if err != nil {
+			return nil
+		}
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(pemBytes) {
+		return nil
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+	}
 }
 
 func jsonResult(status int, body any) *core.OperationResult {
