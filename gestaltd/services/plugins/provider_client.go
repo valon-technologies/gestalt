@@ -34,6 +34,7 @@ type StaticProviderSpec struct {
 
 type remoteProviderBase struct {
 	client       proto.IntegrationProviderClient
+	support      integrationProviderSupport
 	name         string
 	displayName  string
 	description  string
@@ -49,6 +50,11 @@ type remoteProviderBase struct {
 	callerPlugin string
 	invokeGrants plugininvokerservice.InvocationGrants
 }
+
+var (
+	_ core.SessionCatalogProvider = (*remoteProviderBase)(nil)
+	_ core.PostConnectCapable     = (*remoteProviderBase)(nil)
+)
 
 type integrationProviderSupport struct {
 	sessionCatalog bool
@@ -86,6 +92,7 @@ func NewRemote(ctx context.Context, client proto.IntegrationProviderClient, spec
 
 	base := &remoteProviderBase{
 		client:      client,
+		support:     *support,
 		name:        spec.Name,
 		displayName: spec.DisplayName,
 		description: spec.Description,
@@ -101,14 +108,6 @@ func NewRemote(ctx context.Context, client proto.IntegrationProviderClient, spec
 		opt(base)
 	}
 
-	switch {
-	case support.sessionCatalog && support.postConnect:
-		return &remoteProviderWithSessionCatalogAndPostConnect{remoteProviderBase: base}, nil
-	case support.sessionCatalog:
-		return &remoteProviderWithSessionCatalog{remoteProviderBase: base}, nil
-	case support.postConnect:
-		return &remoteProviderWithPostConnect{remoteProviderBase: base}, nil
-	}
 	return base, nil
 }
 
@@ -218,6 +217,17 @@ func (p *remoteProviderBase) DiscoveryConfig() *core.DiscoveryConfig {
 
 func (p *remoteProviderBase) ConnectionForOperation(string) string { return "" }
 
+func (p *remoteProviderBase) SupportsSessionCatalog() bool {
+	return p != nil && p.support.sessionCatalog
+}
+
+func (p *remoteProviderBase) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if !p.SupportsSessionCatalog() {
+		return nil, core.WrapSessionCatalogUnsupported(core.ErrSessionCatalogUnsupported)
+	}
+	return p.sessionCatalog(ctx, token)
+}
+
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
 	reqCtx, err := requestContextProto(ctx)
 	if err != nil {
@@ -239,6 +249,17 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	return p.decorateCatalog(cat), nil
 }
 
+func (p *remoteProviderBase) SupportsPostConnect() bool {
+	return p != nil && p.support.postConnect
+}
+
+func (p *remoteProviderBase) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
+	if !p.SupportsPostConnect() {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return p.postConnect(ctx, token)
+}
+
 func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	resp, err := p.client.PostConnect(ctx, &proto.PostConnectRequest{
 		Token: postConnectCredentialToProto(token),
@@ -255,28 +276,6 @@ func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.Extern
 		out[key] = value
 	}
 	return out, nil
-}
-
-type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.sessionCatalog(ctx, token)
-}
-
-type remoteProviderWithPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithPostConnect) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	return p.postConnect(ctx, token)
-}
-
-type remoteProviderWithSessionCatalogAndPostConnect struct{ *remoteProviderBase }
-
-func (p *remoteProviderWithSessionCatalogAndPostConnect) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.sessionCatalog(ctx, token)
-}
-
-func (p *remoteProviderWithSessionCatalogAndPostConnect) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	return p.postConnect(ctx, token)
 }
 
 func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
