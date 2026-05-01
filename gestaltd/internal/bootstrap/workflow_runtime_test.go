@@ -614,11 +614,11 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if _, ok := metadataPayload["payload"]; ok {
 		t.Fatalf("turn metadata retained raw payload: %#v", metadataPayload)
 	}
-	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.Plugin != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("turn tools = %#v, want preloaded roadmap.sync", turnReq.Tools)
+	if len(turnReq.Tools) != 0 {
+		t.Fatalf("turn tools = %#v, want no preloaded tools", turnReq.Tools)
 	}
-	if turnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		t.Fatalf("turn tool source = %q, want native search", turnReq.ToolSource)
+	if turnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("turn tool source = %q, want mcp_catalog", turnReq.ToolSource)
 	}
 	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)

@@ -289,7 +289,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err != nil {
 		return nil, err
 	}
-	if resolvedTool.Hidden && !agentToolMatchesResolvedTools(resolvedTool.Target, resolvedTool.ID, grant.Tools) {
+	if resolvedTool.Hidden && !agentToolHiddenExplicitlyGranted(resolvedTool.Target, resolvedTool.ID, grant.ToolRefs, grant.Tools) {
 		return nil, fmt.Errorf("%w: hidden agent tool %q was not granted to this turn", invocation.ErrAuthorizationDenied, resolvedTool.ID)
 	}
 	if err := validateAgentToolTargetForGrant(grant, principalValue, resolvedTool.Target, resolvedTool.ID); err != nil {
@@ -423,6 +423,9 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
+	if len(grant.ToolRefs) == 0 {
+		return &coreagent.ListToolsResponse{}, nil
+	}
 	resp, err := searcher.ListTools(ctx, principalValue, coreagent.ListToolsRequest{
 		ProviderName: strings.TrimSpace(grant.ProviderName),
 		SessionID:    strings.TrimSpace(grant.SessionID),
@@ -549,6 +552,9 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	if source == coreagent.ToolSourceModeMCPCatalog {
 		if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
 			return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
+		}
+		if len(grant.ToolRefs) == 0 {
+			return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
 		}
 	}
 	operation := strings.TrimSpace(target.Operation)
@@ -761,6 +767,50 @@ func agentToolMatchesResolvedTools(target coreagent.ToolTarget, rawToolID string
 		if agentToolTargetsEqual(tools[i].Target, target) {
 			return true
 		}
+	}
+	return false
+}
+
+func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID string, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+	if agentToolMatchesResolvedTools(target, rawToolID, tools) {
+		return true
+	}
+	targetOperation := strings.TrimSpace(target.Operation)
+	if targetOperation == "" {
+		return false
+	}
+	if systemName := strings.TrimSpace(target.System); systemName != "" {
+		for i := range refs {
+			if strings.TrimSpace(refs[i].System) != systemName {
+				continue
+			}
+			if strings.TrimSpace(refs[i].Operation) != targetOperation {
+				continue
+			}
+			return true
+		}
+		return false
+	}
+
+	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) != targetOperation {
+			continue
+		}
+		if connection := strings.TrimSpace(ref.Connection); connection != "" && config.ResolveConnectionAlias(connection) != targetConnection {
+			continue
+		}
+		if instance := strings.TrimSpace(ref.Instance); instance != "" && instance != strings.TrimSpace(target.Instance) {
+			continue
+		}
+		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
+			continue
+		}
+		return true
 	}
 	return false
 }

@@ -108,6 +108,7 @@ type routeCountingAgentProvider struct {
 	sessions        map[string]*coreagent.Session
 	turns           map[string]*coreagent.Turn
 	capabilities    *coreagent.ProviderCapabilities
+	createTurnReqs  []coreagent.CreateTurnRequest
 	turnIDOverride  string
 	cancelStatus    coreagent.ExecutionStatus
 	getSessionCalls int
@@ -145,6 +146,7 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent
 }
 
 func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	p.createTurnReqs = append(p.createTurnReqs, req)
 	turnID := req.TurnID
 	if strings.TrimSpace(p.turnIDOverride) != "" {
 		turnID = p.turnIDOverride
@@ -191,7 +193,12 @@ func (p *routeCountingAgentProvider) GetCapabilities(context.Context, coreagent.
 		caps.SupportedToolSources = append([]coreagent.ToolSourceMode(nil), p.capabilities.SupportedToolSources...)
 		return &caps, nil
 	}
-	return &coreagent.ProviderCapabilities{NativeToolSearch: true}, nil
+	return &coreagent.ProviderCapabilities{
+		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeMCPCatalog,
+		},
+	}, nil
 }
 
 func cloneRouteSession(session *coreagent.Session) *coreagent.Session {
@@ -238,7 +245,9 @@ func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	alpha.capabilities = &coreagent.ProviderCapabilities{}
+	alpha.capabilities = &coreagent.ProviderCapabilities{
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+	}
 	beta := newRouteCountingAgentProvider("beta")
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
@@ -339,7 +348,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 	}
 }
 
-func TestManagerCreateTurnTreatsSupportedToolSourcesAsAuthoritative(t *testing.T) {
+func TestManagerCreateTurnDefaultsToMCPCatalogForProviderTurns(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
@@ -372,11 +381,56 @@ func TestManagerCreateTurnTreatsSupportedToolSourcesAsAuthoritative(t *testing.T
 		SessionID: session.ID,
 		Model:     "test-model",
 	})
-	if err == nil {
-		t.Fatal("CreateTurn error = nil, want unsupported native-search tool source")
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
 	}
-	if !strings.Contains(err.Error(), `does not support tool source "native_search"`) {
-		t.Fatalf("CreateTurn error = %v, want unsupported native-search tool source", err)
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	if got := alpha.createTurnReqs[0].ToolSource; got != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", got)
+	}
+	if got := alpha.createTurnReqs[0].Tools; len(got) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", got)
+	}
+}
+
+func TestManagerCreateTurnRejectsNativeSearchToolSource(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:  session.ID,
+		Model:      "test-model",
+		ToolSource: coreagent.ToolSourceModeNativeSearch,
+	})
+	if err == nil {
+		t.Fatal("CreateTurn error = nil, want deprecated native-search tool source")
+	}
+	if !strings.Contains(err.Error(), "deprecated") || !strings.Contains(err.Error(), string(coreagent.ToolSourceModeNativeSearch)) {
+		t.Fatalf("CreateTurn error = %v, want deprecated native-search tool source", err)
+	}
+	if len(alpha.createTurnReqs) != 0 {
+		t.Fatalf("CreateTurn requests = %d, want 0", len(alpha.createTurnReqs))
 	}
 }
 

@@ -861,12 +861,13 @@ func (p *recordingAgentProvider) ResolveInteraction(_ context.Context, req corea
 
 func (p *recordingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return &coreagent.ProviderCapabilities{
-		StreamingText:    true,
-		ToolCalls:        true,
-		NativeToolSearch: true,
-		Interactions:     true,
-		ResumableTurns:   true,
-		StructuredOutput: true,
+		StreamingText:        true,
+		ToolCalls:            true,
+		Interactions:         true,
+		ResumableTurns:       true,
+		StructuredOutput:     true,
+		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
 }
 
@@ -904,6 +905,8 @@ type callbackAgentProvider struct {
 	searchLoadRefs         []*proto.AgentToolRef
 	searchRequests         []*proto.SearchAgentToolsRequest
 	searchResponses        []*proto.SearchAgentToolsResponse
+	listRequests           []*proto.ListAgentToolsRequest
+	listResponses          []*proto.ListAgentToolsResponse
 	toolBodies             []string
 	resolveInteractionHook func(context.Context, coreagent.ResolveInteractionRequest) error
 }
@@ -996,7 +999,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 	}
 
 	outputBody := ""
-	if req.ToolSource == coreagent.ToolSourceModeNativeSearch || len(req.Tools) > 0 {
+	if req.ToolSource == coreagent.ToolSourceModeMCPCatalog || req.ToolSource == coreagent.ToolSourceModeNativeSearch || len(req.Tools) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -1012,7 +1015,29 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 		defer func() { _ = conn.Close() }()
 		client := proto.NewAgentHostClient(conn)
 		tools := append([]coreagent.Tool(nil), req.Tools...)
-		if len(tools) == 0 {
+		if len(tools) == 0 && req.ToolSource == coreagent.ToolSourceModeMCPCatalog {
+			listReq := &proto.ListAgentToolsRequest{
+				SessionId: req.SessionID,
+				TurnId:    turnID,
+				PageSize:  5,
+				ToolGrant: req.ToolGrant,
+			}
+			listResp, err := client.ListTools(ctx, listReq)
+			if err != nil {
+				cleanupPendingTurn()
+				return nil, err
+			}
+			p.listRequests = append(p.listRequests, gproto.Clone(listReq).(*proto.ListAgentToolsRequest))
+			p.listResponses = append(p.listResponses, gproto.Clone(listResp).(*proto.ListAgentToolsResponse))
+			for _, tool := range listResp.GetTools() {
+				tools = append(tools, coreagent.Tool{
+					ID:          tool.GetId(),
+					Name:        tool.GetMcpName(),
+					Description: tool.GetDescription(),
+				})
+			}
+		}
+		if len(tools) == 0 && req.ToolSource == coreagent.ToolSourceModeNativeSearch {
 			searchQuery := strings.TrimSpace(p.searchQuery)
 			if searchQuery == "" {
 				searchQuery = "roadmap sync"
@@ -1138,12 +1163,13 @@ func (p *callbackAgentProvider) ResolveInteraction(ctx context.Context, req core
 
 func (p *callbackAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return &coreagent.ProviderCapabilities{
-		StreamingText:    true,
-		ToolCalls:        true,
-		NativeToolSearch: true,
-		Interactions:     true,
-		ResumableTurns:   true,
-		StructuredOutput: true,
+		StreamingText:        true,
+		ToolCalls:            true,
+		Interactions:         true,
+		ResumableTurns:       true,
+		StructuredOutput:     true,
+		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
 }
 
@@ -1214,7 +1240,13 @@ func (p *generatedIDAgentProvider) CancelTurn(_ context.Context, req coreagent.C
 }
 
 func (p *generatedIDAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true, NativeToolSearch: true, Interactions: true, ResumableTurns: true}, nil
+	return &coreagent.ProviderCapabilities{
+		StreamingText:        true,
+		Interactions:         true,
+		ResumableTurns:       true,
+		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+	}, nil
 }
 
 func (p *generatedIDAgentProvider) Ping(context.Context) error { return nil }
@@ -1697,6 +1729,45 @@ func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostServic
 	t.Cleanup(func() { _ = conn.Close() })
 
 	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
+}
+
+func invokeAgentHostListTools(t *testing.T, hostServices []runtimehost.HostService, req *proto.ListAgentToolsRequest) *proto.ListAgentToolsResponse {
+	t.Helper()
+
+	if len(hostServices) != 1 {
+		t.Fatalf("agent host services = %d, want 1", len(hostServices))
+	}
+	if hostServices[0].Register == nil {
+		t.Fatal("agent host register func is nil")
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	hostServices[0].Register(srv)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	resp, err := proto.NewAgentHostClient(conn).ListTools(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	return resp
 }
 
 func withIndexedDBHostClient(t *testing.T, hostService runtimehost.HostService, fn func(proto.IndexedDBClient)) {
@@ -2582,11 +2653,11 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.CreatedBy.SubjectID != p.SubjectID {
 		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", createTurnReq.CreatedBy.SubjectID, p.SubjectID)
 	}
-	if len(createTurnReq.Tools) != 1 || createTurnReq.Tools[0].Target.Plugin != "roadmap" || createTurnReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("CreateTurn tools = %#v, want preloaded roadmap.sync", createTurnReq.Tools)
+	if len(createTurnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
 	}
-	if createTurnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		t.Fatalf("CreateTurn tool source = %q, want native search", createTurnReq.ToolSource)
+	if createTurnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", createTurnReq.ToolSource)
 	}
 	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].Plugin != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.ToolRefs)
@@ -2610,8 +2681,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	provider.mu.Lock()
 	globalToolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
-	if len(globalToolBodies) != 2 || !strings.Contains(globalToolBodies[1], `"subject":"user:user-123"`) || !strings.Contains(globalToolBodies[1], `"taskId":"task-123"`) {
-		t.Fatalf("global tool callback bodies = %#v", globalToolBodies)
+	if len(globalToolBodies) != 1 {
+		t.Fatalf("global tool callback bodies = %#v, want no execution for empty catalog grant", globalToolBodies)
 	}
 
 	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
@@ -2619,14 +2690,14 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		IdempotencyKey: "scoped-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync ashby"}},
-		ToolRefs:       []coreagent.ToolRef{{Plugin: "ashby"}},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "ashby", Operation: "sync"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
 		t.Fatalf("AgentManager.CreateTurn(scoped unavailable) error = %v, want ashby credential error", err)
 	}
 }
 
-func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing.T) {
+func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2831,6 +2902,7 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 		IdempotencyKey: "linear-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
@@ -2843,7 +2915,7 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 	toolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"list_issues"`) {
-		t.Fatalf("tool callback bodies = %#v, want first searched tool to be linear.list_issues", toolBodies)
+		t.Fatalf("tool callback bodies = %#v, want exact catalog tool linear.list_issues", toolBodies)
 	}
 
 	provider.mu.Lock()
@@ -2854,6 +2926,7 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "get my assigned tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(after unavailable hits): %v", err)
@@ -2866,12 +2939,12 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 	toolBodies = append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], `"provider":"linear"`) || !strings.Contains(toolBodies[1], `"operation":"list_issues"`) {
-		t.Fatalf("tool callback bodies after unavailable hits = %#v, want second searched tool to be linear.list_issues", toolBodies)
+		t.Fatalf("tool callback bodies after unavailable hits = %#v, want exact catalog tool linear.list_issues", toolBodies)
 	}
 
 }
 
-func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T) {
+func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2965,6 +3038,12 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 		IdempotencyKey: "candidate-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "search docs"}},
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "docs", Operation: "alpha_search"},
+			{Plugin: "docs", Operation: "beta_list"},
+			{Plugin: "docs", Operation: "delta_export"},
+			{Plugin: "docs", Operation: "gamma_get"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
@@ -2974,18 +3053,18 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	}
 
 	provider.mu.Lock()
-	searchResponses := append([]*proto.SearchAgentToolsResponse(nil), provider.searchResponses...)
+	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
 	toolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
-	if len(searchResponses) != 1 {
-		t.Fatalf("search response count = %d, want 1", len(searchResponses))
+	if len(listResponses) != 1 {
+		t.Fatalf("list response count = %d, want 1", len(listResponses))
 	}
-	searchResp := searchResponses[0]
-	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetId() == "" {
-		t.Fatalf("loaded search tools = %#v, want one docs tool", searchResp.GetTools())
+	listResp := listResponses[0]
+	if len(listResp.GetTools()) != 4 {
+		t.Fatalf("listed tools = %#v, want four visible docs tools", listResp.GetTools())
 	}
 	if len(toolBodies) != 1 {
-		t.Fatalf("tool callback bodies = %#v, want one searched tool execution", toolBodies)
+		t.Fatalf("tool callback bodies = %#v, want one listed tool execution", toolBodies)
 	}
 	var loadedBody map[string]string
 	if err := json.Unmarshal([]byte(toolBodies[0]), &loadedBody); err != nil {
@@ -2998,72 +3077,42 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	if loadedOperation == "" || loadedOperation == "hidden_admin" {
 		t.Fatalf("loaded operation = %q, want visible docs operation", loadedOperation)
 	}
-	if len(searchResp.GetCandidates()) != 2 {
-		t.Fatalf("search candidates len = %d, want 2: %#v", len(searchResp.GetCandidates()), searchResp.GetCandidates())
-	}
-	candidateOperations := map[string]bool{}
-	for _, candidate := range searchResp.GetCandidates() {
-		operation := candidate.GetRef().GetOperation()
-		if operation == "" || operation == loadedOperation || operation == "hidden_admin" {
-			t.Fatalf("candidate operation = %q, loaded = %q, candidates = %#v", operation, loadedOperation, searchResp.GetCandidates())
+	var betaOperation string
+	for _, tool := range listResp.GetTools() {
+		ref := tool.GetRef()
+		if ref.GetOperation() == "hidden_admin" {
+			t.Fatalf("listed hidden tool = %#v, want only visible tools for broad catalog", tool)
 		}
-		candidateOperations[operation] = true
+		if ref.GetOperation() == "beta_list" {
+			betaOperation = ref.GetOperation()
+		}
 	}
-	if len(candidateOperations) != 2 {
-		t.Fatalf("candidate operations = %#v, want two distinct operations", candidateOperations)
+	if betaOperation == "" {
+		t.Fatalf("listed tools = %#v, want beta_list", listResp.GetTools())
 	}
-	if !searchResp.GetHasMore() {
-		t.Fatal("search has_more = false, want true after candidate limit")
-	}
-
-	betaRef := gproto.Clone(searchResp.GetCandidates()[0].GetRef()).(*proto.AgentToolRef)
-	betaOperation := betaRef.GetOperation()
-	provider.mu.Lock()
-	provider.searchMaxResults = -1
-	provider.searchCandidateLimit = 0
-	provider.searchLoadRefs = []*proto.AgentToolRef{betaRef}
-	provider.mu.Unlock()
 	exact, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
 		SessionID:      session.ID,
 		IdempotencyKey: "candidate-load-ref-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "load beta docs"}},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "docs", Operation: betaOperation}},
 	})
 	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn(load ref): %v", err)
+		t.Fatalf("AgentManager.CreateTurn(exact ref): %v", err)
 	}
 	if exact == nil {
-		t.Fatal("AgentManager.CreateTurn(load ref) returned nil turn")
+		t.Fatal("AgentManager.CreateTurn(exact ref) returned nil turn")
 	}
 
 	provider.mu.Lock()
 	toolBodies = append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], fmt.Sprintf(`"operation":"%s"`, betaOperation)) {
-		t.Fatalf("tool callback bodies after load_ref = %#v, want %s", toolBodies, betaOperation)
-	}
-
-	provider.mu.Lock()
-	provider.searchLoadRefs = []*proto.AgentToolRef{{Plugin: "docs", Operation: "hidden_admin"}}
-	provider.mu.Unlock()
-	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		SessionID:      session.ID,
-		IdempotencyKey: "candidate-hidden-load-ref-idempotency-key",
-		Model:          "gpt-test",
-		Messages:       []coreagent.Message{{Role: "user", Text: "load hidden docs"}},
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn(hidden load ref): %v", err)
-	}
-	provider.mu.Lock()
-	toolBodies = append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(toolBodies) != 2 {
-		t.Fatalf("tool callback bodies after hidden load_ref = %#v, want no hidden execution", toolBodies)
+		t.Fatalf("tool callback bodies after exact ref = %#v, want %s", toolBodies, betaOperation)
 	}
 }
 
-func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T) {
+func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -3101,7 +3150,6 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 		},
 	})
 
-	var provider *callbackAgentProvider
 	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
@@ -3113,7 +3161,6 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 			return nil, err
 		}
 		value.searchQuery = "Linear list issues assigned to me"
-		provider = value
 		return value, nil
 	}
 
@@ -3158,18 +3205,11 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
 		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
 	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "mcp catalog") {
+		t.Fatalf("AgentManager.CreateTurn wildcard error = %v, want mcp catalog validation error", err)
 	}
-	if turn == nil {
-		t.Fatal("AgentManager.CreateTurn returned nil turn")
-	}
-
-	provider.mu.Lock()
-	toolBodies := append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
-		t.Fatalf("tool callback bodies = %#v, want searched linear.issues", toolBodies)
+	if turn != nil {
+		t.Fatalf("AgentManager.CreateTurn returned turn %#v, want nil on wildcard rejection", turn)
 	}
 }
 
@@ -6289,10 +6329,19 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
 		t.Fatal("CreateTurn tool_grant is empty")
 	}
-	if len(createTurnReq.Tools) != 1 {
-		t.Fatalf("CreateTurn tools = %#v, want one tool", createTurnReq.Tools)
+	if len(createTurnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
 	}
-	tool := createTurnReq.Tools[0]
+	listResp := invokeAgentHostListTools(t, capturedHostServices, &proto.ListAgentToolsRequest{
+		SessionId: session.ID,
+		TurnId:    turn.ID,
+		PageSize:  5,
+		ToolGrant: createTurnReq.ToolGrant,
+	})
+	if len(listResp.GetTools()) != 1 {
+		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
+	}
+	tool := listResp.GetTools()[0]
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 	if err != nil {
 		t.Fatalf("structpb.NewStruct: %v", err)
@@ -6301,7 +6350,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId:  session.ID,
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-1",
-		ToolId:     tool.ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	})
@@ -6322,7 +6371,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId:  "wrong-session",
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-mismatch",
-		ToolId:     tool.ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	}); status.Code(err) != codes.PermissionDenied {
@@ -6340,7 +6389,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId:  session.ID,
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-wrong-turn",
-		ToolId:     tool.ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	}); status.Code(err) != codes.PermissionDenied {
@@ -6374,7 +6423,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId:  session.ID,
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-2",
-		ToolId:     tool.ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	}); status.Code(err) != codes.PermissionDenied {
@@ -6463,9 +6512,22 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		stored.CompletedAt = nil
 	}
 	providerImpl.mu.Unlock()
-	if strings.TrimSpace(createTurnReq.ToolGrant) == "" || len(createTurnReq.Tools) != 1 {
-		t.Fatalf("CreateTurn request = %#v, want tool grant and one tool", createTurnReq)
+	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
+		t.Fatal("CreateTurn tool_grant is empty")
 	}
+	if len(createTurnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
+	}
+	listResp := invokeAgentHostListTools(t, capturedHostServices, &proto.ListAgentToolsRequest{
+		SessionId: session.ID,
+		TurnId:    turn.ID,
+		PageSize:  5,
+		ToolGrant: createTurnReq.ToolGrant,
+	})
+	if len(listResp.GetTools()) != 1 {
+		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
+	}
+	tool := listResp.GetTools()[0]
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 	if err != nil {
 		t.Fatalf("structpb.NewStruct: %v", err)
@@ -6474,7 +6536,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionId:  session.ID,
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-before-cancel",
-		ToolId:     createTurnReq.Tools[0].ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	}); err != nil {
@@ -6490,7 +6552,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionId:  session.ID,
 		TurnId:     turn.ID,
 		ToolCallId: "tool-call-after-live-cancel",
-		ToolId:     createTurnReq.Tools[0].ID,
+		ToolId:     tool.GetId(),
 		Arguments:  args,
 		ToolGrant:  createTurnReq.ToolGrant,
 	}); err != nil {

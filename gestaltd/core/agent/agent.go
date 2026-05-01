@@ -154,9 +154,6 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 	if fieldName == "" {
 		fieldName = "toolRefs"
 	}
-	if len(refs) == 0 {
-		return fmt.Errorf("mcp catalog requires explicit %s", fieldName)
-	}
 	for i := range refs {
 		ref := refs[i]
 		system := strings.TrimSpace(ref.System)

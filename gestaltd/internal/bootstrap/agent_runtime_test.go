@@ -1869,6 +1869,45 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		t.Fatalf("invoker idempotency key = %q, want agent-tool:turn-1:call-1", calls[0].idempotencyKey)
 	}
 
+	exactCatalogGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"events.reply"},
+		}},
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint exact catalog grant: %v", err)
+	}
+	resp, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-2",
+		ToolID:       exactTools[0].ID,
+		ToolGrant:    exactCatalogGrant,
+		Arguments:    map[string]any{"eventId": "evt-2"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool exact hidden mcp catalog: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"eventId":"evt-2"}` {
+		t.Fatalf("ExecuteTool exact hidden mcp catalog response = %#v", resp)
+	}
+	calls = invoker.Calls()
+	if len(calls) != 2 || calls[1].providerName != "slack" || calls[1].operation != "events.reply" {
+		t.Fatalf("invoker calls = %#v, want slack events.reply twice", calls)
+	}
+
 	mixedGrant, err := toolGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
@@ -1907,7 +1946,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		t.Fatalf("ExecuteTool visible wildcard response = %#v", resp)
 	}
 	calls = invoker.Calls()
-	if len(calls) != 2 || calls[1].providerName != "slack" || calls[1].operation != "chat.postMessage" {
+	if len(calls) != 3 || calls[2].providerName != "slack" || calls[2].operation != "chat.postMessage" {
 		t.Fatalf("invoker calls = %#v, want slack events.reply then chat.postMessage", calls)
 	}
 }
@@ -2215,6 +2254,46 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("SearchTools with mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	}
+
+	emptyGrant, err := toolGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint empty grant: %v", err)
+	}
+	emptyListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		ToolGrant:    emptyGrant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools with empty mcp catalog grant: %v", err)
+	}
+	if len(emptyListResp.Tools) != 0 || emptyListResp.NextPageToken != "" {
+		t.Fatalf("ListTools empty grant = %#v, want no tools", emptyListResp)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       tool.ToolID,
+		ToolGrant:    emptyGrant,
+		Arguments:    map[string]any{"taskId": "task-123"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ExecuteTool with empty mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
 	}
 
 	broadGrant, err := toolGrants.Mint(agentgrant.Grant{
