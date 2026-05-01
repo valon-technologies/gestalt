@@ -16,9 +16,9 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
