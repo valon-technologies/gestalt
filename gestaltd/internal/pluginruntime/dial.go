@@ -5,7 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,6 +22,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+const allowInsecureRemotePluginTCPEnv = "GESTALTD_ALLOW_INSECURE_REMOTE_PLUGIN_TCP"
 
 type dialedHostedPluginConn struct {
 	conn      *grpc.ClientConn
@@ -259,6 +263,9 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 }
 
 func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
+	if err := validatePlaintextTCPTarget(address); err != nil {
+		return nil, err
+	}
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -269,6 +276,31 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	}
 	conn.Connect()
 	return conn, nil
+}
+
+func validatePlaintextTCPTarget(address string) error {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return fmt.Errorf("parse hosted plugin tcp dial target %q: %w", address, err)
+	}
+	if isLoopbackDialHost(host) {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv(allowInsecureRemotePluginTCPEnv)), "true") || os.Getenv(allowInsecureRemotePluginTCPEnv) == "1" {
+		return nil
+	}
+	return fmt.Errorf("hosted plugin tcp dial target %q uses plaintext TCP for a non-loopback host; use tls:// or set %s=1 for local development", address, allowInsecureRemotePluginTCPEnv)
+}
+
+func isLoopbackDialHost(host string) bool {
+	host = strings.TrimSpace(host)
+	host = strings.TrimPrefix(host, "[")
+	host = strings.TrimSuffix(host, "]")
+	if strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") {
+		return true
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Unmap().IsLoopback()
 }
 
 func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {

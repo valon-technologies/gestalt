@@ -117,9 +117,10 @@ func TestMCPOAuthFlow(t *testing.T) {
 
 		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
 		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
+			MCPURL:                      srv.URL + "/mcp",
+			Store:                       store,
+			RedirectURL:                 "http://localhost:9999/callback",
+			AllowInsecureLocalDiscovery: true,
 		})
 
 		authURL, verifier := handler.StartOAuth("test-state", nil)
@@ -219,9 +220,10 @@ func TestMCPOAuthFlow(t *testing.T) {
 
 		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
 		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
+			MCPURL:                      srv.URL + "/mcp",
+			Store:                       store,
+			RedirectURL:                 "http://localhost:9999/callback",
+			AllowInsecureLocalDiscovery: true,
 		})
 
 		authURL, verifier := handler.StartOAuth("test-state", nil)
@@ -289,8 +291,9 @@ func TestMCPOAuthFlow(t *testing.T) {
 		testutil.CloseOnCleanup(t, srv)
 
 		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			RedirectURL: "http://localhost:9999/callback",
+			MCPURL:                      srv.URL + "/mcp",
+			RedirectURL:                 "http://localhost:9999/callback",
+			AllowInsecureLocalDiscovery: true,
 		})
 
 		authURL, verifier := handler.StartOAuth("test-state", nil)
@@ -365,9 +368,10 @@ func TestMCPOAuthFlow(t *testing.T) {
 
 		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
 		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
+			MCPURL:                      srv.URL + "/mcp",
+			Store:                       store,
+			RedirectURL:                 "http://localhost:9999/callback",
+			AllowInsecureLocalDiscovery: true,
 		})
 
 		authURL1, _ := handler.StartOAuth("s1", nil)
@@ -427,8 +431,9 @@ func TestMCPOAuthFlow(t *testing.T) {
 		testutil.CloseOnCleanup(t, srv)
 
 		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			RedirectURL: "http://localhost:9999/callback",
+			MCPURL:                      srv.URL + "/mcp",
+			RedirectURL:                 "http://localhost:9999/callback",
+			AllowInsecureLocalDiscovery: true,
 		})
 
 		defaultTransport, ok := http.DefaultTransport.(*http.Transport)

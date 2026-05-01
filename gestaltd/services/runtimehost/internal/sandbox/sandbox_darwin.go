@@ -80,7 +80,7 @@ func buildSBPLProfile(policy *Policy) string {
 	}
 
 	if policy.ProxyPort > 0 {
-		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
+		fmt.Fprintf(&b, "(allow network-outbound (remote tcp %s))\n", sbplQuote(fmt.Sprintf("localhost:%d", policy.ProxyPort)))
 		b.WriteString("(allow network* (local unix-socket))\n")
 	} else {
 		b.WriteString("(allow network*)\n")

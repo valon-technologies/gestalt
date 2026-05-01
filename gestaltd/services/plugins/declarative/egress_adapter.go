@@ -58,10 +58,10 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	}
 
 	if pgn, ok := b.Pagination[operation]; ok {
-		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
+		return apiexec.DoPaginated(ctx, b.httpClientForEgress(), req, pgn)
 	}
 
-	result, err := apiexec.Do(ctx, b.httpClient(), req)
+	result, err := apiexec.Do(ctx, b.httpClientForEgress(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (b *Base) executeGraphQL(ctx context.Context, operation string, query strin
 		CustomHeaders: headers,
 	}
 
-	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
+	return apiexec.DoGraphQL(ctx, b.httpClientForEgress(), gqlReq)
 }
 
 func (b *Base) checkEgressHost(rawURL string) error {

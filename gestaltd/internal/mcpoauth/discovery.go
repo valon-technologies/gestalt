@@ -15,6 +15,14 @@ import (
 
 const discoveryTimeout = 10 * time.Second
 
+type DiscoverOption func(*discoveryPolicy)
+
+func withInsecureLocalDiscovery() DiscoverOption {
+	return func(policy *discoveryPolicy) {
+		policy.allowInsecureLocal = true
+	}
+}
+
 type DiscoveredMetadata struct {
 	AuthServerURL                 string
 	AuthorizationEndpoint         string
@@ -65,27 +73,36 @@ func (m *DiscoveredMetadata) PreferredAuthMethod() string {
 // Discover probes an MCP server to find its OAuth endpoints. Handles both
 // RFC 9728 indirection (authorization_servers) and servers that embed
 // endpoints directly in resource metadata (ClickHouse).
-func Discover(ctx context.Context, mcpURL string) (*DiscoveredMetadata, error) {
-	client, closeIdleConnections := newHTTPClient(discoveryTimeout)
+func Discover(ctx context.Context, mcpURL string, opts ...DiscoverOption) (*DiscoveredMetadata, error) {
+	var policy discoveryPolicy
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&policy)
+		}
+	}
+	client, closeIdleConnections := newHTTPClient(discoveryTimeout, policy)
 	defer closeIdleConnections()
 
-	resourceMetadataURL, err := probeForResourceMetadata(ctx, client, mcpURL)
+	resourceMetadataURL, err := probeForResourceMetadata(ctx, client, mcpURL, policy)
 	if err != nil {
 		return nil, fmt.Errorf("mcpoauth discovery: probing %s: %w", mcpURL, err)
 	}
 
-	resourceMeta, err := fetchJSON(ctx, client, resourceMetadataURL)
+	resourceMeta, err := fetchJSON(ctx, client, resourceMetadataURL, policy)
 	if err != nil {
 		return nil, fmt.Errorf("mcpoauth discovery: fetching resource metadata from %s: %w", resourceMetadataURL, err)
 	}
 
-	return resolveMetadata(ctx, client, resourceMeta)
+	return resolveMetadata(ctx, client, resourceMeta, policy)
 }
 
 // probeForResourceMetadata sends an unauthenticated request to the MCP URL and
 // looks for a resource_metadata URL in the WWW-Authenticate header. Falls back
 // to constructing the .well-known URL from the MCP URL's origin.
-func probeForResourceMetadata(ctx context.Context, client *http.Client, mcpURL string) (string, error) {
+func probeForResourceMetadata(ctx context.Context, client *http.Client, mcpURL string, policy discoveryPolicy) (string, error) {
+	if err := validateDiscoveryURL(ctx, mcpURL, policy); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mcpURL, strings.NewReader(`{"jsonrpc":"2.0","method":"initialize","id":1}`))
 	if err != nil {
 		return "", fmt.Errorf("creating probe request: %w", err)
@@ -138,7 +155,7 @@ func wellKnownResourceMetadataURL(mcpURL string) (string, error) {
 	return wellKnown.String(), nil
 }
 
-func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[string]any) (*DiscoveredMetadata, error) {
+func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[string]any, policy discoveryPolicy) (*DiscoveredMetadata, error) {
 	md := &DiscoveredMetadata{}
 
 	// Try RFC 9728 indirection: authorization_servers -> AS metadata
@@ -146,7 +163,7 @@ func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[
 		serverURL, _ := servers[0].(string)
 		if serverURL != "" {
 			md.AuthServerURL = serverURL
-			asMeta, err := fetchASMetadata(ctx, client, serverURL)
+			asMeta, err := fetchASMetadata(ctx, client, serverURL, policy)
 			if err != nil {
 				return nil, fmt.Errorf("fetching AS metadata from %s: %w", serverURL, err)
 			}
@@ -184,6 +201,18 @@ func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[
 	if md.AuthorizationEndpoint == "" || md.TokenEndpoint == "" {
 		return nil, fmt.Errorf("discovery did not find authorization_endpoint and token_endpoint")
 	}
+	for name, endpoint := range map[string]string{
+		"authorization_endpoint": md.AuthorizationEndpoint,
+		"token_endpoint":         md.TokenEndpoint,
+		"registration_endpoint":  md.RegistrationEndpoint,
+	} {
+		if endpoint == "" {
+			continue
+		}
+		if err := validateDiscoveryURL(ctx, endpoint, policy); err != nil {
+			return nil, fmt.Errorf("%s is not a safe discovery URL: %w", name, err)
+		}
+	}
 
 	// Derive AuthServerURL from the authorization endpoint origin when not
 	// set via the authorization_servers field.
@@ -196,7 +225,7 @@ func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[
 	return md, nil
 }
 
-func fetchASMetadata(ctx context.Context, client *http.Client, serverURL string) (map[string]any, error) {
+func fetchASMetadata(ctx context.Context, client *http.Client, serverURL string, policy discoveryPolicy) (map[string]any, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing AS URL: %w", err)
@@ -207,7 +236,7 @@ func fetchASMetadata(ctx context.Context, client *http.Client, serverURL string)
 		Host:   u.Host,
 		Path:   "/.well-known/oauth-authorization-server" + u.Path,
 	}
-	return fetchJSON(ctx, client, wellKnown.String())
+	return fetchJSON(ctx, client, wellKnown.String(), policy)
 }
 
 func populateFromASMetadata(md *DiscoveredMetadata, asMeta map[string]any) {
@@ -225,7 +254,10 @@ func populateFromASMetadata(md *DiscoveredMetadata, asMeta map[string]any) {
 	md.TokenEndpointAuthMethods = stringSlice(asMeta, "token_endpoint_auth_methods_supported")
 }
 
-func fetchJSON(ctx context.Context, client *http.Client, rawURL string) (map[string]any, error) {
+func fetchJSON(ctx context.Context, client *http.Client, rawURL string, policy discoveryPolicy) (map[string]any, error) {
+	if err := validateDiscoveryURL(ctx, rawURL, policy); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request for %s: %w", rawURL, err)
