@@ -78,7 +78,7 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	base, err := declarative.Build(graphql.StaticDefinition("linear", srv.URL), config.ConnectionDef{})
+	base, err := declarative.Build(graphql.StaticDefinition("linear", srv.URL), declarative.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("declarative.Build: %v", err)
 	}

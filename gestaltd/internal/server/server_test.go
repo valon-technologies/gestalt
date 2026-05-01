@@ -10616,7 +10616,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					Operations: map[string]declarative.OperationDef{
 						"list_items": {Method: http.MethodGet, Path: "/items"},
 					},
-				}, config.ConnectionDef{})
+				}, declarative.ConnectionDef{})
 				if err != nil {
 					t.Fatalf("Build: %v", err)
 				}
@@ -10742,7 +10742,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 			Operations: map[string]declarative.OperationDef{
 				"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 			},
-		}, config.ConnectionDef{})
+		}, declarative.ConnectionDef{})
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -21711,7 +21711,7 @@ func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
 		Operations: map[string]declarative.OperationDef{
 			"do_thing": {Description: "Do a thing", Method: http.MethodGet, Path: "/do_thing"},
 		},
-	}, config.ConnectionDef{})
+	}, declarative.ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

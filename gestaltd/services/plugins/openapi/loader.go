@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,15 +17,15 @@ import (
 	"github.com/pb33f/libopenapi/orderedmap"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/toolschema"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
 const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
-func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride) (*declarative.Definition, error) {
+func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*operationexposure.OperationOverride) (*declarative.Definition, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -108,7 +109,7 @@ func extractScopes(scopes *orderedmap.Map[string, string]) []string {
 	return result
 }
 
-func collectOperationScopes(model *v3high.Document, allowedOps map[string]*config.OperationOverride) []string {
+func collectOperationScopes(model *v3high.Document, allowedOps map[string]*operationexposure.OperationOverride) []string {
 	seen := make(map[string]struct{})
 	collect := func(reqs []*base.SecurityRequirement) {
 		for _, req := range reqs {
@@ -151,7 +152,7 @@ func collectOperationScopes(model *v3high.Document, allowedOps map[string]*confi
 	return result
 }
 
-func extractOperations(model *v3high.Document, def *declarative.Definition, allowedOps map[string]*config.OperationOverride) {
+func extractOperations(model *v3high.Document, def *declarative.Definition, allowedOps map[string]*operationexposure.OperationOverride) {
 	def.Operations = make(map[string]declarative.OperationDef)
 
 	if model.Paths == nil || model.Paths.PathItems == nil {
@@ -187,7 +188,7 @@ func extractOperations(model *v3high.Document, def *declarative.Definition, allo
 				if override.Alias != "" {
 					opID = override.Alias
 				}
-				allowedRoles = override.AllowedRoles
+				allowedRoles = slices.Clone(override.AllowedRoles)
 				tags = catalog.MergeTags(tags, override.Tags)
 			}
 
