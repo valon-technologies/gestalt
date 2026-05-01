@@ -18,6 +18,7 @@ type RuntimeLogHostTransport = InterceptedService<Channel, RelayTokenInterceptor
 
 pub const ENV_RUNTIME_LOG_HOST_SOCKET: &str = "GESTALT_RUNTIME_LOG_SOCKET";
 pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_RUNTIME_LOG_SOCKET_TOKEN";
+pub const ENV_RUNTIME_SESSION_ID: &str = "GESTALT_RUNTIME_SESSION_ID";
 const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 pub type RuntimeLogStream = pb::PluginRuntimeLogStream;
@@ -92,6 +93,14 @@ impl RuntimeLogHost {
             .await
     }
 
+    pub async fn append_current(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: impl Into<String>,
+    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        self.append(runtime_session_id()?, stream, message).await
+    }
+
     pub async fn append_entry(
         &mut self,
         session_id: impl Into<String>,
@@ -113,6 +122,23 @@ impl RuntimeLogHost {
         .await
     }
 
+    pub async fn append_current_entry(
+        &mut self,
+        stream: RuntimeLogStream,
+        message: impl Into<String>,
+        observed_at: Option<prost_types::Timestamp>,
+        source_seq: i64,
+    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        self.append_entry(
+            runtime_session_id()?,
+            stream,
+            message,
+            observed_at,
+            source_seq,
+        )
+        .await
+    }
+
     pub async fn append_stdout(
         &mut self,
         session_id: impl Into<String>,
@@ -120,6 +146,13 @@ impl RuntimeLogHost {
     ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(session_id, RuntimeLogStream::Stdout, message)
             .await
+    }
+
+    pub async fn append_current_stdout(
+        &mut self,
+        message: impl Into<String>,
+    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        self.append_current(RuntimeLogStream::Stdout, message).await
     }
 
     pub async fn append_stderr(
@@ -131,12 +164,27 @@ impl RuntimeLogHost {
             .await
     }
 
+    pub async fn append_current_stderr(
+        &mut self,
+        message: impl Into<String>,
+    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        self.append_current(RuntimeLogStream::Stderr, message).await
+    }
+
     pub async fn append_runtime(
         &mut self,
         session_id: impl Into<String>,
         message: impl Into<String>,
     ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(session_id, RuntimeLogStream::Runtime, message)
+            .await
+    }
+
+    pub async fn append_current_runtime(
+        &mut self,
+        message: impl Into<String>,
+    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        self.append_current(RuntimeLogStream::Runtime, message)
             .await
     }
 }
@@ -224,6 +272,19 @@ fn parse_runtime_log_host_target(
         )));
     }
     Ok(RuntimeLogHostTarget::Unix(target.to_string()))
+}
+
+pub fn runtime_session_id() -> std::result::Result<String, RuntimeLogHostError> {
+    let session_id = std::env::var(ENV_RUNTIME_SESSION_ID)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if session_id.is_empty() {
+        return Err(RuntimeLogHostError::Env(format!(
+            "runtime session: {ENV_RUNTIME_SESSION_ID} is not set"
+        )));
+    }
+    Ok(session_id)
 }
 
 fn timestamp_now() -> prost_types::Timestamp {

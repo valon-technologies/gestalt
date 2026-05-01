@@ -7227,6 +7227,77 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 }
 
+func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+			},
+		},
+	}
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	t.Cleanup(func() { _ = services.Close() })
+	deps := Deps{Services: services}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].SessionID {
+		t.Fatalf("StartPlugin %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].SessionID)
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	for _, req := range bindRequests {
+		if req.EnvVar != runtimehost.DefaultRuntimeLogHostSocketEnv {
+			continue
+		}
+		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
+			t.Fatalf("runtime log host relay target = %q, want unix direct dial target", got)
+		}
+		return
+	}
+	t.Fatalf("BindHostService requests missing %s: %#v", runtimehost.DefaultRuntimeLogHostSocketEnv, bindRequests)
+}
+
 func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *runtimehost.PublicHostServiceRegistry) http.Handler {
 	t.Helper()
 

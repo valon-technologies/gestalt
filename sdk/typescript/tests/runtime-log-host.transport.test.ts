@@ -15,12 +15,14 @@ import {
 import {
   ENV_RUNTIME_LOG_HOST_SOCKET,
   ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+  ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
 } from "../src/index.ts";
 
 test("RuntimeLogHost appends logs and forwards relay token env", async () => {
   const previousSocket = process.env[ENV_RUNTIME_LOG_HOST_SOCKET];
   const previousToken = process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN];
+  const previousSession = process.env[ENV_RUNTIME_SESSION_ID];
   const calls: AppendPluginRuntimeLogsRequest[] = [];
   const seenTokens: string[] = [];
 
@@ -60,24 +62,23 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     process.env[ENV_RUNTIME_LOG_HOST_SOCKET] = `tcp://127.0.0.1:${address.port}`;
     process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] =
       "relay-token-typescript";
+    process.env[ENV_RUNTIME_SESSION_ID] = "runtime-session-1";
 
     const host = new RuntimeLogHost();
     const observedAt = new Date("2026-04-30T12:00:00.000Z");
     const appended = await host.append({
-      sessionId: "session-1",
       stream: "runtime",
       message: "runtime boot\n",
       observedAt,
       sourceSeq: 7n,
     });
     await host.append({
-      sessionId: "session-1",
       stream: "runtime",
       message: "pre-epoch\n",
       observedAt: new Date(-1),
       sourceSeq: 8n,
     });
-    const writer = host.writer("session-1", {
+    const writer = host.writer({
       stream: "stderr",
       sourceSeqStart: 8n,
     });
@@ -99,9 +100,9 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       "relay-token-typescript",
     ]);
     expect(calls.map((call) => call.sessionId)).toEqual([
-      "session-1",
-      "session-1",
-      "session-1",
+      "runtime-session-1",
+      "runtime-session-1",
+      "runtime-session-1",
     ]);
     expect(calls[0]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.RUNTIME);
     expect(calls[0]?.logs[0]?.message).toBe("runtime boot\n");
@@ -125,6 +126,11 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       delete process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN];
     } else {
       process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] = previousToken;
+    }
+    if (previousSession === undefined) {
+      delete process.env[ENV_RUNTIME_SESSION_ID];
+    } else {
+      process.env[ENV_RUNTIME_SESSION_ID] = previousSession;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {
