@@ -13,12 +13,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
@@ -152,11 +152,15 @@ func mustAuthorizerWithPluginPolicies(t *testing.T, cfg config.AuthorizationConf
 	for provider, policy := range providerPolicies {
 		pluginDefs[provider] = &config.ProviderEntry{AuthorizationPolicy: policy}
 	}
-	authz, err := authorization.New(cfg, pluginDefs)
+	authz, err := newTestAuthorizer(cfg, pluginDefs)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	return authz
+}
+
+func newTestAuthorizer(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*authorization.Authorizer, error) {
+	return authorization.New(config.AuthorizationStaticConfig(cfg, pluginDefs))
 }
 
 type testSessionWithTools struct {
@@ -1214,7 +1218,7 @@ func TestNewServer_HumanListToolsFiltersRoleRestrictedTools(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	_, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1294,7 +1298,7 @@ func TestNewServer_HumanListToolsUsesCanonicalSubjectForStaticCollisions(t *test
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1354,7 +1358,7 @@ func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1520,7 +1524,7 @@ func TestNewServer_HumanListToolsIgnoresHiddenStaticCollisions(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1663,7 +1667,7 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 	if err != nil {
 		t.Fatalf("FindOrCreateUser admin: %v", err)
 	}
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1768,7 +1772,7 @@ func TestNewServer_HumanSessionCatalogReceivesAccessContext(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1831,7 +1835,7 @@ func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -2264,7 +2268,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -2716,7 +2720,7 @@ func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritin
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	const userID = "viewer-user"
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",

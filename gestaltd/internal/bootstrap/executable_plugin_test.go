@@ -37,7 +37,6 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -3147,7 +3146,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	t.Cleanup(func() { _ = services.Close() })
 
 	if len(authCfg.Policies) > 0 {
-		authz, err := authorization.New(authCfg, cfg.Plugins)
+		authz, err := authorizationservice.New(config.AuthorizationStaticConfig(authCfg, cfg.Plugins))
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
