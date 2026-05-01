@@ -5,7 +5,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

@@ -13,8 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -22,7 +21,6 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
 	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -96,7 +94,7 @@ func newCatalogBackedProvider(stub coretesting.StubIntegration, ops []core.Opera
 	}
 }
 
-func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Services, string) {
+func stubServicesWithToken(t *testing.T, integrations ...string) (*testutil.Services, string) {
 	t.Helper()
 	svc := testutil.NewStubServices(t)
 	ctx := context.Background()
@@ -146,21 +144,18 @@ func ctxWithServiceAccountPrincipal(accountID string) context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
-func mustAuthorizerWithPluginPolicies(t *testing.T, cfg config.AuthorizationConfig, providerPolicies map[string]string) *authorization.Authorizer {
+func mustAuthorizerWithPluginPolicies(t *testing.T, cfg authorization.StaticConfig, providerPolicies map[string]string) *authorization.Authorizer {
 	t.Helper()
-	pluginDefs := make(map[string]*config.ProviderEntry, len(providerPolicies))
-	for provider, policy := range providerPolicies {
-		pluginDefs[provider] = &config.ProviderEntry{AuthorizationPolicy: policy}
-	}
-	authz, err := newTestAuthorizer(cfg, pluginDefs)
+	authz, err := newTestAuthorizer(cfg, providerPolicies)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	return authz
 }
 
-func newTestAuthorizer(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*authorization.Authorizer, error) {
-	return authorization.New(config.AuthorizationStaticConfig(cfg, pluginDefs))
+func newTestAuthorizer(cfg authorization.StaticConfig, providerPolicies map[string]string) (*authorization.Authorizer, error) {
+	cfg.ProviderPolicies = providerPolicies
+	return authorization.New(cfg)
 }
 
 type testSessionWithTools struct {
@@ -1117,10 +1112,10 @@ func TestNewServer_ServiceAccountListToolsFiltersStaticAndSessionTools(t *testin
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz := mustAuthorizerWithPluginPolicies(t, authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"clickhouse_policy": {
-				Members: []config.SubjectPolicyMemberDef{{
+				Members: []authorization.StaticSubjectMember{{
 					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
@@ -1218,17 +1213,17 @@ func TestNewServer_HumanListToolsFiltersRoleRestrictedTools(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	_, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1298,17 +1293,17 @@ func TestNewServer_HumanListToolsUsesCanonicalSubjectForStaticCollisions(t *test
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1358,17 +1353,17 @@ func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1524,17 +1519,17 @@ func TestNewServer_HumanListToolsIgnoresHiddenStaticCollisions(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1667,18 +1662,18 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 	if err != nil {
 		t.Fatalf("FindOrCreateUser admin: %v", err)
 	}
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1772,17 +1767,17 @@ func TestNewServer_HumanSessionCatalogReceivesAccessContext(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1835,17 +1830,17 @@ func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -1907,10 +1902,10 @@ func TestNewServer_ServiceAccountCallToolDeniedReturnsErrorResult(t *testing.T) 
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := testutil.NewStubServices(t)
-	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz := mustAuthorizerWithPluginPolicies(t, authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"clickhouse_policy": {
-				Members: []config.SubjectPolicyMemberDef{{
+				Members: []authorization.StaticSubjectMember{{
 					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
@@ -1973,8 +1968,8 @@ func TestNewServer_ServiceAccountCallToolDeniedForUnboundSessionOnlyProvider(t *
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := testutil.NewStubServices(t)
-	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz := mustAuthorizerWithPluginPolicies(t, authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"clickhouse_policy": {},
 		},
 	}, map[string]string{"clickhouse": "clickhouse_policy"})
@@ -2062,10 +2057,10 @@ func TestNewServer_ServiceAccountCallToolUsesBoundConnectionForSessionOnlyProvid
 		t.Fatalf("PutCredential: %v", err)
 	}
 
-	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz := mustAuthorizerWithPluginPolicies(t, authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"clickhouse_policy": {
-				Members: []config.SubjectPolicyMemberDef{{
+				Members: []authorization.StaticSubjectMember{{
 					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
@@ -2175,10 +2170,10 @@ func TestNewServer_ServiceAccountCallToolUsesRequestedInstance(t *testing.T) {
 		t.Fatalf("PutCredential: %v", err)
 	}
 
-	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz := mustAuthorizerWithPluginPolicies(t, authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sampledb_policy": {
-				Members: []config.SubjectPolicyMemberDef{{
+				Members: []authorization.StaticSubjectMember{{
 					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
@@ -2268,17 +2263,17 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -2720,17 +2715,17 @@ func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritin
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	const userID = "viewer-user"
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
+	authz, err := newTestAuthorizer(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
+				Members: []authorization.StaticSubjectMember{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, map[string]string{
+		"sampledb": "sample_policy",
 	})
 
 	if err != nil {
@@ -2909,7 +2904,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 		"Hybrid",
 		"Hybrid provider",
 		"",
-		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+		composite.BoundProvider{Provider: pluginProv, Connection: core.PluginConnectionName},
 		composite.BoundProvider{Provider: apiProv, Connection: testAPIConnectionName},
 	)
 	if err != nil {
@@ -2920,7 +2915,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
 	_ = ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		ID: "tok-plugin", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
+		ID: "tok-plugin", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: core.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
 	_ = ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{

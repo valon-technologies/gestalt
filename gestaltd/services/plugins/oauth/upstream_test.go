@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 func TestAuthorizationURL(t *testing.T) {

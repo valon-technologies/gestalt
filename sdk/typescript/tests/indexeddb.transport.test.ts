@@ -29,7 +29,7 @@ beforeAll(async () => {
   harnessBinPath = join(tmpDir, "indexeddbtransportd");
 
   const build = spawn(
-    ["go", "build", "-o", harnessBinPath, "./services/testutil/testdata/cmd/indexeddbtransportd/"],
+    ["go", "build", "-o", harnessBinPath, "./internal/testutil/testdata/cmd/indexeddbtransportd/"],
     { cwd: GESTALTD_DIR, stdout: "pipe", stderr: "pipe" },
   );
   const buildExit = await build.exited;

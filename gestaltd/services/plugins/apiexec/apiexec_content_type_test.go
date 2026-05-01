@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 func TestDo_POSTExplicitContentTypeOverridesCustomHeaders(t *testing.T) {

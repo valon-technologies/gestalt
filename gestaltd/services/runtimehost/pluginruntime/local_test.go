@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testing.T) {

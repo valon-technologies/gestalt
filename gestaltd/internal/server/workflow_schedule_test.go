@@ -18,9 +18,9 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 type stubWorkflowControl struct {

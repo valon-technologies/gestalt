@@ -7,8 +7,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 type closableProvider struct {

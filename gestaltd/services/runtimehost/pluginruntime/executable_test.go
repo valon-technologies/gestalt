@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 	"google.golang.org/grpc"
 )
 

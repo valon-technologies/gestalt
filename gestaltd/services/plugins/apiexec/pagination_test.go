@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 func TestDoPaginatedCursor(t *testing.T) {

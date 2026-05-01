@@ -21,9 +21,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
@@ -1179,7 +1179,7 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 			t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 		}
 	case providermanifestv1.KindAgent:
-		if err := buildTarget(gestaltdRootForE2E(t), "./services/testutil/testdata/testproviders/agent", binDest); err != nil {
+		if err := buildTarget(gestaltdRootForE2E(t), "./internal/testutil/testdata/testproviders/agent", binDest); err != nil {
 			t.Fatalf("build agent provider fixture: %v", err)
 		}
 	default:
@@ -1218,7 +1218,7 @@ func gestaltdRootForE2E(t *testing.T) string {
 		t.Fatalf("Getwd: %v", err)
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "services", "testutil", "testdata", "testproviders", "agent")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "internal", "testutil", "testdata", "testproviders", "agent")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)

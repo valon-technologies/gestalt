@@ -7,7 +7,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
-func NewStubServices(t *testing.T) *coredata.Services {
+type Services = coredata.Services
+
+func NewStubServices(t *testing.T) *Services {
 	t.Helper()
 	svc, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -17,7 +19,7 @@ func NewStubServices(t *testing.T) *coredata.Services {
 	return svc
 }
 
-func AttachStubExternalCredentials(svc *coredata.Services) *coretesting.StubExternalCredentialProvider {
+func AttachStubExternalCredentials(svc *Services) *coretesting.StubExternalCredentialProvider {
 	if svc == nil {
 		return nil
 	}

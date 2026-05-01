@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 func TestSubstitutePath_MissingParam(t *testing.T) {

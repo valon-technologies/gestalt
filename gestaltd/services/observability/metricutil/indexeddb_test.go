@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
 
 func TestInstrumentIndexedDBRecordsDBAndObjectStoreAttributes(t *testing.T) {
