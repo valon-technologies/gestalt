@@ -10,9 +10,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/plugins/headerutil"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -80,7 +80,7 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		desc:        fmt.Sprintf("MCP upstream: %s", url),
 		url:         url,
 		connMode:    connMode,
-		headers:     config.NormalizeHeaders(headers),
+		headers:     headerutil.NormalizeHeaders(headers),
 		checkEgress: checkEgress,
 	}
 	for _, opt := range opts {
@@ -156,7 +156,7 @@ func (u *Upstream) Close() error {
 	return u.client.Close()
 }
 
-func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride) error {
+func (u *Upstream) FilterOperations(allowed map[string]*operationexposure.OperationOverride) error {
 	policy, err := operationexposure.New(allowed)
 	if err != nil {
 		return err
@@ -205,7 +205,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 			if token != "" {
 				authHeaders = map[string]string{"Authorization": core.BearerScheme + token}
 			}
-			return config.MergeHeaders(u.headers, authHeaders)
+			return headerutil.MergeHeaders(u.headers, authHeaders)
 		}),
 	)
 	if err != nil {

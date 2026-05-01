@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -162,7 +162,7 @@ func TestUpstream_FilterOperations(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]*config.OperationOverride{"run_query": nil})
+	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{"run_query": nil})
 	if err != nil {
 		t.Fatalf("FilterOperations: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestUpstream_FilterOperationsWithOverride(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]*config.OperationOverride{
+	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{
 		"run_query":      {Description: "Custom query description"},
 		"list_databases": nil,
 	})
@@ -218,7 +218,7 @@ func TestUpstream_FilterOperationsUnknown(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]*config.OperationOverride{"nonexistent": nil})
+	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{"nonexistent": nil})
 	if err == nil {
 		t.Fatal("expected error for unknown operation")
 	}
@@ -230,7 +230,7 @@ func TestUpstream_FilterOperationsEmpty(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]*config.OperationOverride{})
+	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
 	}
@@ -242,7 +242,7 @@ func TestUpstream_DiscoverAfterFilterWithAlias(t *testing.T) {
 	u := newTestUpstream(t)
 	t.Cleanup(func() { _ = u.Close() })
 
-	err := u.FilterOperations(map[string]*config.OperationOverride{
+	err := u.FilterOperations(map[string]*operationexposure.OperationOverride{
 		"run_query": {Alias: "query", Tags: []string{"sql"}},
 	})
 	if err != nil {

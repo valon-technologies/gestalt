@@ -6,13 +6,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 func TestPolicyNewRejectsEmpty(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(map[string]*config.OperationOverride{})
+	_, err := New(map[string]*OperationOverride{})
 	if err == nil {
 		t.Fatal("expected error for empty allowed_operations")
 	}
@@ -21,7 +20,7 @@ func TestPolicyNewRejectsEmpty(t *testing.T) {
 func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(map[string]*config.OperationOverride{
+	_, err := New(map[string]*OperationOverride{
 		"op_a": {Alias: "shared"},
 		"op_b": {Alias: "shared"},
 	})
@@ -36,7 +35,7 @@ func TestPolicyNewRejectsAliasCollisions(t *testing.T) {
 func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
-	policy, err := New(map[string]*config.OperationOverride{
+	policy, err := New(map[string]*OperationOverride{
 		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}},
 		"get_item":   nil,
 	})
