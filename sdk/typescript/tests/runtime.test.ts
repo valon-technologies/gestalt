@@ -96,7 +96,6 @@ import {
   httpSubjectError,
   PresignMethod,
   PluginRuntimeEgressMode,
-  PluginRuntimeHostServiceAccess,
   S3,
   WorkflowRunStatus,
   defineCacheProvider,
@@ -1427,7 +1426,6 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
     getSupport() {
       return {
         canHostPlugins: true,
-        hostServiceAccess: PluginRuntimeHostServiceAccess.DIRECT,
         egressMode: PluginRuntimeEgressMode.HOSTNAME,
       };
     },
@@ -1477,7 +1475,6 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
 
   const support = await (service.getSupport as any)(create(EmptySchema));
   expect(support.canHostPlugins).toBe(true);
-  expect(support.hostServiceAccess).toBe(PluginRuntimeHostServiceAccess.DIRECT);
   expect(support.egressMode).toBe(PluginRuntimeEgressMode.HOSTNAME);
 
   const session = await (service.startSession as any)(

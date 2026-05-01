@@ -80,12 +80,13 @@ to read in terms of behavior, not implementation details. Gestalt asks whether
 the runtime can host plugins, how hosted plugins reach Gestalt-owned services,
 and whether the runtime can preserve hostname-based `egress.allowedHosts`.
 
-Host-service access is reported as `none`, `relay`, or `direct`. `direct`
-means the runtime can expose guest-local service sockets inside the session.
-`relay` means the current host deployment can provide those services through
-Gestalt's public relay path. Egress support is separate: a runtime must preserve
-Gestalt's hostname-based policy model before plugins with `egress.allowedHosts`
-or a default-deny egress policy can run there.
+Host-service access is derived by Gestalt from the current host deployment.
+`none` means host services are unavailable for that runtime, while `relay`
+means Gestalt can provide those services through the public relay path. The
+legacy runtime-reported `host_service_access` field is ignored. Egress support
+is separate: a runtime must preserve Gestalt's hostname-based policy model
+before plugins with `egress.allowedHosts` or a default-deny egress policy can
+run there.
 
 The admin inspection API exposes both sides of that decision. `GET
 /admin/api/v1/runtime/providers` includes `profile.advertised`, which is what
@@ -96,12 +97,9 @@ considered.
 ## Host services and hosted plugins
 
 Plugins do not talk directly to host-local services over the public network.
-`gestaltd` starts those services on the host and then gives the runtime one of
-two integration paths. A runtime with direct host-service access can bind
-guest-local sockets straight into the session. A runtime without that direct
-path can still use relay-backed bindings, in which case the hosted plugin talks
-back to `gestaltd` over a scoped public relay target and `gestaltd` forwards
-the request to the real host-local service.
+`gestaltd` starts those services on the host and gives the runtime relay-backed
+bindings. The hosted plugin talks back to `gestaltd` over a scoped public relay
+target, and `gestaltd` forwards the request to the real host-local service.
 
 That same split shows up in hostname-based egress. A runtime may preserve
 `egress.allowedHosts` internally, or it may preserve it by routing hosted

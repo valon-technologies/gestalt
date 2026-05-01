@@ -27,13 +27,6 @@ const (
 	PolicyDeny  PolicyAction = "deny"
 )
 
-type HostServiceAccess string
-
-const (
-	HostServiceAccessNone   HostServiceAccess = "none"
-	HostServiceAccessDirect HostServiceAccess = "direct"
-)
-
 type EgressMode string
 
 const (
@@ -43,9 +36,8 @@ const (
 )
 
 type Support struct {
-	CanHostPlugins    bool
-	HostServiceAccess HostServiceAccess
-	EgressMode        EgressMode
+	CanHostPlugins bool
+	EgressMode     EgressMode
 }
 
 type Session struct {

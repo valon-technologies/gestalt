@@ -2321,7 +2321,6 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	testutil.CloseOnCleanup(t, relaySrv)
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessNone
 
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -2410,7 +2409,6 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
 	entry := &config.ProviderEntry{
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Kind: providermanifestv1.KindAgent,
@@ -2484,7 +2482,6 @@ func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil

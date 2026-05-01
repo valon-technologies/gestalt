@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -14,6 +15,34 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 )
+
+func TestExecutableProviderIgnoresLegacyDirectHostServiceAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runtimeBin := buildRuntimeLogProviderBinary(t)
+	runtimeProvider, err := NewExecutableProvider(ctx, ExecutableConfig{
+		Name:    "modal",
+		Command: runtimeBin,
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeProvider.Close()
+	})
+
+	support, err := runtimeProvider.Support(ctx)
+	if err != nil {
+		t.Fatalf("Support: %v", err)
+	}
+	want := Support{CanHostPlugins: true, EgressMode: EgressModeNone}
+	if !reflect.DeepEqual(support, want) {
+		t.Fatalf("Support = %#v, want %#v", support, want)
+	}
+}
 
 func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing.T) {
 	t.Parallel()
@@ -171,6 +200,7 @@ func (p *runtimeProvider) Configure(context.Context, string, map[string]any) err
 func (p *runtimeProvider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
 	return &proto.PluginRuntimeSupport{
 		CanHostPlugins: true,
+		HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
 	}, nil
 }
 

@@ -111,13 +111,12 @@ the exported provider for the selected language.
         return nil
     }
 
-    func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
-        return &proto.PluginRuntimeSupport{
-            CanHostPlugins:    true,
-            HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
-            EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-        }, nil
-    }
+	    func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
+	        return &proto.PluginRuntimeSupport{
+	            CanHostPlugins: true,
+	            EgressMode:     proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+	        }, nil
+	    }
 
     func (p *Provider) StartSession(context.Context, *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
         return &proto.PluginRuntimeSession{
@@ -173,12 +172,11 @@ the exported provider for the selected language.
 
 
     class ExampleRuntime(gestalt.PluginRuntimeProvider):
-        def GetSupport(self, request, context):
-            return pb.PluginRuntimeSupport(
-                can_host_plugins=True,
-                host_service_access=pb.PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
-                egress_mode=pb.PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-            )
+	        def GetSupport(self, request, context):
+	            return pb.PluginRuntimeSupport(
+	                can_host_plugins=True,
+	                egress_mode=pb.PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+	            )
 
         def StartSession(self, request, context):
             return pb.PluginRuntimeSession(id="session-1", state="ready")
@@ -229,11 +227,10 @@ the exported provider for the selected language.
             &self,
             _request: Request<()>,
         ) -> Result<Response<proto::PluginRuntimeSupport>, Status> {
-            Ok(Response::new(proto::PluginRuntimeSupport {
-                can_host_plugins: true,
-                host_service_access: proto::PluginRuntimeHostServiceAccess::Direct as i32,
-                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
-            }))
+	            Ok(Response::new(proto::PluginRuntimeSupport {
+	                can_host_plugins: true,
+	                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
+	            }))
         }
 
         async fn start_session(
@@ -313,19 +310,17 @@ the exported provider for the selected language.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import {
-      PluginRuntimeEgressMode,
-      PluginRuntimeHostServiceAccess,
-      definePluginRuntimeProvider,
-    } from "@valon-technologies/gestalt";
+	    import {
+	      PluginRuntimeEgressMode,
+	      definePluginRuntimeProvider,
+	    } from "@valon-technologies/gestalt";
 
     export const runtime = definePluginRuntimeProvider({
       getSupport() {
-        return {
-          canHostPlugins: true,
-          hostServiceAccess: PluginRuntimeHostServiceAccess.DIRECT,
-          egressMode: PluginRuntimeEgressMode.HOSTNAME,
-        };
+	        return {
+	          canHostPlugins: true,
+	          egressMode: PluginRuntimeEgressMode.HOSTNAME,
+	        };
       },
 
       startSession() {
@@ -373,11 +368,10 @@ host-reachable executable plugin session. If that is false, Gestalt will reject
 hosted execution for that runtime immediately instead of failing later during
 bootstrap.
 
-`host_service_access` should be `direct` only when the backend can expose
-guest-local host-service sockets inside the runtime session. Most hosted
-runtimes should report `none` and let Gestalt decide whether the current
-deployment can provide relay-backed host services through the public relay
-path. That relay path is host-provided behavior, not runtime-owned behavior.
+	`host_service_access` is a legacy support field kept on the wire for older
+	runtime SDKs. New providers should omit it or leave it unspecified. Gestalt
+	ignores runtime-advertised host-service access and derives effective
+	host-service access from its own public relay configuration.
 
 `egress_mode` should be `hostname` only when the runtime can preserve
 Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
@@ -402,10 +396,9 @@ API. Gestalt needs an explicit session lifecycle because it may need to create
 the session, wait until it is ready, bind host-local services into it, and only
 then start the plugin.
 
-That is why `BindHostService` exists separately from `StartPlugin`. A binding
-may be direct, using a guest-local socket path, or relay-backed, in which case
-the provider receives a public dial target and the hosted plugin talks back to
-`gestaltd` through the host-service relay.
+	That is why `BindHostService` exists separately from `StartPlugin`. A binding
+	is relay-backed: the provider receives a scoped dial target and the hosted
+	plugin talks back to `gestaltd` through the host-service relay.
 
 ## Dial targets
 
