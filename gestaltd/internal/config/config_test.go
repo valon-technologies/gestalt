@@ -3834,6 +3834,46 @@ server:
 	}
 }
 
+func TestLoadConfigRuntimeRelayBaseURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts and trims relay base url", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  runtime:
+    relayBaseUrl: http://valon-tools-gestaltd.gestalt-runtime.svc.cluster.local:8080/
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Server.Runtime.RelayBaseURL; got != "http://valon-tools-gestaltd.gestalt-runtime.svc.cluster.local:8080" {
+			t.Fatalf("server.runtime.relayBaseUrl = %q", got)
+		}
+	})
+
+	t.Run("rejects relay base url with path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  runtime:
+    relayBaseUrl: https://gestalt.example.test/relay
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.runtime.relayBaseUrl must not include a path") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
 	t.Parallel()
 

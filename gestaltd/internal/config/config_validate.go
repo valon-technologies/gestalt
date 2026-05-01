@@ -427,6 +427,10 @@ func validateRuntimeConfig(cfg *Config) error {
 		return nil
 	}
 	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
+	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
+	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
+		return err
+	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
@@ -458,6 +462,22 @@ func validateRuntimeConfig(cfg *Config) error {
 		return err
 	}
 	return nil
+}
+
+func validateRuntimeRelayBaseURL(raw string) error {
+	parsed, err := validateAbsoluteBaseURL("server.runtime.relayBaseUrl", raw)
+	if err != nil || parsed == nil {
+		return err
+	}
+	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
+		return fmt.Errorf("config validation: server.runtime.relayBaseUrl must not include a path")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+		return nil
+	default:
+		return fmt.Errorf("config validation: server.runtime.relayBaseUrl must use http or https")
+	}
 }
 
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
