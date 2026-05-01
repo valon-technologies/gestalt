@@ -6,7 +6,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"

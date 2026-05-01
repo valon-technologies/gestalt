@@ -37,7 +37,7 @@ async fn start_harness(socket_name: &str) -> Harness {
         .arg("build")
         .arg("-o")
         .arg(&binary)
-        .arg("./internal/testutil/cmd/indexeddbtransportd/")
+        .arg("./services/testutil/testdata/cmd/indexeddbtransportd/")
         .current_dir(repo_root.join("gestaltd"))
         .output()
         .expect("go build");
@@ -87,7 +87,7 @@ async fn start_tcp_harness(expect_token: Option<&str>) -> Harness {
         .arg("build")
         .arg("-o")
         .arg(&binary)
-        .arg("./internal/testutil/cmd/indexeddbtransportd/")
+        .arg("./services/testutil/testdata/cmd/indexeddbtransportd/")
         .current_dir(repo_root.join("gestaltd"))
         .output()
         .expect("go build");

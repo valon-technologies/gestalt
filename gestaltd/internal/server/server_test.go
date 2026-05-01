@@ -44,10 +44,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/server"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -69,6 +66,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/s3"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -2196,7 +2195,7 @@ func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, crea
 	rec := indexeddb.Record{
 		"id":               id,
 		"email":            email,
-		"normalized_email": emailutil.Normalize(email),
+		"normalized_email": strings.ToLower(strings.TrimSpace(email)),
 		"display_name":     "",
 		"created_at":       createdAt,
 		"updated_at":       createdAt,

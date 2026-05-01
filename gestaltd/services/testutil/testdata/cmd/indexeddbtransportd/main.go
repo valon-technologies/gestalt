@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbtransport"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/testutil/indexeddbtransport"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc/codes"
 )

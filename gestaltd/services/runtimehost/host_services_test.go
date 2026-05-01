@@ -8,7 +8,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"

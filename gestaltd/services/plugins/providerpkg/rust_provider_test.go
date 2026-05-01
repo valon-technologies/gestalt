@@ -466,7 +466,7 @@ func rustProviderFixturePath(t *testing.T) string {
 		t.Fatal("runtime.Caller failed")
 	}
 	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
-		path := filepath.Join(dir, "gestaltd", "internal", "testutil", "testdata", "provider-rust")
+		path := filepath.Join(dir, "gestaltd", "services", "testutil", "testdata", "provider-rust")
 		if _, err := os.Stat(path); err == nil {
 			return filepath.Clean(path)
 		}

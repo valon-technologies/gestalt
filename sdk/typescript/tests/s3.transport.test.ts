@@ -29,7 +29,7 @@ beforeAll(async () => {
   socketPath = join(tmpDir, "s3.sock");
 
   const build = spawn(
-    ["go", "build", "-o", harnessBinPath, "./internal/testutil/cmd/s3transportd/"],
+    ["go", "build", "-o", harnessBinPath, "./services/testutil/testdata/cmd/s3transportd/"],
     { cwd: GESTALTD_DIR, stdout: "pipe", stderr: "pipe" },
   );
   const buildExit = await build.exited;

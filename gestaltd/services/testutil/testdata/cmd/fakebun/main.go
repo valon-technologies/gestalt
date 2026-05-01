@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
+	"github.com/valon-technologies/gestalt/server/services/testutil/fakebun"
 )
 
 func main() {
