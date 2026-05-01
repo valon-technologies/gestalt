@@ -15,8 +15,8 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )

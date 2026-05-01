@@ -19,8 +19,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 

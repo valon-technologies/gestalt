@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
@@ -56,11 +55,23 @@ func ParseTokenType(token string) (TokenType, bool) {
 
 type Resolver struct {
 	auth      core.AuthenticationProvider
-	users     *coredata.UserService
-	apiTokens *coredata.APITokenService
+	users     UserStore
+	apiTokens APITokenStore
 }
 
-func NewResolver(auth core.AuthenticationProvider, users *coredata.UserService, apiTokens *coredata.APITokenService) *Resolver {
+// UserStore is the identity user lookup surface required for API-token
+// principal resolution.
+type UserStore interface {
+	GetUser(ctx context.Context, id string) (*core.User, error)
+}
+
+// APITokenStore is the token validation surface required for API-token
+// principal resolution.
+type APITokenStore interface {
+	ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error)
+}
+
+func NewResolver(auth core.AuthenticationProvider, users UserStore, apiTokens APITokenStore) *Resolver {
 	return &Resolver{
 		auth:      auth,
 		users:     users,

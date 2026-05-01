@@ -13,7 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 func newTestServices(t *testing.T) *coredata.Services {

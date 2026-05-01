@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 const defaultIssuedTokenExpiry = 30 * 24 * time.Hour
