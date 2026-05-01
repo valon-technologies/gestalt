@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
@@ -63,8 +64,23 @@ func WrapSessionCatalogUnsupported(err error) error {
 	}
 }
 
+type sessionCatalogSupporter interface {
+	SupportsSessionCatalog() bool
+}
+
+type postConnectSupporter interface {
+	SupportsPostConnect() bool
+}
+
+type httpSubjectSupporter interface {
+	SupportsHTTPSubject() bool
+}
+
 func SupportsSessionCatalog(prov Provider) bool {
-	if aware, ok := prov.(interface{ SupportsSessionCatalog() bool }); ok {
+	if prov == nil {
+		return false
+	}
+	if aware, ok := prov.(sessionCatalogSupporter); ok {
 		return aware.SupportsSessionCatalog()
 	}
 	_, ok := prov.(SessionCatalogProvider)
@@ -72,16 +88,22 @@ func SupportsSessionCatalog(prov Provider) bool {
 }
 
 func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catalog.Catalog, bool, error) {
+	if !SupportsSessionCatalog(prov) {
+		return nil, false, nil
+	}
 	scp, ok := prov.(SessionCatalogProvider)
 	if !ok {
-		return nil, false, nil
+		return nil, true, WrapSessionCatalogUnsupported(fmt.Errorf("provider %q advertises session catalog support but does not implement session catalogs", prov.Name()))
 	}
 	cat, err := scp.CatalogForRequest(ctx, token)
 	return cat, true, wrapSessionCatalogUnavailable(err)
 }
 
 func SupportsPostConnect(prov Provider) bool {
-	if aware, ok := prov.(interface{ SupportsPostConnect() bool }); ok {
+	if prov == nil {
+		return false
+	}
+	if aware, ok := prov.(postConnectSupporter); ok {
 		return aware.SupportsPostConnect()
 	}
 	_, ok := prov.(PostConnectCapable)
@@ -94,7 +116,7 @@ func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) 
 	}
 	pcp, ok := prov.(PostConnectCapable)
 	if !ok {
-		return nil, false, nil
+		return nil, true, fmt.Errorf("%w: provider %q advertises post-connect support but does not implement post-connect", ErrPostConnectUnsupported, prov.Name())
 	}
 	metadata, err := pcp.PostConnect(ctx, token)
 	if err != nil {
@@ -107,7 +129,10 @@ func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) 
 }
 
 func SupportsHTTPSubject(prov Provider) bool {
-	if aware, ok := prov.(interface{ SupportsHTTPSubject() bool }); ok {
+	if prov == nil {
+		return false
+	}
+	if aware, ok := prov.(httpSubjectSupporter); ok {
 		return aware.SupportsHTTPSubject()
 	}
 	_, ok := prov.(HTTPSubjectResolver)

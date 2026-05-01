@@ -74,8 +74,8 @@ func NewRestricted(inner core.Provider, ops map[string]string, opts ...Restricte
 	for _, opt := range opts {
 		opt(r)
 	}
-	if scp, ok := inner.(core.SessionCatalogProvider); ok {
-		rs := &restrictedSession{Restricted: r, scp: scp}
+	if core.SupportsSessionCatalog(inner) {
+		rs := &restrictedSession{Restricted: r, sessionSource: inner}
 		if oauth, ok := inner.(core.OAuthProvider); ok {
 			return &restrictedOAuth{Restricted: rs.Restricted, inner: oauth, session: rs}
 		}
@@ -173,15 +173,22 @@ func (r *Restricted) Inner() core.Provider {
 	return r.inner
 }
 
+func (r *Restricted) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(r.inner)
+}
+
 // restrictedSession wraps a Restricted provider and adds SessionCatalogProvider
-// support. Only returned when the inner provider actually implements it.
+// support. Only returned when the inner provider reports support for it.
 type restrictedSession struct {
 	*Restricted
-	scp core.SessionCatalogProvider
+	sessionSource core.Provider
 }
 
 func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, err := rs.scp.CatalogForRequest(ctx, token)
+	cat, scoped, err := core.CatalogForRequest(ctx, rs.sessionSource, token)
+	if !scoped {
+		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", rs.Name()))
+	}
 	if err != nil || cat == nil {
 		return cat, err
 	}
@@ -208,11 +215,15 @@ func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string)
 	return r.inner.RefreshToken(ctx, refreshToken)
 }
 
+func (r *restrictedOAuth) SupportsSessionCatalog() bool {
+	return r.session != nil && core.SupportsSessionCatalog(r.Restricted.inner)
+}
+
 func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if r.session != nil {
 		return r.session.CatalogForRequest(ctx, token)
 	}
-	return nil, nil
+	return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", r.Name()))
 }
 
 func (r *Restricted) AuthTypes() []string {
@@ -236,10 +247,11 @@ func (r *Restricted) SupportsPostConnect() bool {
 }
 
 func (r *Restricted) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if pcp, ok := r.inner.(core.PostConnectCapable); ok {
-		return pcp.PostConnect(ctx, token)
+	metadata, supported, err := core.PostConnect(ctx, r.inner, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
 	}
-	return nil, core.ErrPostConnectUnsupported
+	return metadata, err
 }
 
 func (r *Restricted) SupportsHTTPSubject() bool {

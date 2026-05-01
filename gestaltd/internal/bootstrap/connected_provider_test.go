@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 	"testing"
@@ -237,5 +238,55 @@ func TestBindProviderConnectionDoesNotFalsePositivePostConnectSupport(t *testing
 	}
 	if got != nil {
 		t.Fatalf("PostConnect metadata = %#v, want nil", got)
+	}
+}
+
+type connectedNoSessionCatalogProvider struct {
+	connectedNoPostConnectProvider
+	catalogCalls int
+}
+
+func (p *connectedNoSessionCatalogProvider) SupportsSessionCatalog() bool {
+	return false
+}
+
+func (p *connectedNoSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	p.catalogCalls++
+	return p.connectedNoPostConnectProvider.CatalogForRequest(ctx, token)
+}
+
+func TestBindProviderConnectionDoesNotFalsePositiveSessionCatalogSupport(t *testing.T) {
+	t.Parallel()
+
+	inner := &connectedNoSessionCatalogProvider{}
+	prov := bindProviderConnection(inner, "default")
+	if core.SupportsSessionCatalog(prov) {
+		t.Fatal("expected bound provider to report no session catalog support")
+	}
+
+	cat, attempted, err := core.CatalogForRequest(context.Background(), prov, "tok")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if attempted {
+		t.Fatal("expected core.CatalogForRequest to report no attempt")
+	}
+	if cat != nil {
+		t.Fatalf("CatalogForRequest catalog = %#v, want nil", cat)
+	}
+	if inner.catalogCalls != 0 {
+		t.Fatalf("CatalogForRequest calls = %d, want 0", inner.catalogCalls)
+	}
+
+	scp, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatal("expected outer OAuth/GraphQL wrapper to still have direct CatalogForRequest method")
+	}
+	_, err = scp.CatalogForRequest(context.Background(), "tok")
+	if !errors.Is(err, core.ErrSessionCatalogUnsupported) {
+		t.Fatalf("direct CatalogForRequest error = %v, want ErrSessionCatalogUnsupported", err)
+	}
+	if inner.catalogCalls != 0 {
+		t.Fatalf("direct CatalogForRequest calls = %d, want 0", inner.catalogCalls)
 	}
 }
