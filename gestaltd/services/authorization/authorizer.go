@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -29,12 +28,22 @@ type StaticSubjectMember struct {
 	Role      string
 }
 
+type StaticConfig struct {
+	Policies         map[string]StaticSubjectPolicy
+	ProviderPolicies map[string]string
+}
+
+type StaticSubjectPolicy struct {
+	Default string
+	Members []StaticSubjectMember
+}
+
 type Authorizer struct {
 	policies         map[string]*SubjectPolicy
 	providerPolicies map[string]string
 }
 
-func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*Authorizer, error) {
+func New(cfg StaticConfig) (*Authorizer, error) {
 	a := &Authorizer{
 		policies:         map[string]*SubjectPolicy{},
 		providerPolicies: map[string]string{},
@@ -54,11 +63,8 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		}
 		a.policies[policyID] = policy
 	}
-	for providerName, entry := range pluginDefs {
-		if entry == nil {
-			continue
-		}
-		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
+	for providerName, policy := range cfg.ProviderPolicies {
+		if policy = strings.TrimSpace(policy); policy != "" {
 			a.providerPolicies[providerName] = policy
 		}
 	}
