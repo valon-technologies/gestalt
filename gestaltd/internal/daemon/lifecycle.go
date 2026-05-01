@@ -5,7 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/operator"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
 func operatorLifecycle() *operator.Lifecycle {
