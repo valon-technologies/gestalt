@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/server/internal/pluginvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1901,7 +1901,7 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, plug
 	}, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry, configDir string) (*pluginstore.InstalledPlugin, LockEntry, error) {
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry, configDir string) (*store.InstalledPlugin, LockEntry, error) {
 	sourceLocation := plugin.SourceReleaseLocation()
 	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
 	if err != nil {
@@ -1942,7 +1942,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		return nil, LockEntry{}, fmt.Errorf("metadata source digest mismatch for %s: got %s, want %s", subject, download.SHA256Hex, archive.SHA256)
 	}
 
-	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	installed, err := store.Install(download.LocalPath, destDir)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("install metadata source package for %s: %w", subject, err)
 	}
@@ -2017,7 +2017,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths lifec
 
 	sourceLocation := plugin.SourceReleaseLocation()
 	var (
-		installed *pluginstore.InstalledPlugin
+		installed *store.InstalledPlugin
 		entry     LockEntry
 		err       error
 	)
@@ -2073,7 +2073,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths lifecy
 	sourceLocation := plugin.SourceReleaseLocation()
 	destDir := providerDestDir(paths, name)
 	var (
-		installed *pluginstore.InstalledPlugin
+		installed *store.InstalledPlugin
 		entry     LockEntry
 		err       error
 	)
@@ -2142,7 +2142,7 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths life
 	expectedPackage := plugin.SourceReleaseLocation()
 
 	var (
-		installed *pluginstore.InstalledPlugin
+		installed *store.InstalledPlugin
 		entry     LockEntry
 		opErr     error
 	)
@@ -2271,7 +2271,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 	return validatedDuringPrepare, nil
 }
 
-func installLockedPackageAtomic(packagePath, destDir string) (*pluginstore.InstalledPlugin, func() error, func() error, error) {
+func installLockedPackageAtomic(packagePath, destDir string) (*store.InstalledPlugin, func() error, func() error, error) {
 	if destDir == "" {
 		return nil, nil, nil, fmt.Errorf("destination directory is required")
 	}
@@ -2284,7 +2284,7 @@ func installLockedPackageAtomic(packagePath, destDir string) (*pluginstore.Insta
 		return nil, nil, nil, fmt.Errorf("create temp install directory: %w", err)
 	}
 	cleanupDir := tempDir
-	installed, err := pluginstore.Install(packagePath, tempDir)
+	installed, err := store.Install(packagePath, tempDir)
 	if err != nil {
 		_ = os.RemoveAll(cleanupDir)
 		return nil, nil, nil, err
@@ -2998,7 +2998,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("remove stale cache for ui provider: %w", err)
 	}
-	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	installed, err := store.Install(download.LocalPath, destDir)
 	if err != nil {
 		return fmt.Errorf("install locked source for ui provider: %w", err)
 	}
