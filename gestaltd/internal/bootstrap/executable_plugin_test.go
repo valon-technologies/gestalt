@@ -1162,7 +1162,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		SessionId:       sessionID,
 		Model:           "gpt-test",
 		IdempotencyKey:  "plugin-agent-turn",
-		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH,
+		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
 		ToolRefs: []*proto.AgentToolRef{{
 			Plugin:    "roadmap",
 			Operation: "sync",
@@ -1994,12 +1994,13 @@ func (p *stubAgentTurnManagerProvider) ResolveInteraction(_ context.Context, req
 
 func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
 	return &coreagent.ProviderCapabilities{
-		StreamingText:    true,
-		ToolCalls:        true,
-		NativeToolSearch: true,
-		Interactions:     true,
-		ResumableTurns:   true,
-		StructuredOutput: true,
+		StreamingText:        true,
+		ToolCalls:            true,
+		Interactions:         true,
+		ResumableTurns:       true,
+		StructuredOutput:     true,
+		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
 	}, nil
 }
 
@@ -4067,11 +4068,11 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if requireInteraction, _ := turnReq.Metadata["requireInteraction"].(bool); !requireInteraction {
 		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnReq.Metadata)
 	}
-	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.Plugin != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("CreateTurn tools = %#v, want preloaded roadmap.sync", turnReq.Tools)
+	if len(turnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
 	}
-	if turnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
-		t.Fatalf("CreateTurn tool source = %q, want native search", turnReq.ToolSource)
+	if turnReq.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", turnReq.ToolSource)
 	}
 	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", turnReq.ToolRefs)

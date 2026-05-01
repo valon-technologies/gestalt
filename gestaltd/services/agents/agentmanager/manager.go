@@ -570,7 +570,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
-	toolSource, err := validateToolSource(req.ToolSource)
+	toolSource, err := validateProviderTurnToolSource(req.ToolSource)
 	if err != nil {
 		return nil, err
 	}
@@ -582,10 +582,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	if toolSource == coreagent.ToolSourceModeMCPCatalog {
-		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
-			return nil, err
-		}
+	if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
+		return nil, err
 	}
 	if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
 		return nil, err
@@ -595,13 +593,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	} else if !supported {
 		return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
-	}
-	resolvableToolRefs := resolvableAgentToolRefs(toolRefs)
-	if len(resolvableToolRefs) > 0 {
-		tools, err = m.resolveExactAgentToolRefs(ctx, p, resolvableToolRefs)
-		if err != nil {
-			return nil, err
-		}
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
@@ -1219,6 +1210,9 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 	if err != nil {
 		return nil, err
 	}
+	if len(refs) == 0 {
+		return &coreagent.ListToolsResponse{}, nil
+	}
 
 	out := make([]coreagent.ListedTool, 0, len(refs))
 	seen := map[agentToolTargetKey]struct{}{}
@@ -1454,30 +1448,6 @@ func agentToolCandidateParameterNames(op catalog.CatalogOperation) []string {
 		out = append(out, name)
 	}
 	return out
-}
-
-func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
-	if len(refs) == 0 {
-		return nil, nil
-	}
-	out := make([]coreagent.Tool, 0, len(refs))
-	seen := make(map[agentToolTargetKey]struct{}, len(refs))
-	for i := range refs {
-		if strings.TrimSpace(refs[i].Operation) == "" {
-			return nil, fmt.Errorf("%w: agent tool_refs[%d] requires native tool search", invocation.ErrInternal, i)
-		}
-		tool, err := m.resolveTool(ctx, p, refs[i])
-		if err != nil {
-			return nil, fmt.Errorf("agent tool_refs[%d]: %w", i, err)
-		}
-		key := agentToolTargetKeyFromTarget(tool.Target)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, tool)
-	}
-	return out, nil
 }
 
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
@@ -2476,6 +2446,18 @@ func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMo
 	return source, nil
 }
 
+func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
+	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
+	switch source {
+	case coreagent.ToolSourceModeUnspecified, coreagent.ToolSourceModeMCPCatalog:
+		return coreagent.ToolSourceModeMCPCatalog, nil
+	case coreagent.ToolSourceModeNativeSearch:
+		return "", fmt.Errorf("%w: agent tool source %q is deprecated; use %q", invocation.ErrInvalidInvocation, source, coreagent.ToolSourceModeMCPCatalog)
+	default:
+		return "", fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, source)
+	}
+}
+
 func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) []core.AccessPermission {
 	p = principal.Canonicalized(p)
 	if p == nil {
@@ -2558,31 +2540,6 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		out = append(out, ref)
 	}
 	return out, nil
-}
-
-func resolvableAgentToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]coreagent.ToolRef, 0, len(refs))
-	for i := range refs {
-		ref := refs[i]
-		if strings.TrimSpace(ref.System) != "" {
-			if strings.TrimSpace(ref.Operation) == "" {
-				continue
-			}
-			out = append(out, ref)
-			continue
-		}
-		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin {
-			continue
-		}
-		if strings.TrimSpace(ref.Operation) == "" {
-			continue
-		}
-		out = append(out, ref)
-	}
-	return out
 }
 
 func exactAgentToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {

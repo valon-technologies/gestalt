@@ -389,13 +389,11 @@ func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapa
 	return &coreagent.ProviderCapabilities{
 		StreamingText:        true,
 		ToolCalls:            true,
-		NativeToolSearch:     true,
 		Interactions:         true,
 		ResumableTurns:       true,
 		StructuredOutput:     true,
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
-			coreagent.ToolSourceModeNativeSearch,
 			coreagent.ToolSourceModeMCPCatalog,
 		},
 	}, nil
@@ -616,11 +614,11 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if gotProvider.Name != "managed" || !gotProvider.Default {
 		t.Fatalf("provider = %#v, want managed default", gotProvider)
 	}
-	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.NativeToolSearch || !gotProvider.Capabilities.BoundedListHydration {
-		t.Fatalf("provider capabilities = %#v, want streaming text, native tool search, and bounded list hydration", gotProvider.Capabilities)
+	if !gotProvider.Capabilities.StreamingText || gotProvider.Capabilities.NativeToolSearch || !gotProvider.Capabilities.BoundedListHydration {
+		t.Fatalf("provider capabilities = %#v, want streaming text, catalog listing, and no native tool search", gotProvider.Capabilities)
 	}
-	if got := gotProvider.Capabilities.SupportedToolSources; strings.Join(got, ",") != "native_search,mcp_catalog" {
-		t.Fatalf("supported tool sources = %#v, want native_search,mcp_catalog", got)
+	if got := gotProvider.Capabilities.SupportedToolSources; strings.Join(got, ",") != "mcp_catalog" {
+		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
 	}
 
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"plugin":"docs","operation":"search"}]}`))
@@ -642,8 +640,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].Tools; len(got) != 1 || got[0].Target.Plugin != "docs" || got[0].Target.Operation != "search" {
-		t.Fatalf("provider turn tools = %#v, want docs.search", got)
+	if got := turnRequests[0].Tools; len(got) != 0 {
+		t.Fatalf("provider turn tools = %#v, want no preloaded tools", got)
 	}
 	if turnRequests[0].ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].ToolSource)
