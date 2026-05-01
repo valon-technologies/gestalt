@@ -56,7 +56,6 @@ import {
   SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import {
-  BindPluginRuntimeHostServiceRequestSchema,
   GetPluginRuntimeSessionRequestSchema,
   ListPluginRuntimeSessionsRequestSchema,
   StartHostedPluginRequestSchema,
@@ -1445,14 +1444,6 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
       return [{ id: "plugin-session", state: "ready" }];
     },
     stopSession() {},
-    bindHostService(request) {
-      return {
-        id: "binding-1",
-        sessionId: request.sessionId,
-        envVar: request.envVar,
-        ...(request.relay ? { relay: request.relay } : {}),
-      };
-    },
     startPlugin(request) {
       return {
         id: "hosted-plugin-1",
@@ -1498,20 +1489,6 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
   );
   expect(sessions.sessions).toHaveLength(1);
   expect(sessions.sessions[0].id).toBe("plugin-session");
-
-  const binding = await (service.bindHostService as any)(
-    create(BindPluginRuntimeHostServiceRequestSchema, {
-      sessionId: "plugin-session",
-      envVar: "GESTALT_CACHE_SOCKET",
-      relay: { dialTarget: "tcp://127.0.0.1:10000" },
-    }),
-  );
-  expect(binding).toMatchObject({
-    id: "binding-1",
-    sessionId: "plugin-session",
-    envVar: "GESTALT_CACHE_SOCKET",
-  });
-  expect(binding.relay?.dialTarget).toBe("tcp://127.0.0.1:10000");
 
   const hosted = await (service.startPlugin as any)(
     create(StartHostedPluginRequestSchema, {

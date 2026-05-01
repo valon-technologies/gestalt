@@ -132,11 +132,6 @@ class PluginRuntimeProviderStub(object):
                 request_serializer=v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
-        self.BindHostService = channel.unary_unary(
-                '/gestalt.provider.v1.PluginRuntimeProvider/BindHostService',
-                request_serializer=v1_dot_pluginruntime__pb2.BindPluginRuntimeHostServiceRequest.SerializeToString,
-                response_deserializer=v1_dot_pluginruntime__pb2.PluginRuntimeHostServiceBinding.FromString,
-                _registered_method=True)
         self.StartPlugin = channel.unary_unary(
                 '/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin',
                 request_serializer=v1_dot_pluginruntime__pb2.StartHostedPluginRequest.SerializeToString,
@@ -177,12 +172,6 @@ class PluginRuntimeProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def BindHostService(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def StartPlugin(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -216,11 +205,6 @@ def add_PluginRuntimeProviderServicer_to_server(servicer, server):
                     servicer.StopSession,
                     request_deserializer=v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'BindHostService': grpc.unary_unary_rpc_method_handler(
-                    servicer.BindHostService,
-                    request_deserializer=v1_dot_pluginruntime__pb2.BindPluginRuntimeHostServiceRequest.FromString,
-                    response_serializer=v1_dot_pluginruntime__pb2.PluginRuntimeHostServiceBinding.SerializeToString,
             ),
             'StartPlugin': grpc.unary_unary_rpc_method_handler(
                     servicer.StartPlugin,
@@ -363,33 +347,6 @@ class PluginRuntimeProvider(object):
             '/gestalt.provider.v1.PluginRuntimeProvider/StopSession',
             v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def BindHostService(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.PluginRuntimeProvider/BindHostService',
-            v1_dot_pluginruntime__pb2.BindPluginRuntimeHostServiceRequest.SerializeToString,
-            v1_dot_pluginruntime__pb2.PluginRuntimeHostServiceBinding.FromString,
             options,
             channel_credentials,
             insecure,

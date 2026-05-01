@@ -2046,8 +2046,6 @@ impl TransactionDurabilityHint {
 pub struct PluginRuntimeSupport {
     #[prost(bool, tag = "1")]
     pub can_host_plugins: bool,
-    #[prost(enumeration = "PluginRuntimeHostServiceAccess", tag = "2")]
-    pub host_service_access: i32,
     #[prost(enumeration = "PluginRuntimeEgressMode", tag = "3")]
     pub egress_mode: i32,
 }
@@ -2116,31 +2114,6 @@ pub struct StopPluginRuntimeSessionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PluginRuntimeHostServiceRelay {
-    #[prost(string, tag = "1")]
-    pub dial_target: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BindPluginRuntimeHostServiceRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub env_var: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub relay: ::core::option::Option<PluginRuntimeHostServiceRelay>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PluginRuntimeHostServiceBinding {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub env_var: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub relay: ::core::option::Option<PluginRuntimeHostServiceRelay>,
-}
 /// StartHostedPluginRequest describes the plugin process to launch inside a
 /// runtime session. The runtime backend owns allocation and injection of the
 /// plugin's listener endpoint and returns a host-reachable dial target in the
@@ -2200,35 +2173,6 @@ pub struct AppendPluginRuntimeLogsRequest {
 pub struct AppendPluginRuntimeLogsResponse {
     #[prost(int64, tag = "1")]
     pub last_seq: i64,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum PluginRuntimeHostServiceAccess {
-    Unspecified = 0,
-    None = 1,
-    Direct = 2,
-}
-impl PluginRuntimeHostServiceAccess {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Self::Unspecified => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED",
-            Self::None => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE",
-            Self::Direct => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED" => Some(Self::Unspecified),
-            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE" => Some(Self::None),
-            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT" => Some(Self::Direct),
-            _ => None,
-        }
-    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

@@ -91,13 +91,6 @@ where
         self.provider.stop_session(request).await
     }
 
-    async fn bind_host_service(
-        &self,
-        request: GrpcRequest<pb::BindPluginRuntimeHostServiceRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::PluginRuntimeHostServiceBinding>, Status> {
-        self.provider.bind_host_service(request).await
-    }
-
     async fn start_plugin(
         &self,
         request: GrpcRequest<pb::StartHostedPluginRequest>,

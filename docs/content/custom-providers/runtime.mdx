@@ -257,13 +257,6 @@ the exported provider for the selected language.
             Ok(Response::new(()))
         }
 
-        async fn bind_host_service(
-            &self,
-            _request: Request<proto::BindPluginRuntimeHostServiceRequest>,
-        ) -> Result<Response<proto::PluginRuntimeHostServiceBinding>, Status> {
-            Err(Status::unimplemented("BindHostService is a legacy RPC"))
-        }
-
         async fn start_plugin(
             &self,
             request: Request<proto::StartHostedPluginRequest>,
@@ -335,10 +328,8 @@ host-reachable executable plugin session. If that is false, Gestalt will reject
 hosted execution for that runtime immediately instead of failing later during
 bootstrap.
 
-	`host_service_access` is a legacy support field kept on the wire for older
-	runtime SDKs. New providers should omit it or leave it unspecified. Gestalt
-	ignores runtime-advertised host-service access and derives effective
-	host-service access from its own public relay configuration.
+Gestalt derives effective host-service access from its own public relay
+configuration. Runtime providers do not advertise host-service access.
 
 `egress_mode` should be `hostname` only when the runtime can preserve
 Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
@@ -368,8 +359,10 @@ contains a public `tls://host:port` relay target and the corresponding
 `<ENV>_TOKEN` var contains the scoped relay token. Runtime providers should pass
 those env vars through to the plugin process unchanged.
 
-`BindHostService` remains in the proto surface for compatibility with older SDKs
-and runtime providers, but current `gestaltd` does not call it.
+Older SDKs exposed a `BindHostService` RPC, but current `gestaltd` does not call
+that method and current SDKs no longer include it in the runtime-provider
+surface. Upgrade `gestaltd` first before rebuilding a runtime provider against
+an SDK that has removed `BindHostService`; older servers still expect that RPC.
 
 ## Dial targets
 

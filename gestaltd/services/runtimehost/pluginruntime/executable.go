@@ -296,8 +296,6 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 	if src == nil {
 		return Support{}
 	}
-	// host_service_access is a legacy runtime-advertised capability. gestaltd
-	// now derives host-service access from its own public relay configuration.
 	return Support{
 		CanHostPlugins: src.GetCanHostPlugins(),
 		EgressMode:     egressModeFromProto(src.GetEgressMode()),
