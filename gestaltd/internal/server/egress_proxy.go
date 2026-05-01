@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 const (
