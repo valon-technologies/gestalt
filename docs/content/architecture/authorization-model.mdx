@@ -10,9 +10,10 @@ Gestalt separates four concerns that are easy to conflate:
 | Credentials | Which upstream token or platform credential should be used? | Plugin `connections`, connection mode, connected user credentials |
 
 These layers are checked independently. Granting one does not imply the others.
-For example, `plugins.brain.invokes` can allow Brain to attempt a Slack call,
-but the execution principal still needs `slack.<operation>` scope, and the
-Slack operation still resolves its own connection and credential.
+For example, `plugins.indexer.invokes` can allow an indexer plugin to attempt
+a call into a source plugin, but the execution principal still needs the
+source operation scope, and the source operation still resolves its own
+connection and credential.
 
 ## Request Principals
 
@@ -30,20 +31,15 @@ operation.
 ## Broker Checks
 
 The broker is the common runtime gate for HTTP, MCP, workflow, agent-tool, and
-nested plugin invocations. For a plugin operation call it:
-
-1. Resolves the target plugin and operation.
-2. Requires the principal to include the target plugin.
-3. Requires the principal to include the target operation when operation scopes
-   are present.
-4. Resolves the canonical subject and applies the configured authorization
-   provider/policy when one is bound.
-5. Resolves the connection and credential for the target operation.
-6. Invokes the provider with only the token needed for that invocation.
+nested plugin invocations. For a plugin operation call, it resolves the target
+plugin and operation, verifies that the principal can call them, applies any
+bound authorization provider or policy for the canonical subject, resolves the
+operation connection and credential, and invokes the provider with only the
+token needed for that invocation.
 
 The authorization provider does not replace operation scopes. It is the
 deployment policy layer. Operation scopes still decide whether the principal is
-allowed to call `slack.conversations.history` at all.
+allowed to call a target operation at all.
 
 ## Nested Plugin Invocations
 
@@ -56,12 +52,11 @@ host service and a short-lived invocation token. The token carries the current
 principal, request metadata, invocation depth, credential context, and the
 declared invocation grants for that caller plugin.
 
-On a nested call, Gestalt checks both:
-
-| Check | Purpose |
-| --- | --- |
-| `plugins.<caller>.invokes` | The caller plugin is allowed to attempt this dependency. |
-| Propagated principal permissions | This execution is allowed to call the target operation. |
+On a nested call, Gestalt checks the caller plugin's declared
+`plugins.<caller>.invokes` grants and the propagated principal permissions.
+The first check means the caller plugin is allowed to attempt that dependency.
+The second check means this specific execution is allowed to call the target
+operation.
 
 Invocation tokens can be exchanged only for subsets of their parent grants.
 That lets plugins narrow delegated authority, but not add new target plugins or
@@ -90,42 +85,27 @@ with `permissions`:
 ```yaml
 workflows:
   schedules:
-    brain_slack_sync:
+    external_source_sync:
       provider: local
       cron: "*/15 * * * *"
       target:
         plugin:
-          name: brain
+          name: indexer
           operation: sources.sync
           input:
-            sourceId: slack-valon-public
+            sourceId: primary-source
       permissions:
-        - plugin: slack
+        - plugin: source
           operations:
-            - conversations.list
-            - conversations.history
-            - conversations.replies
+            - messages.list
+            - messages.get
 ```
 
-This grants the workflow execution principal `brain.sources.sync` plus the
-listed Slack operation scopes. It does not grant Slack credentials. Slack still
-uses the connection selected by the Slack operation and deployment config.
+This grants the workflow execution principal `indexer.sources.sync` plus the
+listed source operation scopes. It does not grant source credentials. The
+source plugin still uses the connection selected by the target operation and
+deployment config.
 
 Config-owned direct targets, agent tools, and output-delivery targets must
 resolve to non-user credentials. Mixed plugins are still supported when the
 target explicitly selects a platform-backed connection.
-
-## Debugging Denials
-
-The layer that failed is usually visible from the error:
-
-| Symptom | Likely missing piece |
-| --- | --- |
-| `plugin "brain" may not invoke slack.conversations.history` | `plugins.brain.invokes` is missing or too narrow. |
-| `scope denied: slack.conversations.history` | The propagated principal or workflow execution ref lacks the Slack operation scope. |
-| `authorization denied` | The authorization provider or bound policy rejected the subject. |
-| `not authenticated` or missing upstream token | The target operation resolved to a connection with no usable credential for the credential subject. |
-
-For config-managed source syncs, the common fix is to add explicit workflow
-`permissions` for the downstream plugin operations that the source sync will
-call, while keeping upstream credentials on platform-backed connections.
