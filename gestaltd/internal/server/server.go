@@ -22,7 +22,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -81,63 +80,61 @@ type BuiltinAdminUIOptions struct {
 }
 
 type Server struct {
-	router                  chi.Router
-	handler                 http.Handler
-	auth                    core.AuthenticationProvider
-	authProviders           map[string]core.AuthenticationProvider
-	serverAuthProvider      string
-	auditSink               core.AuditSink
-	users                   *coredata.UserService
-	externalCredentials     core.ExternalCredentialProvider
-	apiTokens               *coredata.APITokenService
-	managedSubjects         *coredata.ManagedSubjectService
-	agent                   bootstrap.AgentControl
-	workflowSchedules       *workflowmanager.Manager
-	agentRuns               agentmanager.Service
-	authorizationProvider   core.AuthorizationProvider
-	providers               *registry.ProviderMap[core.Provider]
-	workflow                bootstrap.WorkflowControl
-	pluginRuntimes          bootstrap.RuntimeInspector
-	resolver                *principal.Resolver
-	authResolvers           map[string]*principal.Resolver
-	invoker                 invocation.Invoker
-	pluginInvoker           invocation.Invoker
-	defaultConnection       map[string]string
-	catalogConnection       map[string]string
-	connectionAuth          func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs              map[string]*config.ProviderEntry
-	authorizer              authorization.RuntimeAuthorizer
-	noAuth                  bool
-	anonymousPrincipal      *principal.Principal
-	publicBaseURL           string
-	managementBaseURL       string
-	secureCookies           bool
-	encryptor               *cryptoutil.AESGCMEncryptor
-	sessionIssuer           []byte
-	stateCodec              *integrationOAuthStateCodec
-	apiTokenTTL             time.Duration
-	now                     func() time.Time
-	readiness               ReadinessChecker
-	meterProvider           metric.MeterProvider
-	prometheusMetrics       http.Handler
-	mcpHandler              http.Handler
-	hostServiceRelayTokens  *runtimehost.HostServiceRelayTokenManager
-	invocationTokens        *plugininvokerservice.InvocationTokenManager
-	hostServiceMu           sync.Mutex
-	coreHostServiceHandlers map[hostServiceHandlerKey]hostServiceHandlerEntry
-	hostServiceHandlers     map[uint64]http.Handler
-	publicHostServices      *runtimehost.PublicHostServiceRegistry
-	s3                      map[string]s3store.Client
-	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
-	egressProxyTokens       *egressproxy.TokenManager
-	providerDevSessions     *providerdev.Manager
-	providerDevAttach       bool
-	mountedHTTPBindings     []MountedHTTPBinding
-	mountedUIs              []MountedUI
-	adminRoute              AdminRouteConfig
-	adminUI                 http.Handler
-	routeProfile            RouteProfile
-	httpBindingReplayStore  httpBindingReplayStore
+	router                 chi.Router
+	handler                http.Handler
+	auth                   core.AuthenticationProvider
+	authProviders          map[string]core.AuthenticationProvider
+	serverAuthProvider     string
+	auditSink              core.AuditSink
+	users                  *coredata.UserService
+	externalCredentials    core.ExternalCredentialProvider
+	apiTokens              *coredata.APITokenService
+	managedSubjects        *coredata.ManagedSubjectService
+	agent                  bootstrap.AgentControl
+	workflowSchedules      *workflowmanager.Manager
+	agentRuns              agentmanager.Service
+	authorizationProvider  core.AuthorizationProvider
+	providers              *registry.ProviderMap[core.Provider]
+	workflow               bootstrap.WorkflowControl
+	pluginRuntimes         bootstrap.RuntimeInspector
+	resolver               *principal.Resolver
+	authResolvers          map[string]*principal.Resolver
+	invoker                invocation.Invoker
+	pluginInvoker          invocation.Invoker
+	defaultConnection      map[string]string
+	catalogConnection      map[string]string
+	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs             map[string]*config.ProviderEntry
+	authorizer             authorization.RuntimeAuthorizer
+	noAuth                 bool
+	anonymousPrincipal     *principal.Principal
+	publicBaseURL          string
+	managementBaseURL      string
+	secureCookies          bool
+	encryptor              *cryptoutil.AESGCMEncryptor
+	sessionIssuer          []byte
+	stateCodec             *integrationOAuthStateCodec
+	apiTokenTTL            time.Duration
+	now                    func() time.Time
+	readiness              ReadinessChecker
+	meterProvider          metric.MeterProvider
+	prometheusMetrics      http.Handler
+	mcpHandler             http.Handler
+	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
+	hostServiceMu          sync.Mutex
+	hostServiceHandlers    map[uint64]http.Handler
+	publicHostServices     *runtimehost.PublicHostServiceRegistry
+	s3                     map[string]s3store.Client
+	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
+	egressProxyTokens      *egressproxy.TokenManager
+	providerDevSessions    *providerdev.Manager
+	providerDevAttach      bool
+	mountedHTTPBindings    []MountedHTTPBinding
+	mountedUIs             []MountedUI
+	adminRoute             AdminRouteConfig
+	adminUI                http.Handler
+	routeProfile           RouteProfile
+	httpBindingReplayStore httpBindingReplayStore
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -301,17 +298,12 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
-	var invocationTokens *plugininvokerservice.InvocationTokenManager
 	var egressProxyTokens *egressproxy.TokenManager
 	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
 		hostServiceRelayTokens, err = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
-		}
-		invocationTokens, err = plugininvokerservice.NewInvocationTokenManager(cfg.StateSecret)
-		if err != nil {
-			return nil, fmt.Errorf("init invocation tokens: %w", err)
 		}
 		egressProxyTokens, err = egressproxy.NewTokenManager(cfg.StateSecret)
 		if err != nil {
@@ -365,7 +357,6 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
-		invocationTokens:       invocationTokens,
 		publicHostServices:     cfg.PublicHostServices,
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,
