@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 	"gopkg.in/yaml.v3"
 )
 

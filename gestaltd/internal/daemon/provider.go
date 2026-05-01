@@ -13,9 +13,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"gopkg.in/yaml.v3"
 )

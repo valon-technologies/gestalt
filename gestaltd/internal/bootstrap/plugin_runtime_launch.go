@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 )
 
 type hostedProcessLaunch struct {

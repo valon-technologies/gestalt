@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/services/operator"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
