@@ -1,4 +1,4 @@
-package provider
+package providerdrivers
 
 import (
 	"context"
@@ -6,14 +6,14 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
 
-var Factory bootstrap.ExternalCredentialFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+var ExternalCredentialsFactory bootstrap.ExternalCredentialFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("external credentials provider: parsing config: %w", err)

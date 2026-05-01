@@ -1,4 +1,4 @@
-package provider
+package providerdrivers
 
 import (
 	"context"
@@ -6,13 +6,13 @@ import (
 
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"gopkg.in/yaml.v3"
 )
 
-var Factory bootstrap.CacheFactory = func(node yaml.Node) (corecache.Cache, error) {
+var CacheFactory bootstrap.CacheFactory = func(node yaml.Node) (corecache.Cache, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("cache provider: parsing config: %w", err)

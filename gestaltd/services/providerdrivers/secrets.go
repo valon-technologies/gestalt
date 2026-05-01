@@ -1,4 +1,4 @@
-package provider
+package providerdrivers
 
 import (
 	"context"
@@ -6,13 +6,13 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
 	"gopkg.in/yaml.v3"
 )
 
-var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretManager, error) {
+var SecretsProviderFactory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretManager, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("secrets provider: parsing config: %w", err)

@@ -20,10 +20,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"gopkg.in/yaml.v3"
 )
 
@@ -2364,7 +2364,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	t.Setenv("source-token", "ghp_inline_auth_source_token")
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
@@ -2541,7 +2541,7 @@ func TestSourceAuthPluginPrepareAllowsMissingEnvPlaceholderInNonStringField(t *t
 	t.Setenv("source-token", "ghp_inline_auth_source_token")
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
@@ -2707,7 +2707,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	}
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
@@ -3170,7 +3170,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	}
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
@@ -3403,7 +3403,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	}
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
@@ -3522,7 +3522,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	}
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
