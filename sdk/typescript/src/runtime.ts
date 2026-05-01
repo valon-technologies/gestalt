@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http2";
 import { dirname, resolve } from "node:path";
