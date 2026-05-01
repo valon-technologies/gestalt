@@ -3929,6 +3929,188 @@ plugins:
 	}
 }
 
+func TestLoadConfigProviderPackageSources(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v5
+providerRepositories:
+  local:
+    url: https://providers.example.test/index.yaml
+plugins:
+  service:
+    source:
+      repo: local
+      package: github.com/acme/providers/service
+      version: ">= 1.2.0, < 2.0.0"
+      auth:
+        token: test-token
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.APIVersion; got != ConfigAPIVersionV5 {
+		t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersionV5)
+	}
+	if got := cfg.ProviderRepositories["local"].URL; got != "https://providers.example.test/index.yaml" {
+		t.Fatalf("providerRepositories.local.url = %q", got)
+	}
+	entry := cfg.Plugins["service"]
+	if entry == nil {
+		t.Fatal(`Plugins["service"] = nil`)
+	}
+	if !entry.Source.IsPackage() {
+		t.Fatal("Source.IsPackage = false, want true")
+	}
+	if got := entry.Source.PackageRepo(); got != "local" {
+		t.Fatalf("Source.PackageRepo = %q, want local", got)
+	}
+	if got := entry.Source.PackageAddress(); got != "github.com/acme/providers/service" {
+		t.Fatalf("Source.PackageAddress = %q", got)
+	}
+	if got := entry.Source.PackageVersionConstraint(); got != ">= 1.2.0, < 2.0.0" {
+		t.Fatalf("Source.PackageVersionConstraint = %q", got)
+	}
+	if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
+		t.Fatalf("Source.Auth = %#v, want token", entry.Source.Auth)
+	}
+}
+
+func TestLoadConfigProviderPackageSourcesRequireV5(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "v4 rejects package source",
+			yaml: `
+apiVersion: gestaltd.config/v4
+plugins:
+  service:
+    source:
+      package: github.com/acme/providers/service
+`,
+			want: `source.package requires apiVersion "gestaltd.config/v5"`,
+		},
+		{
+			name: "v4 rejects provider repositories",
+			yaml: `
+apiVersion: gestaltd.config/v4
+providerRepositories:
+  local:
+    url: https://providers.example.test/index.yaml
+plugins:
+`,
+			want: `providerRepositories requires apiVersion "gestaltd.config/v5"`,
+		},
+		{
+			name: "package and url are mutually exclusive",
+			yaml: `
+apiVersion: gestaltd.config/v5
+plugins:
+  service:
+    source:
+      url: https://example.com/provider-release.yaml
+      package: github.com/acme/providers/service
+`,
+			want: `source.path and metadata URL sources are mutually exclusive`,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteRawConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadPathsProviderPackageSourceAPIVersionLayering(t *testing.T) {
+	t.Parallel()
+
+	t.Run("v5 overlay enables package source", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		basePath := filepath.Join(dir, "base.yaml")
+		overridePath := filepath.Join(dir, "override.yaml")
+		if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v4
+plugins:
+  service:
+    source: https://example.com/service/provider-release.yaml
+`), 0o644); err != nil {
+			t.Fatalf("write base: %v", err)
+		}
+		if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v5
+providerRepositories:
+  local:
+    url: https://providers.example.test/index.yaml
+plugins:
+  service:
+    source:
+      repo: local
+      package: github.com/acme/providers/service
+`), 0o644); err != nil {
+			t.Fatalf("write override: %v", err)
+		}
+
+		cfg, err := LoadPaths([]string{basePath, overridePath})
+		if err != nil {
+			t.Fatalf("LoadPaths: %v", err)
+		}
+		if got := cfg.APIVersion; got != ConfigAPIVersionV5 {
+			t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersionV5)
+		}
+		if !cfg.Plugins["service"].Source.IsPackage() {
+			t.Fatal("merged source is not package source")
+		}
+	})
+
+	t.Run("v4 overlay disables package source features", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		basePath := filepath.Join(dir, "base.yaml")
+		overridePath := filepath.Join(dir, "override.yaml")
+		if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v5
+plugins:
+  service:
+    source:
+      package: github.com/acme/providers/service
+`), 0o644); err != nil {
+			t.Fatalf("write base: %v", err)
+		}
+		if err := os.WriteFile(overridePath, []byte(`
+apiVersion: gestaltd.config/v4
+`), 0o644); err != nil {
+			t.Fatalf("write override: %v", err)
+		}
+
+		_, err := LoadPaths([]string{basePath, overridePath})
+		if err == nil {
+			t.Fatal("LoadPaths: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `source.package requires apiVersion "gestaltd.config/v5"`) {
+			t.Fatalf("LoadPaths error = %v, want package source apiVersion error", err)
+		}
+	})
+}
+
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 

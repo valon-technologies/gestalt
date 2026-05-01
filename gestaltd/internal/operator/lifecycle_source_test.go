@@ -758,6 +758,305 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	}
 }
 
+func TestSourceProviderPackagePrepareAndLockedSync(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/alpha"
+	version := "1.2.3"
+	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "provider-package-alpha")
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	currentArchiveSHA := sha256.Sum256(currentArchiveData)
+	currentArchiveSHAHex := hex.EncodeToString(currentArchiveSHA[:])
+
+	var indexCount atomic.Int64
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	var failIndexAndMetadata atomic.Bool
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	requireAuth := func(w http.ResponseWriter, r *http.Request, subject string) bool {
+		t.Helper()
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			handlerErrs <- fmt.Errorf("%s authorization = %q, want %q", subject, got, "Bearer test-token")
+			http.Error(w, "bad authorization", http.StatusBadRequest)
+			return false
+		}
+		return true
+	}
+
+	indexPath := "/provider-index.yaml"
+	metadataPath := "/providers/alpha/v1.2.3/provider-release.yaml"
+	archivePath := "/providers/alpha/v1.2.3/alpha.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case indexPath:
+			indexCount.Add(1)
+			if failIndexAndMetadata.Load() {
+				http.Error(w, "index should not be fetched after lock", http.StatusInternalServerError)
+				return
+			}
+			if !requireAuth(w, r, "index") {
+				return
+			}
+			index := fmt.Sprintf(`
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  github.com/acme/tools/alpha:
+    displayName: Alpha
+    versions:
+      %s:
+        metadata: providers/alpha/v1.2.3/provider-release.yaml
+        kind: plugin
+        runtime: executable
+        platforms:
+          - %s
+`, version, providerpkg.CurrentPlatformString())
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte(index))
+		case metadataPath:
+			metadataCount.Add(1)
+			if failIndexAndMetadata.Load() {
+				http.Error(w, "metadata should not be fetched after lock", http.StatusInternalServerError)
+				return
+			}
+			if !requireAuth(w, r, "metadata") {
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePath),
+						SHA256: currentArchiveSHAHex,
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePath:
+			archiveCount.Add(1)
+			if !requireAuth(w, r, "archive") {
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersionV5,
+		"providerRepositories:",
+		"  local:",
+		"    url: " + srv.URL + indexPath,
+		strings.TrimSuffix(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), "\n"),
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      repo: local",
+		"      package: " + packageSource,
+		"      version: \">= 1.0.0, < 2.0.0\"",
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	legacyConfigPath := filepath.Join(dir, "legacy-direct-url.yaml")
+	legacyConfigYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "legacy-data.db")) + strings.Join([]string{
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      url: " + srv.URL + metadataPath,
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(legacyConfigPath, []byte(legacyConfigYAML), 0o644); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+	legacyCfg, err := config.Load(legacyConfigPath)
+	if err != nil {
+		t.Fatalf("load legacy config: %v", err)
+	}
+	legacyFingerprint, err := ProviderFingerprint("alpha", legacyCfg.Plugins["alpha"], filepath.Dir(legacyConfigPath))
+	if err != nil {
+		t.Fatalf("legacy ProviderFingerprint: %v", err)
+	}
+
+	lc := NewLifecycle()
+	lock, err := lc.PrepareAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if entry.Source != srv.URL+metadataPath {
+		t.Fatalf("lock source = %q, want %q", entry.Source, srv.URL+metadataPath)
+	}
+	if entry.Package != packageSource {
+		t.Fatalf("lock package = %q, want %q", entry.Package, packageSource)
+	}
+	if entry.Version != version {
+		t.Fatalf("lock version = %q, want %q", entry.Version, version)
+	}
+	if got := entry.Archives[providerpkg.CurrentPlatformString()].SHA256; got != currentArchiveSHAHex {
+		t.Fatalf("archive SHA256 = %q, want %q", got, currentArchiveSHAHex)
+	}
+	if got := indexCount.Load(); got != 1 {
+		t.Fatalf("index request count = %d, want 1", got)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	entry.Source = srv.URL + metadataPath + "?mirror=1"
+	lock.Providers["alpha"] = entry
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+	failIndexAndMetadata.Store(true)
+	indexBefore := indexCount.Load()
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := indexCount.Load(); got != indexBefore {
+		t.Fatalf("index request count after sync = %d, want %d", got, indexBefore)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count after sync = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got != archiveBefore+1 {
+		t.Fatalf("archive request count after sync = %d, want %d", got, archiveBefore+1)
+	}
+
+	archiveBeforeLoad := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if got := indexCount.Load(); got != indexBefore {
+		t.Fatalf("index request count after locked load = %d, want %d", got, indexBefore)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count after locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeLoad {
+		t.Fatalf("archive request count after locked load = %d, want %d", got, archiveBeforeLoad)
+	}
+	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
+		t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest missing`)
+	}
+	if got := cfg.Plugins["alpha"].ResolvedManifest.Source; got != packageSource {
+		t.Fatalf("ResolvedManifest.Source = %q, want %q", got, packageSource)
+	}
+
+	legacyEntry := lock.Providers["alpha"]
+	legacyEntry.Source = srv.URL + metadataPath
+	legacyEntry.Fingerprint = legacyFingerprint
+	lock.Providers["alpha"] = legacyEntry
+	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile legacy: %v", err)
+	}
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root before legacy sync: %v", err)
+	}
+	archiveBeforeLegacy := archiveCount.Load()
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("SyncAtPathsWithStatePaths legacy lock: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := indexCount.Load(); got != indexBefore {
+		t.Fatalf("index request count after legacy sync = %d, want %d", got, indexBefore)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count after legacy sync = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeLegacy+1 {
+		t.Fatalf("archive request count after legacy sync = %d, want %d", got, archiveBeforeLegacy+1)
+	}
+	archiveBeforeLegacyLoad := archiveCount.Load()
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPath(legacy locked=true): %v", err)
+	}
+	if got := indexCount.Load(); got != indexBefore {
+		t.Fatalf("index request count after legacy locked load = %d, want %d", got, indexBefore)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count after legacy locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeLegacyLoad {
+		t.Fatalf("archive request count after legacy locked load = %d, want %d", got, archiveBeforeLegacyLoad)
+	}
+}
+
 func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 

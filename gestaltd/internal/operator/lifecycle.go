@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
@@ -83,6 +84,7 @@ type LockEntry struct {
 type Lifecycle struct {
 	configSecretResolver func(context.Context, *config.Config) error
 	httpClient           *http.Client
+	providerResolver     *providerregistry.Resolver
 }
 
 type StatePaths struct {
@@ -118,11 +120,23 @@ func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 	return l
 }
 
+func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *Lifecycle {
+	l.providerResolver = resolver
+	return l
+}
+
 func (l *Lifecycle) metadataHTTPClient() *http.Client {
 	if l != nil && l.httpClient != nil {
 		return l.httpClient
 	}
 	return http.DefaultClient
+}
+
+func (l *Lifecycle) providerPackageResolver() *providerregistry.Resolver {
+	if l != nil && l.providerResolver != nil {
+		return l.providerResolver
+	}
+	return &providerregistry.Resolver{Client: l.metadataHTTPClient()}
 }
 
 func (l *Lifecycle) PrepareAtPath(configPath string) (*Lockfile, error) {
@@ -289,6 +303,9 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 }
 
 func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, paths lifecyclePaths, cfg *config.Config) (*Lockfile, error) {
+	if err := l.resolvePackageSources(ctx, cfg); err != nil {
+		return nil, err
+	}
 	secretsEntries, err := l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil, artifactModeMaterialize)
 	if err != nil {
 		return nil, err
@@ -383,6 +400,149 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 		}
 	}
 	return lock, nil
+}
+
+func (l *Lifecycle) resolvePackageSources(ctx context.Context, cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if !configHasPackageSources(cfg) {
+		return nil
+	}
+	repos, err := providerRepositoriesForConfig(cfg)
+	if err != nil {
+		return err
+	}
+	resolveEntry := func(subject string, entry *config.ProviderEntry) error {
+		if entry == nil || !entry.Source.IsPackage() || entry.Source.ResolvedPackageMetadataURL() != "" {
+			return nil
+		}
+		reqRepos := cloneProviderRepositories(repos)
+		if token := sourceAuthToken(entry); token != "" {
+			for i := range reqRepos {
+				if entry.Source.PackageRepo() == "" || reqRepos[i].Name == entry.Source.PackageRepo() {
+					reqRepos[i].Token = token
+				}
+			}
+		}
+		resolved, err := l.providerPackageResolver().Resolve(ctx, providerregistry.ResolveRequest{
+			Package:           entry.Source.PackageAddress(),
+			VersionConstraint: entry.Source.PackageVersionConstraint(),
+			RepositoryName:    entry.Source.PackageRepo(),
+			Repositories:      reqRepos,
+		})
+		if err != nil {
+			return fmt.Errorf("%s resolve provider package: %w", subject, err)
+		}
+		entry.Source.SetResolvedPackage(resolved.MetadataURL, resolved.Version)
+		return nil
+	}
+	for name, entry := range cfg.Plugins {
+		if err := resolveEntry("plugin "+strconv.Quote(name), entry); err != nil {
+			return err
+		}
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		for name, entry := range collection.entries {
+			if err := resolveEntry(string(collection.kind)+" "+strconv.Quote(name), entry); err != nil {
+				return err
+			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			if err := resolveEntry("runtime "+strconv.Quote(name), &entry.ProviderEntry); err != nil {
+				return err
+			}
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil {
+			if err := resolveEntry("ui "+strconv.Quote(name), &entry.ProviderEntry); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func configHasPackageSources(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	for _, entry := range cfg.Plugins {
+		if entry != nil && entry.Source.IsPackage() {
+			return true
+		}
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		for _, entry := range collection.entries {
+			if entry != nil && entry.Source.IsPackage() {
+				return true
+			}
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil && entry.Source.IsPackage() {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil && entry.Source.IsPackage() {
+			return true
+		}
+	}
+	return false
+}
+
+func providerRepositoriesForConfig(cfg *config.Config) ([]providerregistry.NamedRepository, error) {
+	byName := make(map[string]providerregistry.NamedRepository)
+	order := []string{providerregistry.DefaultRepositoryName}
+	for _, repo := range providerregistry.DefaultRepositories() {
+		byName[repo.Name] = repo
+	}
+	if storePath := providerregistry.UserRepositoryStorePath(); storePath != "" {
+		store, err := providerregistry.ReadRepositoryStore(storePath)
+		if err != nil {
+			return nil, fmt.Errorf("read provider repository store: %w", err)
+		}
+		userNames := slices.Sorted(maps.Keys(store.Repositories))
+		for _, name := range userNames {
+			repo := store.Repositories[name]
+			if err := providerregistry.ValidateRepositoryName(name); err != nil {
+				return nil, err
+			}
+			if _, ok := byName[name]; !ok {
+				order = append(order, name)
+			}
+			byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL, Token: repo.Token}
+		}
+	}
+	projectNames := slices.Sorted(maps.Keys(cfg.ProviderRepositories))
+	for _, name := range projectNames {
+		repo := cfg.ProviderRepositories[name]
+		if err := providerregistry.ValidateRepositoryName(name); err != nil {
+			return nil, err
+		}
+		if _, ok := byName[name]; !ok {
+			order = append(order, name)
+		}
+		byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL}
+	}
+	out := make([]providerregistry.NamedRepository, 0, len(order))
+	for _, name := range order {
+		if repo, ok := byName[name]; ok {
+			out = append(out, repo)
+		}
+	}
+	return out, nil
+}
+
+func cloneProviderRepositories(repos []providerregistry.NamedRepository) []providerregistry.NamedRepository {
+	if len(repos) == 0 {
+		return nil
+	}
+	return append([]providerregistry.NamedRepository(nil), repos...)
 }
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
@@ -1323,8 +1483,7 @@ func lockMatchesConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile)
 		if !ok {
 			return false
 		}
-		fingerprint, err := NamedUIProviderFingerprint(name, &entry.ProviderEntry, paths.configDir)
-		if err != nil || lockEntry.Fingerprint != fingerprint {
+		if !uiLockEntryMetadataMatches(paths, name, &entry.ProviderEntry, lockEntry, true) {
 			return false
 		}
 		install, err := inspectPreparedInstall(uiDestDir(paths, name))
@@ -1415,7 +1574,7 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 
 	input := providerFingerprintInput{
 		Name:   name,
-		Source: providerSourceLockLocation(entry, configDir),
+		Source: providerSourceFingerprintLocation(entry, configDir),
 	}
 	if entry.HasLocalSource() {
 		input.Path = fingerprintLocalSourcePath(entry.SourcePath(), configDir)
@@ -1432,6 +1591,10 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 		input.Digest = digest
 	}
 
+	return hashProviderFingerprintInput(input)
+}
+
+func hashProviderFingerprintInput(input providerFingerprintInput) (string, error) {
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return "", err
@@ -1448,6 +1611,9 @@ func providerSourceLockLocation(entry *config.ProviderEntry, configDir string) s
 	if entry == nil {
 		return ""
 	}
+	if entry.Source.IsPackage() {
+		return strings.TrimSpace(entry.Source.ResolvedPackageMetadataURL())
+	}
 	if entry.HasRemoteSource() {
 		return entry.SourceRemoteLocation()
 	}
@@ -1455,6 +1621,59 @@ func providerSourceLockLocation(entry *config.ProviderEntry, configDir string) s
 		return fingerprintLocalSourcePath(entry.SourceReleasePath(), configDir)
 	}
 	return ""
+}
+
+func providerSourceFingerprintLocation(entry *config.ProviderEntry, configDir string) string {
+	if entry == nil {
+		return ""
+	}
+	if entry.Source.IsPackage() {
+		return strings.Join([]string{
+			"package",
+			entry.Source.PackageRepo(),
+			entry.Source.PackageAddress(),
+			entry.Source.PackageVersionConstraint(),
+		}, "\x00")
+	}
+	return providerSourceLockLocation(entry, configDir)
+}
+
+func lockEntrySourceMatchesProvider(paths lifecyclePaths, provider *config.ProviderEntry, entry LockEntry) bool {
+	if provider == nil {
+		return false
+	}
+	if provider.Source.IsPackage() {
+		if strings.TrimSpace(entry.Package) != provider.Source.PackageAddress() {
+			return false
+		}
+		return providerregistry.VersionSatisfiesConstraint(entry.Version, provider.Source.PackageVersionConstraint())
+	}
+	return entry.Source == providerSourceLockLocation(provider, paths.configDir)
+}
+
+func lockEntryFingerprintMatchesProvider(name string, provider *config.ProviderEntry, configDir string, entry LockEntry) (bool, error) {
+	fingerprint, err := ProviderFingerprint(name, provider, configDir)
+	if err != nil {
+		return false, err
+	}
+	if entry.Fingerprint == fingerprint {
+		return true, nil
+	}
+	if provider == nil || !provider.Source.IsPackage() {
+		return false, nil
+	}
+	legacySource := strings.TrimSpace(entry.Source)
+	if legacySource == "" {
+		return false, nil
+	}
+	legacyFingerprint, err := hashProviderFingerprintInput(providerFingerprintInput{
+		Name:   name,
+		Source: legacySource,
+	})
+	if err != nil {
+		return false, err
+	}
+	return entry.Fingerprint == legacyFingerprint, nil
 }
 
 func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
@@ -1695,11 +1914,11 @@ func lockEntryMetadataMatches(paths lifecyclePaths, kind, name string, providerE
 	if !found {
 		return false
 	}
-	fingerprint, err := ProviderFingerprint(name, providerEntry, paths.configDir)
-	if err != nil || entry.Fingerprint != fingerprint {
+	fingerprintMatches, err := lockEntryFingerprintMatchesProvider(name, providerEntry, paths.configDir, entry)
+	if err != nil || !fingerprintMatches {
 		return false
 	}
-	if entry.Source != providerSourceLockLocation(providerEntry, paths.configDir) {
+	if !lockEntrySourceMatchesProvider(paths, providerEntry, entry) {
 		return false
 	}
 	if entry.Kind != "" && entry.Kind != kind {
@@ -1712,11 +1931,11 @@ func uiLockEntryMetadataMatches(paths lifecyclePaths, name string, providerEntry
 	if !found {
 		return false
 	}
-	fingerprint, err := NamedUIProviderFingerprint(name, providerEntry, paths.configDir)
-	if err != nil || entry.Fingerprint != fingerprint {
+	fingerprintMatches, err := lockEntryFingerprintMatchesProvider("ui:"+name, providerEntry, paths.configDir, entry)
+	if err != nil || !fingerprintMatches {
 		return false
 	}
-	if entry.Source != providerSourceLockLocation(providerEntry, paths.configDir) {
+	if !lockEntrySourceMatchesProvider(paths, providerEntry, entry) {
 		return false
 	}
 	if entry.Kind != "" && entry.Kind != providermanifestv1.KindUI {
@@ -2471,10 +2690,10 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 			}
 			return "", lockMetadataStaleError(paths, "lock entry for %s is missing or stale", subject)
 		}
-		if lockEntry.Source != providerSourceLockLocation(provider, paths.configDir) {
+		if !lockEntrySourceMatchesProvider(paths, provider, *lockEntry) {
 			return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 		}
-		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider, paths.configDir)
+		fingerprintMatches, err := lockEntryFingerprintMatchesProvider("ui:"+logicalName, provider, paths.configDir, *lockEntry)
 		if err != nil {
 			return "", fmt.Errorf("fingerprinting %s: %w", subject, err)
 		}
@@ -2486,7 +2705,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				_ = cleanupStaged()
 			}
 		}()
-		if lockEntry.Fingerprint != fingerprint {
+		if !fingerprintMatches {
 			return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 		}
 		install, err := inspectPreparedInstall(destDir)
@@ -2512,7 +2731,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 					if err != nil {
 						return "", err
 					}
-					fingerprint, err = NamedUIProviderFingerprint(logicalName, provider, paths.configDir)
+					fingerprint, err := NamedUIProviderFingerprint(logicalName, provider, paths.configDir)
 					if err != nil {
 						return "", fmt.Errorf("fingerprinting %s: %w", subject, err)
 					}
@@ -2591,10 +2810,10 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if !ok {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
 	}
-	if entry.Source != providerSourceLockLocation(plugin, paths.configDir) {
+	if !lockEntrySourceMatchesProvider(paths, plugin, entry) {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 	}
-	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+	fingerprintMatches, err := lockEntryFingerprintMatchesProvider(name, plugin, paths.configDir, entry)
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
@@ -2608,7 +2827,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			_ = cleanupStaged()
 		}
 	}()
-	if entry.Fingerprint != fingerprint {
+	if !fingerprintMatches {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 	}
 
@@ -2640,7 +2859,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 				if err != nil {
 					return err
 				}
-				fingerprint, err = ProviderFingerprint(name, plugin, paths.configDir)
+				fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 				if err != nil {
 					return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 				}
@@ -2685,10 +2904,10 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 	if entry == nil {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
 	}
-	if entry.Source != providerSourceLockLocation(plugin, paths.configDir) {
+	if !lockEntrySourceMatchesProvider(paths, plugin, *entry) {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 	}
-	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+	fingerprintMatches, err := lockEntryFingerprintMatchesProvider(name, plugin, paths.configDir, *entry)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
@@ -2701,7 +2920,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			_ = cleanupStaged()
 		}
 	}()
-	if entry.Fingerprint != fingerprint {
+	if !fingerprintMatches {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 	}
 
@@ -2736,7 +2955,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 				if err != nil {
 					return err
 				}
-				fingerprint, err = ProviderFingerprint(name, plugin, paths.configDir)
+				fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 				if err != nil {
 					return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 				}
