@@ -9,7 +9,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/composite"
+	"github.com/valon-technologies/gestalt/server/services/plugins/composite"
 )
 
 type fakeMCPUpstream struct {
