@@ -1552,11 +1552,10 @@ func (p *attachProvider) CatalogForRequest(ctx context.Context, token string) (*
 	if p == nil || p.Provider == nil {
 		return nil, core.ErrSessionCatalogUnsupported
 	}
-	scp, ok := p.Provider.(core.SessionCatalogProvider)
-	if !ok {
-		return nil, core.ErrSessionCatalogUnsupported
+	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
+	if !scoped {
+		return nil, core.WrapSessionCatalogUnsupported(core.ErrSessionCatalogUnsupported)
 	}
-	cat, err := scp.CatalogForRequest(ctx, token)
 	if err != nil {
 		return nil, err
 	}
@@ -1574,11 +1573,11 @@ func (p *attachProvider) PostConnect(ctx context.Context, token *core.ExternalCr
 	if p == nil || p.Provider == nil {
 		return nil, core.ErrPostConnectUnsupported
 	}
-	pcp, ok := p.Provider.(core.PostConnectCapable)
-	if !ok {
+	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
+	if !supported {
 		return nil, core.ErrPostConnectUnsupported
 	}
-	return pcp.PostConnect(ctx, token)
+	return metadata, err
 }
 
 func (p *attachProvider) SupportsHTTPSubject() bool {

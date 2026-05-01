@@ -246,6 +246,61 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 }
 
+func TestAttachProviderSkipsSessionCatalogWhenRemoteMetadataReportsNoSupport(t *testing.T) {
+	t.Parallel()
+
+	local := &recordingIntegrationClient{
+		sessionCatalog: &proto.Catalog{
+			Name: "roadmap",
+			Operations: []*proto.CatalogOperation{{
+				Id:        "echo",
+				Transport: catalog.TransportPlugin,
+			}},
+		},
+	}
+	spec := pluginservice.StaticProviderSpec{
+		Name:           "roadmap",
+		DisplayName:    "Roadmap",
+		ConnectionMode: core.ConnectionModeUser,
+		Catalog: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:        "echo",
+				Transport: catalog.TransportPlugin,
+			}},
+		},
+	}
+	remote, err := pluginservice.NewRemote(context.Background(), local, spec, nil)
+	if err != nil {
+		t.Fatalf("NewRemote: %v", err)
+	}
+	prov := &attachProvider{
+		Provider:      remote,
+		policyCatalog: spec.Catalog,
+	}
+
+	if core.SupportsSessionCatalog(prov) {
+		t.Fatal("expected attach provider to report no session catalog support")
+	}
+	cat, attempted, err := core.CatalogForRequest(context.Background(), prov, "tok")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if attempted {
+		t.Fatal("expected core.CatalogForRequest to report no attempt")
+	}
+	if cat != nil {
+		t.Fatalf("CatalogForRequest catalog = %#v, want nil", cat)
+	}
+
+	local.mu.Lock()
+	calls := local.sessionCatalogCalls
+	local.mu.Unlock()
+	if calls != 0 {
+		t.Fatalf("GetSessionCatalog calls = %d, want 0", calls)
+	}
+}
+
 func TestVerifyHostServiceSessionUsesActiveMemorySession(t *testing.T) {
 	t.Parallel()
 
@@ -1104,6 +1159,7 @@ type recordingIntegrationClient struct {
 	mu                     sync.Mutex
 	metadataCalls          int
 	startCalls             int
+	sessionCatalogCalls    int
 	startName              string
 	startConfig            map[string]any
 	supportsSessionCatalog bool
@@ -1139,6 +1195,9 @@ func (c *recordingIntegrationClient) ResolveHTTPSubject(context.Context, *proto.
 }
 
 func (c *recordingIntegrationClient) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest, ...grpc.CallOption) (*proto.GetSessionCatalogResponse, error) {
+	c.mu.Lock()
+	c.sessionCatalogCalls++
+	c.mu.Unlock()
 	if !c.supportsSessionCatalog {
 		return nil, status.Error(codes.Unimplemented, "session catalog is not implemented")
 	}

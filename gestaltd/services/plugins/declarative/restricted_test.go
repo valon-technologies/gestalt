@@ -2,6 +2,7 @@ package declarative_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -389,5 +390,40 @@ func TestRestrictedPreservesPostConnectCapability(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
+	}
+}
+
+func TestRestrictedOAuthDoesNotFalsePositiveSessionCatalogSupport(t *testing.T) {
+	t.Parallel()
+
+	inner := &stubOAuth{
+		stubWithOps: stubWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			ops:             sampleOps(),
+		},
+	}
+
+	prov := coreintegration.NewRestricted(inner, map[string]string{"list_channels": ""})
+	if core.SupportsSessionCatalog(prov) {
+		t.Fatal("expected restricted OAuth wrapper to report no session catalog support")
+	}
+	cat, attempted, err := core.CatalogForRequest(context.Background(), prov, "tok")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if attempted {
+		t.Fatal("expected core.CatalogForRequest to report no attempt")
+	}
+	if cat != nil {
+		t.Fatalf("CatalogForRequest catalog = %#v, want nil", cat)
+	}
+
+	scp, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatal("expected OAuth wrapper to still have direct CatalogForRequest method")
+	}
+	_, err = scp.CatalogForRequest(context.Background(), "tok")
+	if !errors.Is(err, core.ErrSessionCatalogUnsupported) {
+		t.Fatalf("direct CatalogForRequest error = %v, want ErrSessionCatalogUnsupported", err)
 	}
 }

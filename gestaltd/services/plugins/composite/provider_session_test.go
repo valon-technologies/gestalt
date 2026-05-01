@@ -2,6 +2,7 @@ package composite_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 	"testing"
@@ -155,5 +156,68 @@ func TestCompositePreservesPostConnectCapability(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, api.metadata) {
 		t.Fatalf("PostConnect metadata = %#v, want %#v", got, api.metadata)
+	}
+}
+
+type falseSupportPostConnectProvider struct {
+	*fakeProvider
+	called bool
+}
+
+func (p *falseSupportPostConnectProvider) SupportsPostConnect() bool {
+	return false
+}
+
+func (p *falseSupportPostConnectProvider) PostConnect(context.Context, *core.ExternalCredential) (map[string]string, error) {
+	p.called = true
+	return map[string]string{"unexpected": "true"}, nil
+}
+
+func TestCompositeSkipsPostConnectWhenProviderAdvertisesNoSupport(t *testing.T) {
+	t.Parallel()
+
+	api := &falseSupportPostConnectProvider{
+		fakeProvider: &fakeProvider{name: "api"},
+	}
+	mcp := &fakeMCPUpstream{
+		fakeSessionProvider: &fakeSessionProvider{
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeUser},
+			sessionCat:   &catalog.Catalog{Name: "test"},
+		},
+	}
+
+	prov := composite.New("test", api, mcp)
+	if core.SupportsPostConnect(prov) {
+		t.Fatal("expected composite provider to report no post-connect support")
+	}
+
+	metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
+		Integration: "slack",
+		Connection:  "default",
+		AccessToken: "tok",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if supported {
+		t.Fatal("expected core.PostConnect to report unsupported")
+	}
+	if metadata != nil {
+		t.Fatalf("PostConnect metadata = %#v, want nil", metadata)
+	}
+	if api.called {
+		t.Fatal("explicit false support should prevent API PostConnect from being called")
+	}
+
+	pcp, ok := prov.(core.PostConnectCapable)
+	if !ok {
+		t.Fatal("expected composite provider to keep direct PostConnect method")
+	}
+	_, err = pcp.PostConnect(context.Background(), &core.ExternalCredential{})
+	if !errors.Is(err, core.ErrPostConnectUnsupported) {
+		t.Fatalf("direct PostConnect error = %v, want ErrPostConnectUnsupported", err)
+	}
+	if api.called {
+		t.Fatal("direct composite PostConnect should not call API provider with false support")
 	}
 }

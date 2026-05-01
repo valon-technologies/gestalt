@@ -18,10 +18,10 @@ func bindProviderConnection(prov core.Provider, connection string) core.Provider
 		inner:      prov,
 		connection: connection,
 	}
-	if session, ok := prov.(core.SessionCatalogProvider); ok {
+	if core.SupportsSessionCatalog(prov) {
 		wrapped = &connectedSessionCatalogProvider{
-			Provider: wrapped,
-			session:  session,
+			Provider:      wrapped,
+			sessionSource: prov,
 		}
 	}
 	if graphQL, ok := prov.(core.GraphQLSurfaceInvoker); ok {
@@ -83,6 +83,9 @@ func (p *connectedProvider) OperationConnectionOverrideAllowed(operation string,
 	return false
 }
 func (p *connectedProvider) Catalog() *catalog.Catalog { return p.inner.Catalog() }
+func (p *connectedProvider) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(p.inner)
+}
 func (p *connectedProvider) SupportsPostConnect() bool { return core.SupportsPostConnect(p.inner) }
 func (p *connectedProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.inner.Execute(ctx, operation, params, token)
@@ -108,7 +111,11 @@ func (p *connectedProvider) Close() error {
 
 type connectedSessionCatalogProvider struct {
 	core.Provider
-	session core.SessionCatalogProvider
+	sessionSource core.Provider
+}
+
+func (p *connectedSessionCatalogProvider) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(p.sessionSource)
 }
 
 func (p *connectedSessionCatalogProvider) SupportsPostConnect() bool {
@@ -141,7 +148,11 @@ func (p *connectedSessionCatalogProvider) OperationConnectionOverrideAllowed(ope
 }
 
 func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return p.session.CatalogForRequest(ctx, token)
+	cat, scoped, err := core.CatalogForRequest(ctx, p.sessionSource, token)
+	if !scoped {
+		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
+	}
+	return cat, err
 }
 
 func (p *connectedSessionCatalogProvider) Close() error {
@@ -154,6 +165,10 @@ func (p *connectedSessionCatalogProvider) Close() error {
 type connectedGraphQLProvider struct {
 	core.Provider
 	graphQL core.GraphQLSurfaceInvoker
+}
+
+func (p *connectedGraphQLProvider) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(p.Provider)
 }
 
 func (p *connectedGraphQLProvider) SupportsPostConnect() bool {
@@ -190,11 +205,11 @@ func (p *connectedGraphQLProvider) InvokeGraphQL(ctx context.Context, request co
 }
 
 func (p *connectedGraphQLProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	session, ok := p.Provider.(core.SessionCatalogProvider)
-	if !ok {
+	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
+	if !scoped {
 		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
 	}
-	return session.CatalogForRequest(ctx, token)
+	return cat, err
 }
 
 func (p *connectedGraphQLProvider) Close() error {
@@ -207,6 +222,10 @@ func (p *connectedGraphQLProvider) Close() error {
 type connectedOAuthProvider struct {
 	core.Provider
 	auth core.OAuthProvider
+}
+
+func (p *connectedOAuthProvider) SupportsSessionCatalog() bool {
+	return core.SupportsSessionCatalog(p.Provider)
 }
 
 func (p *connectedOAuthProvider) SupportsPostConnect() bool {
@@ -251,11 +270,11 @@ func (p *connectedOAuthProvider) RefreshToken(ctx context.Context, refreshToken 
 }
 
 func (p *connectedOAuthProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	session, ok := p.Provider.(core.SessionCatalogProvider)
-	if !ok {
+	cat, scoped, err := core.CatalogForRequest(ctx, p.Provider, token)
+	if !scoped {
 		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.Name()))
 	}
-	return session.CatalogForRequest(ctx, token)
+	return cat, err
 }
 
 func (p *connectedOAuthProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {

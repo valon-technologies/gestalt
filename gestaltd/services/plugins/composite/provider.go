@@ -148,10 +148,11 @@ func (p *Provider) SupportsPostConnect() bool {
 }
 
 func (p *Provider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
-	if pcp, ok := p.api.(core.PostConnectCapable); ok {
-		return pcp.PostConnect(ctx, token)
+	metadata, supported, err := core.PostConnect(ctx, p.api, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
 	}
-	return nil, core.ErrPostConnectUnsupported
+	return metadata, err
 }
 
 func (p *Provider) SupportsHTTPSubject() bool {
