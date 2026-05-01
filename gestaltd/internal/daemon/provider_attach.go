@@ -11,7 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerdev"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 )
 
 type providerAttachCommandOptions struct {
