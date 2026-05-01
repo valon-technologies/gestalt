@@ -8,7 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -19,8 +23,8 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-func newTestServer() *mcpserver.MCPServer {
-	srv := mcpserver.NewMCPServer("test-remote", "1.0.0")
+func newTestServer(opts ...mcpserver.ServerOption) *mcpserver.MCPServer {
+	srv := mcpserver.NewMCPServer("test-remote", "1.0.0", opts...)
 
 	srv.AddTool(
 		mcpgo.NewToolWithRawSchema("run_query", "Execute a SQL query",
@@ -94,6 +98,21 @@ func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[stri
 		}
 		handler.ServeHTTP(w, r)
 	}))
+}
+
+func newCountingHTTPTestServer(t *testing.T, listToolsCount *atomic.Int32, opts ...mcpserver.ServerOption) *httptest.Server {
+	t.Helper()
+
+	hooks := &mcpserver.Hooks{}
+	hooks.AddBeforeListTools(func(context.Context, any, *mcpgo.ListToolsRequest) {
+		listToolsCount.Add(1)
+	})
+	opts = append(opts, mcpserver.WithHooks(hooks))
+	handler := mcpserver.NewStreamableHTTPServer(
+		newTestServer(opts...),
+		mcpserver.WithStateLess(true),
+	)
+	return httptest.NewServer(handler)
 }
 
 func TestUpstream_DiscoverTools(t *testing.T) {
@@ -376,6 +395,335 @@ func TestUpstream_LazyDiscoveryUsesRequestToken(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+}
+
+func TestUpstream_CatalogForRequestCachesByToken(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	ts := newCountingHTTPTestServer(t, &listToolsCount)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	first, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("first CatalogForRequest: %v", err)
+	}
+	first.Operations[0].ID = "mutated-by-caller"
+
+	second, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("second CatalogForRequest: %v", err)
+	}
+	if got := listToolsCount.Load(); got != 1 {
+		t.Fatalf("ListTools count = %d, want 1", got)
+	}
+	if second.Operations[0].ID == "mutated-by-caller" {
+		t.Fatalf("cached catalog was mutated by caller: %#v", second.Operations)
+	}
+}
+
+func TestUpstream_CatalogForRequestCacheExpires(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	ts := newCountingHTTPTestServer(t, &listToolsCount)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	u.catalogCacheTTL = 10 * time.Millisecond
+
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("first CatalogForRequest: %v", err)
+	}
+	time.Sleep(25 * time.Millisecond)
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("second CatalogForRequest: %v", err)
+	}
+	if got := listToolsCount.Load(); got != 2 {
+		t.Fatalf("ListTools count = %d, want 2 after expiry", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestCacheSeparatesTokens(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	ts := newCountingHTTPTestServer(t, &listToolsCount)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, token := range []string{"token-a", "token-a", "token-b", "token-a"} {
+		if _, err := u.CatalogForRequest(context.Background(), token); err != nil {
+			t.Fatalf("CatalogForRequest(%q): %v", token, err)
+		}
+	}
+	if got := listToolsCount.Load(); got != 2 {
+		t.Fatalf("ListTools count = %d, want 2 for two distinct tokens", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestSingleflightsConcurrentDiscovery(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	firstListStarted := make(chan struct{})
+	releaseFirstList := make(chan struct{})
+	hooks := &mcpserver.Hooks{}
+	hooks.AddBeforeListTools(func(context.Context, any, *mcpgo.ListToolsRequest) {
+		if listToolsCount.Add(1) == 1 {
+			close(firstListStarted)
+			<-releaseFirstList
+		}
+	})
+	handler := mcpserver.NewStreamableHTTPServer(
+		newTestServer(mcpserver.WithHooks(hooks)),
+		mcpserver.WithStateLess(true),
+	)
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := u.CatalogForRequest(context.Background(), "secret-token")
+		errs <- err
+	}()
+
+	<-firstListStarted
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err := u.CatalogForRequest(context.Background(), "secret-token")
+		errs <- err
+	}()
+	time.Sleep(25 * time.Millisecond)
+	close(releaseFirstList)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("CatalogForRequest: %v", err)
+		}
+	}
+	if got := listToolsCount.Load(); got != 1 {
+		t.Fatalf("ListTools count = %d, want 1 for concurrent same-token discovery", got)
+	}
+}
+
+func TestUpstream_CatalogForRequestSingleflightIgnoresLeaderCancellation(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	firstListStarted := make(chan struct{})
+	releaseFirstList := make(chan struct{})
+	hooks := &mcpserver.Hooks{}
+	hooks.AddBeforeListTools(func(context.Context, any, *mcpgo.ListToolsRequest) {
+		if listToolsCount.Add(1) == 1 {
+			close(firstListStarted)
+			<-releaseFirstList
+		}
+	})
+	handler := mcpserver.NewStreamableHTTPServer(
+		newTestServer(mcpserver.WithHooks(hooks)),
+		mcpserver.WithStateLess(true),
+	)
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderErr := make(chan error, 1)
+	go func() {
+		_, err := u.CatalogForRequest(leaderCtx, "secret-token")
+		leaderErr <- err
+	}()
+
+	<-firstListStarted
+	cancelLeader()
+	if err := <-leaderErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("leader error = %v, want context.Canceled", err)
+	}
+
+	waiterErr := make(chan error, 1)
+	go func() {
+		_, err := u.CatalogForRequest(context.Background(), "secret-token")
+		waiterErr <- err
+	}()
+	time.Sleep(25 * time.Millisecond)
+	close(releaseFirstList)
+	if err := <-waiterErr; err != nil {
+		t.Fatalf("waiter CatalogForRequest: %v", err)
+	}
+	if got := listToolsCount.Load(); got != 1 {
+		t.Fatalf("ListTools count = %d, want 1 despite leader cancellation", got)
+	}
+}
+
+func TestUpstream_FilterOperationsClearsDynamicCatalogCache(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	ts := newCountingHTTPTestServer(t, &listToolsCount)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	full, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("initial CatalogForRequest: %v", err)
+	}
+	if len(full.Operations) != 2 {
+		t.Fatalf("initial operations len = %d, want 2", len(full.Operations))
+	}
+
+	if err := u.FilterOperations(map[string]*config.OperationOverride{
+		"run_query": {Alias: "query"},
+	}); err != nil {
+		t.Fatalf("FilterOperations: %v", err)
+	}
+
+	filtered, err := u.CatalogForRequest(context.Background(), "secret-token")
+	if err != nil {
+		t.Fatalf("filtered CatalogForRequest: %v", err)
+	}
+	if got := listToolsCount.Load(); got != 2 {
+		t.Fatalf("ListTools count = %d, want 2 after filter invalidation", got)
+	}
+	if len(filtered.Operations) != 1 || filtered.Operations[0].ID != "query" {
+		t.Fatalf("filtered operations = %#v, want only aliased query", filtered.Operations)
+	}
+}
+
+func TestUpstream_FilterOperationsConcurrentWithCatalogAndCallTool(t *testing.T) {
+	t.Parallel()
+
+	var listToolsCount atomic.Int32
+	ts := newCountingHTTPTestServer(t, &listToolsCount)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 90)
+	for i := 0; i < 30; i++ {
+		wg.Add(3)
+		go func(i int) {
+			defer wg.Done()
+			allowed := map[string]*config.OperationOverride{"run_query": nil}
+			if i%2 == 0 {
+				allowed = map[string]*config.OperationOverride{"list_databases": nil}
+			}
+			if err := u.FilterOperations(allowed); err != nil {
+				errs <- err
+			}
+		}(i)
+		go func() {
+			defer wg.Done()
+			if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+				errs <- err
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			if _, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"}); err != nil && !strings.Contains(err.Error(), "not allowed") {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("concurrent operation failed: %v", err)
+	}
+}
+
+func TestUpstream_CallToolRemainsLiveAfterCatalogCache(t *testing.T) {
+	t.Parallel()
+
+	var (
+		listToolsCount atomic.Int32
+		callToolCount  atomic.Int32
+	)
+	hooks := &mcpserver.Hooks{}
+	hooks.AddBeforeListTools(func(context.Context, any, *mcpgo.ListToolsRequest) {
+		listToolsCount.Add(1)
+	})
+	srv := mcpserver.NewMCPServer("live-tool-test", "1.0.0", mcpserver.WithHooks(hooks))
+	srv.AddTool(
+		mcpgo.NewTool("run_query", mcpgo.WithDescription("Execute a SQL query")),
+		func(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText(fmt.Sprintf("call-%d", callToolCount.Add(1))), nil
+		},
+	)
+	handler := mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("first CatalogForRequest: %v", err)
+	}
+	if _, err := u.CatalogForRequest(context.Background(), "secret-token"); err != nil {
+		t.Fatalf("second CatalogForRequest: %v", err)
+	}
+	if got := listToolsCount.Load(); got != 1 {
+		t.Fatalf("ListTools count = %d, want cached catalog discovery", got)
+	}
+
+	for i, want := range []string{"call-1", "call-2"} {
+		result, err := u.CallTool(context.Background(), "run_query", nil)
+		if err != nil {
+			t.Fatalf("CallTool #%d: %v", i+1, err)
+		}
+		if result.IsError {
+			t.Fatalf("CallTool #%d returned tool error: %v", i+1, result.Content)
+		}
+		text, ok := result.Content[0].(mcpgo.TextContent)
+		if !ok {
+			t.Fatalf("CallTool #%d content = %T, want TextContent", i+1, result.Content[0])
+		}
+		if text.Text != want {
+			t.Fatalf("CallTool #%d text = %q, want %q", i+1, text.Text, want)
+		}
+	}
+	if got := callToolCount.Load(); got != 2 {
+		t.Fatalf("CallTool count = %d, want 2 live calls", got)
 	}
 }
 

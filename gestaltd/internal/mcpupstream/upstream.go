@@ -2,24 +2,36 @@ package mcpupstream
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/singleflight"
 )
 
-const httpTimeout = 30 * time.Second
+const (
+	httpTimeout                 = 30 * time.Second
+	defaultCatalogCacheTTL      = 5 * time.Minute
+	defaultCatalogCacheMaxItems = 128
+)
 
 var (
 	_ core.Provider               = (*Upstream)(nil)
@@ -48,12 +60,25 @@ type Upstream struct {
 	connMode    core.ConnectionMode
 	headers     map[string]string
 	cat         *catalog.Catalog
+	catMu       sync.RWMutex
 	client      mcpclient.MCPClient
-	exposure    *operationexposure.Policy
+	exposure    atomic.Pointer[operationexposure.Policy]
 	checkEgress func(string) error
+
+	catalogCacheMu       sync.Mutex
+	catalogCache         map[string]cachedCatalog
+	catalogCacheGroup    singleflight.Group
+	catalogCacheTTL      time.Duration
+	catalogCacheMaxItems int
+	catalogCacheGen      uint64
 }
 
 type Option func(*Upstream)
+
+type cachedCatalog struct {
+	cat       *catalog.Catalog
+	expiresAt time.Time
+}
 
 func WithMetadataOverrides(displayName, description, iconSVG string) Option {
 	return func(u *Upstream) {
@@ -82,6 +107,9 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		connMode:    connMode,
 		headers:     config.NormalizeHeaders(headers),
 		checkEgress: checkEgress,
+
+		catalogCacheTTL:      defaultCatalogCacheTTL,
+		catalogCacheMaxItems: defaultCatalogCacheMaxItems,
 	}
 	for _, opt := range opts {
 		opt(u)
@@ -98,6 +126,9 @@ func newFromClient(name string, client mcpclient.MCPClient, connMode core.Connec
 		connMode: connMode,
 		cat:      cat,
 		client:   client,
+
+		catalogCacheTTL:      defaultCatalogCacheTTL,
+		catalogCacheMaxItems: defaultCatalogCacheMaxItems,
 	}
 }
 
@@ -112,7 +143,7 @@ func (u *Upstream) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 func (u *Upstream) CredentialFields() []core.CredentialFieldDef { return nil }
 func (u *Upstream) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (u *Upstream) ConnectionForOperation(string) string        { return "" }
-func (u *Upstream) Catalog() *catalog.Catalog                   { return u.decorateCatalog(u.cat) }
+func (u *Upstream) Catalog() *catalog.Catalog                   { return u.decorateCatalog(u.staticCatalog()) }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }
@@ -123,7 +154,52 @@ func (u *Upstream) Execute(_ context.Context, _ string, _ map[string]any, _ stri
 }
 
 func (u *Upstream) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	return u.discover(ctx, token)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if u.client != nil && u.hasStaticCatalog() {
+		return u.discover(ctx, token)
+	}
+
+	cacheKey := mcpCatalogCacheKey(token)
+	if cat := u.cachedCatalog(cacheKey); cat != nil {
+		observability.RecordMCPCatalogCacheHit(ctx, u.catalogMetricAttrs("hit")...)
+		return u.decorateCatalog(cat), nil
+	}
+	observability.RecordMCPCatalogCacheMiss(ctx, u.catalogMetricAttrs("miss")...)
+
+	cacheGen := u.catalogCacheGeneration()
+	flightKey := fmt.Sprintf("%s:%d", cacheKey, cacheGen)
+	result := u.catalogCacheGroup.DoChan(flightKey, func() (any, error) {
+		if cat := u.cachedCatalog(cacheKey); cat != nil {
+			return cat, nil
+		}
+
+		discoverCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), httpTimeout)
+		defer cancel()
+		startedAt := time.Now()
+		cat, err := u.discoverCatalog(discoverCtx, token)
+		observability.RecordMCPCatalogDiscover(discoverCtx, startedAt, err != nil, u.catalogMetricAttrs("")...)
+		if err != nil {
+			return nil, err
+		}
+		u.storeCachedCatalog(cacheKey, cacheGen, cat)
+		return cat, nil
+	})
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-result:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		cat, ok := res.Val.(*catalog.Catalog)
+		if !ok || cat == nil {
+			return nil, fmt.Errorf("mcpupstream %s: catalog discovery returned no catalog", u.name)
+		}
+		return u.decorateCatalog(cat), nil
+	}
 }
 
 func (u *Upstream) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
@@ -161,18 +237,21 @@ func (u *Upstream) FilterOperations(allowed map[string]*config.OperationOverride
 	if err != nil {
 		return err
 	}
+
+	u.catMu.Lock()
 	if u.cat != nil {
 		if err := policy.ValidateCatalog(u.cat); err != nil {
+			u.catMu.Unlock()
 			return err
 		}
+		if policy != nil {
+			u.cat = policy.ApplyCatalog(u.cat)
+		}
 	}
-	u.exposure = policy
+	u.catMu.Unlock()
 
-	if u.cat == nil || policy == nil {
-		return nil
-	}
-
-	u.cat = policy.ApplyCatalog(u.cat)
+	u.exposure.Store(policy)
+	u.clearCatalogCache()
 	return nil
 }
 
@@ -232,8 +311,18 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
-	if u.client != nil && u.cat != nil {
-		return u.decorateCatalog(u.cat), nil
+	cat, err := u.discoverCatalog(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return u.decorateCatalog(cat), nil
+}
+
+func (u *Upstream) discoverCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if u.client != nil {
+		if cat := u.staticCatalog(); cat != nil {
+			return cat, nil
+		}
 	}
 
 	client, err := u.connect(ctx, token)
@@ -248,14 +337,15 @@ func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog
 	}
 
 	cat := buildCatalog(u.name, toolsResult.Tools)
-	if err := u.exposure.ValidateCatalog(cat); err != nil {
+	exposure := u.exposure.Load()
+	if err := exposure.ValidateCatalog(cat); err != nil {
 		return nil, err
 	}
-	return u.decorateCatalog(u.exposure.ApplyCatalog(cat)), nil
+	return exposure.ApplyCatalog(cat), nil
 }
 
 func (u *Upstream) resolveInnerName(name string) (string, bool) {
-	return u.exposure.Resolve(name)
+	return u.exposure.Load().Resolve(name)
 }
 
 func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
@@ -311,4 +401,103 @@ func (u *Upstream) decorateCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		decorated.IconSVG = u.iconSVG
 	}
 	return decorated
+}
+
+func (u *Upstream) staticCatalog() *catalog.Catalog {
+	u.catMu.RLock()
+	defer u.catMu.RUnlock()
+	if u.cat == nil {
+		return nil
+	}
+	return u.cat.Clone()
+}
+
+func (u *Upstream) hasStaticCatalog() bool {
+	u.catMu.RLock()
+	defer u.catMu.RUnlock()
+	return u.cat != nil
+}
+
+func (u *Upstream) cachedCatalog(key string) *catalog.Catalog {
+	if u.catalogCacheTTL <= 0 {
+		return nil
+	}
+
+	now := time.Now()
+	u.catalogCacheMu.Lock()
+	defer u.catalogCacheMu.Unlock()
+	cached, ok := u.catalogCache[key]
+	if !ok {
+		return nil
+	}
+	if !cached.expiresAt.After(now) {
+		delete(u.catalogCache, key)
+		return nil
+	}
+	return cached.cat.Clone()
+}
+
+func (u *Upstream) storeCachedCatalog(key string, generation uint64, cat *catalog.Catalog) {
+	if u.catalogCacheTTL <= 0 || cat == nil {
+		return
+	}
+
+	u.catalogCacheMu.Lock()
+	defer u.catalogCacheMu.Unlock()
+	if u.catalogCacheGen != generation {
+		return
+	}
+	if u.catalogCache == nil {
+		u.catalogCache = make(map[string]cachedCatalog)
+	}
+	u.pruneCatalogCacheLocked(time.Now())
+	if maxItems := u.catalogCacheMaxItems; maxItems > 0 && len(u.catalogCache) >= maxItems {
+		for existingKey := range u.catalogCache {
+			delete(u.catalogCache, existingKey)
+			break
+		}
+	}
+	u.catalogCache[key] = cachedCatalog{
+		cat:       cat.Clone(),
+		expiresAt: time.Now().Add(u.catalogCacheTTL),
+	}
+}
+
+func (u *Upstream) clearCatalogCache() {
+	u.catalogCacheMu.Lock()
+	defer u.catalogCacheMu.Unlock()
+	u.catalogCacheGen++
+	clear(u.catalogCache)
+}
+
+func (u *Upstream) catalogCacheGeneration() uint64 {
+	u.catalogCacheMu.Lock()
+	defer u.catalogCacheMu.Unlock()
+	return u.catalogCacheGen
+}
+
+func (u *Upstream) pruneCatalogCacheLocked(now time.Time) {
+	for key, cached := range u.catalogCache {
+		if !cached.expiresAt.After(now) {
+			delete(u.catalogCache, key)
+		}
+	}
+}
+
+func (u *Upstream) catalogMetricAttrs(cacheResult string) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{
+		metricutil.AttrProvider.String(metricutil.AttrValue(u.name)),
+	}
+	if cacheResult != "" {
+		attrs = append(attrs, observability.AttrMCPCatalogCacheResult.String(cacheResult))
+	}
+	return attrs
+}
+
+func mcpCatalogCacheKey(token string) string {
+	if token == "" {
+		return "no-token"
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
