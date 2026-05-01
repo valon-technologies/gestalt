@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 // RuntimeAuthorizer is the internal authorization interface used by gestaltd

@@ -15,11 +15,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -94,6 +93,12 @@ type ProviderOverrideResolver interface {
 	ResolveProviderOverride(ctx context.Context, p *principal.Principal, providerName string) (core.Provider, bool, error)
 }
 
+// UserStore is the user persistence surface the broker needs to canonicalize
+// session identities before resolving user-scoped credentials.
+type UserStore interface {
+	FindOrCreateUser(ctx context.Context, email string) (*core.User, error)
+}
+
 var (
 	_ Invoker          = (*Broker)(nil)
 	_ GraphQLInvoker   = (*Broker)(nil)
@@ -124,7 +129,7 @@ type RefresherResolver func() map[string]map[string]OAuthRefresher
 
 type Broker struct {
 	providers         *registry.ProviderMap[core.Provider]
-	users             *coredata.UserService
+	users             UserStore
 	externalCreds     core.ExternalCredentialProvider
 	authorizer        authorization.RuntimeAuthorizer
 	connMapper        ConnectionMapper
@@ -161,7 +166,7 @@ func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
 	return func(b *Broker) { b.providerOverrides = r }
 }
 
-func NewBroker(providers *registry.ProviderMap[core.Provider], users *coredata.UserService, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
+func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
@@ -605,7 +610,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if effectiveConnectionMode(ctx, prov) != core.ConnectionModeUser {
 		return targets, nil
 	}
-	if b == nil || coredata.ExternalCredentialProviderMissing(b.externalCreds) {
+	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
 		return nil, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 	subjectID := principal.EffectiveCredentialSubjectID(p)
@@ -757,7 +762,7 @@ func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principa
 }
 
 func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
-	if b == nil || coredata.ExternalCredentialProviderMissing(b.externalCreds) {
+	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
 		return ctx, "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

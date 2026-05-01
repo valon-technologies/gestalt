@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 func FromExecutionReference(ref *coreworkflow.ExecutionReference) *principal.Principal {
