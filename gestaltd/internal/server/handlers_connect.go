@@ -218,9 +218,6 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 					continue
 				}
 				s := fmt.Sprintf("%v", val)
-				if !safeTokenResponseValue.MatchString(s) {
-					return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
-				}
 				metadata[name] = s
 			}
 		}
@@ -406,7 +403,7 @@ func validateProviderMetadata(source string, metadata map[string]string) error {
 		source = "provider"
 	}
 	for k, v := range metadata {
-		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
+		if !safeParamValue.MatchString(k) || !safeProviderMetadataValue.MatchString(v) {
 			return fmt.Errorf("%s returned invalid key or value for %q", source, k)
 		}
 	}

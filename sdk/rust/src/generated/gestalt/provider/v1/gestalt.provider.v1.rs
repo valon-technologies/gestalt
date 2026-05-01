@@ -192,6 +192,8 @@ pub struct PluginInvokeGraphQlRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub operation: ::prost::alloc::string::String,
 }
 /// PostConnectCredential is the host-managed credential payload passed into
 /// post-connect hooks. Field numbers intentionally match the legacy

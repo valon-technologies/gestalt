@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -98,12 +99,32 @@ func (p *graphQLSessionCatalogProvider) Execute(ctx context.Context, operation s
 		return nil, fmt.Errorf("graphql operation %q has no query template", operation)
 	}
 	return p.graphQL.InvokeGraphQL(ctx, core.GraphQLRequest{
+		Operation: operation,
 		Document:  op.Query,
 		Variables: params,
 	}, token)
 }
 
 func (p *graphQLSessionCatalogProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	if p.allowedOperations != nil {
+		operation := strings.TrimSpace(request.Operation)
+		if operation == "" {
+			return nil, fmt.Errorf("graphql invocation requires an allowed catalog operation")
+		}
+		cat, err := p.CatalogForRequest(ctx, token)
+		if err != nil {
+			return nil, err
+		}
+		op, ok := graphQLCatalogOperation(cat, operation)
+		if !ok || strings.TrimSpace(op.Query) == "" {
+			return nil, fmt.Errorf("operation %q is not an allowed graphql catalog operation", operation)
+		}
+		return p.graphQL.InvokeGraphQL(ctx, core.GraphQLRequest{
+			Operation: operation,
+			Document:  op.Query,
+			Variables: request.Variables,
+		}, token)
+	}
 	return p.graphQL.InvokeGraphQL(ctx, request, token)
 }
 

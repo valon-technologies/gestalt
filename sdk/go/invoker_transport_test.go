@@ -59,6 +59,7 @@ func (h *pluginInvokerTransportHarness) InvokeGraphQL(ctx context.Context, req *
 		Connection:      req.GetConnection(),
 		Instance:        req.GetInstance(),
 		IdempotencyKey:  req.GetIdempotencyKey(),
+		Operation:       req.GetOperation(),
 	})
 	h.mu.Unlock()
 
@@ -115,7 +116,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	graphQLResult, err := client.InvokeGraphQL(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
 		"team": "eng",
 	}, &gestalt.InvokeOptions{
-		IdempotencyKey: " graphql-call-42 ",
+		IdempotencyKey:   " graphql-call-42 ",
+		GraphQLOperation: " viewer ",
 	})
 	if err != nil {
 		t.Fatalf("InvokeGraphQL: %v", err)
@@ -152,5 +154,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	}
 	if harness.graphQL[0].GetIdempotencyKey() != "graphql-call-42" {
 		t.Fatalf("graphql idempotency key = %q, want graphql-call-42", harness.graphQL[0].GetIdempotencyKey())
+	}
+	if harness.graphQL[0].GetOperation() != "viewer" {
+		t.Fatalf("graphql operation = %q, want viewer", harness.graphQL[0].GetOperation())
 	}
 }

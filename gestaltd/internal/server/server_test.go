@@ -15509,6 +15509,107 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 	})
 
+	t.Run("persists token_response connection param with URL delimiter", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{
+						AccessToken: "slack-token",
+						Extra: map[string]any{
+							"team": map[string]any{"id": "evil.com/x"},
+						},
+					}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+			connectionParams: map[string]core.ConnectionParamDef{
+				"team_id": {
+					Required: true,
+					From:     "token_response",
+					Field:    "team.id",
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "evil-token-response@example.com"}, nil
+				},
+			}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer session-token")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		noRedirect := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusSeeOther {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 303 for token response value, got %d: %s", resp.StatusCode, body)
+		}
+
+		u, err := svc.Users.FindOrCreateUser(context.Background(), "evil-token-response@example.com")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser: %v", err)
+		}
+		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if err != nil {
+			t.Fatalf("ListCredentials: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("stored credentials = %d, want 1", len(tokens))
+		}
+		var metadata map[string]string
+		if err := json.Unmarshal([]byte(tokens[0].MetadataJSON), &metadata); err != nil {
+			t.Fatalf("metadata json: %v", err)
+		}
+		if metadata["team_id"] != "evil.com/x" {
+			t.Fatalf("team_id metadata = %q, want delimiter value", metadata["team_id"])
+		}
+	})
+
 	t.Run("selection_required", func(t *testing.T) {
 		t.Parallel()
 
@@ -20291,10 +20392,12 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name             string
-		metadataJSON     string
-		tokenURL         string
-		wantRefreshedURL string
+		name               string
+		metadataJSON       string
+		tokenURL           string
+		wantRefreshedURL   string
+		wantStatus         int
+		wantRefreshBlocked bool
 	}{
 		{
 			name: "direct refresh uses connection handler",
@@ -20304,6 +20407,13 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 			metadataJSON:     `{"tenant":"acme"}`,
 			tokenURL:         "https://{tenant}.example.com/oauth/token",
 			wantRefreshedURL: "https://acme.example.com/oauth/token",
+		},
+		{
+			name:               "unsafe token URL connection param blocks refresh",
+			metadataJSON:       `{"tenant":"evil.com/x"}`,
+			tokenURL:           "https://{tenant}.example.com/oauth/token",
+			wantStatus:         http.StatusPreconditionFailed,
+			wantRefreshBlocked: true,
 		},
 	}
 
@@ -20345,6 +20455,9 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 			handler := &testOAuthHandler{
 				tokenURLVal: tc.tokenURL,
 				refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+					if tc.wantRefreshBlocked {
+						t.Fatal("refresh should not be attempted with unsafe token URL parameter")
+					}
 					if tc.wantRefreshedURL != "" {
 						t.Fatalf("expected refresh to use resolved token URL override")
 					}
@@ -20352,6 +20465,9 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 					return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
 				},
 				refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+					if tc.wantRefreshBlocked {
+						t.Fatal("refresh should not be attempted with unsafe token URL parameter")
+					}
 					if tc.wantRefreshedURL == "" {
 						t.Fatalf("expected direct refresh without token URL override")
 					}
@@ -20377,8 +20493,18 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 			}
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			wantStatus := tc.wantStatus
+			if wantStatus == 0 {
+				wantStatus = http.StatusOK
+			}
+			if resp.StatusCode != wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, wantStatus)
+			}
+			if tc.wantRefreshBlocked {
+				if refreshedToken != "" || refreshedURL != "" || usedToken != "" {
+					t.Fatalf("refresh or operation unexpectedly ran: refreshedToken=%q refreshedURL=%q usedToken=%q", refreshedToken, refreshedURL, usedToken)
+				}
+				return
 			}
 			if refreshedToken != "old-refresh" {
 				t.Fatalf("refresh token = %q, want %q", refreshedToken, "old-refresh")

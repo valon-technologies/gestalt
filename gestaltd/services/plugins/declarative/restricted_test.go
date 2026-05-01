@@ -3,6 +3,7 @@ package declarative_test
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -230,6 +231,76 @@ func TestRestrictedWithAliases(t *testing.T) {
 	}
 }
 
+func TestRestrictedInvokeGraphQLRequiresAllowedCatalogOperation(t *testing.T) {
+	t.Parallel()
+
+	var executedOp string
+	inner := &stubGraphQLIntegration{
+		StubIntegration: coretesting.StubIntegration{
+			N: "test_provider",
+			CatalogVal: &catalog.Catalog{
+				Name: "test_provider",
+				Operations: []catalog.CatalogOperation{
+					{ID: "viewer", Transport: "graphql", Query: "query Viewer { viewer { id } }"},
+					{ID: "admin_users", Transport: "graphql", Query: "query AdminUsers { adminUsers { id } }"},
+				},
+			},
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				executedOp = op
+				return &core.OperationResult{Status: 200, Body: op}, nil
+			},
+		},
+	}
+
+	r := coreintegration.NewRestricted(inner, map[string]string{"profile": "viewer"})
+	gql, ok := r.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		t.Fatal("expected restricted wrapper to expose graphql surface")
+	}
+
+	_, err := gql.InvokeGraphQL(context.Background(), core.GraphQLRequest{
+		Document: "query AdminUsers { adminUsers { id } }",
+	}, "tok")
+	if err == nil || !strings.Contains(err.Error(), "allowed catalog operation") {
+		t.Fatalf("InvokeGraphQL without operation err = %v, want allowed catalog operation error", err)
+	}
+	if inner.rawGraphQLCalled {
+		t.Fatal("raw graphql surface was invoked for unnamed request")
+	}
+	if executedOp != "" {
+		t.Fatalf("executedOp = %q, want empty", executedOp)
+	}
+
+	_, err = gql.InvokeGraphQL(context.Background(), core.GraphQLRequest{
+		Operation: "admin_users",
+		Document:  "query AdminUsers { adminUsers { id } }",
+	}, "tok")
+	if err == nil || !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("InvokeGraphQL disallowed operation err = %v, want not allowed error", err)
+	}
+	if inner.rawGraphQLCalled {
+		t.Fatal("raw graphql surface was invoked for disallowed operation")
+	}
+	if executedOp != "" {
+		t.Fatalf("executedOp = %q, want empty", executedOp)
+	}
+
+	result, err := gql.InvokeGraphQL(context.Background(), core.GraphQLRequest{
+		Operation: "profile",
+		Document:  "query AdminUsers { adminUsers { id } }",
+		Variables: map[string]any{"first": 10},
+	}, "tok")
+	if err != nil {
+		t.Fatalf("InvokeGraphQL allowed operation: %v", err)
+	}
+	if result.Body != "viewer" || executedOp != "viewer" {
+		t.Fatalf("executed operation = result %q capture %q, want viewer", result.Body, executedOp)
+	}
+	if inner.rawGraphQLCalled {
+		t.Fatal("raw graphql surface was invoked instead of catalog operation")
+	}
+}
+
 func TestDelegationMethods(t *testing.T) {
 	t.Parallel()
 
@@ -300,6 +371,16 @@ func (s *stubCatalogProvider) Catalog() *catalog.Catalog { return s.cat }
 type stubOAuth struct {
 	stubWithOps
 	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)
+}
+
+type stubGraphQLIntegration struct {
+	coretesting.StubIntegration
+	rawGraphQLCalled bool
+}
+
+func (s *stubGraphQLIntegration) InvokeGraphQL(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error) {
+	s.rawGraphQLCalled = true
+	return &core.OperationResult{Status: 200, Body: "raw"}, nil
 }
 
 func (s *stubOAuth) AuthorizationURL(state string, _ []string) string {

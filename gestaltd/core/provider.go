@@ -86,6 +86,8 @@ type GraphQLSurfaceInvoker interface {
 }
 
 type GraphQLRequest struct {
+	// Operation is the catalog operation name for restricted GraphQL execution.
+	Operation string
 	Document  string
 	Variables map[string]any
 }

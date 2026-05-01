@@ -990,6 +990,7 @@ type PluginInvokeGraphQLRequest struct {
 	Instance        string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,6,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	IdempotencyKey  string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Operation       string                 `protobuf:"bytes,8,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1069,6 +1070,13 @@ func (x *PluginInvokeGraphQLRequest) GetInvocationToken() string {
 func (x *PluginInvokeGraphQLRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *PluginInvokeGraphQLRequest) GetOperation() string {
+	if x != nil {
+		return x.Operation
 	}
 	return ""
 }
@@ -2286,7 +2294,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x06 \x01(\tR\binstance\x12)\n" +
 	"\x10invocation_token\x18\a \x01(\tR\x0finvocationToken\x12'\n" +
-	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKeyJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x97\x02\n" +
+	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKeyJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xb5\x02\n" +
 	"\x1aPluginInvokeGraphQLRequest\x12\x16\n" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +
@@ -2296,7 +2304,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12)\n" +
 	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\x12'\n" +
-	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\"\xd2\x04\n" +
+	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12\x1c\n" +
+	"\toperation\x18\b \x01(\tR\toperation\"\xd2\x04\n" +
 	"\x15PostConnectCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +

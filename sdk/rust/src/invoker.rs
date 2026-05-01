@@ -50,6 +50,7 @@ pub struct InvokeOptions {
     pub connection: String,
     pub instance: String,
     pub idempotency_key: String,
+    pub graphql_operation: String,
 }
 
 pub struct PluginInvoker {
@@ -187,6 +188,10 @@ impl PluginInvoker {
                 idempotency_key: options
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
+                    .unwrap_or_default(),
+                operation: options
+                    .as_ref()
+                    .map(|opts| opts.graphql_operation.trim().to_string())
                     .unwrap_or_default(),
             })
             .await?

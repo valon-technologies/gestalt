@@ -80,6 +80,7 @@ class PluginInvoker:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
+        operation: str = "",
     ) -> Response[str]:
         trimmed_document = document.strip()
         if not trimmed_document:
@@ -92,6 +93,7 @@ class PluginInvoker:
             connection=connection,
             instance=instance,
             idempotency_key=idempotency_key.strip(),
+            operation=operation.strip(),
         )
         message = _struct_from_dict_optional(variables, preserve_empty=False)
         if message is not None:
