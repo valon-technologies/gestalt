@@ -159,9 +159,10 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 	r.Get(mcpAuthorizationServerMetadataMCPPath, s.mcpAuthorizationServerMetadata)
 	r.Post(mcpRegistrationEndpointPath, s.mcpRegisterOAuthClient)
 	r.Get(mcpAuthorizationEndpointPath, s.mcpOAuthAuthorize)
+	r.Post(mcpAuthorizationConsentEndpointPath, s.mcpOAuthAuthorizeConsent)
 	r.Post(mcpTokenEndpointPath, s.mcpOAuthToken)
 	r.Group(func(r chi.Router) {
-		r.Use(s.authMiddleware)
+		r.Use(s.mcpAuthMiddleware)
 		r.Handle(mcpPath, s.mcpHandler)
 	})
 }

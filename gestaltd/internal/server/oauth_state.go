@@ -35,6 +35,12 @@ type integrationOAuthStateCodec struct {
 	encryptor *cryptoutil.AESGCMEncryptor
 }
 
+type encryptedStateEnvelope struct {
+	Type    string          `json:"typ"`
+	Version int             `json:"v"`
+	Payload json.RawMessage `json:"payload"`
+}
+
 func newIntegrationOAuthStateCodec(secret []byte) (*integrationOAuthStateCodec, error) {
 	encryptor, err := cryptoutil.NewAESGCM(secret)
 	if err != nil {
@@ -48,7 +54,15 @@ func encodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label string, 
 	if err != nil {
 		return "", fmt.Errorf("marshal %s: %w", label, err)
 	}
-	encoded, err := enc.EncryptURLSafe(string(payload))
+	envelope, err := json.Marshal(encryptedStateEnvelope{
+		Type:    label,
+		Version: 1,
+		Payload: payload,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal %s envelope: %w", label, err)
+	}
+	encoded, err := enc.EncryptURLSafeWithAAD(string(envelope), []byte(label))
 	if err != nil {
 		return "", fmt.Errorf("encrypt %s: %w", label, err)
 	}
@@ -56,13 +70,27 @@ func encodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label string, 
 }
 
 func decodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded string) (*T, error) {
-	plaintext, err := enc.DecryptURLSafe(encoded)
+	plaintext, err := enc.DecryptURLSafeWithAAD(encoded, []byte(label))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt %s: %w", label, err)
 	}
 
+	var envelope encryptedStateEnvelope
+	if err := json.Unmarshal([]byte(plaintext), &envelope); err != nil {
+		return nil, fmt.Errorf("unmarshal %s envelope: %w", label, err)
+	}
+	if envelope.Type != label {
+		return nil, fmt.Errorf("%s has unexpected type", label)
+	}
+	if envelope.Version != 1 {
+		return nil, fmt.Errorf("%s has unsupported version", label)
+	}
+	if len(envelope.Payload) == 0 {
+		return nil, fmt.Errorf("%s missing payload", label)
+	}
+
 	var state T
-	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
+	if err := json.Unmarshal(envelope.Payload, &state); err != nil {
 		return nil, fmt.Errorf("unmarshal %s: %w", label, err)
 	}
 	return &state, nil
@@ -149,8 +177,22 @@ type mcpOAuthAuthorizationCodeState struct {
 	ExpiresAt           int64  `json:"exp"`
 }
 
+type mcpOAuthConsentState struct {
+	ClientID            string `json:"cid"`
+	RedirectURI         string `json:"ru"`
+	Email               string `json:"em"`
+	DisplayName         string `json:"dn,omitempty"`
+	AvatarURL           string `json:"av,omitempty"`
+	Scope               string `json:"sc,omitempty"`
+	State               string `json:"st,omitempty"`
+	CodeChallenge       string `json:"cc"`
+	CodeChallengeMethod string `json:"cm,omitempty"`
+	ExpiresAt           int64  `json:"exp"`
+}
+
 type mcpOAuthRefreshTokenState struct {
 	ClientID    string `json:"cid"`
+	FamilyID    string `json:"fid"`
 	Email       string `json:"em"`
 	DisplayName string `json:"dn,omitempty"`
 	AvatarURL   string `json:"av,omitempty"`
@@ -332,6 +374,44 @@ func decodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, encoded st
 	return state, nil
 }
 
+func encodeMCPOAuthConsentState(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthConsentState) (string, error) {
+	return encodeEncryptedState(enc, "mcp oauth consent", state)
+}
+
+func validateMCPOAuthConsentState(state *mcpOAuthConsentState, now time.Time) error {
+	if state.ClientID == "" {
+		return fmt.Errorf("mcp oauth consent missing client ID")
+	}
+	if state.RedirectURI == "" {
+		return fmt.Errorf("mcp oauth consent missing redirect URI")
+	}
+	if state.Email == "" {
+		return fmt.Errorf("mcp oauth consent missing email")
+	}
+	if state.CodeChallenge == "" {
+		return fmt.Errorf("mcp oauth consent missing code challenge")
+	}
+	if state.ExpiresAt == 0 {
+		return fmt.Errorf("mcp oauth consent missing expiration")
+	}
+	if now.Unix() > state.ExpiresAt {
+		return fmt.Errorf("mcp oauth consent expired")
+	}
+	return nil
+}
+
+func decodeMCPOAuthConsentState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthConsentState, error) {
+	encoded = strings.TrimSpace(encoded)
+	state, err := decodeEncryptedState[mcpOAuthConsentState](enc, "mcp oauth consent", encoded)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMCPOAuthConsentState(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
 func encodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthRefreshTokenState) (string, error) {
 	encoded, err := encodeEncryptedState(enc, "mcp oauth refresh token", state)
 	if err != nil {
@@ -343,6 +423,9 @@ func encodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthR
 func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Time) error {
 	if state.ClientID == "" {
 		return fmt.Errorf("mcp oauth refresh token missing client ID")
+	}
+	if state.FamilyID == "" {
+		return fmt.Errorf("mcp oauth refresh token missing family ID")
 	}
 	if state.Email == "" {
 		return fmt.Errorf("mcp oauth refresh token missing email")

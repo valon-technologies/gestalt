@@ -26,22 +26,30 @@ func NewAESGCM(key []byte) (*AESGCMEncryptor, error) {
 }
 
 func (e *AESGCMEncryptor) Encrypt(plaintext string) (string, error) {
-	return e.encrypt(plaintext, base64.StdEncoding)
+	return e.encrypt(plaintext, base64.StdEncoding, nil)
 }
 
 func (e *AESGCMEncryptor) Decrypt(encoded string) (string, error) {
-	return e.decrypt(encoded, base64.StdEncoding)
+	return e.decrypt(encoded, base64.StdEncoding, nil)
 }
 
 func (e *AESGCMEncryptor) EncryptURLSafe(plaintext string) (string, error) {
-	return e.encrypt(plaintext, base64.RawURLEncoding)
+	return e.encrypt(plaintext, base64.RawURLEncoding, nil)
 }
 
 func (e *AESGCMEncryptor) DecryptURLSafe(encoded string) (string, error) {
-	return e.decrypt(encoded, base64.RawURLEncoding)
+	return e.decrypt(encoded, base64.RawURLEncoding, nil)
 }
 
-func (e *AESGCMEncryptor) encrypt(plaintext string, enc *base64.Encoding) (string, error) {
+func (e *AESGCMEncryptor) EncryptURLSafeWithAAD(plaintext string, aad []byte) (string, error) {
+	return e.encrypt(plaintext, base64.RawURLEncoding, aad)
+}
+
+func (e *AESGCMEncryptor) DecryptURLSafeWithAAD(encoded string, aad []byte) (string, error) {
+	return e.decrypt(encoded, base64.RawURLEncoding, aad)
+}
+
+func (e *AESGCMEncryptor) encrypt(plaintext string, enc *base64.Encoding, aad []byte) (string, error) {
 	if plaintext == "" {
 		return "", nil
 	}
@@ -49,11 +57,11 @@ func (e *AESGCMEncryptor) encrypt(plaintext string, enc *base64.Encoding) (strin
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("generating nonce: %w", err)
 	}
-	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	ciphertext := e.gcm.Seal(nonce, nonce, []byte(plaintext), aad)
 	return enc.EncodeToString(ciphertext), nil
 }
 
-func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding) (string, error) {
+func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding, aad []byte) (string, error) {
 	if encoded == "" {
 		return "", nil
 	}
@@ -66,7 +74,7 @@ func (e *AESGCMEncryptor) decrypt(encoded string, enc *base64.Encoding) (string,
 		return "", fmt.Errorf("ciphertext too short")
 	}
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plaintext, err := e.gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := e.gcm.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return "", fmt.Errorf("decrypt: %w", err)
 	}

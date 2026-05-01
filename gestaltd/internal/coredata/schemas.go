@@ -8,6 +8,7 @@ const (
 	StoreUsers           = "users"
 	StoreAPITokens       = "api_tokens"
 	StoreManagedSubjects = "managed_subjects"
+	StoreMCPOAuthGrants  = "mcp_oauth_grants"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -63,5 +64,22 @@ var ManagedSubjectsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 		{Name: "deleted_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var MCPOAuthGrantsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_kind", KeyPath: []string{"kind"}},
+		{Name: "by_family", KeyPath: []string{"family_id"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "kind", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "family_id", Type: indexeddb.TypeString},
+		{Name: "expires_at", Type: indexeddb.TypeTime, NotNull: true},
+		{Name: "consumed_at", Type: indexeddb.TypeTime},
+		{Name: "revoked_at", Type: indexeddb.TypeTime},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},
 }

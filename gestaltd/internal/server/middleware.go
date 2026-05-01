@@ -267,6 +267,76 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) resolveMCPRequestPrincipal(r *http.Request, auth authRuntime) (*principal.Principal, error) {
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
+	if p != nil {
+		return p, nil
+	}
+	resolverErr := err
+
+	token, err := requestBearerToken(r)
+	if err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, resolverErr
+	}
+
+	p, err = s.validateMCPOAuthAccessToken(token)
+	if err == nil && p != nil {
+		return p, nil
+	}
+	if resolverErr != nil {
+		return nil, resolverErr
+	}
+	return nil, principal.ErrInvalidToken
+}
+
+func (s *Server) mcpAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := s.serverAuthRuntime()
+		if auth.noAuth {
+			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
+			return
+		}
+
+		p, err := s.resolveMCPRequestPrincipal(r, auth)
+		if err == nil && p != nil {
+			enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
+			switch {
+			case enrichErr == nil && enriched != nil:
+				p = enriched
+			case enrichErr != nil:
+				slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
+			}
+			ctx := principal.WithPrincipal(r.Context(), p)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		authSource := requestedAuthSource(r)
+		switch {
+		case err == nil:
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("missing authorization"))
+			s.maybeSetMCPResourceMetadataHeader(w, r)
+			writeError(w, http.StatusUnauthorized, "missing authorization")
+		case errors.Is(err, errInvalidAuthorizationHeader):
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errInvalidAuthorizationHeader)
+			s.maybeSetMCPResourceMetadataHeader(w, r)
+			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+		case errors.Is(err, principal.ErrInvalidToken):
+			slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, principal.ErrInvalidToken)
+			s.maybeSetMCPResourceMetadataHeader(w, r)
+			writeError(w, http.StatusUnauthorized, "invalid token")
+		default:
+			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("token validation failed"))
+			writeError(w, http.StatusInternalServerError, "token validation failed")
+		}
+	})
+}
+
 func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

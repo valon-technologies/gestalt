@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 )
@@ -20,6 +24,7 @@ const (
 	mcpAuthorizationServerMetadataPath       = "/.well-known/oauth-authorization-server"
 	mcpAuthorizationServerMetadataMCPPath    = "/.well-known/oauth-authorization-server/mcp"
 	mcpAuthorizationEndpointPath             = "/oauth/authorize"
+	mcpAuthorizationConsentEndpointPath      = "/oauth/authorize/consent"
 	mcpTokenEndpointPath                     = "/oauth/token"
 	mcpRegistrationEndpointPath              = "/oauth/register"
 	mcpOAuthTokenAuthMethodNone              = "none"
@@ -258,26 +263,79 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/api/v1/auth/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(query.Get("prompt")), "none") {
+		redirectMCPOAuthError(w, r, redirectURI, state, "interaction_required", "user consent is required")
+		return
+	}
 
-	code, err := encodeMCPOAuthAuthorizationCode(s.encryptor, mcpOAuthAuthorizationCodeState{
+	consent, err := encodeMCPOAuthConsentState(s.encryptor, mcpOAuthConsentState{
 		ClientID:            clientID,
 		RedirectURI:         redirectURI,
 		Email:               p.Identity.Email,
 		DisplayName:         p.Identity.DisplayName,
 		AvatarURL:           p.Identity.AvatarURL,
 		Scope:               strings.TrimSpace(query.Get("scope")),
+		State:               state,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod,
 		ExpiresAt:           s.now().Add(mcpOAuthAuthorizationCodeTTL).Unix(),
 	})
 	if err != nil {
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to prepare authorization consent")
+		return
+	}
+
+	writeMCPOAuthConsentPage(w, client.ClientName, strings.TrimSpace(query.Get("scope")), consent)
+}
+
+func (s *Server) mcpOAuthAuthorizeConsent(w http.ResponseWriter, r *http.Request) {
+	auth := s.serverAuthRuntime()
+	if auth.noAuth || auth.provider == nil {
+		writeMCPOAuthError(w, http.StatusNotFound, "server_error", "auth is disabled")
+		return
+	}
+	if s.encryptor == nil {
+		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "MCP OAuth authorization is unavailable")
+		return
+	}
+	if !s.sameOriginFormPost(r) {
+		writeMCPOAuthError(w, http.StatusForbidden, "invalid_request", "authorization consent origin is invalid")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_request", "invalid authorization consent body")
+		return
+	}
+	consent := strings.TrimSpace(r.Form.Get("consent"))
+	if consent == "" {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_request", "authorization consent is required")
+		return
+	}
+	state, err := decodeMCPOAuthConsentState(s.encryptor, consent, s.now())
+	if err != nil {
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_request", "authorization consent is invalid")
+		return
+	}
+
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
+	if err != nil || p == nil || p.Identity == nil || p.Identity.Email == "" || principal.IsNonUserPrincipal(p) {
+		writeMCPOAuthError(w, http.StatusUnauthorized, "login_required", "user login is required")
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(p.Identity.Email), strings.TrimSpace(state.Email)) {
+		writeMCPOAuthError(w, http.StatusForbidden, "access_denied", "authorization consent does not match the logged-in user")
+		return
+	}
+
+	code, err := s.issueMCPOAuthAuthorizationCode(r, *state)
+	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue authorization code")
 		return
 	}
 
-	redirectMCPOAuthSuccess(w, r, redirectURI, map[string]string{
+	redirectMCPOAuthSuccess(w, r, state.RedirectURI, map[string]string{
 		"code":  code,
-		"state": state,
+		"state": state.State,
 	})
 }
 
@@ -330,7 +388,33 @@ func (s *Server) mcpOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) issueMCPOAuthAuthorizationCode(r *http.Request, consent mcpOAuthConsentState) (string, error) {
+	if s.mcpOAuthGrants == nil {
+		return "", fmt.Errorf("mcp oauth grant store is not configured")
+	}
+	expiresAt := s.now().Add(mcpOAuthAuthorizationCodeTTL)
+	code, err := encodeMCPOAuthAuthorizationCode(s.encryptor, mcpOAuthAuthorizationCodeState{
+		ClientID:            consent.ClientID,
+		RedirectURI:         consent.RedirectURI,
+		Email:               consent.Email,
+		DisplayName:         consent.DisplayName,
+		AvatarURL:           consent.AvatarURL,
+		Scope:               consent.Scope,
+		CodeChallenge:       consent.CodeChallenge,
+		CodeChallengeMethod: consent.CodeChallengeMethod,
+		ExpiresAt:           expiresAt.Unix(),
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := s.mcpOAuthGrants.StoreAuthorizationCode(r.Context(), code, expiresAt); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
 func (s *Server) mcpOAuthExchangeAuthorizationCode(w http.ResponseWriter, r *http.Request, clientID string) {
+	code := r.Form.Get("code")
 	codeState, err := decodeMCPOAuthAuthorizationCode(s.encryptor, r.Form.Get("code"), s.now())
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
@@ -365,16 +449,27 @@ func (s *Server) mcpOAuthExchangeAuthorizationCode(w http.ResponseWriter, r *htt
 		return
 	}
 
+	familyID := uuid.NewString()
+	refreshExpiresAt := s.now().Add(mcpOAuthRefreshTokenTTL)
 	refreshToken, err := encodeMCPOAuthRefreshToken(s.encryptor, mcpOAuthRefreshTokenState{
 		ClientID:    clientID,
+		FamilyID:    familyID,
 		Email:       codeState.Email,
 		DisplayName: codeState.DisplayName,
 		AvatarURL:   codeState.AvatarURL,
 		Scope:       codeState.Scope,
-		ExpiresAt:   s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
+		ExpiresAt:   refreshExpiresAt.Unix(),
 	})
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue refresh token")
+		return
+	}
+	if s.mcpOAuthGrants == nil {
+		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "MCP OAuth grant storage is unavailable")
+		return
+	}
+	if err := s.mcpOAuthGrants.ConsumeAuthorizationCodeAndStoreRefreshToken(r.Context(), code, refreshToken, familyID, refreshExpiresAt); err != nil {
+		writeMCPOAuthGrantError(w, err, "authorization code is invalid")
 		return
 	}
 
@@ -397,16 +492,26 @@ func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if s.mcpOAuthGrants == nil {
+		writeMCPOAuthError(w, http.StatusServiceUnavailable, "server_error", "MCP OAuth grant storage is unavailable")
+		return
+	}
+	refreshExpiresAt := s.now().Add(mcpOAuthRefreshTokenTTL)
 	refreshToken, err := encodeMCPOAuthRefreshToken(s.encryptor, mcpOAuthRefreshTokenState{
 		ClientID:    clientID,
+		FamilyID:    refreshState.FamilyID,
 		Email:       refreshState.Email,
 		DisplayName: refreshState.DisplayName,
 		AvatarURL:   refreshState.AvatarURL,
 		Scope:       refreshState.Scope,
-		ExpiresAt:   s.now().Add(mcpOAuthRefreshTokenTTL).Unix(),
+		ExpiresAt:   refreshExpiresAt.Unix(),
 	})
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
+		return
+	}
+	if err := s.mcpOAuthGrants.RotateRefreshToken(r.Context(), r.Form.Get("refresh_token"), refreshToken, refreshState.FamilyID, refreshExpiresAt); err != nil {
+		writeMCPOAuthGrantError(w, err, "refresh token is invalid")
 		return
 	}
 
@@ -420,17 +525,16 @@ func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, identity *core.UserIdentity, scope, refreshToken string) {
 	auth := s.serverAuthRuntime()
-	accessToken, err := s.issueSessionToken(auth.provider, identity)
-	if err != nil {
-		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
-		return
-	}
-
 	ttl := defaultSessionCookieTTL
 	if auth.provider != nil {
 		if providerWithTTL, ok := auth.provider.(SessionTokenTTLProvider); ok {
 			ttl = providerWithTTL.SessionTokenTTL()
 		}
+	}
+	accessToken, err := s.issueMCPOAuthAccessToken(identity, scope, ttl)
+	if err != nil {
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
+		return
 	}
 
 	setMCPOAuthNoStoreHeaders(w)
@@ -451,9 +555,80 @@ func writeMCPOAuthError(w http.ResponseWriter, status int, code, description str
 	})
 }
 
+func writeMCPOAuthGrantError(w http.ResponseWriter, err error, description string) {
+	switch {
+	case errors.Is(err, coredata.ErrMCPOAuthGrantNotFound),
+		errors.Is(err, coredata.ErrMCPOAuthGrantConsumed),
+		errors.Is(err, coredata.ErrMCPOAuthGrantRevoked),
+		errors.Is(err, coredata.ErrMCPOAuthGrantExpired):
+		writeMCPOAuthError(w, http.StatusBadRequest, "invalid_grant", description)
+	default:
+		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "MCP OAuth grant storage failed")
+	}
+}
+
 func setMCPOAuthNoStoreHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
+}
+
+func writeMCPOAuthConsentPage(w http.ResponseWriter, clientName, scope, consent string) {
+	clientName = strings.TrimSpace(clientName)
+	if clientName == "" {
+		clientName = "MCP client"
+	}
+	setMCPOAuthNoStoreHeaders(w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Authorize MCP Client</title></head>
+<body>
+<main>
+<h1>Authorize %s</h1>
+<p>This client is requesting MCP access%s.</p>
+<form method="post" action="%s">
+<input type="hidden" name="consent" value="%s">
+<button type="submit">Authorize</button>
+</form>
+</main>
+</body>
+</html>`,
+		html.EscapeString(clientName),
+		mcpOAuthConsentScopeText(scope),
+		html.EscapeString(mcpAuthorizationConsentEndpointPath),
+		html.EscapeString(consent),
+	)
+}
+
+func mcpOAuthConsentScopeText(scope string) string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return ""
+	}
+	return " for scope " + html.EscapeString(scope)
+}
+
+func (s *Server) sameOriginFormPost(r *http.Request) bool {
+	raw := strings.TrimSpace(r.Header.Get("Origin"))
+	if raw == "" {
+		raw = strings.TrimSpace(r.Header.Get("Referer"))
+	}
+	if raw == "" {
+		return true
+	}
+	got, err := url.Parse(raw)
+	if err != nil || got.Scheme == "" || got.Host == "" {
+		return false
+	}
+	expectedRaw, err := s.resolvePublicURL(r, "/")
+	if err != nil {
+		return false
+	}
+	expected, err := url.Parse(expectedRaw)
+	if err != nil || expected.Scheme == "" || expected.Host == "" {
+		return false
+	}
+	return strings.EqualFold(got.Scheme, expected.Scheme) && strings.EqualFold(got.Host, expected.Host)
 }
 
 func redirectMCPOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state, code, description string) {
@@ -521,7 +696,25 @@ func validateMCPOAuthRedirectURI(raw string) error {
 	if parsed.Fragment != "" {
 		return errors.New("redirect_uri must not include a fragment")
 	}
+	if parsed.User != nil {
+		return errors.New("redirect_uri must not include userinfo")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("redirect_uri scheme must be http or https")
+	}
+	if parsed.Host == "" || !isLoopbackRedirectHost(parsed.Hostname()) {
+		return errors.New("redirect_uri host must be loopback")
+	}
 	return nil
+}
+
+func isLoopbackRedirectHost(host string) bool {
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func resolveRegisteredMCPOAuthRedirectURI(registered []string, requested string) (string, error) {

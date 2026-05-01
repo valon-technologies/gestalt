@@ -20851,10 +20851,27 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	svc := coretesting.NewStubServices(t)
-	providers := func() *registry.ProviderMap[core.Provider] {
-		reg := registry.New()
-		return &reg.Providers
-	}()
+	var calledTool string
+	prov := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
+			ops:             []core.Operation{{Name: "run_query", Description: "Execute a SQL query"}},
+		},
+		catalog: &catalog.Catalog{
+			Name: "clickhouse",
+			Operations: []catalog.CatalogOperation{{
+				ID:          "run_query",
+				Description: "Execute a SQL query",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+				Transport:   catalog.TransportMCPPassthrough,
+			}},
+		},
+		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			calledTool = name
+			return mcpgo.NewToolResultText("query executed"), nil
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, prov)
 	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -20972,11 +20989,31 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	}
 	defer func() { _ = authorizedResp.Body.Close() }()
 
-	if authorizedResp.StatusCode != http.StatusFound {
+	if authorizedResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(authorizedResp.Body)
-		t.Fatalf("resumed authorize status = %d, want %d: %s", authorizedResp.StatusCode, http.StatusFound, body)
+		t.Fatalf("resumed authorize status = %d, want %d: %s", authorizedResp.StatusCode, http.StatusOK, body)
 	}
-	finalRedirect, err := url.Parse(authorizedResp.Header.Get("Location"))
+	consentBody, err := io.ReadAll(authorizedResp.Body)
+	if err != nil {
+		t.Fatalf("read consent body: %v", err)
+	}
+	consentToken := extractHiddenInputValue(t, string(consentBody), "consent")
+	if consentToken == "" {
+		t.Fatal("consent page missing consent token")
+	}
+
+	consentResp, err := noRedirect.PostForm(ts.URL+"/oauth/authorize/consent", url.Values{
+		"consent": {consentToken},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/authorize/consent: %v", err)
+	}
+	defer func() { _ = consentResp.Body.Close() }()
+	if consentResp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(consentResp.Body)
+		t.Fatalf("consent status = %d, want %d: %s", consentResp.StatusCode, http.StatusFound, body)
+	}
+	finalRedirect, err := url.Parse(consentResp.Header.Get("Location"))
 	if err != nil {
 		t.Fatalf("parse final redirect: %v", err)
 	}
@@ -21021,6 +21058,22 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 		t.Fatal("token response missing refresh_token")
 	}
 
+	replayResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"code_verifier": {verifier},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/token replay: %v", err)
+	}
+	defer func() { _ = replayResp.Body.Close() }()
+	if replayResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(replayResp.Body)
+		t.Fatalf("replay status = %d, want %d: %s", replayResp.StatusCode, http.StatusBadRequest, body)
+	}
+
 	status, _ := mcpJSONRPC(t, ts, map[string]string{"Authorization": "Bearer " + accessToken}, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
@@ -21033,6 +21086,33 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	})
 	if status != http.StatusOK {
 		t.Fatalf("initialize with access token: expected 200, got %d", status)
+	}
+	status, toolResp := mcpJSONRPC(t, ts, map[string]string{"Authorization": "Bearer " + accessToken}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "clickhouse_run_query",
+			"arguments": map[string]any{"sql": "SELECT 1"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call with scoped OAuth access token: expected 200, got %d: %+v", status, toolResp)
+	}
+	if calledTool != "run_query" {
+		t.Fatalf("tools/call invoked %q, want run_query", calledTool)
+	}
+
+	apiReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	apiReq.Header.Set("Authorization", "Bearer "+accessToken)
+	apiResp, err := http.DefaultClient.Do(apiReq)
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations with MCP token: %v", err)
+	}
+	defer func() { _ = apiResp.Body.Close() }()
+	if apiResp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(apiResp.Body)
+		t.Fatalf("MCP access token API status = %d, want %d: %s", apiResp.StatusCode, http.StatusUnauthorized, body)
 	}
 
 	refreshResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
@@ -21058,6 +21138,10 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	if refreshedAccessToken == "" {
 		t.Fatal("refresh response missing access_token")
 	}
+	rotatedRefreshToken, _ := refreshBody["refresh_token"].(string)
+	if rotatedRefreshToken == "" || rotatedRefreshToken == refreshToken {
+		t.Fatalf("refresh response did not rotate refresh_token")
+	}
 
 	status, _ = mcpJSONRPC(t, ts, map[string]string{"Authorization": "Bearer " + refreshedAccessToken}, map[string]any{
 		"jsonrpc": "2.0",
@@ -21071,6 +21155,68 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	})
 	if status != http.StatusOK {
 		t.Fatalf("initialize with refreshed access token: expected 200, got %d", status)
+	}
+
+	reusedRefreshResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
+		"grant_type":    {"refresh_token"},
+		"client_id":     {clientID},
+		"refresh_token": {refreshToken},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/token reused refresh_token: %v", err)
+	}
+	defer func() { _ = reusedRefreshResp.Body.Close() }()
+	if reusedRefreshResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(reusedRefreshResp.Body)
+		t.Fatalf("reused refresh status = %d, want %d: %s", reusedRefreshResp.StatusCode, http.StatusBadRequest, body)
+	}
+
+	revokedFamilyResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
+		"grant_type":    {"refresh_token"},
+		"client_id":     {clientID},
+		"refresh_token": {rotatedRefreshToken},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/token after refresh family revocation: %v", err)
+	}
+	defer func() { _ = revokedFamilyResp.Body.Close() }()
+	if revokedFamilyResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(revokedFamilyResp.Body)
+		t.Fatalf("revoked family refresh status = %d, want %d: %s", revokedFamilyResp.StatusCode, http.StatusBadRequest, body)
+	}
+}
+
+func TestMCPOAuthDynamicClientRegistrationRejectsNonLoopbackRedirect(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	svc := coretesting.NewStubServices(t)
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{secret: secret, name: "oidc"}
+		cfg.StateSecret = secret
+		cfg.MCPHandler = mcpHandler
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(ts.URL+"/oauth/register", "application/json", strings.NewReader(`{
+		"client_name":"Evil",
+		"redirect_uris":["https://evil.example/callback"]
+	}`))
+	if err != nil {
+		t.Fatalf("POST /oauth/register: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("register status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
 	}
 }
 
