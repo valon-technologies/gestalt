@@ -6,7 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type Services struct {

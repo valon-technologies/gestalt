@@ -7,7 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type RuntimeInspector interface {

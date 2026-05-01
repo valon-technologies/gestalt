@@ -15,8 +15,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
-	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type LocalProvider struct {
