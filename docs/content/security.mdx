@@ -55,10 +55,10 @@ The host resolves the caller's access token and passes it to the provider in eac
 
 Executable plugins may also opt into a runtime provider. In that model,
 `gestaltd` first talks to the runtime provider, which creates a hosted session,
-binds host-local services into that session, starts the plugin there, and
-bridges the plugin's provider gRPC listener back to the host. The effective
-execution boundary then depends on the selected runtime backend and its
-capabilities, not just the host-local child-process wrapper.
+prepares relay-backed host-service environment variables, starts the plugin
+there, and bridges the plugin's provider gRPC listener back to the host. The
+effective execution boundary then depends on the selected runtime backend and
+its capabilities, not just the host-local child-process wrapper.
 
 ### Egress control
 
