@@ -169,12 +169,9 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
 	env = withHostServiceTLSCAEnv(env, deps)
 	for _, hostService := range hostServices {
-		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, true)
+		bindingEnv, _, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps, true)
 		if err != nil {
 			return providerdev.RuntimeEnv{}, err
-		}
-		if bindingReq.EnvVar != "" && bindingReq.Relay.DialTarget != "" {
-			env[bindingReq.EnvVar] = bindingReq.Relay.DialTarget
 		}
 		maps.Copy(env, bindingEnv)
 	}

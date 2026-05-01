@@ -237,15 +237,6 @@ func (p *runtimeProvider) StopSession(_ context.Context, req *proto.StopPluginRu
 	return &emptypb.Empty{}, nil
 }
 
-func (p *runtimeProvider) BindHostService(_ context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
-	return &proto.PluginRuntimeHostServiceBinding{
-		Id:        "binding-1",
-		SessionId: req.GetSessionId(),
-		EnvVar:    req.GetEnvVar(),
-		Relay:     req.GetRelay(),
-	}, nil
-}
-
 func (p *runtimeProvider) StartPlugin(ctx context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
 	host, err := gestalt.RuntimeLogHost()
 	if err == nil {

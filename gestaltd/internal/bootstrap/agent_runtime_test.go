@@ -1594,29 +1594,22 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		t.Fatalf("GetSession(after CreateTurn) = %#v, want preserved client_ref cli-session-2", postTurnSession)
 	}
 
-	bindRequests := capturingRuntime.bindHostServiceRequests()
-	foundAgentHost := false
-	foundRuntimeLogHost := false
 	wantRelayTarget := "tls://" + relaySrv.Listener.Addr().String()
-	for _, req := range bindRequests {
-		switch req.EnvVar {
-		case agentservice.DefaultHostSocketEnv:
-			foundAgentHost = true
-			if got := req.Relay.DialTarget; got != wantRelayTarget {
-				t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
-			}
-		case runtimehost.DefaultRuntimeLogHostSocketEnv:
-			foundRuntimeLogHost = true
-			if got := req.Relay.DialTarget; got != wantRelayTarget {
-				t.Fatalf("runtime log host relay target = %q, want %q", got, wantRelayTarget)
-			}
-		}
+	startRequests := capturingRuntime.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if !foundAgentHost {
-		t.Fatalf("bind host service requests missing %s: %#v", agentservice.DefaultHostSocketEnv, bindRequests)
+	if got := startRequests[0].Env[agentservice.DefaultHostSocketEnv]; got != wantRelayTarget {
+		t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 	}
-	if !foundRuntimeLogHost {
-		t.Fatalf("bind host service requests missing %s: %#v", runtimehost.DefaultRuntimeLogHostSocketEnv, bindRequests)
+	if got := startRequests[0].Env[agentservice.HostSocketTokenEnv()]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing %s", agentservice.HostSocketTokenEnv())
+	}
+	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv]; got != wantRelayTarget {
+		t.Fatalf("runtime log host relay target = %q, want %q", got, wantRelayTarget)
+	}
+	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
@@ -2385,20 +2378,12 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		t.Fatalf("turn = %#v, want provider-only output", turn)
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("bind host service requests = %d, want 1", len(bindRequests))
-	}
-	if bindRequests[0].EnvVar != agentservice.DefaultHostSocketEnv {
-		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, agentservice.DefaultHostSocketEnv)
-	}
-	if got := bindRequests[0].Relay.DialTarget; got != "tls://"+relaySrv.Listener.Addr().String() {
-		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("start plugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[agentservice.DefaultHostSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
+		t.Fatalf("StartPlugin env %s = %q, want tls relay target", agentservice.DefaultHostSocketEnv, got)
 	}
 	if got := startRequests[0].Env[agentservice.HostSocketTokenEnv()]; strings.TrimSpace(got) == "" {
 		t.Fatalf("StartPlugin env missing %s_TOKEN: %#v", agentservice.DefaultHostSocketEnv, startRequests[0].Env)

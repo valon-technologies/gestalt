@@ -907,12 +907,9 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	allowedHosts := entry.EffectiveAllowedHosts()
 	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, true)
+		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps, true)
 		if err != nil {
 			return nil, err
-		}
-		if _, err := runtimeProvider.BindHostService(ctx, bindingReq); err != nil {
-			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
 		}
 		if len(bindingEnv) > 0 {
 			if startEnv == nil {
@@ -1178,14 +1175,10 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	phaseStarted = time.Now()
 	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, true)
+		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps, true)
 		if err != nil {
-			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
+			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
 			return nil, err
-		}
-		if _, err := runtimeProvider.BindHostService(ctx, bindingReq); err != nil {
-			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
-			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
 		}
 		if len(bindingEnv) > 0 {
 			if startEnv == nil {
@@ -1197,7 +1190,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 			allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 		}
 	}
-	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, nil)
+	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, nil)
 	phaseStarted = time.Now()
 	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.Policy(agentAllowedHosts), allowedHosts, runtimePlan, deps)
 	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
@@ -1641,7 +1634,7 @@ func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.Host
 	return out
 }
 
-func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowCoreRoutable bool) (map[string]string, string, error) {
 	var (
 		serviceKey   string
 		serviceLabel string
@@ -1685,9 +1678,9 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 		serviceLabel = "runtime log host"
 		methodPrefix = "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/"
 	default:
-		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires public host service relay support", hostService.EnvVar)
+		return nil, "", fmt.Errorf("host service %q requires public host service relay support", hostService.EnvVar)
 	}
-	relay, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(
+	relayDialTarget, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(
 		providerName,
 		sessionID,
 		hostService,
@@ -1698,16 +1691,13 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 		allowCoreRoutable && isCoreRoutableHostedRuntimeHostService(hostService, serviceKey, methodPrefix),
 	)
 	if err != nil {
-		return pluginruntime.BindHostServiceRequest{}, nil, "", err
+		return nil, "", err
 	}
 	if !ok {
-		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s through the public host service relay", providerName, serviceLabel)
+		return nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s through the public host service relay", providerName, serviceLabel)
 	}
-	return pluginruntime.BindHostServiceRequest{
-		SessionID: sessionID,
-		EnvVar:    hostService.EnvVar,
-		Relay:     relay,
-	}, relayEnv, relayHost, nil
+	relayEnv[hostService.EnvVar] = relayDialTarget
+	return relayEnv, relayHost, nil
 }
 
 type runtimeHostServiceSessionVerifier struct {
@@ -1828,17 +1818,17 @@ func publicRuntimeRegistryHostServices(hostServices []runtimehost.HostService) [
 	return append([]runtimehost.HostService(nil), hostServices...)
 }
 
-func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (string, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
-		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
+		return "", nil, "", false, nil
 	}
 	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(deps.BaseURL)
 	if err != nil {
-		return pluginruntime.HostServiceRelay{}, nil, "", false, err
+		return "", nil, "", false, err
 	}
 	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
 	if err != nil {
-		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
+		return "", nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   providerName,
@@ -1850,13 +1840,11 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {
-		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
+		return "", nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
 	}
-	return pluginruntime.HostServiceRelay{
-			DialTarget: dialTarget,
-		}, map[string]string{
-			hostService.EnvVar + "_TOKEN": token,
-		}, relayHost, true, nil
+	return dialTarget, map[string]string{
+		hostService.EnvVar + "_TOKEN": token,
+	}, relayHost, true, nil
 }
 
 func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
