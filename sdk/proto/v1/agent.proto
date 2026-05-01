@@ -135,6 +135,8 @@ enum AgentInteractionState {
 }
 
 message AgentProviderCapabilities {
+  reserved 8;
+
   bool streaming_text = 1;
   bool tool_calls = 2;
   bool parallel_tool_calls = 3;
@@ -142,7 +144,6 @@ message AgentProviderCapabilities {
   bool interactions = 5;
   bool resumable_turns = 6;
   bool reasoning_summaries = 7;
-  bool native_tool_search = 8;
   bool bounded_list_hydration = 9;
   repeated AgentToolSourceMode supported_tool_sources = 10;
 }

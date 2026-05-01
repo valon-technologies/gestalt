@@ -141,7 +141,6 @@ type agentProviderCapabilitiesInfo struct {
 	Interactions         bool     `json:"interactions,omitempty"`
 	ResumableTurns       bool     `json:"resumableTurns,omitempty"`
 	ReasoningSummaries   bool     `json:"reasoningSummaries,omitempty"`
-	NativeToolSearch     bool     `json:"nativeToolSearch,omitempty"`
 	BoundedListHydration bool     `json:"boundedListHydration,omitempty"`
 	SupportedToolSources []string `json:"supportedToolSources,omitempty"`
 }
@@ -947,7 +946,6 @@ func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities)
 		Interactions:         caps.Interactions,
 		ResumableTurns:       caps.ResumableTurns,
 		ReasoningSummaries:   caps.ReasoningSummaries,
-		NativeToolSearch:     caps.NativeToolSearch,
 		BoundedListHydration: caps.BoundedListHydration,
 		SupportedToolSources: agentToolSourceModesInfoFromCore(caps.SupportedToolSources),
 	}

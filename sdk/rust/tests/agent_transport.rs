@@ -320,7 +320,6 @@ impl AgentProviderGrpc for TestAgentProvider {
             interactions: true,
             resumable_turns: true,
             reasoning_summaries: false,
-            native_tool_search: true,
             bounded_list_hydration: true,
             supported_tool_sources: vec![pb::AgentToolSourceMode::NativeSearch as i32],
         }))
@@ -646,7 +645,6 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     assert!(capabilities.tool_calls);
     assert!(capabilities.interactions);
     assert!(capabilities.resumable_turns);
-    assert!(capabilities.native_tool_search);
 
     assert_eq!(
         *provider

@@ -353,7 +353,6 @@ func TestManagerCreateTurnDefaultsToMCPCatalogForProviderTurns(t *testing.T) {
 
 	alpha := newRouteCountingAgentProvider("alpha")
 	alpha.capabilities = &coreagent.ProviderCapabilities{
-		NativeToolSearch: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
 			coreagent.ToolSourceModeMCPCatalog,
 		},

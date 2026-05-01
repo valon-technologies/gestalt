@@ -21,12 +21,14 @@ const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");
 
 let tmpDir: string;
 let harnessBinPath: string;
+let socketPath: string;
 let proc: Subprocess;
 let db: IndexedDB;
 
 beforeAll(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), "indexeddb-transport-test-"));
   harnessBinPath = join(tmpDir, "indexeddbtransportd");
+  socketPath = join(tmpDir, "indexeddb.sock");
 
   const build = spawn(
     ["go", "build", "-o", harnessBinPath, "./internal/testutil/testdata/cmd/indexeddbtransportd/"],
@@ -38,9 +40,7 @@ beforeAll(async () => {
     throw new Error(`go build failed (exit ${buildExit}): ${stderr}`);
   }
 
-  const address = await reserveTCPAddress();
-  const target = `tcp://${address}`;
-  proc = spawn([harnessBinPath, "--tcp", address], {
+  proc = spawn([harnessBinPath, "--socket", socketPath], {
     stdout: "pipe",
     stderr: "inherit",
   });
@@ -57,8 +57,8 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_INDEXEDDB_SOCKET = target;
-  process.env[indexedDBSocketEnv("named")] = target;
+  process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
+  process.env[indexedDBSocketEnv("named")] = `unix://${socketPath}`;
 }, 60_000);
 
 beforeEach(() => {

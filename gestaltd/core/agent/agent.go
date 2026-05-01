@@ -319,7 +319,6 @@ type ProviderCapabilities struct {
 	Interactions         bool
 	ResumableTurns       bool
 	ReasoningSummaries   bool
-	NativeToolSearch     bool
 	BoundedListHydration bool
 	SupportedToolSources []ToolSourceMode
 }

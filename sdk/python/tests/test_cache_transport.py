@@ -21,6 +21,7 @@ def _build_harness() -> str:
         "gestaltd",
         "internal",
         "testutil",
+        "testdata",
         "cmd",
         "cachetransportd",
     )

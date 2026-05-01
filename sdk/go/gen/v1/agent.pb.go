@@ -1073,7 +1073,6 @@ type AgentProviderCapabilities struct {
 	Interactions         bool                   `protobuf:"varint,5,opt,name=interactions,proto3" json:"interactions,omitempty"`
 	ResumableTurns       bool                   `protobuf:"varint,6,opt,name=resumable_turns,json=resumableTurns,proto3" json:"resumable_turns,omitempty"`
 	ReasoningSummaries   bool                   `protobuf:"varint,7,opt,name=reasoning_summaries,json=reasoningSummaries,proto3" json:"reasoning_summaries,omitempty"`
-	NativeToolSearch     bool                   `protobuf:"varint,8,opt,name=native_tool_search,json=nativeToolSearch,proto3" json:"native_tool_search,omitempty"`
 	BoundedListHydration bool                   `protobuf:"varint,9,opt,name=bounded_list_hydration,json=boundedListHydration,proto3" json:"bounded_list_hydration,omitempty"`
 	SupportedToolSources []AgentToolSourceMode  `protobuf:"varint,10,rep,packed,name=supported_tool_sources,json=supportedToolSources,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"supported_tool_sources,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -1155,13 +1154,6 @@ func (x *AgentProviderCapabilities) GetResumableTurns() bool {
 func (x *AgentProviderCapabilities) GetReasoningSummaries() bool {
 	if x != nil {
 		return x.ReasoningSummaries
-	}
-	return false
-}
-
-func (x *AgentProviderCapabilities) GetNativeToolSearch() bool {
-	if x != nil {
-		return x.NativeToolSearch
 	}
 	return false
 }
@@ -4466,7 +4458,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"parameters\x18\x05 \x03(\tR\n" +
 	"parameters\x12\x14\n" +
-	"\x05score\x18\x06 \x01(\x01R\x05score\"\x80\x04\n" +
+	"\x05score\x18\x06 \x01(\x01R\x05score\"\xd8\x03\n" +
 	"\x19AgentProviderCapabilities\x12%\n" +
 	"\x0estreaming_text\x18\x01 \x01(\bR\rstreamingText\x12\x1d\n" +
 	"\n" +
@@ -4475,11 +4467,10 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x11structured_output\x18\x04 \x01(\bR\x10structuredOutput\x12\"\n" +
 	"\finteractions\x18\x05 \x01(\bR\finteractions\x12'\n" +
 	"\x0fresumable_turns\x18\x06 \x01(\bR\x0eresumableTurns\x12/\n" +
-	"\x13reasoning_summaries\x18\a \x01(\bR\x12reasoningSummaries\x12,\n" +
-	"\x12native_tool_search\x18\b \x01(\bR\x10nativeToolSearch\x124\n" +
+	"\x13reasoning_summaries\x18\a \x01(\bR\x12reasoningSummaries\x124\n" +
 	"\x16bounded_list_hydration\x18\t \x01(\bR\x14boundedListHydration\x12^\n" +
 	"\x16supported_tool_sources\x18\n" +
-	" \x03(\x0e2(.gestalt.provider.v1.AgentToolSourceModeR\x14supportedToolSources\"%\n" +
+	" \x03(\x0e2(.gestalt.provider.v1.AgentToolSourceModeR\x14supportedToolSourcesJ\x04\b\b\x10\t\"%\n" +
 	"#GetAgentProviderCapabilitiesRequest\"\xed\x03\n" +
 	"\x10AgentInteraction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12=\n" +

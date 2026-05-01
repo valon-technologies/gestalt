@@ -870,7 +870,6 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 			Default      bool   `json:"default"`
 			Capabilities struct {
 				StreamingText        bool     `json:"streamingText"`
-				NativeToolSearch     bool     `json:"nativeToolSearch"`
 				BoundedListHydration bool     `json:"boundedListHydration"`
 				SupportedToolSources []string `json:"supportedToolSources"`
 			} `json:"capabilities"`
@@ -886,8 +885,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if gotProvider.Name != "managed" || !gotProvider.Default {
 		t.Fatalf("provider = %#v, want managed default", gotProvider)
 	}
-	if !gotProvider.Capabilities.StreamingText || gotProvider.Capabilities.NativeToolSearch || !gotProvider.Capabilities.BoundedListHydration {
-		t.Fatalf("provider capabilities = %#v, want streaming text, catalog listing, and no native tool search", gotProvider.Capabilities)
+	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.BoundedListHydration {
+		t.Fatalf("provider capabilities = %#v, want streaming text and catalog listing", gotProvider.Capabilities)
 	}
 	if got := gotProvider.Capabilities.SupportedToolSources; strings.Join(got, ",") != "mcp_catalog" {
 		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
