@@ -13,11 +13,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/pluginvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"gopkg.in/yaml.v3"
 )
 
@@ -414,10 +413,7 @@ func validateStagedReleaseCatalog(staged *providerpkg.StagedPreparedInstall) err
 	if err != nil {
 		return fmt.Errorf("invalid source in staged manifest: %w", err)
 	}
-	return pluginservice.ValidateEffectiveCatalog(context.Background(), src.PluginName(), &config.ProviderEntry{
-		ResolvedManifestPath: staged.ManifestPath,
-		ResolvedManifest:     staged.Manifest,
-	})
+	return pluginvalidation.ValidateEffectiveManifest(context.Background(), src.PluginName(), staged.ManifestPath, staged.Manifest)
 }
 
 func platformArchiveName(pluginName, version string, plat releasePlatform) string {
