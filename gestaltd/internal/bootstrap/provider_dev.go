@@ -178,7 +178,7 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			cleanup()
 		}
 	}()
-	env := map[string]string{}
+	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
 	if sharedAttachmentState {
 		for _, hostService := range hostServices {
 			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, runtimehost.StartedHostService{

@@ -69,8 +69,8 @@ pub use plugin_runtime::PluginRuntimeProvider;
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 pub use runtime_log_host::{
-    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, RuntimeLogHost,
-    RuntimeLogHostError, RuntimeLogStream,
+    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, ENV_RUNTIME_SESSION_ID,
+    RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
 };
 pub use s3::{
     ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, S3, S3Error, S3Provider, s3_socket_env, s3_socket_token_env,

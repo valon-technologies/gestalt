@@ -1700,14 +1700,27 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 
 	bindRequests := capturingRuntime.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("bind host service requests = %d, want 1", len(bindRequests))
+	foundAgentHost := false
+	foundRuntimeLogHost := false
+	for _, req := range bindRequests {
+		switch req.EnvVar {
+		case agentservice.DefaultHostSocketEnv:
+			foundAgentHost = true
+			if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
+				t.Fatalf("agent host relay target = %q, want unix relay target", got)
+			}
+		case runtimehost.DefaultRuntimeLogHostSocketEnv:
+			foundRuntimeLogHost = true
+			if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
+				t.Fatalf("runtime log host relay target = %q, want unix relay target", got)
+			}
+		}
 	}
-	if bindRequests[0].EnvVar != agentservice.DefaultHostSocketEnv {
-		t.Fatalf("BindHostService EnvVar = %q, want %q", bindRequests[0].EnvVar, agentservice.DefaultHostSocketEnv)
+	if !foundAgentHost {
+		t.Fatalf("bind host service requests missing %s: %#v", agentservice.DefaultHostSocketEnv, bindRequests)
 	}
-	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
-		t.Fatalf("BindHostService relay target = %q, want unix relay target", got)
+	if !foundRuntimeLogHost {
+		t.Fatalf("bind host service requests missing %s: %#v", runtimehost.DefaultRuntimeLogHostSocketEnv, bindRequests)
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{

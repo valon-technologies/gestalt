@@ -18,6 +18,7 @@ import {
 
 export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";
 export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = `${ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN`;
+export const ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID";
 
 const RUNTIME_LOG_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
@@ -31,7 +32,7 @@ export type RuntimeLogAppendLogsInput = MessageInitShape<
 export type RuntimeLogAppendResponseMessage = AppendPluginRuntimeLogsResponse;
 
 export interface RuntimeLogAppendInput {
-  sessionId: string;
+  sessionId?: string;
   message: string | Uint8Array;
   stream?: RuntimeLogStreamInput;
   observedAt?: Date;
@@ -39,12 +40,14 @@ export interface RuntimeLogAppendInput {
 }
 
 export interface RuntimeLogWriterOptions {
+  sessionId?: string;
   stream?: RuntimeLogStreamInput;
   sourceSeqStart?: number | bigint;
 }
 
 export class RuntimeLogHost {
   private readonly client: Client<typeof PluginRuntimeLogHostService>;
+  private sourceSeq = 0n;
 
   constructor() {
     const target = process.env[ENV_RUNTIME_LOG_HOST_SOCKET];
@@ -82,25 +85,43 @@ export class RuntimeLogHost {
   async append(
     input: RuntimeLogAppendInput,
   ): Promise<RuntimeLogAppendResponseMessage> {
+    const sourceSeq =
+      input.sourceSeq === undefined
+        ? (this.sourceSeq += 1n)
+        : BigInt(input.sourceSeq);
+    if (sourceSeq > this.sourceSeq) {
+      this.sourceSeq = sourceSeq;
+    }
     return await this.appendLogs({
-      sessionId: input.sessionId,
+      sessionId: runtimeSessionId(input.sessionId),
       logs: [
         {
           stream: runtimeLogStream(input.stream ?? "runtime"),
           message: runtimeLogMessage(input.message),
           observedAt: toProtoTimestamp(input.observedAt ?? new Date()),
-          sourceSeq: BigInt(input.sourceSeq ?? 0),
+          sourceSeq,
         },
       ],
     });
   }
 
+  writer(options?: RuntimeLogWriterOptions): Writable;
+  writer(sessionId: string, options?: RuntimeLogWriterOptions): Writable;
   writer(
-    sessionId: string,
+    sessionIdOrOptions: string | RuntimeLogWriterOptions = {},
     options: RuntimeLogWriterOptions = {},
   ): Writable {
-    const stream = options.stream ?? "stdout";
-    let sourceSeq = BigInt(options.sourceSeqStart ?? 0);
+    const writerOptions =
+      typeof sessionIdOrOptions === "string"
+        ? options
+        : sessionIdOrOptions;
+    const sessionId = runtimeSessionId(
+      typeof sessionIdOrOptions === "string"
+        ? sessionIdOrOptions
+        : writerOptions.sessionId,
+    );
+    const stream = writerOptions.stream ?? "stdout";
+    let sourceSeq = BigInt(writerOptions.sourceSeqStart ?? 0);
 
     return new Writable({
       write: (chunk: Buffer | string, encoding, callback) => {
@@ -124,6 +145,14 @@ export class RuntimeLogHost {
       },
     });
   }
+}
+
+function runtimeSessionId(sessionId?: string): string {
+  const value = (sessionId ?? process.env[ENV_RUNTIME_SESSION_ID] ?? "").trim();
+  if (!value) {
+    throw new Error(`runtime session: ${ENV_RUNTIME_SESSION_ID} is not set`);
+  }
+  return value;
 }
 
 function runtimeLogTransportOptions(rawTarget: string): {

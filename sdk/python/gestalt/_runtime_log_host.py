@@ -18,6 +18,7 @@ timestamp_pb2: Any = cast(Any, _timestamp_pb2)
 
 ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET"
 ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = f"{ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN"
+ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID"
 
 _STREAMS = {
     "stdout": pb.PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
@@ -28,18 +29,19 @@ _STREAMS = {
 
 class RuntimeLogHost:
     def __init__(self) -> None:
-        target = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET, "")
+        target = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET, "").strip()
         if not target:
             raise RuntimeError(
                 f"runtime log host: {ENV_RUNTIME_LOG_HOST_SOCKET} is not set"
             )
-        relay_token = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, "")
+        relay_token = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, "").strip()
         self._channel = host_service_channel(
             "runtime log host",
             target,
             token=relay_token,
         )
         self._stub = pb_grpc.PluginRuntimeLogHostStub(self._channel)
+        self._source_seq = 0
 
     def close(self) -> None:
         self._channel.close()
@@ -50,15 +52,25 @@ class RuntimeLogHost:
     def append(
         self,
         session_id: str,
-        message: str,
+        message: str | bytes | None = None,
         *,
         stream: str | int = "runtime",
         observed_at: Any = None,
-        source_seq: int = 0,
+        source_seq: int | None = None,
     ) -> Any:
+        if message is None:
+            message = session_id
+            session_id = _runtime_session_id()
+        else:
+            session_id = _runtime_session_id(session_id)
+        if source_seq is None:
+            self._source_seq += 1
+            source_seq = self._source_seq
+        else:
+            self._source_seq = max(self._source_seq, source_seq)
         entry = pb.PluginRuntimeLogEntry(
             stream=_stream_value(stream),
-            message=message,
+            message=_message_value(message),
             observed_at=_timestamp_value(observed_at),
             source_seq=source_seq,
         )
@@ -68,14 +80,14 @@ class RuntimeLogHost:
 
     def writer(
         self,
-        session_id: str,
+        session_id: str | None = None,
         *,
         stream: str | int = "stdout",
         source_seq_start: int = 0,
     ) -> RuntimeLogWriter:
         return RuntimeLogWriter(
             self,
-            session_id,
+            _runtime_session_id(session_id),
             stream=stream,
             source_seq_start=source_seq_start,
         )
@@ -134,7 +146,7 @@ class RuntimeLogHandler(logging.Handler):
 
     def __init__(
         self,
-        session_id: str,
+        session_id: str | None = None,
         *,
         host: RuntimeLogHost | None = None,
         stream: str | int = "runtime",
@@ -143,7 +155,7 @@ class RuntimeLogHandler(logging.Handler):
         super().__init__(level=level)
         self._host = host or RuntimeLogHost()
         self._owns_host = host is None
-        self._session_id = session_id
+        self._session_id = _runtime_session_id(session_id)
         self._stream = stream
         self._source_seq = 0
 
@@ -176,6 +188,23 @@ def _stream_value(stream: str | int) -> int:
     if value is None:
         raise ValueError(f"unsupported runtime log stream {stream!r}")
     return value
+
+
+def _runtime_session_id(session_id: str | None = None) -> str:
+    value = (
+        session_id
+        if session_id is not None
+        else os.environ.get(ENV_RUNTIME_SESSION_ID, "")
+    ).strip()
+    if not value:
+        raise RuntimeError(f"runtime session: {ENV_RUNTIME_SESSION_ID} is not set")
+    return value
+
+
+def _message_value(message: str | bytes) -> str:
+    if isinstance(message, bytes):
+        return message.decode("utf-8", errors="replace")
+    return message
 
 
 def _timestamp_value(observed_at: Any) -> Any:

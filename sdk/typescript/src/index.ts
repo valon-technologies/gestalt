@@ -131,6 +131,7 @@ export {
 export {
   ENV_RUNTIME_LOG_HOST_SOCKET,
   ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+  ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
   type RuntimeLogAppendInput,
   type RuntimeLogAppendLogsInput,

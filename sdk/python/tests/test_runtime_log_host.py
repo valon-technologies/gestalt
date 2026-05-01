@@ -15,6 +15,7 @@ import grpc
 from gestalt import (
     ENV_RUNTIME_LOG_HOST_SOCKET,
     ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+    ENV_RUNTIME_SESSION_ID,
     RuntimeLogHandler,
     RuntimeLogHost,
 )
@@ -59,6 +60,7 @@ def setUpModule() -> None:
 
     os.environ[ENV_RUNTIME_LOG_HOST_SOCKET] = _socket_path
     os.environ[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] = "relay-token-py"
+    os.environ[ENV_RUNTIME_SESSION_ID] = "runtime-session-1"
 
 
 def tearDownModule() -> None:
@@ -78,16 +80,15 @@ class RuntimeLogHostTransportTests(unittest.TestCase):
 
         with RuntimeLogHost() as host:
             response = host.append(
-                "session-1",
                 "runtime boot\n",
                 stream="runtime",
                 observed_at=observed_at,
                 source_seq=7,
             )
-            writer = host.writer("session-1", stream="stderr", source_seq_start=7)
+            writer = host.writer(stream="stderr", source_seq_start=7)
             self.assertEqual(writer.write(b"stderr line\n"), len(b"stderr line\n"))
 
-            handler = RuntimeLogHandler("session-2", host=host)
+            handler = RuntimeLogHandler(host=host)
             handler.setFormatter(logging.Formatter("%(levelname)s:%(message)s"))
             logger = logging.getLogger("gestalt.runtime-log-host-test")
             logger.handlers = []
@@ -103,7 +104,7 @@ class RuntimeLogHostTransportTests(unittest.TestCase):
         self.assertEqual(response.last_seq, 7)
         self.assertEqual(_relay_tokens, ["relay-token-py"] * 3)
         self.assertEqual(
-            [req.session_id for req in _requests], ["session-1"] * 2 + ["session-2"]
+            [req.session_id for req in _requests], ["runtime-session-1"] * 3
         )
         self.assertEqual(_requests[0].logs[0].message, "runtime boot\n")
         self.assertEqual(

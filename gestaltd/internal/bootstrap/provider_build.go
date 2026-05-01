@@ -894,6 +894,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, err
 	}
+	hostServices = appendRuntimeLogHostService(hostServices, runtimeConfig, deps, runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimePlan, runtimeProvider)
 	if err != nil {
 		return nil, err
@@ -913,6 +914,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		})
 	}
 	startEnv := maps.Clone(env)
+	startEnv = withRuntimeSessionEnv(startEnv, sessionID)
 	allowedHosts := entry.EffectiveAllowedHosts()
 	for _, hostService := range startedHostServices.Bindings() {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect, true)
@@ -1001,6 +1003,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 		launch.close()
 		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.HostedRuntimeRestartPolicyAlways)
 	}
+	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimePlan, launch.runtimeProvider)
 	if err != nil {
 		launch.close()
@@ -1187,7 +1190,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		_ = startedHostServices.Close()
 	})
 
-	startEnv := maps.Clone(cfg.Env)
+	startEnv := withRuntimeSessionEnv(maps.Clone(cfg.Env), sessionID)
 	agentAllowedHosts := cfg.EgressPolicy("").AllowedHosts
 	if len(agentAllowedHosts) == 0 {
 		agentAllowedHosts = slices.Clone(launch.allowedHosts)
@@ -1589,6 +1592,39 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	return hostServices, invTokens, cleanup, nil
 }
 
+func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveHostedRuntime, deps Deps, runtimePlan HostedRuntimePlan) []runtimehost.HostService {
+	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil || runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
+		return hostServices
+	}
+	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
+	return append(hostServices, runtimehost.HostService{
+		Name:   "runtime_log_host",
+		EnvVar: runtimehost.DefaultRuntimeLogHostSocketEnv,
+		Register: func(srv *grpc.Server) {
+			runtimehost.RegisterRuntimeLogHostServer(srv, runtimeProviderName, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
+		},
+	})
+}
+
+func runtimeSessionLogProviderName(runtimeConfig config.EffectiveHostedRuntime) string {
+	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
+		return name
+	}
+	return "local"
+}
+
+func withRuntimeSessionEnv(env map[string]string, sessionID string) map[string]string {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return env
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	env[runtimehost.DefaultRuntimeSessionIDEnv] = sessionID
+	return env
+}
+
 func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService runtimehost.StartedHostService, deps Deps, allowUnixRelay bool, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
 	if !allowUnixRelay {
 		var (
@@ -1629,6 +1665,10 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			serviceKey = "plugin_invoker"
 			serviceLabel = "plugin invoker"
 			methodPrefix = "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == runtimehost.DefaultRuntimeLogHostSocketEnv:
+			serviceKey = "runtime_log_host"
+			serviceLabel = "runtime log host"
+			methodPrefix = "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/"
 		default:
 			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
 		}

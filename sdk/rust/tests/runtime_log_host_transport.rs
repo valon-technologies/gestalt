@@ -11,8 +11,8 @@ use gestalt::proto::v1::{
     AppendPluginRuntimeLogsRequest, AppendPluginRuntimeLogsResponse, PluginRuntimeLogStream,
 };
 use gestalt::{
-    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, RuntimeLogHost,
-    RuntimeLogStream,
+    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, ENV_RUNTIME_SESSION_ID,
+    RuntimeLogHost, RuntimeLogStream,
 };
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
@@ -65,11 +65,11 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     let _socket_guard = helpers::EnvGuard::set(ENV_RUNTIME_LOG_HOST_SOCKET, socket.as_os_str());
     let _token_guard =
         helpers::EnvGuard::set(ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, "relay-token-rust");
+    let _session_guard = helpers::EnvGuard::set(ENV_RUNTIME_SESSION_ID, "runtime-session-1");
 
     let mut host = RuntimeLogHost::connect().await.expect("connect");
     let response = host
-        .append_entry(
-            "session-1",
+        .append_current_entry(
             RuntimeLogStream::Runtime,
             "runtime boot\n",
             Some(helpers::timestamp_now()),
@@ -77,14 +77,14 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
         )
         .await
         .expect("append runtime log");
-    host.append_stderr("session-1", "stderr line\n")
+    host.append_current_stderr("stderr line\n")
         .await
         .expect("append stderr log");
 
     assert_eq!(response.last_seq, 7);
     let requests = server.requests.lock().expect("lock requests").clone();
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[0].session_id, "session-1");
+    assert_eq!(requests[0].session_id, "runtime-session-1");
     assert_eq!(requests[0].logs[0].message, "runtime boot\n");
     assert_eq!(
         requests[0].logs[0].stream,
@@ -93,6 +93,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
     assert_eq!(requests[0].logs[0].source_seq, 7);
     assert!(requests[0].logs[0].observed_at.is_some());
     assert_eq!(requests[1].logs[0].message, "stderr line\n");
+    assert_eq!(requests[1].session_id, "runtime-session-1");
     assert_eq!(
         requests[1].logs[0].stream,
         PluginRuntimeLogStream::Stderr as i32
