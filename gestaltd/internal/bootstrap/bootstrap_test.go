@@ -92,13 +92,6 @@ func bootstrapGraphQLStringPtr(value string) *string {
 	return &value
 }
 
-func protoStructToBootstrapMap(value *structpb.Struct) map[string]any {
-	if value == nil {
-		return nil
-	}
-	return value.AsMap()
-}
-
 func bootstrapGraphQLSchema() graphqlschema.Schema {
 	return graphqlschema.Schema{
 		QueryType: &graphqlschema.TypeName{Name: "Query"},
@@ -899,12 +892,6 @@ type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *runtimehost.StartedHostServices
 	socketPath             string
-	searchQuery            string
-	searchMaxResults       int32
-	searchCandidateLimit   int32
-	searchLoadRefs         []*proto.AgentToolRef
-	searchRequests         []*proto.SearchAgentToolsRequest
-	searchResponses        []*proto.SearchAgentToolsResponse
 	listRequests           []*proto.ListAgentToolsRequest
 	listResponses          []*proto.ListAgentToolsResponse
 	toolBodies             []string
@@ -999,7 +986,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 	}
 
 	outputBody := ""
-	if req.ToolSource == coreagent.ToolSourceModeMCPCatalog || req.ToolSource == coreagent.ToolSourceModeNativeSearch || len(req.Tools) > 0 {
+	if req.ToolSource == coreagent.ToolSourceModeMCPCatalog || len(req.Tools) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -1034,40 +1021,6 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 					ID:          tool.GetId(),
 					Name:        tool.GetMcpName(),
 					Description: tool.GetDescription(),
-				})
-			}
-		}
-		if len(tools) == 0 && req.ToolSource == coreagent.ToolSourceModeNativeSearch {
-			searchQuery := strings.TrimSpace(p.searchQuery)
-			if searchQuery == "" {
-				searchQuery = "roadmap sync"
-			}
-			maxResults := p.searchMaxResults
-			if maxResults == 0 {
-				maxResults = 5
-			}
-			searchReq := &proto.SearchAgentToolsRequest{
-				SessionId:  req.SessionID,
-				TurnId:     turnID,
-				Query:      searchQuery,
-				MaxResults: maxResults,
-				ToolGrant:  req.ToolGrant,
-			}
-			searchReq.CandidateLimit = p.searchCandidateLimit
-			searchReq.LoadRefs = append([]*proto.AgentToolRef(nil), p.searchLoadRefs...)
-			resp, err := client.SearchTools(ctx, searchReq)
-			if err != nil {
-				cleanupPendingTurn()
-				return nil, err
-			}
-			p.searchRequests = append(p.searchRequests, gproto.Clone(searchReq).(*proto.SearchAgentToolsRequest))
-			p.searchResponses = append(p.searchResponses, gproto.Clone(resp).(*proto.SearchAgentToolsResponse))
-			for _, tool := range resp.GetTools() {
-				tools = append(tools, coreagent.Tool{
-					ID:               tool.GetId(),
-					Name:             tool.GetName(),
-					Description:      tool.GetDescription(),
-					ParametersSchema: protoStructToBootstrapMap(tool.GetParametersSchema()),
 				})
 			}
 		}
@@ -2852,7 +2805,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 			_ = started.Close()
 			return nil, err
 		}
-		value.searchQuery = "list my Linear tickets/issues assigned to me"
 		provider = value
 		return value, nil
 	}
@@ -2918,9 +2870,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 		t.Fatalf("tool callback bodies = %#v, want exact catalog tool linear.list_issues", toolBodies)
 	}
 
-	provider.mu.Lock()
-	provider.searchQuery = "assigned ticket issues"
-	provider.mu.Unlock()
 	second, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
 		SessionID:      session.ID,
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
@@ -2995,9 +2944,6 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 			_ = started.Close()
 			return nil, err
 		}
-		value.searchQuery = "docs"
-		value.searchMaxResults = 1
-		value.searchCandidateLimit = 2
 		provider = value
 		return value, nil
 	}
@@ -3160,7 +3106,6 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 			_ = started.Close()
 			return nil, err
 		}
-		value.searchQuery = "Linear list issues assigned to me"
 		return value, nil
 	}
 

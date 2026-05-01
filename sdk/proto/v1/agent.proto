@@ -89,18 +89,10 @@ message AgentToolRef {
   string system = 8;
 }
 
-message AgentToolCandidate {
-  AgentToolRef ref = 1;
-  string id = 2;
-  string name = 3;
-  string description = 4;
-  repeated string parameters = 5;
-  double score = 6;
-}
-
 enum AgentToolSourceMode {
+  reserved 1;
+
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
-  AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH = 1;
   AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2;
 }
 
@@ -345,22 +337,6 @@ message ExecuteAgentToolResponse {
   string body = 2;
 }
 
-message SearchAgentToolsRequest {
-  string session_id = 1;
-  string turn_id = 2;
-  string query = 3;
-  int32 max_results = 4;
-  int32 candidate_limit = 5;
-  repeated AgentToolRef load_refs = 6;
-  string tool_grant = 7;
-}
-
-message SearchAgentToolsResponse {
-  repeated ResolvedAgentTool tools = 1;
-  repeated AgentToolCandidate candidates = 2;
-  bool has_more = 3;
-}
-
 message ListedAgentTool {
   string id = 1;
   string mcp_name = 2;
@@ -525,7 +501,6 @@ service AgentProvider {
 }
 
 service AgentHost {
-  rpc SearchTools(SearchAgentToolsRequest) returns (SearchAgentToolsResponse);
   rpc ListTools(ListAgentToolsRequest) returns (ListAgentToolsResponse);
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
 }

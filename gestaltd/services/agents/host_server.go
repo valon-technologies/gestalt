@@ -18,68 +18,21 @@ import (
 )
 
 type ExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
-type SearchToolsFunc func(context.Context, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 type ListToolsFunc func(context.Context, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
 
 type HostServer struct {
 	proto.UnimplementedAgentHostServer
 	providerName string
-	searchTools  SearchToolsFunc
 	listTools    ListToolsFunc
 	executeTool  ExecuteToolFunc
 }
 
-func NewHostServer(providerName string, searchTools SearchToolsFunc, listTools ListToolsFunc, executeTool ExecuteToolFunc) *HostServer {
+func NewHostServer(providerName string, listTools ListToolsFunc, executeTool ExecuteToolFunc) *HostServer {
 	return &HostServer{
 		providerName: providerName,
-		searchTools:  searchTools,
 		listTools:    listTools,
 		executeTool:  executeTool,
 	}
-}
-
-func (s *HostServer) SearchTools(ctx context.Context, req *proto.SearchAgentToolsRequest) (*proto.SearchAgentToolsResponse, error) {
-	if s == nil || s.searchTools == nil {
-		return nil, status.Error(codes.FailedPrecondition, "agent host tool search is not configured")
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
-	}
-	resp, err := s.searchTools(ctx, coreagent.SearchToolsRequest{
-		ProviderName:   strings.TrimSpace(s.providerName),
-		SessionID:      sessionID,
-		TurnID:         turnID,
-		Query:          strings.TrimSpace(req.GetQuery()),
-		MaxResults:     int(req.GetMaxResults()),
-		CandidateLimit: int(req.GetCandidateLimit()),
-		LoadRefs:       agentToolRefsFromProto(req.GetLoadRefs()),
-		ToolGrant:      strings.TrimSpace(req.GetToolGrant()),
-	})
-	if err != nil {
-		return nil, status.Errorf(agentHostErrorCode(err), "agent search tools: %v", err)
-	}
-	out := &proto.SearchAgentToolsResponse{}
-	if resp == nil {
-		return out, nil
-	}
-	if len(resp.Tools) > 0 {
-		tools, err := agentToolsToProto(resp.Tools)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "encode agent search tools: %v", err)
-		}
-		out.Tools = tools
-	}
-	out.Candidates = agentToolCandidatesToProto(resp.Candidates)
-	out.HasMore = resp.HasMore
-	return out, nil
 }
 
 func (s *HostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {

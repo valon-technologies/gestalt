@@ -2271,10 +2271,6 @@ func (unavailableAgentManager) ResolveTools(context.Context, *principal.Principa
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) SearchTools(context.Context, *principal.Principal, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
-	return nil, fmt.Errorf("agent manager is not available")
-}
-
 func (unavailableAgentManager) ListTools(context.Context, *principal.Principal, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }

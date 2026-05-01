@@ -48,7 +48,6 @@ _manager_socket = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
 _host_relay_tokens: list[str] = []
-_host_search_requests: list[dict[str, Any]] = []
 _host_list_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
@@ -241,58 +240,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 
 
 class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
-    def SearchTools(self, request: Any, context: grpc.ServicerContext) -> Any:
-        _record_host_relay_tokens(context)
-        _host_search_requests.append(
-            {
-                "session_id": request.session_id,
-                "turn_id": request.turn_id,
-                "query": request.query,
-                "max_results": request.max_results,
-                "candidate_limit": request.candidate_limit,
-                "load_refs": [
-                    {
-                        "system": ref.system,
-                        "plugin": ref.plugin,
-                        "operation": ref.operation,
-                        "connection": ref.connection,
-                        "instance": ref.instance,
-                    }
-                    for ref in request.load_refs
-                ],
-            }
-        )
-        return agent_pb2.SearchAgentToolsResponse(
-            tools=[
-                agent_pb2.ResolvedAgentTool(
-                    id="slack.send_message",
-                    name="Send Slack message",
-                    description="Send a direct message",
-                ),
-                agent_pb2.ResolvedAgentTool(
-                    id="system.workflow.schedules.list",
-                    name="List workflow schedules",
-                    description="List schedules owned by the caller",
-                )
-            ],
-            candidates=[
-                agent_pb2.AgentToolCandidate(
-                    ref=agent_pb2.AgentToolRef(
-                        plugin="slack",
-                        operation="search_messages",
-                        connection="workspace",
-                        instance="primary",
-                    ),
-                    id="slack/search_messages/workspace/primary",
-                    name="Search Slack messages",
-                    description="Search messages",
-                    parameters=["query", "channel"],
-                    score=12.5,
-                )
-            ],
-            has_more=True,
-        )
-
     def ListTools(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_host_relay_tokens(context)
         _host_list_requests.append(
@@ -671,7 +618,6 @@ class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
         _host_relay_tokens.clear()
-        _host_search_requests.clear()
         _host_list_requests.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
@@ -814,23 +760,6 @@ class AgentTransportTests(unittest.TestCase):
         arguments.update({"query": "Ada Lovelace"})
 
         with AgentHost() as host:
-            search_response = host.search_tools(
-                agent_pb2.SearchAgentToolsRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    query="send slack dm",
-                    max_results=3,
-                    candidate_limit=12,
-                    load_refs=[
-                        agent_pb2.AgentToolRef(
-                            plugin="slack",
-                            operation="search_messages",
-                            connection="workspace",
-                            instance="primary",
-                        )
-                    ],
-                )
-            )
             list_response = host.list_tools(
                 agent_pb2.ListAgentToolsRequest(
                     session_id="session-1",
@@ -851,42 +780,13 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(len(search_response.tools), 2)
-        self.assertEqual(len(search_response.candidates), 1)
-        self.assertEqual(search_response.candidates[0].ref.operation, "search_messages")
-        self.assertTrue(search_response.has_more)
-        self.assertEqual(search_response.tools[0].id, "slack.send_message")
-        self.assertEqual(search_response.tools[0].name, "Send Slack message")
-        self.assertEqual(search_response.tools[1].id, "system.workflow.schedules.list")
-        self.assertEqual(search_response.tools[1].name, "List workflow schedules")
         self.assertEqual(len(list_response.tools), 1)
         self.assertEqual(list_response.tools[0].mcp_name, "slack__chat_post_message")
         self.assertEqual(list_response.next_page_token, "next-1")
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7")
         self.assertEqual(
-            _host_relay_tokens, ["relay-token-py", "relay-token-py", "relay-token-py"]
-        )
-        self.assertEqual(
-            _host_search_requests,
-            [
-                {
-                    "session_id": "session-1",
-                    "turn_id": "turn-1",
-                    "query": "send slack dm",
-                    "max_results": 3,
-                    "candidate_limit": 12,
-                    "load_refs": [
-                        {
-                            "system": "",
-                            "plugin": "slack",
-                            "operation": "search_messages",
-                            "connection": "workspace",
-                            "instance": "primary",
-                        }
-                    ],
-                }
-            ],
+            _host_relay_tokens, ["relay-token-py", "relay-token-py"]
         )
         self.assertEqual(
             _host_list_requests,
@@ -939,7 +839,7 @@ class AgentTransportTests(unittest.TestCase):
                             ],
                         )
                     ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH,
+                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
                 )
             )
             fetched_turn = manager.get_turn(

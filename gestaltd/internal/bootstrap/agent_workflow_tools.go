@@ -106,7 +106,7 @@ func (t *workflowSystemTools) ResolveTool(ctx context.Context, _ *principal.Prin
 	return workflowSystemToolFromRef(ref)
 }
 
-func (t *workflowSystemTools) SearchTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
+func (t *workflowSystemTools) ResolveTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
 	if len(refs) == 0 {
 		return nil, nil
 	}

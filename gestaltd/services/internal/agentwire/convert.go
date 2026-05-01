@@ -114,8 +114,6 @@ func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 
 func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
 	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH:
-		return coreagent.ToolSourceModeNativeSearch
 	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG:
 		return coreagent.ToolSourceModeMCPCatalog
 	default:
@@ -125,8 +123,6 @@ func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourc
 
 func ToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
 	switch mode {
-	case coreagent.ToolSourceModeNativeSearch:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH
 	case coreagent.ToolSourceModeMCPCatalog:
 		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 	default:

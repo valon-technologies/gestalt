@@ -250,7 +250,7 @@ fn test_cli_creates_agent_session() {
 fn test_cli_creates_agent_turn_from_input() {
     let request_json = r#"{
         "model":"gpt-5.4",
-        "toolSource":"native_search",
+        "toolSource":"mcp_catalog",
         "metadata":{"ticket":"TASK-123"},
         "providerOptions":{"temperature":0.2},
         "responseSchema":{

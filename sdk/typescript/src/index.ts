@@ -365,8 +365,6 @@ export {
   type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
-  type SearchAgentToolsRequest,
-  type SearchAgentToolsResponse,
   type UpdateAgentProviderSessionRequest,
 } from "./agent.ts";
 export {

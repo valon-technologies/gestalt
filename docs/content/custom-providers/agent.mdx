@@ -51,14 +51,14 @@ Providers can call back into Gestalt through the host service:
 
 | Host method | Purpose |
 | --- | --- |
-| `SearchTools` | Ask Gestalt to resolve candidate tools for the current turn. |
+| `ListTools` | Page through MCP catalog tools available to the current turn |
 | `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a turn |
 
 These callbacks work the same way when the provider runs directly on the
 `gestaltd` host or inside a hosted runtime.
 
 The host passes a `tool_grant` to `CreateTurn` when tools are available. Pass
-that grant back to `SearchTools` or `ExecuteTool`; it is the scoped authority
+that grant back to `ListTools` or `ExecuteTool`; it is the scoped authority
 for resolving or executing tools during that turn.
 
 ## Observability

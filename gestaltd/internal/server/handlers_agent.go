@@ -867,8 +867,6 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 	switch strings.TrimSpace(value) {
 	case "":
 		return coreagent.ToolSourceModeUnspecified, nil
-	case string(coreagent.ToolSourceModeNativeSearch):
-		return coreagent.ToolSourceModeNativeSearch, nil
 	case string(coreagent.ToolSourceModeMCPCatalog):
 		return coreagent.ToolSourceModeMCPCatalog, nil
 	default:

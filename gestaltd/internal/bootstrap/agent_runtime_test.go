@@ -1737,40 +1737,6 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	runtime.SetToolGrants(toolGrants)
 	runtime.SetToolSearcher(manager)
 
-	broadGrant, err := toolGrants.Mint(agentgrant.Grant{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
-		Permissions: []core.AccessPermission{{
-			Plugin:     "slack",
-			Operations: []string{"events.reply"},
-		}},
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "slack"}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
-	})
-	if err != nil {
-		t.Fatalf("Mint broad grant: %v", err)
-	}
-	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
-			Plugin:    "slack",
-			Operation: "events.reply",
-		}),
-		ToolGrant: broadGrant,
-		Arguments: map[string]any{"eventId": "evt-1"},
-	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ExecuteTool broad hidden error = %v, want ErrAuthorizationDenied", err)
-	}
-	if calls := invoker.Calls(); len(calls) != 0 {
-		t.Fatalf("invoker calls after rejected hidden tool = %#v, want none", calls)
-	}
-
 	modeGrant, err := toolGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
@@ -1782,7 +1748,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 			Operations: []string{"chat.postMessage"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{Plugin: "slack", Operation: "chat.postMessage"}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Mint credential mode grant: %v", err)
@@ -1813,7 +1779,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 			Plugin:    "slack",
 			Operation: "events.reply",
 		}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("ResolveTools exact hidden: %v", err)
@@ -1836,7 +1802,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 			Operation: "events.reply",
 		}},
 		Tools:      exactTools,
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Mint exact grant: %v", err)
@@ -1864,85 +1830,9 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		t.Fatalf("invoker idempotency key = %q, want agent-tool:turn-1:call-1", calls[0].idempotencyKey)
 	}
 
-	exactCatalogGrant, err := toolGrants.Mint(agentgrant.Grant{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
-		Permissions: []core.AccessPermission{{
-			Plugin:     "slack",
-			Operations: []string{"events.reply"},
-		}},
-		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "slack",
-			Operation: "events.reply",
-		}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
-	})
-	if err != nil {
-		t.Fatalf("Mint exact catalog grant: %v", err)
-	}
-	resp, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "call-2",
-		ToolID:       exactTools[0].ID,
-		ToolGrant:    exactCatalogGrant,
-		Arguments:    map[string]any{"eventId": "evt-2"},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool exact hidden mcp catalog: %v", err)
-	}
-	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"eventId":"evt-2"}` {
-		t.Fatalf("ExecuteTool exact hidden mcp catalog response = %#v", resp)
-	}
 	calls = invoker.Calls()
-	if len(calls) != 2 || calls[1].providerName != "slack" || calls[1].operation != "events.reply" {
-		t.Fatalf("invoker calls = %#v, want slack events.reply twice", calls)
-	}
-
-	mixedGrant, err := toolGrants.Mint(agentgrant.Grant{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		SubjectID:    "user:user-123",
-		SubjectKind:  string(principal.KindUser),
-		Permissions: []core.AccessPermission{{
-			Plugin:     "slack",
-			Operations: []string{"chat.postMessage", "events.reply"},
-		}},
-		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "*"},
-			{Plugin: "slack", Operation: "events.reply"},
-		},
-		Tools:      exactTools,
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
-	})
-	if err != nil {
-		t.Fatalf("Mint mixed grant: %v", err)
-	}
-	resp, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
-			Plugin:    "slack",
-			Operation: "chat.postMessage",
-		}),
-		ToolGrant: mixedGrant,
-		Arguments: map[string]any{"text": "hello"},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool visible wildcard with hidden exact grant: %v", err)
-	}
-	if resp == nil || resp.Status != http.StatusAccepted || resp.Body != `{"text":"hello"}` {
-		t.Fatalf("ExecuteTool visible wildcard response = %#v", resp)
-	}
-	calls = invoker.Calls()
-	if len(calls) != 3 || calls[2].providerName != "slack" || calls[2].operation != "chat.postMessage" {
-		t.Fatalf("invoker calls = %#v, want slack events.reply then chat.postMessage", calls)
+	if len(calls) != 1 || calls[0].providerName != "slack" || calls[0].operation != "events.reply" {
+		t.Fatalf("invoker calls = %#v, want slack events.reply once", calls)
 	}
 }
 
@@ -1993,7 +1883,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Mint grant: %v", err)
@@ -2068,30 +1958,29 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Mint grant: %v", err)
 	}
-	searchResp, err := runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
+	listResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
-		Query:        "sync",
-		MaxResults:   5,
+		PageSize:     5,
 		ToolGrant:    grant,
 	})
 	if err != nil {
-		t.Fatalf("SearchTools with provider-owned turn ID: %v", err)
+		t.Fatalf("ListTools with provider-owned turn ID: %v", err)
 	}
-	if len(searchResp.Tools) != 1 {
-		t.Fatalf("SearchTools returned %d tools, want 1", len(searchResp.Tools))
+	if len(listResp.Tools) != 1 {
+		t.Fatalf("ListTools returned %d tools, want 1", len(listResp.Tools))
 	}
 	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
-		ToolID:       searchResp.Tools[0].ID,
+		ToolID:       listResp.Tools[0].ToolID,
 		ToolGrant:    grant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
@@ -2113,21 +2002,20 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeNativeSearch,
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Mint wrong grant: %v", err)
 	}
-	_, err = runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
+	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
-		Query:        "sync",
-		MaxResults:   5,
+		PageSize:     5,
 		ToolGrant:    wrongGrant,
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("SearchTools wrong execution ref error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("ListTools wrong execution ref error = %v, want ErrAuthorizationDenied", err)
 	}
 }
 
@@ -2263,17 +2151,6 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	}
 	if tool.InputSchemaJSON == "" || tool.Annotations.ReadOnlyHint == nil || !*tool.Annotations.ReadOnlyHint {
 		t.Fatalf("listed tool schema/annotations = %#v", tool)
-	}
-
-	_, err = runtime.SearchTools(context.Background(), coreagent.SearchToolsRequest{
-		ProviderName: "claude",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		Query:        "sync",
-		ToolGrant:    grant,
-	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("SearchTools with mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
 	}
 
 	emptyGrant, err := toolGrants.Mint(agentgrant.Grant{
