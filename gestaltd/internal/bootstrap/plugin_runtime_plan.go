@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
@@ -95,12 +96,20 @@ func hostCanRelayPluginRuntimeHostServices(deps Deps) bool {
 	if len(deps.EncryptionKey) == 0 {
 		return false
 	}
-	_, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
+	baseURL, explicit := hostedRuntimeRelayBaseURL(deps)
+	_, _, err := pluginRuntimePublicProxyBaseURL(baseURL, explicit)
 	return err == nil
 }
 
 func hostCanProvideHostedHostnameEgress(deps Deps) bool {
 	return hostCanRelayPluginRuntimeHostServices(deps)
+}
+
+func hostedRuntimeRelayBaseURL(deps Deps) (string, bool) {
+	if baseURL := strings.TrimSpace(deps.RuntimeRelayBaseURL); baseURL != "" {
+		return baseURL, true
+	}
+	return strings.TrimSpace(deps.BaseURL), false
 }
 
 func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {

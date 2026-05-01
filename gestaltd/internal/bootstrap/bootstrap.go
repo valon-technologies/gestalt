@@ -147,6 +147,7 @@ type Deps struct {
 	// raw config value.
 	EncryptionKey         []byte
 	BaseURL               string
+	RuntimeRelayBaseURL   string
 	SecretManager         core.SecretManager
 	Services              *coredata.Services
 	SelectedIndexedDBName string
@@ -791,6 +792,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps := Deps{
 		EncryptionKey:        encKey,
 		BaseURL:              cfg.Server.BaseURL,
+		RuntimeRelayBaseURL:  cfg.Server.Runtime.RelayBaseURL,
 		SecretManager:        sm,
 		Telemetry:            tp,
 		AgentToolGrants:      agentToolGrants,

@@ -1761,10 +1761,11 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 }
 
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
-	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
+	baseURL, explicitRelayBaseURL := hostedRuntimeRelayBaseURL(deps)
+	if baseURL == "" || len(deps.EncryptionKey) == 0 {
 		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress for hosted runtimes", providerName)
 	}
-	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
+	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(baseURL, explicitRelayBaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1798,10 +1799,11 @@ func publicRuntimeRegistryHostServices(hostServices []runtimehost.HostService) [
 }
 
 func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string) (string, map[string]string, string, bool, error) {
-	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
+	baseURL, explicitRelayBaseURL := hostedRuntimeRelayBaseURL(deps)
+	if baseURL == "" || len(deps.EncryptionKey) == 0 {
 		return "", nil, "", false, nil
 	}
-	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(deps.BaseURL)
+	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(baseURL, explicitRelayBaseURL)
 	if err != nil {
 		return "", nil, "", false, err
 	}
@@ -1825,8 +1827,8 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 	}, relayHost, true, nil
 }
 
-func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
-	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL)
+func pluginRuntimePublicRelayTarget(baseURL string, allowInsecureHTTP bool) (string, string, error) {
+	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL, allowInsecureHTTP)
 	if err != nil {
 		return "", "", err
 	}
@@ -1849,7 +1851,7 @@ func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
 	}
 }
 
-func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
+func pluginRuntimePublicProxyBaseURL(baseURL string, allowInsecureHTTP bool) (*url.URL, string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
 		return nil, "", fmt.Errorf("parse server.baseURL for public runtime relay: %w", err)
@@ -1867,7 +1869,7 @@ func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
 	switch strings.ToLower(parsed.Scheme) {
 	case "https":
 	case "http":
-		if !isLoopbackAllowedHost(host) {
+		if !allowInsecureHTTP && !isLoopbackAllowedHost(host) {
 			return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay unless it targets loopback", baseURL)
 		}
 	default:

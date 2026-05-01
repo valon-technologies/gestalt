@@ -119,6 +119,9 @@ server:
       name: gestalt-encryption-key
   apiTokenTtl: 30d
   artifactsDir: ./state
+  runtime:
+    defaultHostedProvider: modal
+    relayBaseUrl: https://gestalt.example.com
   providers:
     authorization: indexeddb
     authentication: oidc
@@ -148,6 +151,8 @@ authorization:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
+`runtime.defaultHostedProvider` selects the runtime provider used when a plugin or agent opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private deployment URL while browser and OAuth flows still use the public origin.
+
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
@@ -174,6 +179,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. The only supported value is `indexeddb`, which stores attachment state in the configured host IndexedDB for shared and load-balanced servers. |
 | `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |
+| `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
@@ -260,6 +266,9 @@ means `server.baseUrl` and `server.encryptionKey` must be set, and the runtime
 must report a compatible support profile. Without those prerequisites, Gestalt
 will reject Modal for plugins that need relay-backed host services,
 `egress.allowedHosts`, or a server-wide default-deny egress policy.
+When hosted runtimes cannot reach `server.baseUrl` directly, set
+`server.runtime.relayBaseUrl` to the private HTTP(S) origin they should use for
+host-service relay and egress proxy callbacks.
 
 Hosted runtime images are expected to contain the provider package at the image
 working directory. Gestalt starts the executable declared by the provider

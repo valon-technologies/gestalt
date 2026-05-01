@@ -1455,11 +1455,12 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 
 	deps := Deps{
-		BaseURL:            relaySrv.URL,
-		EncryptionKey:      secret,
-		Services:           services,
-		AgentRuntime:       agentRuntime,
-		PublicHostServices: publicHostServices,
+		BaseURL:             "https://gestalt.example.test",
+		RuntimeRelayBaseURL: relaySrv.URL,
+		EncryptionKey:       secret,
+		Services:            services,
+		AgentRuntime:        agentRuntime,
+		PublicHostServices:  publicHostServices,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 

@@ -1428,6 +1428,7 @@ const DevAttachmentStateIndexedDB DevAttachmentState = "indexeddb"
 
 type ServerRuntimeConfig struct {
 	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`
+	RelayBaseURL          string `yaml:"relayBaseUrl,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -2880,6 +2881,7 @@ func applyPluginMountBindings(cfg *Config) error {
 func resolveBaseURL(cfg *Config) {
 	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
+	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
 }
 
 func resolveRelativePathsInValue(configPath string, root map[string]any) {

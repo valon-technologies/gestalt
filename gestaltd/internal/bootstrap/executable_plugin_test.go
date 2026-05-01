@@ -7905,9 +7905,10 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 		},
 	}
 	deps := Deps{
-		BaseURL:       "https://gestalt.example.test",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		Egress:        EgressDeps{DefaultAction: egress.PolicyDeny},
+		BaseURL:             "https://gestalt.example.test",
+		RuntimeRelayBaseURL: "http://gestaltd.gestalt-runtime.svc.cluster.local:8080",
+		EncryptionKey:       []byte("0123456789abcdef0123456789abcdef"),
+		Egress:              EgressDeps{DefaultAction: egress.PolicyDeny},
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -7936,11 +7937,11 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	if err != nil {
 		t.Fatalf("parse HTTP_PROXY: %v", err)
 	}
-	if parsed.Scheme != "https" {
-		t.Fatalf("HTTP_PROXY scheme = %q, want https", parsed.Scheme)
+	if parsed.Scheme != "http" {
+		t.Fatalf("HTTP_PROXY scheme = %q, want explicit relay base URL scheme http", parsed.Scheme)
 	}
-	if parsed.Host != "gestalt.example.test" {
-		t.Fatalf("HTTP_PROXY host = %q, want gestalt.example.test", parsed.Host)
+	if parsed.Host != "gestaltd.gestalt-runtime.svc.cluster.local:8080" {
+		t.Fatalf("HTTP_PROXY host = %q, want explicit relay base URL host", parsed.Host)
 	}
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")
