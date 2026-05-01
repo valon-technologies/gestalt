@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -2623,6 +2624,9 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
+  slack:
+    source:
+      path: ./providers/slack/manifest.yaml
 workflows:
   schedules:
     nightly:
@@ -2634,6 +2638,11 @@ workflows:
           operation: nightly_sync
           input:
             source: yaml
+      permissions:
+        - plugin: slack
+          operations:
+            - conversations.list
+            - conversations.history
   eventTriggers:
     task_updated:
       provider: temporal
@@ -2646,6 +2655,10 @@ workflows:
           operation: backfill_items
           input:
             source: event
+      permissions:
+        - plugin: slack
+          operations:
+            - chat.postMessage
       paused: true
 providers:
   workflow:
@@ -2677,6 +2690,13 @@ server:
 					},
 				},
 			},
+			Permissions: []core.AccessPermission{{
+				Plugin: "slack",
+				Operations: []string{
+					"conversations.list",
+					"conversations.history",
+				},
+			}},
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
 		}
@@ -2694,6 +2714,10 @@ server:
 					},
 				},
 			},
+			Permissions: []core.AccessPermission{{
+				Plugin:     "slack",
+				Operations: []string{"chat.postMessage"},
+			}},
 			Match: WorkflowEventMatch{
 				Type:   "roadmap.task.updated",
 				Source: "roadmap",
@@ -2734,6 +2758,66 @@ server:
   encryptionKey: server-key
 `,
 				want: `workflows.schedules.nightly.target.plugin.name references unknown plugin "missing"`,
+			},
+			{
+				name: "unknown schedule permission plugin",
+				yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
+      permissions:
+        - plugin: missing
+          operations: [conversations.list]
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.permissions[0].plugin references unknown plugin "missing"`,
+			},
+			{
+				name: "schedule permission requires operations",
+				yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+  slack:
+    source:
+      path: ./providers/slack/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
+      permissions:
+        - plugin: slack
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.permissions[0].operations is required`,
 			},
 			{
 				name: "event trigger agent missing provider",

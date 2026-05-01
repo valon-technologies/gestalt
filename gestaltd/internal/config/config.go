@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -599,18 +600,20 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Cron     string                `yaml:"cron,omitempty"`
-	Timezone string                `yaml:"timezone,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+	Provider    string                  `yaml:"provider,omitempty"`
+	Target      *WorkflowTargetConfig   `yaml:"target,omitempty"`
+	Permissions []core.AccessPermission `yaml:"permissions,omitempty"`
+	Cron        string                  `yaml:"cron,omitempty"`
+	Timezone    string                  `yaml:"timezone,omitempty"`
+	Paused      bool                    `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+	Provider    string                  `yaml:"provider,omitempty"`
+	Target      *WorkflowTargetConfig   `yaml:"target,omitempty"`
+	Permissions []core.AccessPermission `yaml:"permissions,omitempty"`
+	Match       WorkflowEventMatch      `yaml:"match,omitempty"`
+	Paused      bool                    `yaml:"paused,omitempty"`
 }
 
 type WorkflowTargetConfig struct {

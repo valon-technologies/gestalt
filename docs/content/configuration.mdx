@@ -545,6 +545,11 @@ workflows:
         plugin:
           name: roadmap
           operation: sync_items
+      permissions:
+        - plugin: slack
+          operations:
+            - conversations.list
+            - conversations.history
   eventTriggers:
     item_updated:
       provider: local
@@ -558,8 +563,12 @@ workflows:
 
 Workflow targets are always explicit through `target.plugin` or `target.agent`.
 For plugin targets, set `name`, `operation`, and optional `connection`,
-`instance`, and `input`. Config-managed schedules and event triggers are
-reconciled into the provider at startup. See [Workflow](/providers/workflow)
+`instance`, and `input`. `permissions` can grant additional plugin operations
+to the config-owned execution principal for nested calls made by the target;
+the direct target operation is always granted. These scopes do not select or
+grant credentials; nested calls still resolve credentials through the invoked
+plugin operation's normal connection. Config-managed schedules and event
+triggers are reconciled into the provider at startup. See [Workflow](/providers/workflow)
 for the user-facing and provider model.
 
 ## Configuring agent providers

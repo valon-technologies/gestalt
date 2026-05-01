@@ -55,7 +55,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, trigger.Permissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
