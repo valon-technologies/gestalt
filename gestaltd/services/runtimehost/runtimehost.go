@@ -7,7 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
-	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc"
 )
 

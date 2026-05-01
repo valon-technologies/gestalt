@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 
 type sessionLogWriter struct {
