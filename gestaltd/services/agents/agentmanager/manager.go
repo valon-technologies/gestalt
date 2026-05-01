@@ -473,16 +473,22 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	requireBounded := req.SummaryOnly || limit > 0
 	out := make([]*coreagent.Session, 0)
 	for _, candidate := range candidates {
+		providerLimit := limit
+		providerSummaryOnly := req.SummaryOnly
 		if requireBounded {
 			if err := requireAgentProviderBoundedListHydration(ctx, candidate.name, candidate.provider); err != nil {
-				return nil, err
+				if !errors.Is(err, ErrAgentBoundedListUnsupported) {
+					return nil, err
+				}
+				providerLimit = 0
+				providerSummaryOnly = false
 			}
 		}
 		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{
 			Subject:     agentSubjectFromPrincipal(p),
 			State:       req.State,
-			Limit:       limit,
-			SummaryOnly: req.SummaryOnly,
+			Limit:       providerLimit,
+			SummaryOnly: providerSummaryOnly,
 		})
 		if err != nil {
 			return nil, err
@@ -662,17 +668,23 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 	if err != nil {
 		return nil, err
 	}
+	providerLimit := limit
+	providerSummaryOnly := req.SummaryOnly
 	if req.SummaryOnly || limit > 0 {
 		if err := requireAgentProviderBoundedListHydration(ctx, ownedSession.providerName, ownedSession.provider); err != nil {
-			return nil, err
+			if !errors.Is(err, ErrAgentBoundedListUnsupported) {
+				return nil, err
+			}
+			providerLimit = 0
+			providerSummaryOnly = false
 		}
 	}
 	turns, err = ownedSession.provider.ListTurns(ctx, coreagent.ListTurnsRequest{
 		SessionID:   ownedSession.session.ID,
 		Subject:     agentSubjectFromPrincipal(p),
 		Status:      req.Status,
-		Limit:       limit,
-		SummaryOnly: req.SummaryOnly,
+		Limit:       providerLimit,
+		SummaryOnly: providerSummaryOnly,
 	})
 	if err != nil {
 		return nil, err
@@ -2393,11 +2405,26 @@ func requireAgentProviderBoundedListHydration(ctx context.Context, providerName 
 	}
 	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
 	if err != nil {
+		if agentProviderCapabilitiesUnimplemented(err) {
+			return errAgentBoundedListUnsupported(providerName)
+		}
 		return err
 	}
 	if caps != nil && caps.BoundedListHydration {
 		return nil
 	}
+	return errAgentBoundedListUnsupported(providerName)
+}
+
+func agentProviderCapabilitiesUnimplemented(err error) bool {
+	if status.Code(err) == codes.Unimplemented {
+		return true
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.Contains(message, "get capabilities") && strings.Contains(message, "not implemented")
+}
+
+func errAgentBoundedListUnsupported(providerName string) error {
 	providerName = strings.TrimSpace(providerName)
 	if providerName == "" {
 		return ErrAgentBoundedListUnsupported

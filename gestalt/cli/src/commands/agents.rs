@@ -28,6 +28,7 @@ mod tui;
 const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
 const PROVIDERS_PATH: &str = "/api/v1/agent/providers";
 const TURNS_PATH: &str = "/api/v1/agent/turns";
+const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL: &str = "blocked_or_terminal";
@@ -50,10 +51,21 @@ pub fn list_sessions(
     client: &ApiClient,
     provider: Option<&str>,
     state: Option<&str>,
+    limit: Option<usize>,
+    full: bool,
     format: Format,
 ) -> Result<()> {
+    let summary_limit = if full {
+        None
+    } else {
+        let limit = limit.unwrap_or(DEFAULT_SESSION_LIST_LIMIT);
+        if limit == 0 {
+            bail!("--limit must be greater than 0");
+        }
+        Some(limit)
+    };
     let resp = client
-        .get(&sessions_path(provider, state))
+        .get(&sessions_path(provider, state, summary_limit))
         .context("failed to list agent sessions")?;
     print_sessions(&resp, format);
     Ok(())
@@ -1416,7 +1428,11 @@ fn resume_latest_session_info(
 ) -> Result<AgentSessionInfo> {
     let sessions: Vec<AgentSessionInfo> = decode_json(
         client
-            .get(&sessions_path(provider, Some("active")))
+            .get(&sessions_path(
+                provider,
+                Some("active"),
+                Some(DEFAULT_SESSION_LIST_LIMIT),
+            ))
             .context("failed to list active agent sessions")?,
     )?;
     sessions
@@ -1868,13 +1884,21 @@ fn agent_tool_ref_value(tool: &AgentToolArg) -> Value {
     })
 }
 
-fn sessions_path(provider: Option<&str>, state: Option<&str>) -> String {
+fn sessions_path(
+    provider: Option<&str>,
+    state: Option<&str>,
+    summary_limit: Option<usize>,
+) -> String {
     let mut serializer = url::form_urlencoded::Serializer::new(String::new());
     if let Some(provider) = provider {
         serializer.append_pair("provider", provider);
     }
     if let Some(state) = state {
         serializer.append_pair("state", state);
+    }
+    if let Some(limit) = summary_limit {
+        serializer.append_pair("view", "summary");
+        serializer.append_pair("limit", &limit.to_string());
     }
     let query = serializer.finish();
     if query.is_empty() {

@@ -195,10 +195,15 @@ type GetSessionRequest struct {
 }
 
 type ListSessionsRequest struct {
-	Subject     SubjectContext
-	SessionIDs  []string
-	State       SessionState
-	Limit       int
+	Subject    SubjectContext
+	SessionIDs []string
+	State      SessionState
+	// Limit asks providers with BoundedListHydration to apply the cap before returning.
+	// Providers must order sessions by recency before limiting: last turn time, then
+	// updated time, then created time, newest first.
+	Limit int
+	// SummaryOnly asks providers with BoundedListHydration to omit heavy fields.
+	// Exact SessionIDs may still be served by direct lookup rather than projections.
 	SummaryOnly bool
 }
 
@@ -251,11 +256,15 @@ type GetTurnRequest struct {
 }
 
 type ListTurnsRequest struct {
-	SessionID   string
-	Subject     SubjectContext
-	TurnIDs     []string
-	Status      ExecutionStatus
-	Limit       int
+	SessionID string
+	Subject   SubjectContext
+	TurnIDs   []string
+	Status    ExecutionStatus
+	// Limit asks providers with BoundedListHydration to apply the cap before returning.
+	// Providers must order turns by creation time, newest first, before limiting.
+	Limit int
+	// SummaryOnly asks providers with BoundedListHydration to omit heavy turn fields.
+	// Exact TurnIDs may still be served by direct lookup rather than projections.
 	SummaryOnly bool
 }
 
@@ -302,13 +311,16 @@ type ListTurnEventsRequest struct {
 type GetCapabilitiesRequest struct{}
 
 type ProviderCapabilities struct {
-	StreamingText        bool
-	ToolCalls            bool
-	ParallelToolCalls    bool
-	StructuredOutput     bool
-	Interactions         bool
-	ResumableTurns       bool
-	ReasoningSummaries   bool
+	StreamingText      bool
+	ToolCalls          bool
+	ParallelToolCalls  bool
+	StructuredOutput   bool
+	Interactions       bool
+	ResumableTurns     bool
+	ReasoningSummaries bool
+	// BoundedListHydration means provider list APIs can apply Limit and SummaryOnly
+	// without hydrating every source record, while preserving the list ordering
+	// contract before applying Limit.
 	BoundedListHydration bool
 	SupportedToolSources []ToolSourceMode
 }
@@ -436,8 +448,10 @@ type ManagerCreateTurnRequest struct {
 type ManagerListSessionsRequest struct {
 	ProviderName string
 	State        SessionState
-	Limit        int
-	SummaryOnly  bool
+	// Limit caps the globally sorted manager response. Providers that advertise
+	// BoundedListHydration also receive this cap for per-provider bounded listing.
+	Limit       int
+	SummaryOnly bool
 }
 
 type ManagerListTurnsRequest struct {

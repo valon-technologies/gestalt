@@ -978,16 +978,19 @@ func (x *AgentToolRef) GetSystem() string {
 }
 
 type AgentProviderCapabilities struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	StreamingText        bool                   `protobuf:"varint,1,opt,name=streaming_text,json=streamingText,proto3" json:"streaming_text,omitempty"`
-	ToolCalls            bool                   `protobuf:"varint,2,opt,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
-	ParallelToolCalls    bool                   `protobuf:"varint,3,opt,name=parallel_tool_calls,json=parallelToolCalls,proto3" json:"parallel_tool_calls,omitempty"`
-	StructuredOutput     bool                   `protobuf:"varint,4,opt,name=structured_output,json=structuredOutput,proto3" json:"structured_output,omitempty"`
-	Interactions         bool                   `protobuf:"varint,5,opt,name=interactions,proto3" json:"interactions,omitempty"`
-	ResumableTurns       bool                   `protobuf:"varint,6,opt,name=resumable_turns,json=resumableTurns,proto3" json:"resumable_turns,omitempty"`
-	ReasoningSummaries   bool                   `protobuf:"varint,7,opt,name=reasoning_summaries,json=reasoningSummaries,proto3" json:"reasoning_summaries,omitempty"`
-	BoundedListHydration bool                   `protobuf:"varint,9,opt,name=bounded_list_hydration,json=boundedListHydration,proto3" json:"bounded_list_hydration,omitempty"`
-	SupportedToolSources []AgentToolSourceMode  `protobuf:"varint,10,rep,packed,name=supported_tool_sources,json=supportedToolSources,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"supported_tool_sources,omitempty"`
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	StreamingText      bool                   `protobuf:"varint,1,opt,name=streaming_text,json=streamingText,proto3" json:"streaming_text,omitempty"`
+	ToolCalls          bool                   `protobuf:"varint,2,opt,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	ParallelToolCalls  bool                   `protobuf:"varint,3,opt,name=parallel_tool_calls,json=parallelToolCalls,proto3" json:"parallel_tool_calls,omitempty"`
+	StructuredOutput   bool                   `protobuf:"varint,4,opt,name=structured_output,json=structuredOutput,proto3" json:"structured_output,omitempty"`
+	Interactions       bool                   `protobuf:"varint,5,opt,name=interactions,proto3" json:"interactions,omitempty"`
+	ResumableTurns     bool                   `protobuf:"varint,6,opt,name=resumable_turns,json=resumableTurns,proto3" json:"resumable_turns,omitempty"`
+	ReasoningSummaries bool                   `protobuf:"varint,7,opt,name=reasoning_summaries,json=reasoningSummaries,proto3" json:"reasoning_summaries,omitempty"`
+	// Provider list APIs can apply non-zero limits and summary projections without
+	// hydrating every source record. Providers that set this must order sessions
+	// and turns by the relevant newest-first recency fields before applying limit.
+	BoundedListHydration bool                  `protobuf:"varint,9,opt,name=bounded_list_hydration,json=boundedListHydration,proto3" json:"bounded_list_hydration,omitempty"`
+	SupportedToolSources []AgentToolSourceMode `protobuf:"varint,10,rep,packed,name=supported_tool_sources,json=supportedToolSources,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"supported_tool_sources,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -1514,12 +1517,16 @@ func (x *GetAgentProviderSessionRequest) GetSubject() *AgentSubjectContext {
 }
 
 type ListAgentProviderSessionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       *AgentSubjectContext   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	SessionIds    []string               `protobuf:"bytes,2,rep,name=session_ids,json=sessionIds,proto3" json:"session_ids,omitempty"`
-	State         AgentSessionState      `protobuf:"varint,3,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
-	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	SummaryOnly   bool                   `protobuf:"varint,5,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Subject    *AgentSubjectContext   `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	SessionIds []string               `protobuf:"bytes,2,rep,name=session_ids,json=sessionIds,proto3" json:"session_ids,omitempty"`
+	State      AgentSessionState      `protobuf:"varint,3,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
+	// When non-zero and bounded_list_hydration is supported, cap results after
+	// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
+	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// When true and bounded_list_hydration is supported, omit heavy fields such as
+	// metadata unless exact session_ids require direct lookup.
+	SummaryOnly   bool `protobuf:"varint,5,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2198,13 +2205,18 @@ func (x *GetAgentProviderTurnRequest) GetSubject() *AgentSubjectContext {
 }
 
 type ListAgentProviderTurnsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Subject       *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	TurnIds       []string               `protobuf:"bytes,3,rep,name=turn_ids,json=turnIds,proto3" json:"turn_ids,omitempty"`
-	Status        AgentExecutionStatus   `protobuf:"varint,4,opt,name=status,proto3,enum=gestalt.provider.v1.AgentExecutionStatus" json:"status,omitempty"`
-	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	SummaryOnly   bool                   `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Subject   *AgentSubjectContext   `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	TurnIds   []string               `protobuf:"bytes,3,rep,name=turn_ids,json=turnIds,proto3" json:"turn_ids,omitempty"`
+	Status    AgentExecutionStatus   `protobuf:"varint,4,opt,name=status,proto3,enum=gestalt.provider.v1.AgentExecutionStatus" json:"status,omitempty"`
+	// When non-zero and bounded_list_hydration is supported, cap results after
+	// ordering turns newest-first by created_at.
+	Limit int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	// When true and bounded_list_hydration is supported, omit heavy fields such as
+	// messages, output text, and structured output unless exact turn_ids require
+	// direct lookup.
+	SummaryOnly   bool `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3334,10 +3346,12 @@ type AgentManagerListSessionsRequest struct {
 	ProviderName    string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	State           AgentSessionState      `protobuf:"varint,4,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
-	Limit           int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	SummaryOnly     bool                   `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Manager response cap after provider responses are normalized and globally
+	// sorted by session recency.
+	Limit         int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	SummaryOnly   bool  `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentManagerListSessionsRequest) Reset() {

@@ -136,6 +136,9 @@ message AgentProviderCapabilities {
   bool interactions = 5;
   bool resumable_turns = 6;
   bool reasoning_summaries = 7;
+  // Provider list APIs can apply non-zero limits and summary projections without
+  // hydrating every source record. Providers that set this must order sessions
+  // and turns by the relevant newest-first recency fields before applying limit.
   bool bounded_list_hydration = 9;
   repeated AgentToolSourceMode supported_tool_sources = 10;
 }
@@ -189,7 +192,11 @@ message ListAgentProviderSessionsRequest {
   AgentSubjectContext subject = 1;
   repeated string session_ids = 2;
   AgentSessionState state = 3;
+  // When non-zero and bounded_list_hydration is supported, cap results after
+  // ordering sessions newest-first by last_turn_at, updated_at, then created_at.
   int32 limit = 4;
+  // When true and bounded_list_hydration is supported, omit heavy fields such as
+  // metadata unless exact session_ids require direct lookup.
   bool summary_only = 5;
 }
 
@@ -265,7 +272,12 @@ message ListAgentProviderTurnsRequest {
   AgentSubjectContext subject = 2;
   repeated string turn_ids = 3;
   AgentExecutionStatus status = 4;
+  // When non-zero and bounded_list_hydration is supported, cap results after
+  // ordering turns newest-first by created_at.
   int32 limit = 5;
+  // When true and bounded_list_hydration is supported, omit heavy fields such as
+  // messages, output text, and structured output unless exact turn_ids require
+  // direct lookup.
   bool summary_only = 6;
 }
 
@@ -386,6 +398,8 @@ message AgentManagerListSessionsRequest {
   string provider_name = 2;
   string invocation_token = 3;
   AgentSessionState state = 4;
+  // Manager response cap after provider responses are normalized and globally
+  // sorted by session recency.
   int32 limit = 5;
   bool summary_only = 6;
 }
