@@ -29,6 +29,14 @@ _PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
 class PluginInvoker:
+    """Client for invoking sibling plugin operations from provider code.
+
+    ``PluginInvoker`` connects to the host plugin-invoker service exposed in
+    ``GESTALT_PLUGIN_INVOKER_SOCKET``. It attaches the invocation token supplied
+    by the host to each request and returns regular :class:`gestalt.Response`
+    objects for operation and GraphQL calls.
+    """
+
     def __init__(self, invocation_token: str) -> None:
         trimmed_token = invocation_token.strip()
         if not trimmed_token:
@@ -44,6 +52,8 @@ class PluginInvoker:
         self._invocation_token = trimmed_token
 
     def close(self) -> None:
+        """Close the underlying gRPC channel."""
+
         self._channel.close()
 
     def invoke(
@@ -56,6 +66,13 @@ class PluginInvoker:
         instance: str = "",
         idempotency_key: str = "",
     ) -> Response[str]:
+        """Invoke one operation on another plugin.
+
+        ``params`` is encoded as a protobuf ``Struct``. ``connection`` and
+        ``instance`` select the connected account or provider instance that the
+        target plugin should invoke against.
+        """
+
         request = pb.PluginInvokeRequest(
             invocation_token=self._invocation_token,
             plugin=plugin,
@@ -81,6 +98,8 @@ class PluginInvoker:
         instance: str = "",
         idempotency_key: str = "",
     ) -> Response[str]:
+        """Invoke another plugin's GraphQL surface."""
+
         trimmed_document = document.strip()
         if not trimmed_document:
             raise RuntimeError("plugin invoker: graphql document is required")
@@ -106,6 +125,8 @@ class PluginInvoker:
         grants: Sequence[Any] | None = None,
         ttl_seconds: int = 0,
     ) -> str:
+        """Exchange this invocation token for a narrower child token."""
+
         request = pb.ExchangeInvocationTokenRequest(
             parent_invocation_token=self._invocation_token,
         )
@@ -116,9 +137,13 @@ class PluginInvoker:
         return response.invocation_token
 
     def __enter__(self) -> PluginInvoker:
+        """Return the client for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the client at the end of a context manager block."""
+
         self.close()
 
 

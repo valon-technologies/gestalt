@@ -1,8 +1,11 @@
 Gestalt Python SDK
 ==================
 
-The :mod:`gestalt` package is published as ``gestalt-sdk`` and imported as
-``gestalt`` in provider projects.
+Use :mod:`gestalt` to build executable Gestalt providers with Python models,
+decorators, runtime providers, host-service clients, and telemetry helpers.
+
+The package is published as ``gestalt-sdk`` and imported as ``gestalt`` in
+provider projects.
 
 This reference focuses on the handwritten Python SDK surface. Generated
 protobuf bindings under :mod:`gestalt.gen` remain available to the runtime, but

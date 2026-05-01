@@ -18,22 +18,37 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// EnvPluginInvokerSocket names the environment variable containing the
+// plugin-invoker service target.
 const EnvPluginInvokerSocket = proto.EnvPluginInvokerSocket
+
+// EnvPluginInvokerSocketToken names the optional plugin-invoker relay-token
+// variable.
 const EnvPluginInvokerSocketToken = EnvPluginInvokerSocket + "_TOKEN"
 
+// InvokeOptions selects a target connection for a plugin invocation.
 type InvokeOptions struct {
-	Connection     string
-	Instance       string
+	// Connection is the connected account id or name to invoke against.
+	Connection string
+	// Instance is the provider instance id or name to invoke against.
+	Instance string
+	// IdempotencyKey is forwarded to the target operation.
 	IdempotencyKey string
 }
 
+// InvocationGrant describes access granted to an exchanged invocation token.
 type InvocationGrant struct {
-	Plugin        string
-	Operations    []string
-	Surfaces      []string
+	// Plugin is the plugin name the child token may invoke.
+	Plugin string
+	// Operations are the specific operation ids allowed by the child token.
+	Operations []string
+	// Surfaces are the surface names allowed by the child token.
+	Surfaces []string
+	// AllOperations allows every operation on Plugin.
 	AllOperations bool
 }
 
+// InvokerClient invokes sibling plugin operations through the host.
 type InvokerClient struct {
 	client          proto.PluginInvokerClient
 	invocationToken string
@@ -47,6 +62,7 @@ var sharedInvokerTransport struct {
 	client proto.PluginInvokerClient
 }
 
+// Invoker returns a client that attaches invocationToken to every request.
 func Invoker(invocationToken string) (*InvokerClient, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("plugin invoker: invocation token is not available")
@@ -203,14 +219,17 @@ func parsePluginInvokerTarget(raw string) (network string, address string, err e
 	}
 }
 
+// InvokerFromContext returns an Invoker using the context invocation token.
 func InvokerFromContext(ctx context.Context) (*InvokerClient, error) {
 	return Invoker(InvocationTokenFromContext(ctx))
 }
 
+// Close is a no-op compatibility method because this client uses shared transport.
 func (c *InvokerClient) Close() error {
 	return nil
 }
 
+// Invoke calls one operation on another plugin.
 func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, params map[string]any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
@@ -245,6 +264,7 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 	}, nil
 }
 
+// InvokeGraphQL calls another plugin's GraphQL surface.
 func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document string, variables map[string]any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
@@ -285,6 +305,7 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document stri
 	}, nil
 }
 
+// ExchangeInvocationToken exchanges this invocation token for a narrower child token.
 func (c *InvokerClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
 	if c == nil || c.client == nil {
 		return "", fmt.Errorf("plugin invoker: client is not initialized")

@@ -19,18 +19,23 @@ use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
 
 #[derive(Clone)]
+/// gRPC integration-provider server used by the Rust runtime.
 pub struct ProviderServer<P> {
     provider: Arc<P>,
     router: Router<P>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Serialized operation result returned by the provider runtime.
 pub struct OperationResult {
+    /// HTTP-style status code.
     pub status: u16,
+    /// JSON-encoded response body.
     pub body: String,
 }
 
 impl OperationResult {
+    /// Serializes a typed handler response.
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
         let status = response.status.unwrap_or(200);
         match serde_json::to_string(&response.body) {
@@ -42,6 +47,7 @@ impl OperationResult {
         }
     }
 
+    /// Converts an SDK error into a serialized operation result.
     pub fn from_error(error: Error) -> Self {
         let status = error.status().unwrap_or(HTTP_INTERNAL_SERVER_ERROR);
         if !error.expose_message() {
@@ -51,6 +57,7 @@ impl OperationResult {
         Self::error(status, error.message().to_owned())
     }
 
+    /// Creates a serialized error response.
     pub fn error(status: u16, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -60,6 +67,7 @@ impl OperationResult {
 }
 
 impl<P> ProviderServer<P> {
+    /// Creates a server from a provider and operation router.
     pub fn new(provider: Arc<P>, router: Router<P>) -> Self {
         Self { provider, router }
     }

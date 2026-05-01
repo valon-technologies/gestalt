@@ -1,41 +1,107 @@
 ---
-title: Python SDK API
+title: Python SDK
 ---
 
-# Python SDK API
+# Python SDK
 
-The Python SDK is published as `gestalt-sdk` and imported as `gestalt`.
+Use the Python SDK to build executable Gestalt providers with normal Python
+classes, functions, and type annotations.
 
-Use it for authored provider code such as:
+The package is published as `gestalt-sdk` and imported as `gestalt`. Use it
+when you want compact provider code, model classes for operation inputs and
+outputs, and Python runtime helpers for host services such as cache, S3,
+IndexedDB, workflows, agents, and telemetry.
 
-```python
-from gestalt import Model, Plugin
+## Install
 
+Install the package in your provider project:
 
-class SearchInput(Model):
-    query: str
-
-
-plugin = Plugin("search")
-
-
-@plugin.operation(title="Search")
-def search(params: SearchInput):
-    return {"query": params.query}
+```sh
+uv add gestalt-sdk
 ```
 
-The generated API reference is published separately as static HTML:
+Provider code imports the package as `gestalt`:
 
-- [Python SDK Reference](/api/python/index.html)
+```python
+import gestalt
+```
 
-Those pages focus on the handwritten SDK surface. Generated protobuf bindings
-under `gestalt.gen` remain available to provider code, but they are not
-expanded as authored reference pages.
+## Create a plugin provider
 
-Provider runtimes also expose OpenTelemetry helpers through `gestalt.telemetry`.
-`gestaltd` owns exporter configuration through `providers.telemetry` and passes
-standard `OTEL_*` environment into provider processes; Python providers should
-use the SDK helpers only around the GenAI work they own.
+Operations are the callable units of a plugin. Define input and output models,
+then register a function as an operation.
+
+```python
+import gestalt
+
+
+class SearchInput(gestalt.Model):
+    query: str = gestalt.field(description="Search query")
+    limit: int = gestalt.field(description="Maximum results", default=10)
+
+
+class SearchOutput(gestalt.Model):
+    results: list[str]
+
+
+plugin = gestalt.Plugin("search")
+
+
+@plugin.operation(method="GET", title="Search")
+def search(input: SearchInput, request: gestalt.Request) -> SearchOutput:
+    return SearchOutput(results=[input.query][: input.limit])
+```
+
+Fields without defaults are required. Use `gestalt.field(...)` to attach
+catalog descriptions and defaults.
+
+## Point Gestalt at the provider
+
+Python source providers are discovered from `pyproject.toml`. Point
+`[tool.gestalt].provider` at the module or object that exports your provider
+surface.
+
+```toml
+[project]
+name = "gestalt-search"
+version = "0.0.1"
+dependencies = ["gestalt-sdk"]
+
+[tool.uv]
+package = false
+
+[tool.gestalt]
+provider = "provider"
+```
+
+The provider manifest still owns the provider identity, connections, hosted
+HTTP routes, and passthrough surfaces. The Python module owns executable
+operation handlers and runtime hooks.
+
+## Use provider runtimes
+
+Use `Plugin` for integration providers. Inherit from a provider base class when
+you are implementing a host-service provider.
+
+| Base class | Use it when you want to serve |
+| --- | --- |
+| `AuthenticationProvider` | Login flows and optional bearer-token validation. |
+| `CacheProvider` | Plugin-bound cache storage. |
+| `S3Provider` | S3-compatible object storage. |
+| `SecretsProvider` | Secret resolution. |
+| `WorkflowProvider` | Workflow runs, schedules, and event triggers. |
+| `AgentProvider` | Agent sessions, turns, events, interactions, and capabilities. |
+| `PluginRuntimeProvider` | Hosted plugin execution backends. |
+
+The SDK also exposes clients such as `Cache`, `IndexedDB`, `S3`,
+`WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
+`PluginInvoker` for provider code that needs to call sibling host services.
+
+## Record provider telemetry
+
+`gestaltd` owns OpenTelemetry exporter configuration and passes standard
+`OTEL_*` environment variables into provider processes. Use
+`gestalt.telemetry` around GenAI work that your provider performs.
 
 ```python
 from gestalt import telemetry
@@ -50,40 +116,10 @@ with telemetry.model_operation(
     telemetry.record_openai_usage(operation, response)
 ```
 
-The Python SDK also exposes agent-provider helpers:
+## API reference
 
-```python
-import gestalt
+- [Open the Python API reference](/api/python/index.html)
 
-
-class ExampleAgent(gestalt.AgentProvider):
-    def CreateSession(self, request, context):
-        return gestalt.pb.AgentSession(
-            id=request.session_id,
-            provider_name="example",
-            model=request.model,
-            state=gestalt.pb.AGENT_SESSION_STATE_ACTIVE,
-        )
-
-    def CreateTurn(self, request, context):
-        return gestalt.pb.AgentTurn(
-            id=request.turn_id,
-            session_id=request.session_id,
-            provider_name="example",
-            model=request.model,
-            status=gestalt.pb.AGENT_EXECUTION_STATUS_RUNNING,
-            messages=request.messages,
-            execution_ref=request.execution_ref,
-        )
-
-    def GetCapabilities(self, request, context):
-        return gestalt.pb.AgentProviderCapabilities(
-            streaming_text=True,
-            tool_calls=True,
-            interactions=True,
-            resumable_turns=True,
-        )
-```
-
-Workflow providers use the same runtime pattern through `gestalt.WorkflowProvider`.
-Runtime-provider authors should inherit from `gestalt.PluginRuntimeProvider`.
+Generated protobuf bindings under `gestalt.gen` remain importable for lower
+level protocol work, but they are intentionally not expanded as authored
+reference pages.

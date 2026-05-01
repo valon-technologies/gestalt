@@ -48,8 +48,15 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
+/** Environment variable containing the workflow-host service socket path. */
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
 
+/**
+ * Generated workflow protocol message types commonly used by providers.
+ *
+ * These are re-exported so workflow provider code can type runs, schedules,
+ * triggers, and operation-invocation requests without importing from `gen`.
+ */
 export type {
   BoundWorkflowEventTrigger,
   BoundWorkflowRun,
@@ -77,6 +84,7 @@ export type {
 };
 export { WorkflowRunStatus };
 
+/** Handlers and runtime metadata for a workflow provider. */
 export interface WorkflowProviderOptions extends RuntimeProviderOptions {
   startRun: (
     request: StartWorkflowProviderRunRequest,
@@ -131,6 +139,7 @@ export interface WorkflowProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<void>;
 }
 
+/** Runtime provider implementation for the Gestalt workflow host contract. */
 export class WorkflowProvider extends RuntimeProvider {
   readonly kind = "workflow" as const;
 
@@ -276,12 +285,14 @@ export class WorkflowProvider extends RuntimeProvider {
   }
 }
 
+/** Creates a workflow provider for export from a provider module. */
 export function defineWorkflowProvider(
   options: WorkflowProviderOptions,
 ): WorkflowProvider {
   return new WorkflowProvider(options);
 }
 
+/** Runtime type guard for workflow providers loaded from user modules. */
 export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
   return (
     value instanceof WorkflowProvider ||
@@ -309,6 +320,7 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
   );
 }
 
+/** Client for invoking operations from workflow provider code. */
 export class WorkflowHost {
   private readonly client: Client<typeof WorkflowHostService>;
 
@@ -326,6 +338,7 @@ export class WorkflowHost {
     this.client = createClient(WorkflowHostService, transport);
   }
 
+  /** Invokes an operation through the workflow host service. */
   async invokeOperation(
     request: InvokeWorkflowOperationRequest,
   ): Promise<InvokeWorkflowOperationResponse> {
@@ -333,6 +346,7 @@ export class WorkflowHost {
   }
 }
 
+/** Builds the Connect service implementation used by the TypeScript runtime. */
 export function createWorkflowProviderService(
   provider: WorkflowProvider,
 ): Partial<ServiceImpl<typeof WorkflowProviderService>> {

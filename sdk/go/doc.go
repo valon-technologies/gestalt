@@ -1,49 +1,70 @@
-// Package gestalt provides a Go SDK for building Gestalt executable providers.
+// Package gestalt provides a Go SDK for building executable Gestalt providers.
 //
-// Gestalt providers extend the platform with new integrations and automations.
-// [Provider] is the runtime contract for integration providers: it
-// receives startup config and serves typed executable operations when the host
-// invokes them.
+// Use this package when you want a provider implemented as normal Go code with
+// typed operation inputs, typed operation outputs, and a small runtime surface.
+// The provider manifest still owns static identity, connections, hosted HTTP
+// routes, passthrough surfaces, and release metadata. Go code owns executable
+// handlers and provider runtime hooks.
 //
-// Static metadata still belongs to the provider manifest. Static executable
-// operations are authored in Go and materialized automatically by the SDK and
-// host. The recommended authoring flow is:
+// # Quick start
 //
-//  1. Implement [Provider.Configure].
-//  2. Define typed operations and handlers in Go with [Operation], [Register],
-//     and [Router].
-//  3. Export `New()` plus `Router` from the provider package.
+// Implement Provider.Configure, define typed operations, and export New plus
+// Router from the provider package:
 //
-// This keeps the runtime contract single-source and manifest-backed while still
-// giving provider authors typed Go definitions for executable helper
-// operations.
+//	type SearchProvider struct{}
 //
-// The package also includes first-pass runtime/auth/datastore protocol types
-// for non-integration provider kinds, plus transport helpers like [Cache],
-// [IndexedDB], and [S3] for speaking to sibling provider components. The
-// current host-side execution flow
-// remains integration-focused and is anchored on [ServeProvider].
+//	func New() *SearchProvider { return &SearchProvider{} }
 //
-// # Implementing a Provider
-//
-// The runtime provider interface stays small:
-//
-//	type MyProvider struct{}
-//
-//	func (p *MyProvider) Configure(ctx context.Context, name string, config map[string]any) error {
+//	func (p *SearchProvider) Configure(ctx context.Context, name string, config map[string]any) error {
 //		return nil
 //	}
 //
-//	func New() *MyProvider { return &MyProvider{} }
+//	type SearchInput struct {
+//		Query string `json:"query" doc:"Search query" required:"true"`
+//	}
+//
+//	type SearchOutput struct {
+//		Results []string `json:"results"`
+//	}
 //
 //	var Router = gestalt.MustRouter(
-//		gestalt.Register(myOperation, (*MyProvider).myHandler),
+//		gestalt.Register(
+//			gestalt.Operation[SearchInput, SearchOutput]{
+//				ID:     "search",
+//				Method: http.MethodGet,
+//				Title:  "Search",
+//			},
+//			func(_ *SearchProvider, _ context.Context, input SearchInput, _ gestalt.Request) (gestalt.Response[SearchOutput], error) {
+//				return gestalt.OK(SearchOutput{Results: []string{input.Query}}), nil
+//			},
+//		),
 //	)
 //
 // Source-provider flows derive the executable catalog name from manifest.yaml.
-// Use [Router.WithName] only when you need an explicit catalog name outside
-// that manifest-backed flow.
+// Use Router.WithName only when you need an explicit catalog name outside that
+// manifest-backed flow.
 //
-// See https://gestaltd.ai/custom-providers/plugins for the full typed
+// # Catalog metadata
+//
+// The router derives catalog parameters from Go struct tags. The json tag sets
+// the parameter name. json:",omitempty" makes the parameter optional.
+// doc:"..." sets the description, required:"true|false" overrides requiredness,
+// and default:"..." sets a scalar default.
+//
+// # Provider surfaces
+//
+// Provider, Operation, Register, and Router model integration providers. The
+// package also exposes provider interfaces for host-service backends, including
+// AuthenticationProvider, AuthorizationProvider, CacheProvider,
+// IndexedDBProvider, S3Provider, SecretsProvider, WorkflowProvider,
+// AgentProvider, and PluginRuntimeProvider.
+//
+// Use the host-service clients when provider code needs to call sibling
+// services exposed by gestaltd. These include CacheClient, IndexedDBClient,
+// S3Client, WorkflowHostClient, WorkflowManagerClient, AgentHostClient,
+// AgentManagerClient, AuthorizationClient, and InvokerClient.
+//
+// See https://gestaltd.ai/reference/go-sdk for the Go SDK guide.
+// See https://gestaltd.ai/custom-providers/plugins for the full typed plugin
 // authoring flow.
 package gestalt

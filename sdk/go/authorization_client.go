@@ -18,9 +18,14 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// EnvAuthorizationSocket names the environment variable containing the
+// authorization service target.
 const EnvAuthorizationSocket = "GESTALT_AUTHORIZATION_SOCKET"
+
+// EnvAuthorizationSocketToken names the optional authorization relay-token variable.
 const EnvAuthorizationSocketToken = EnvAuthorizationSocket + "_TOKEN"
 
+// AuthorizationClient calls the read-only host authorization provider.
 type AuthorizationClient struct {
 	client proto.AuthorizationProviderClient
 }
@@ -33,6 +38,7 @@ var sharedAuthorizationTransport struct {
 	client proto.AuthorizationProviderClient
 }
 
+// Authorization returns a shared read-only authorization client.
 func Authorization() (*AuthorizationClient, error) {
 	target := os.Getenv(EnvAuthorizationSocket)
 	if target == "" {
@@ -182,8 +188,10 @@ func parseAuthorizationTarget(raw string) (network string, address string, err e
 	}
 }
 
+// Close is a no-op compatibility method because this client uses shared transport.
 func (c *AuthorizationClient) Close() error { return nil }
 
+// SearchSubjects searches subjects related to a resource and action.
 func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSearchRequest) (*SubjectSearchResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("authorization: client is not initialized")
@@ -194,6 +202,7 @@ func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSe
 	return c.client.SearchSubjects(ctx, req)
 }
 
+// GetMetadata returns host authorization provider metadata.
 func (c *AuthorizationClient) GetMetadata(ctx context.Context) (*AuthorizationMetadata, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("authorization: client is not initialized")

@@ -14,22 +14,30 @@ use crate::generated::v1::{
 
 type WorkflowManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
+/// Environment variable containing the workflow-manager host-service target.
 pub const ENV_WORKFLOW_MANAGER_SOCKET: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET";
+/// Environment variable containing the optional workflow-manager relay token.
 pub const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET_TOKEN";
 const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`WorkflowManager`].
 pub enum WorkflowManagerError {
+    /// The invocation token was empty.
     #[error("workflow manager: invocation token is not available")]
     MissingInvocationToken,
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
 
+/// Client for starting workflow runs and managing schedules or triggers.
 pub struct WorkflowManager {
     client: ProtoWorkflowManagerHostClient<WorkflowManagerTransport>,
     invocation_token: String,
@@ -37,12 +45,14 @@ pub struct WorkflowManager {
 }
 
 impl WorkflowManager {
+    /// Connects to the workflow manager with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
     ) -> std::result::Result<Self, WorkflowManagerError> {
         Self::connect_with_idempotency_key(invocation_token, "").await
     }
 
+    /// Connects with a default idempotency key for create requests.
     pub async fn connect_with_idempotency_key(
         invocation_token: impl AsRef<str>,
         idempotency_key: impl AsRef<str>,
@@ -87,6 +97,7 @@ impl WorkflowManager {
         })
     }
 
+    /// Creates a workflow schedule.
     pub async fn create_schedule(
         &mut self,
         mut request: pb::WorkflowManagerCreateScheduleRequest,
@@ -98,6 +109,7 @@ impl WorkflowManager {
         Ok(self.client.create_schedule(request).await?.into_inner())
     }
 
+    /// Starts a workflow run.
     pub async fn start_run(
         &mut self,
         mut request: pb::WorkflowManagerStartRunRequest,
@@ -106,6 +118,7 @@ impl WorkflowManager {
         Ok(self.client.start_run(request).await?.into_inner())
     }
 
+    /// Signals an existing workflow run.
     pub async fn signal_run(
         &mut self,
         mut request: pb::WorkflowManagerSignalRunRequest,
@@ -114,6 +127,7 @@ impl WorkflowManager {
         Ok(self.client.signal_run(request).await?.into_inner())
     }
 
+    /// Signals a run or starts it when no matching run exists.
     pub async fn signal_or_start_run(
         &mut self,
         mut request: pb::WorkflowManagerSignalOrStartRunRequest,
@@ -122,6 +136,7 @@ impl WorkflowManager {
         Ok(self.client.signal_or_start_run(request).await?.into_inner())
     }
 
+    /// Fetches one workflow schedule.
     pub async fn get_schedule(
         &mut self,
         mut request: pb::WorkflowManagerGetScheduleRequest,
@@ -130,6 +145,7 @@ impl WorkflowManager {
         Ok(self.client.get_schedule(request).await?.into_inner())
     }
 
+    /// Updates a workflow schedule.
     pub async fn update_schedule(
         &mut self,
         mut request: pb::WorkflowManagerUpdateScheduleRequest,
@@ -138,6 +154,7 @@ impl WorkflowManager {
         Ok(self.client.update_schedule(request).await?.into_inner())
     }
 
+    /// Deletes a workflow schedule.
     pub async fn delete_schedule(
         &mut self,
         mut request: pb::WorkflowManagerDeleteScheduleRequest,
@@ -147,6 +164,7 @@ impl WorkflowManager {
         Ok(())
     }
 
+    /// Pauses a workflow schedule.
     pub async fn pause_schedule(
         &mut self,
         mut request: pb::WorkflowManagerPauseScheduleRequest,
@@ -155,6 +173,7 @@ impl WorkflowManager {
         Ok(self.client.pause_schedule(request).await?.into_inner())
     }
 
+    /// Resumes a workflow schedule.
     pub async fn resume_schedule(
         &mut self,
         mut request: pb::WorkflowManagerResumeScheduleRequest,
@@ -163,6 +182,7 @@ impl WorkflowManager {
         Ok(self.client.resume_schedule(request).await?.into_inner())
     }
 
+    /// Creates an event trigger.
     pub async fn create_trigger(
         &mut self,
         mut request: pb::WorkflowManagerCreateEventTriggerRequest,
@@ -178,6 +198,7 @@ impl WorkflowManager {
             .into_inner())
     }
 
+    /// Fetches one event trigger.
     pub async fn get_trigger(
         &mut self,
         mut request: pb::WorkflowManagerGetEventTriggerRequest,
@@ -186,6 +207,7 @@ impl WorkflowManager {
         Ok(self.client.get_event_trigger(request).await?.into_inner())
     }
 
+    /// Updates an event trigger.
     pub async fn update_trigger(
         &mut self,
         mut request: pb::WorkflowManagerUpdateEventTriggerRequest,
@@ -198,6 +220,7 @@ impl WorkflowManager {
             .into_inner())
     }
 
+    /// Deletes an event trigger.
     pub async fn delete_trigger(
         &mut self,
         mut request: pb::WorkflowManagerDeleteEventTriggerRequest,
@@ -207,6 +230,7 @@ impl WorkflowManager {
         Ok(())
     }
 
+    /// Pauses an event trigger.
     pub async fn pause_trigger(
         &mut self,
         mut request: pb::WorkflowManagerPauseEventTriggerRequest,
@@ -215,6 +239,7 @@ impl WorkflowManager {
         Ok(self.client.pause_event_trigger(request).await?.into_inner())
     }
 
+    /// Resumes an event trigger.
     pub async fn resume_trigger(
         &mut self,
         mut request: pb::WorkflowManagerResumeEventTriggerRequest,
@@ -227,6 +252,7 @@ impl WorkflowManager {
             .into_inner())
     }
 
+    /// Publishes an event into the workflow manager.
     pub async fn publish_event(
         &mut self,
         mut request: pb::WorkflowManagerPublishEventRequest,

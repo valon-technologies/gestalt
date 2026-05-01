@@ -28,6 +28,14 @@ _STREAMS = {
 
 
 class RuntimeLogHost:
+    """Client for appending runtime logs to the host log stream.
+
+    ``RuntimeLogHost`` reads ``GESTALT_RUNTIME_LOG_SOCKET`` and its optional
+    relay token from the environment. Use it directly for structured log
+    entries, or create a :class:`RuntimeLogWriter`/:class:`RuntimeLogHandler`
+    when redirecting standard streams or Python logging output.
+    """
+
     def __init__(self) -> None:
         target = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET, "").strip()
         if not target:
@@ -44,9 +52,13 @@ class RuntimeLogHost:
         self._source_seq = 0
 
     def close(self) -> None:
+        """Close the underlying gRPC channel."""
+
         self._channel.close()
 
     def append_logs(self, request: Any) -> Any:
+        """Append logs using a raw protocol request message."""
+
         return _grpc_call(self._stub.AppendLogs, request)
 
     def append(
@@ -58,6 +70,12 @@ class RuntimeLogHost:
         observed_at: Any = None,
         source_seq: int | None = None,
     ) -> Any:
+        """Append one log entry.
+
+        When ``message`` is omitted, the first positional argument is treated as
+        the message and the session id is read from ``GESTALT_RUNTIME_SESSION_ID``.
+        """
+
         if message is None:
             message = session_id
             session_id = _runtime_session_id()
@@ -85,6 +103,8 @@ class RuntimeLogHost:
         stream: str | int = "stdout",
         source_seq_start: int = 0,
     ) -> RuntimeLogWriter:
+        """Return a file-like writer that appends data to a runtime log stream."""
+
         return RuntimeLogWriter(
             self,
             _runtime_session_id(session_id),
@@ -93,13 +113,19 @@ class RuntimeLogHost:
         )
 
     def __enter__(self) -> RuntimeLogHost:
+        """Return the client for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the client at the end of a context manager block."""
+
         self.close()
 
 
 class RuntimeLogWriter:
+    """File-like object that forwards writes to :class:`RuntimeLogHost`."""
+
     def __init__(
         self,
         host: RuntimeLogHost,
@@ -115,6 +141,8 @@ class RuntimeLogWriter:
         self.closed = False
 
     def write(self, data: str | bytes) -> int:
+        """Append ``data`` to the configured runtime log stream."""
+
         if self.closed:
             raise ValueError("I/O operation on closed runtime log writer")
         if isinstance(data, bytes):
@@ -135,13 +163,23 @@ class RuntimeLogWriter:
         return written
 
     def flush(self) -> None:
+        """Flush buffered data.
+
+        Runtime log writes are sent eagerly, so this method is a no-op for
+        file-like compatibility.
+        """
+
         return None
 
     def close(self) -> None:
+        """Mark the writer closed."""
+
         self.closed = True
 
 
 class RuntimeLogHandler(logging.Handler):
+    """Python logging handler that forwards records to runtime logs."""
+
     terminator = "\n"
 
     def __init__(
@@ -160,6 +198,8 @@ class RuntimeLogHandler(logging.Handler):
         self._source_seq = 0
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Format and append one Python logging record."""
+
         try:
             message = self.format(record) + self.terminator
             self._source_seq += 1
@@ -173,6 +213,8 @@ class RuntimeLogHandler(logging.Handler):
             self.handleError(record)
 
     def close(self) -> None:
+        """Close the owned runtime-log host, if this handler created it."""
+
         try:
             if self._owns_host:
                 self._host.close()

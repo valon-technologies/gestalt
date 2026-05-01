@@ -19,30 +19,38 @@ type CacheTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Default Unix-socket environment variable used by [`Cache::connect`].
 pub const ENV_CACHE_SOCKET: &str = "GESTALT_CACHE_SOCKET";
+/// Default relay-token environment variable used by [`Cache::connect`].
 pub const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
+/// Suffix added to named cache socket variables for relay-token variables.
 pub const ENV_CACHE_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// One cache entry written through [`Cache::set_many`].
 pub struct CacheEntry {
+    /// Cache key to store.
     pub key: String,
+    /// Cache value bytes.
     pub value: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 /// Options applied to cache writes.
 pub struct CacheSetOptions {
+    /// Optional time-to-live for the stored value.
     pub ttl: Option<Duration>,
 }
 
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by the cache client transport.
 pub enum CacheError {
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }

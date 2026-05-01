@@ -282,7 +282,11 @@ class PluginRuntimeProvider(PluginProvider):
 
 
 class WorkflowProvider(PluginProvider):
+    """Base class for workflow-provider runtimes."""
+
     def serve(self) -> None:
+        """Start the workflow runtime."""
+
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.WORKFLOW)

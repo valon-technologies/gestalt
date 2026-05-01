@@ -27,54 +27,81 @@ import {
 } from "../gen/v1/workflow_pb.ts";
 import type { Request } from "./api.ts";
 
+/** Environment variable containing the workflow-manager host-service target. */
 export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET";
-export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = `${ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN`;
+/** Environment variable containing the optional workflow-manager relay token. */
+export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN =
+  `${ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN`;
 const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
   "x-gestalt-host-service-relay-token";
 
+/** Managed workflow schedule message returned by the host manager. */
 export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
+/** Managed workflow event-trigger message returned by the host manager. */
 export type ManagedWorkflowEventTriggerMessage = ManagedWorkflowEventTrigger;
+/** Workflow event message returned after publishing an event. */
 export type WorkflowEventMessage = WorkflowEvent;
+/** Shape accepted when creating a workflow schedule. */
 export type WorkflowManagerCreateScheduleInput = MessageInitShape<
   typeof WorkflowManagerCreateScheduleRequestSchema
 >;
+/** Shape accepted when creating an event trigger. */
 export type WorkflowManagerCreateTriggerInput = MessageInitShape<
   typeof WorkflowManagerCreateEventTriggerRequestSchema
 >;
+/** Shape accepted when fetching a workflow schedule. */
 export type WorkflowManagerGetScheduleInput = MessageInitShape<
   typeof WorkflowManagerGetScheduleRequestSchema
 >;
+/** Shape accepted when fetching an event trigger. */
 export type WorkflowManagerGetTriggerInput = MessageInitShape<
   typeof WorkflowManagerGetEventTriggerRequestSchema
 >;
+/** Shape accepted when updating a workflow schedule. */
 export type WorkflowManagerUpdateScheduleInput = MessageInitShape<
   typeof WorkflowManagerUpdateScheduleRequestSchema
 >;
+/** Shape accepted when updating an event trigger. */
 export type WorkflowManagerUpdateTriggerInput = MessageInitShape<
   typeof WorkflowManagerUpdateEventTriggerRequestSchema
 >;
+/** Shape accepted when deleting a workflow schedule. */
 export type WorkflowManagerDeleteScheduleInput = MessageInitShape<
   typeof WorkflowManagerDeleteScheduleRequestSchema
 >;
+/** Shape accepted when deleting an event trigger. */
 export type WorkflowManagerDeleteTriggerInput = MessageInitShape<
   typeof WorkflowManagerDeleteEventTriggerRequestSchema
 >;
+/** Shape accepted when pausing a workflow schedule. */
 export type WorkflowManagerPauseScheduleInput = MessageInitShape<
   typeof WorkflowManagerPauseScheduleRequestSchema
 >;
+/** Shape accepted when pausing an event trigger. */
 export type WorkflowManagerPauseTriggerInput = MessageInitShape<
   typeof WorkflowManagerPauseEventTriggerRequestSchema
 >;
+/** Shape accepted when resuming a workflow schedule. */
 export type WorkflowManagerResumeScheduleInput = MessageInitShape<
   typeof WorkflowManagerResumeScheduleRequestSchema
 >;
+/** Shape accepted when resuming an event trigger. */
 export type WorkflowManagerResumeTriggerInput = MessageInitShape<
   typeof WorkflowManagerResumeEventTriggerRequestSchema
 >;
+/** Shape accepted when publishing a workflow event. */
 export type WorkflowManagerPublishEventInput = MessageInitShape<
   typeof WorkflowManagerPublishEventRequestSchema
 >;
 
+/**
+ * Client for creating and controlling workflow schedules and event triggers.
+ *
+ * The constructor accepts either a Gestalt request or an invocation token. Each
+ * manager call forwards that token to the host service. When constructed from a
+ * request, create operations reuse the request idempotency key unless the call
+ * provides one explicitly.
+ */
 export class WorkflowManager {
   private readonly client: Client<typeof WorkflowManagerHostService>;
   private readonly invocationToken: string;
@@ -104,6 +131,7 @@ export class WorkflowManager {
     this.client = createClient(WorkflowManagerHostService, transport);
   }
 
+  /** Creates a workflow schedule. */
   async createSchedule(
     request: WorkflowManagerCreateScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
@@ -114,6 +142,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Fetches one workflow schedule. */
   async getSchedule(
     request: WorkflowManagerGetScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
@@ -123,6 +152,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Updates a workflow schedule. */
   async updateSchedule(
     request: WorkflowManagerUpdateScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
@@ -132,6 +162,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Deletes a workflow schedule. */
   async deleteSchedule(
     request: WorkflowManagerDeleteScheduleInput,
   ): Promise<void> {
@@ -141,6 +172,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Pauses a workflow schedule. */
   async pauseSchedule(
     request: WorkflowManagerPauseScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
@@ -150,6 +182,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Resumes a workflow schedule. */
   async resumeSchedule(
     request: WorkflowManagerResumeScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
@@ -159,6 +192,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Creates an event trigger. */
   async createTrigger(
     request: WorkflowManagerCreateTriggerInput,
   ): Promise<ManagedWorkflowEventTriggerMessage> {
@@ -169,6 +203,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Fetches one event trigger. */
   async getTrigger(
     request: WorkflowManagerGetTriggerInput,
   ): Promise<ManagedWorkflowEventTriggerMessage> {
@@ -178,6 +213,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Updates an event trigger. */
   async updateTrigger(
     request: WorkflowManagerUpdateTriggerInput,
   ): Promise<ManagedWorkflowEventTriggerMessage> {
@@ -187,6 +223,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Deletes an event trigger. */
   async deleteTrigger(
     request: WorkflowManagerDeleteTriggerInput,
   ): Promise<void> {
@@ -196,6 +233,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Pauses an event trigger. */
   async pauseTrigger(
     request: WorkflowManagerPauseTriggerInput,
   ): Promise<ManagedWorkflowEventTriggerMessage> {
@@ -205,6 +243,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Resumes an event trigger. */
   async resumeTrigger(
     request: WorkflowManagerResumeTriggerInput,
   ): Promise<ManagedWorkflowEventTriggerMessage> {
@@ -214,6 +253,7 @@ export class WorkflowManager {
     });
   }
 
+  /** Publishes an event into the workflow manager. */
   async publishEvent(
     request: WorkflowManagerPublishEventInput,
   ): Promise<WorkflowEventMessage> {

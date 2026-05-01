@@ -7,10 +7,13 @@ import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
+/** Base environment variable for discovering cache runtime sockets. */
 export const ENV_CACHE_SOCKET = "GESTALT_CACHE_SOCKET";
 const CACHE_SOCKET_TOKEN_SUFFIX = "_TOKEN";
 const CACHE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
-export const ENV_CACHE_SOCKET_TOKEN = `${ENV_CACHE_SOCKET}${CACHE_SOCKET_TOKEN_SUFFIX}`;
+/** Base environment variable for the default cache relay token. */
+export const ENV_CACHE_SOCKET_TOKEN =
+  `${ENV_CACHE_SOCKET}${CACHE_SOCKET_TOKEN_SUFFIX}`;
 
 /**
  * Single cache entry used by batch cache APIs.
@@ -145,6 +148,7 @@ export class Cache {
     this.client = createClient(CacheService, transport);
   }
 
+  /** Returns a cached value, or `undefined` when the key is missing. */
   async get(key: string): Promise<Uint8Array | undefined> {
     const response = await this.client.get({
       key,
@@ -155,6 +159,7 @@ export class Cache {
     return cloneBytes(response.value);
   }
 
+  /** Returns the subset of requested keys that currently exist. */
   async getMany(keys: string[]): Promise<Record<string, Uint8Array>> {
     const response = await this.client.getMany({
       keys: [...keys],
@@ -162,6 +167,7 @@ export class Cache {
     return entriesToRecord(response.entries);
   }
 
+  /** Stores a cached value with an optional TTL. */
   async set(
     key: string,
     value: Uint8Array,
@@ -175,6 +181,7 @@ export class Cache {
     });
   }
 
+  /** Stores multiple values with an optional shared TTL. */
   async setMany(
     entries: Iterable<CacheEntry>,
     options?: CacheSetOptions,
@@ -186,6 +193,7 @@ export class Cache {
     });
   }
 
+  /** Deletes a cached value and reports whether it existed. */
   async delete(key: string): Promise<boolean> {
     const response = await this.client.delete({
       key,
@@ -193,6 +201,7 @@ export class Cache {
     return response.deleted;
   }
 
+  /** Deletes several cached values and returns the number removed. */
   async deleteMany(keys: string[]): Promise<number | bigint> {
     const response = await this.client.deleteMany({
       keys: [...keys],
@@ -200,6 +209,7 @@ export class Cache {
     return toJsInt(response.deleted);
   }
 
+  /** Refreshes the TTL for an existing key. */
   async touch(key: string, ttlMs: number): Promise<boolean> {
     const ttl = toProtoDuration(ttlMs);
     const response = await this.client.touch({

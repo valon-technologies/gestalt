@@ -1202,7 +1202,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
     [project]
     name = "my-plugin"
     version = "0.0.1-alpha.1"
-    dependencies = ["gestalt"]
+    dependencies = ["gestalt-sdk"]
 
     [tool.gestalt]
     provider = "provider"
@@ -1218,7 +1218,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
     edition = "2024"
 
     [dependencies]
-    gestalt = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1-alpha.1" }
+    gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
     schemars = { version = "0.8", features = ["derive"] }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"

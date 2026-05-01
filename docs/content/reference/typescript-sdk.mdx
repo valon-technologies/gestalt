@@ -1,158 +1,129 @@
+---
+title: TypeScript SDK
+---
+
 # TypeScript SDK
 
-The TypeScript SDK reference is generated from the authored public surface in
-`sdk/typescript/src`. It covers the root package exports from
-`@valon-technologies/gestalt` together with the `build`, `runtime`, `schema`,
-and `target` entrypoints used by Bun-based providers.
+Use the TypeScript SDK to build Bun-based executable Gestalt providers with
+explicit runtime schemas.
 
-[Open the TypeScript API reference](/api/typescript/index.html)
+The package is published as `@valon-technologies/gestalt`. Use it when you want
+schema-defined operation inputs and outputs, TypeScript handlers, and provider
+runtime helpers for plugins, authentication, cache, S3, IndexedDB, workflows,
+agents, hosted runtimes, and telemetry.
+
+## Install
+
+Install the current pre-1.0 package:
+
+```sh
+bun add @valon-technologies/gestalt@0.0.1-alpha.16
+```
+
+The npm `latest` dist-tag currently points at an older prerelease. Use the
+`alpha` dist-tag to check the newest prerelease, then pin the resolved version
+in provider projects.
+
+## Create a plugin provider
+
+TypeScript types disappear at runtime, so the SDK uses explicit schemas for
+operation inputs and outputs.
 
 ```ts
 import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
 
 export const plugin = definePlugin({
-  displayName: "Example Provider",
+  displayName: "Search",
   operations: [
     operation({
-      id: "hello",
-      input: s.object({ name: s.string({ default: "World" }) }),
-      output: s.object({ message: s.string() }),
+      id: "search",
+      method: "GET",
+      title: "Search",
+      readOnly: true,
+      input: s.object({
+        query: s.string({ description: "Search query" }),
+        limit: s.integer({ description: "Maximum results", default: 10 }),
+      }),
+      output: s.object({
+        results: s.array(s.string()),
+      }),
       async handler(input) {
-        return ok({ message: `Hello, ${input.name}` });
+        return ok({ results: [input.query].slice(0, input.limit) });
       },
     }),
   ],
 });
 ```
 
-```ts
-import { parseRuntimeArgs, serve } from "@valon-technologies/gestalt/runtime";
+Use `ok(body)` for normal responses. Use `response(status, body)` when the
+operation needs to return a deliberate non-2xx status.
 
-const args = parseRuntimeArgs(process.argv.slice(2));
+## Point Gestalt at the provider
+
+Declare the provider target in `package.json`. The target is a relative file
+path plus an optional export suffix.
+
+```json
+{
+  "name": "gestalt-search",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@valon-technologies/gestalt": "0.0.1-alpha.16"
+  },
+  "gestalt": {
+    "provider": {
+      "kind": "plugin",
+      "target": "./provider.ts#plugin"
+    }
+  }
+}
 ```
 
-Agent-provider surfaces are part of the same package:
+If the export suffix is omitted, the runtime looks for `provider`, then
+`plugin`, then the default export. Use an object target with an explicit `kind`
+for non-plugin provider surfaces.
 
-```ts
-import {
-  AgentExecutionStatus,
-  AgentSessionState,
-  defineAgentProvider,
-} from "@valon-technologies/gestalt";
+## Use provider runtimes
 
-export const provider = defineAgentProvider({
-  displayName: "Example Agent",
+The root package exports provider definition helpers for each executable
+surface.
 
-  async createSession(request) {
-    return {
-      id: request.sessionId,
-      providerName: "example",
-      model: request.model,
-      clientRef: request.clientRef,
-      state: AgentSessionState.ACTIVE,
-      createdBy: request.createdBy,
-    };
-  },
+| Helper | Use it when you want to serve |
+| --- | --- |
+| `definePlugin` | Integration operations and session catalogs. |
+| `defineAuthenticationProvider` | Login flows and optional bearer-token validation. |
+| `defineAuthorizationProvider` | Subject authorization decisions. |
+| `defineCacheProvider` | Plugin-bound cache storage. |
+| `defineIndexedDBProvider` | IndexedDB-style system state. |
+| `defineS3Provider` | S3-compatible object storage. |
+| `defineSecretsProvider` | Secret resolution. |
+| `defineWorkflowProvider` | Workflow runs, schedules, and event triggers. |
+| `defineAgentProvider` | Agent sessions, turns, events, interactions, and capabilities. |
+| `definePluginRuntimeProvider` | Hosted plugin execution backends. |
 
-  async createTurn(request) {
-    return {
-      id: request.turnId,
-      sessionId: request.sessionId,
-      providerName: "example",
-      model: request.model,
-      status: AgentExecutionStatus.RUNNING,
-      messages: request.messages,
-      createdBy: request.createdBy,
-      executionRef: request.executionRef,
-    };
-  },
+## Runtime and build entrypoints
 
-  async getCapabilities() {
-    return { streamingText: true, toolCalls: true };
-  },
-});
+Use the runtime entrypoint for local source execution:
+
+```sh
+gestalt-ts-runtime ROOT plugin:./provider.ts#plugin
 ```
 
-Workflow-provider helpers expose the authored run, schedule, trigger, and event
-surface:
+Use the build entrypoint when `gestaltd provider release` packages a source
+provider:
 
-```ts
-import {
-  WorkflowRunStatus,
-  defineWorkflowProvider,
-} from "@valon-technologies/gestalt";
-
-export const workflow = defineWorkflowProvider({
-  async startRun(request) {
-    return {
-      id: `${request.target?.plugin?.pluginName ?? "workflow"}:run-1`,
-      status: WorkflowRunStatus.PENDING,
-      target: request.target,
-    };
-  },
-
-  async getRun(request) {
-    return { id: request.runId };
-  },
-
-  async listRuns() {
-    return [];
-  },
-
-  async cancelRun(request) {
-    return { id: request.runId, status: WorkflowRunStatus.CANCELED };
-  },
-
-  async upsertSchedule(request) {
-    return {
-      id: request.scheduleId,
-      cron: request.cron,
-      target: request.target,
-      paused: request.paused,
-    };
-  },
-
-  async getSchedule(request) {
-    return { id: request.scheduleId };
-  },
-
-  async listSchedules() {
-    return [];
-  },
-
-  async deleteSchedule() {},
-  async pauseSchedule(request) {
-    return { id: request.scheduleId, paused: true };
-  },
-  async resumeSchedule(request) {
-    return { id: request.scheduleId, paused: false };
-  },
-
-  async upsertEventTrigger(request) {
-    return {
-      id: request.triggerId,
-      match: request.match,
-      target: request.target,
-      paused: request.paused,
-    };
-  },
-
-  async getEventTrigger(request) {
-    return { id: request.triggerId };
-  },
-
-  async listEventTriggers() {
-    return [];
-  },
-
-  async deleteEventTrigger() {},
-  async pauseEventTrigger(request) {
-    return { id: request.triggerId, paused: true };
-  },
-  async resumeEventTrigger(request) {
-    return { id: request.triggerId, paused: false };
-  },
-
-  async publishEvent() {},
-});
+```sh
+gestalt-ts-build ROOT plugin:./provider.ts#plugin OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
+
+The build entrypoint compiles a standalone executable with Bun and bundles the
+provider source into the result.
+
+## API reference
+
+The generated TypeDoc reference covers the public package exports and the
+`build`, `runtime`, `schema`, `target`, and `telemetry` entrypoints:
+
+- [Open the TypeScript API reference](/api/typescript/index.html)

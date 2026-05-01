@@ -16,29 +16,39 @@ use crate::generated::v1::{
 
 type RuntimeLogHostTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
+/// Environment variable containing the runtime-log host-service target.
 pub const ENV_RUNTIME_LOG_HOST_SOCKET: &str = "GESTALT_RUNTIME_LOG_SOCKET";
+/// Environment variable containing the optional runtime-log relay token.
 pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_RUNTIME_LOG_SOCKET_TOKEN";
+/// Environment variable containing the current plugin-runtime session id.
 pub const ENV_RUNTIME_SESSION_ID: &str = "GESTALT_RUNTIME_SESSION_ID";
 const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
+/// Runtime log stream enum generated from the provider protocol.
 pub type RuntimeLogStream = pb::PluginRuntimeLogStream;
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`RuntimeLogHost`].
 pub enum RuntimeLogHostError {
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
 
+/// Client for appending plugin-runtime logs to the host.
 pub struct RuntimeLogHost {
     client: ProtoPluginRuntimeLogHostClient<RuntimeLogHostTransport>,
     source_seq: i64,
 }
 
 impl RuntimeLogHost {
+    /// Connects to the runtime-log host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, RuntimeLogHostError> {
         let socket_path = std::env::var(ENV_RUNTIME_LOG_HOST_SOCKET).map_err(|_| {
             RuntimeLogHostError::Env(format!("{ENV_RUNTIME_LOG_HOST_SOCKET} is not set"))
@@ -74,6 +84,7 @@ impl RuntimeLogHost {
         })
     }
 
+    /// Appends logs using a raw protocol request message.
     pub async fn append_logs(
         &mut self,
         request: pb::AppendPluginRuntimeLogsRequest,
@@ -81,6 +92,7 @@ impl RuntimeLogHost {
         Ok(self.client.append_logs(request).await?.into_inner())
     }
 
+    /// Appends one log entry for an explicit session id.
     pub async fn append(
         &mut self,
         session_id: impl Into<String>,
@@ -93,6 +105,7 @@ impl RuntimeLogHost {
             .await
     }
 
+    /// Appends one log entry for `GESTALT_RUNTIME_SESSION_ID`.
     pub async fn append_current(
         &mut self,
         stream: RuntimeLogStream,
@@ -101,6 +114,7 @@ impl RuntimeLogHost {
         self.append(runtime_session_id()?, stream, message).await
     }
 
+    /// Appends one log entry with an explicit timestamp and source sequence.
     pub async fn append_entry(
         &mut self,
         session_id: impl Into<String>,
@@ -122,6 +136,7 @@ impl RuntimeLogHost {
         .await
     }
 
+    /// Appends one explicit log entry for `GESTALT_RUNTIME_SESSION_ID`.
     pub async fn append_current_entry(
         &mut self,
         stream: RuntimeLogStream,
@@ -139,6 +154,7 @@ impl RuntimeLogHost {
         .await
     }
 
+    /// Appends one stdout log entry for an explicit session id.
     pub async fn append_stdout(
         &mut self,
         session_id: impl Into<String>,
@@ -148,6 +164,7 @@ impl RuntimeLogHost {
             .await
     }
 
+    /// Appends one stdout log entry for `GESTALT_RUNTIME_SESSION_ID`.
     pub async fn append_current_stdout(
         &mut self,
         message: impl Into<String>,
@@ -155,6 +172,7 @@ impl RuntimeLogHost {
         self.append_current(RuntimeLogStream::Stdout, message).await
     }
 
+    /// Appends one stderr log entry for an explicit session id.
     pub async fn append_stderr(
         &mut self,
         session_id: impl Into<String>,
@@ -164,6 +182,7 @@ impl RuntimeLogHost {
             .await
     }
 
+    /// Appends one stderr log entry for `GESTALT_RUNTIME_SESSION_ID`.
     pub async fn append_current_stderr(
         &mut self,
         message: impl Into<String>,
@@ -171,6 +190,7 @@ impl RuntimeLogHost {
         self.append_current(RuntimeLogStream::Stderr, message).await
     }
 
+    /// Appends one runtime log entry for an explicit session id.
     pub async fn append_runtime(
         &mut self,
         session_id: impl Into<String>,
@@ -180,6 +200,7 @@ impl RuntimeLogHost {
             .await
     }
 
+    /// Appends one runtime log entry for `GESTALT_RUNTIME_SESSION_ID`.
     pub async fn append_current_runtime(
         &mut self,
         message: impl Into<String>,
@@ -274,6 +295,7 @@ fn parse_runtime_log_host_target(
     Ok(RuntimeLogHostTarget::Unix(target.to_string()))
 }
 
+/// Returns the current runtime session id from `GESTALT_RUNTIME_SESSION_ID`.
 pub fn runtime_session_id() -> std::result::Result<String, RuntimeLogHostError> {
     let session_id = std::env::var(ENV_RUNTIME_SESSION_ID)
         .unwrap_or_default()

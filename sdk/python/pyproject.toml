@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "gestalt-sdk"
 version = "0.0.1a1"
 description = "Python SDK for Gestalt executable providers"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "grpcio>=1.80.0,<2",
@@ -31,6 +32,10 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["gestalt*"]
+
+[project.urls]
+Documentation = "https://gestaltd.ai/reference/python-sdk"
+Repository = "https://github.com/valon-technologies/gestalt"
 
 [tool.ruff]
 target-version = "py310"

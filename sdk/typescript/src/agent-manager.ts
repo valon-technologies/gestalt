@@ -26,44 +26,64 @@ import {
 } from "../gen/v1/agent_pb.ts";
 import type { Request } from "./api.ts";
 
+/** Environment variable containing the agent-manager host-service target. */
 export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET";
-export const ENV_AGENT_MANAGER_SOCKET_TOKEN = `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
+/** Environment variable containing the optional agent-manager relay token. */
+export const ENV_AGENT_MANAGER_SOCKET_TOKEN =
+  `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
 const AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
+/** Shape accepted when creating an agent session through the host manager. */
 export type AgentManagerCreateSessionInput = MessageInitShape<
   typeof AgentManagerCreateSessionRequestSchema
 >;
+/** Shape accepted when fetching an agent session through the host manager. */
 export type AgentManagerGetSessionInput = MessageInitShape<
   typeof AgentManagerGetSessionRequestSchema
 >;
+/** Shape accepted when listing agent sessions through the host manager. */
 export type AgentManagerListSessionsInput = MessageInitShape<
   typeof AgentManagerListSessionsRequestSchema
 >;
+/** Shape accepted when updating an agent session through the host manager. */
 export type AgentManagerUpdateSessionInput = MessageInitShape<
   typeof AgentManagerUpdateSessionRequestSchema
 >;
+/** Shape accepted when creating an agent turn through the host manager. */
 export type AgentManagerCreateTurnInput = MessageInitShape<
   typeof AgentManagerCreateTurnRequestSchema
 >;
+/** Shape accepted when fetching an agent turn through the host manager. */
 export type AgentManagerGetTurnInput = MessageInitShape<
   typeof AgentManagerGetTurnRequestSchema
 >;
+/** Shape accepted when listing agent turns through the host manager. */
 export type AgentManagerListTurnsInput = MessageInitShape<
   typeof AgentManagerListTurnsRequestSchema
 >;
+/** Shape accepted when cancelling an agent turn through the host manager. */
 export type AgentManagerCancelTurnInput = MessageInitShape<
   typeof AgentManagerCancelTurnRequestSchema
 >;
+/** Shape accepted when listing events for an agent turn. */
 export type AgentManagerListTurnEventsInput = MessageInitShape<
   typeof AgentManagerListTurnEventsRequestSchema
 >;
+/** Shape accepted when listing agent interactions. */
 export type AgentManagerListInteractionsInput = MessageInitShape<
   typeof AgentManagerListInteractionsRequestSchema
 >;
+/** Shape accepted when resolving an agent interaction. */
 export type AgentManagerResolveInteractionInput = MessageInitShape<
   typeof AgentManagerResolveInteractionRequestSchema
 >;
 
+/**
+ * Client for managing agent sessions, turns, events, and interactions.
+ *
+ * The constructor accepts either a Gestalt request or an invocation token. Each
+ * manager call forwards that token to the host service.
+ */
 export class AgentManager {
   private readonly client: Client<typeof AgentManagerHostService>;
   private readonly invocationToken: string;
@@ -89,6 +109,7 @@ export class AgentManager {
     this.client = createClient(AgentManagerHostService, transport);
   }
 
+  /** Creates an agent session. */
   async createSession(
     request: AgentManagerCreateSessionInput,
   ): Promise<AgentSession> {
@@ -98,6 +119,7 @@ export class AgentManager {
     });
   }
 
+  /** Fetches one agent session. */
   async getSession(request: AgentManagerGetSessionInput): Promise<AgentSession> {
     return await this.client.getSession({
       ...request,
@@ -105,6 +127,7 @@ export class AgentManager {
     });
   }
 
+  /** Lists agent sessions visible to the invocation token. */
   async listSessions(
     request: AgentManagerListSessionsInput = {},
   ): Promise<AgentSession[]> {
@@ -115,6 +138,7 @@ export class AgentManager {
     return [...response.sessions];
   }
 
+  /** Updates mutable fields on an agent session. */
   async updateSession(
     request: AgentManagerUpdateSessionInput,
   ): Promise<AgentSession> {
@@ -124,6 +148,7 @@ export class AgentManager {
     });
   }
 
+  /** Creates an agent turn. */
   async createTurn(request: AgentManagerCreateTurnInput): Promise<AgentTurn> {
     return await this.client.createTurn({
       ...request,
@@ -131,6 +156,7 @@ export class AgentManager {
     });
   }
 
+  /** Fetches one agent turn. */
   async getTurn(request: AgentManagerGetTurnInput): Promise<AgentTurn> {
     return await this.client.getTurn({
       ...request,
@@ -138,6 +164,7 @@ export class AgentManager {
     });
   }
 
+  /** Lists turns for an agent session. */
   async listTurns(request: AgentManagerListTurnsInput): Promise<AgentTurn[]> {
     const response = await this.client.listTurns({
       ...request,
@@ -146,6 +173,7 @@ export class AgentManager {
     return [...response.turns];
   }
 
+  /** Cancels an in-progress agent turn. */
   async cancelTurn(request: AgentManagerCancelTurnInput): Promise<AgentTurn> {
     return await this.client.cancelTurn({
       ...request,
@@ -153,6 +181,7 @@ export class AgentManager {
     });
   }
 
+  /** Lists events emitted for an agent turn. */
   async listTurnEvents(
     request: AgentManagerListTurnEventsInput,
   ): Promise<AgentTurnEvent[]> {
@@ -163,6 +192,7 @@ export class AgentManager {
     return [...response.events];
   }
 
+  /** Lists pending or completed agent interactions. */
   async listInteractions(
     request: AgentManagerListInteractionsInput,
   ): Promise<AgentInteraction[]> {
@@ -173,6 +203,7 @@ export class AgentManager {
     return [...response.interactions];
   }
 
+  /** Resolves an agent interaction with a host response. */
   async resolveInteraction(
     request: AgentManagerResolveInteractionInput,
   ): Promise<AgentInteraction> {

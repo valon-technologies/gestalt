@@ -64,6 +64,12 @@ Plugin authoring
    Plugin
    operation
    session_catalog
+   post_connect
+   http_subject
+   ConnectedToken
+   HTTPSubjectRequest
+   HTTPSubjectResolutionError
+   http_subject_error
    SessionCatalogProvider
    Catalog
    CatalogOperation
@@ -77,6 +83,18 @@ Plugin authoring
 .. autofunction:: operation
 
 .. autofunction:: session_catalog
+
+.. autofunction:: post_connect
+
+.. autofunction:: http_subject
+
+.. autoclass:: ConnectedToken
+
+.. autoclass:: HTTPSubjectRequest
+
+.. autoexception:: HTTPSubjectResolutionError
+
+.. autofunction:: http_subject_error
 
 .. autoclass:: SessionCatalogProvider
    :members:
@@ -115,6 +133,7 @@ Provider interfaces
    PluginProvider
    MetadataProvider
    HealthChecker
+   Starter
    WarningsProvider
    Closer
    PluginProviderAdapter
@@ -124,6 +143,9 @@ Provider interfaces
    SecretsProvider
    CacheProvider
    S3Provider
+   AgentProvider
+   PluginRuntimeProvider
+   WorkflowProvider
    AuthenticatedUser
    BeginLoginRequest
    BeginLoginResponse
@@ -142,6 +164,10 @@ Provider interfaces
    :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: HealthChecker
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: Starter
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -178,6 +204,18 @@ Provider interfaces
    :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: S3Provider
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: AgentProvider
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: PluginRuntimeProvider
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: WorkflowProvider
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -269,9 +307,13 @@ Cache client
 .. autosummary::
    :nosignatures:
 
+   ENV_CACHE_SOCKET_TOKEN
    CacheEntry
    Cache
    cache_socket_env
+   cache_socket_token_env
+
+.. autodata:: ENV_CACHE_SOCKET_TOKEN
 
 .. autoclass:: CacheEntry
 
@@ -281,6 +323,8 @@ Cache client
    :exclude-members: __dict__, __module__, __weakref__
 
 .. autofunction:: cache_socket_env
+
+.. autofunction:: cache_socket_token_env
 
 IndexedDB client
 ----------------
@@ -293,8 +337,10 @@ IndexedDB client
    CURSOR_PREV
    CURSOR_PREV_UNIQUE
    indexeddb_socket_env
+   indexeddb_socket_token_env
    NotFoundError
    AlreadyExistsError
+   TransactionError
    KeyRange
    IndexSchema
    ObjectStoreSchema
@@ -302,6 +348,9 @@ IndexedDB client
    ObjectStore
    Index
    Cursor
+   Transaction
+   TransactionObjectStore
+   TransactionIndex
 
 .. autodata:: CURSOR_NEXT
 
@@ -313,9 +362,13 @@ IndexedDB client
 
 .. autofunction:: indexeddb_socket_env
 
+.. autofunction:: indexeddb_socket_token_env
+
 .. autoexception:: NotFoundError
 
 .. autoexception:: AlreadyExistsError
+
+.. autoexception:: TransactionError
 
 .. autoclass:: KeyRange
 
@@ -341,6 +394,19 @@ IndexedDB client
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
 
+.. autoclass:: Transaction
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: TransactionObjectStore
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: TransactionIndex
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
 S3 client
 ---------
 
@@ -348,7 +414,9 @@ S3 client
    :nosignatures:
 
    ENV_S3_SOCKET
+   ENV_S3_SOCKET_TOKEN
    s3_socket_env
+   s3_socket_token_env
    S3NotFoundError
    S3PreconditionFailedError
    S3InvalidRangeError
@@ -363,13 +431,19 @@ S3 client
    PresignMethod
    PresignOptions
    PresignResult
+   ObjectAccessURLOptions
+   ObjectAccessURL
    S3ReadStream
    S3
    S3Object
 
 .. autodata:: ENV_S3_SOCKET
 
+.. autodata:: ENV_S3_SOCKET_TOKEN
+
 .. autofunction:: s3_socket_env
+
+.. autofunction:: s3_socket_token_env
 
 .. autoexception:: S3NotFoundError
 
@@ -399,6 +473,12 @@ S3 client
 
 .. autoclass:: PresignResult
 
+.. autodata:: ObjectAccessURLOptions
+   :annotation:
+
+.. autodata:: ObjectAccessURL
+   :annotation:
+
 .. autoclass:: S3ReadStream
    :members:
    :special-members: __enter__, __exit__
@@ -411,4 +491,115 @@ S3 client
 
 .. autoclass:: S3Object
    :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+Host service clients
+--------------------
+
+These clients connect to host services made available to a provider process by
+``gestaltd``. They read socket and relay-token locations from environment
+variables and add invocation tokens to manager requests when required.
+
+.. autosummary::
+   :nosignatures:
+
+   ENV_AGENT_HOST_SOCKET
+   ENV_AGENT_HOST_SOCKET_TOKEN
+   ENV_AGENT_MANAGER_SOCKET
+   ENV_AGENT_MANAGER_SOCKET_TOKEN
+   ENV_AUTHORIZATION_SOCKET
+   ENV_AUTHORIZATION_SOCKET_TOKEN
+   ENV_PLUGIN_INVOKER_SOCKET
+   ENV_PLUGIN_INVOKER_SOCKET_TOKEN
+   ENV_RUNTIME_LOG_HOST_SOCKET
+   ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN
+   ENV_RUNTIME_SESSION_ID
+   ENV_WORKFLOW_HOST_SOCKET
+   ENV_WORKFLOW_HOST_SOCKET_TOKEN
+   ENV_WORKFLOW_MANAGER_SOCKET
+   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN
+   AgentHost
+   AgentManager
+   Authorization
+   AuthorizationClient
+   PluginInvoker
+   RuntimeLogHost
+   RuntimeLogWriter
+   RuntimeLogHandler
+   WorkflowHost
+   WorkflowManager
+
+.. autodata:: ENV_AGENT_HOST_SOCKET
+
+.. autodata:: ENV_AGENT_HOST_SOCKET_TOKEN
+
+.. autodata:: ENV_AGENT_MANAGER_SOCKET
+
+.. autodata:: ENV_AGENT_MANAGER_SOCKET_TOKEN
+
+.. autodata:: ENV_AUTHORIZATION_SOCKET
+
+.. autodata:: ENV_AUTHORIZATION_SOCKET_TOKEN
+
+.. autodata:: ENV_PLUGIN_INVOKER_SOCKET
+
+.. autodata:: ENV_PLUGIN_INVOKER_SOCKET_TOKEN
+
+.. autodata:: ENV_RUNTIME_LOG_HOST_SOCKET
+
+.. autodata:: ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN
+
+.. autodata:: ENV_RUNTIME_SESSION_ID
+
+.. autodata:: ENV_WORKFLOW_HOST_SOCKET
+
+.. autodata:: ENV_WORKFLOW_HOST_SOCKET_TOKEN
+
+.. autodata:: ENV_WORKFLOW_MANAGER_SOCKET
+
+.. autodata:: ENV_WORKFLOW_MANAGER_SOCKET_TOKEN
+
+.. autoclass:: AgentHost
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: AgentManager
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autofunction:: Authorization
+
+.. autoclass:: AuthorizationClient
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: PluginInvoker
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: RuntimeLogHost
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: RuntimeLogWriter
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: RuntimeLogHandler
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: WorkflowHost
+   :members:
+   :special-members: __enter__, __exit__
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autoclass:: WorkflowManager
+   :members:
+   :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__

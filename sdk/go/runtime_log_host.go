@@ -12,10 +12,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// EnvRuntimeLogHostSocket names the environment variable containing the
+// runtime-log service target.
 const EnvRuntimeLogHostSocket = "GESTALT_RUNTIME_LOG_SOCKET"
+
+// EnvRuntimeLogHostSocketToken names the optional runtime-log relay-token variable.
 const EnvRuntimeLogHostSocketToken = EnvRuntimeLogHostSocket + "_TOKEN"
+
+// EnvRuntimeSessionID names the environment variable containing the current
+// plugin-runtime session id.
 const EnvRuntimeSessionID = "GESTALT_RUNTIME_SESSION_ID"
 
+// RuntimeLogHostClient appends plugin-runtime logs to the host.
 type RuntimeLogHostClient struct {
 	client    proto.PluginRuntimeLogHostClient
 	sourceSeq atomic.Int64
@@ -23,6 +31,7 @@ type RuntimeLogHostClient struct {
 
 var sharedRuntimeLogHostTransport sharedManagerTransport[proto.PluginRuntimeLogHostClient]
 
+// RuntimeLogHost returns a shared client for the runtime-log host service.
 func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	target := strings.TrimSpace(os.Getenv(EnvRuntimeLogHostSocket))
 	if target == "" {
@@ -40,14 +49,17 @@ func RuntimeLogHost() (*RuntimeLogHostClient, error) {
 	return &RuntimeLogHostClient{client: client}, nil
 }
 
+// Close is a no-op compatibility method because this client uses shared transport.
 func (c *RuntimeLogHostClient) Close() error {
 	return nil
 }
 
+// AppendLogs appends logs using a raw protocol request.
 func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, req *proto.AppendPluginRuntimeLogsRequest) (*proto.AppendPluginRuntimeLogsResponse, error) {
 	return c.client.AppendLogs(ctx, req)
 }
 
+// RuntimeLogAppendOption configures a single Append call.
 type RuntimeLogAppendOption func(*runtimeLogAppendOptions)
 
 type runtimeLogAppendOptions struct {

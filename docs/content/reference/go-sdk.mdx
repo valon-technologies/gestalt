@@ -1,18 +1,36 @@
 ---
-title: Go SDK API
+title: Go SDK
 ---
 
-# Go SDK API
+# Go SDK
 
-The Go SDK is published as the module
+Use the Go SDK to build executable Gestalt providers with typed handlers and a
+small runtime surface.
+
+The Go module is published as
 `github.com/valon-technologies/gestalt/sdk/go`.
 
-Its canonical API reference is hosted on `pkg.go.dev`:
+## Install
 
-- [Open the Go SDK reference on pkg.go.dev](https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go)
+Add the module to your provider project:
+
+```sh
+go get github.com/valon-technologies/gestalt/sdk/go@latest
+```
+
+Import it with a short package alias:
 
 ```go
-package example
+import gestalt "github.com/valon-technologies/gestalt/sdk/go"
+```
+
+## Create a plugin provider
+
+Define typed input and output structs, register the operation on a router, and
+export `New` plus `Router` from the provider package.
+
+```go
+package provider
 
 import (
 	"context"
@@ -21,75 +39,65 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
-type EchoProvider struct{}
+type SearchProvider struct{}
 
-func (p *EchoProvider) Configure(ctx context.Context, name string, config map[string]any) error {
+func New() *SearchProvider { return &SearchProvider{} }
+
+func (p *SearchProvider) Configure(ctx context.Context, name string, config map[string]any) error {
 	return nil
 }
 
-func New() *EchoProvider { return &EchoProvider{} }
+type SearchInput struct {
+	Query string `json:"query" doc:"Search query" required:"true"`
+	Limit int    `json:"limit,omitempty" doc:"Maximum results" default:"10"`
+}
+
+type SearchOutput struct {
+	Results []string `json:"results"`
+}
 
 var Router = gestalt.MustRouter(
 	gestalt.Register(
-		gestalt.Operation[struct{ Message string }, struct{ Echoed string }]{
-			ID:     "echo",
-			Method: http.MethodPost,
+		gestalt.Operation[SearchInput, SearchOutput]{
+			ID:     "search",
+			Method: http.MethodGet,
+			Title:  "Search",
 		},
-		func(_ *EchoProvider, _ context.Context, input struct{ Message string }, _ gestalt.Request) (gestalt.Response[struct{ Echoed string }], error) {
-			return gestalt.OK(struct{ Echoed string }{Echoed: input.Message}), nil
+		func(_ *SearchProvider, _ context.Context, input SearchInput, _ gestalt.Request) (gestalt.Response[SearchOutput], error) {
+			return gestalt.OK(SearchOutput{Results: []string{input.Query}}), nil
 		},
 	),
 )
 ```
 
-`pkg.go.dev` renders the source comments directly, so package and symbol docs
-there are the primary Go reference surface.
+`json:"name"` sets the catalog parameter name. `omitempty` makes a field
+optional. `doc:"..."`, `required:"true|false"`, and `default:"..."` control
+the generated catalog metadata.
 
-The same module also exposes the agent-provider runtime:
+## Use provider runtimes
 
-```go
-package exampleagent
+Use `Provider`, `Operation`, `Register`, and `Router` for integration
+providers. The module also exposes lower-level provider interfaces for host
+services.
 
-import (
-	"context"
+| Interface | Use it when you want to serve |
+| --- | --- |
+| `AgentProvider` | Agent sessions, turns, events, interactions, and capabilities. |
+| `AuthenticationProvider` | Login flows and optional bearer-token validation. |
+| `AuthorizationProvider` | Subject authorization decisions. |
+| `CacheProvider` | Plugin-bound cache storage. |
+| `IndexedDBProvider` | IndexedDB-style system state. |
+| `PluginRuntimeProvider` | Hosted plugin execution backends. |
+| `S3Provider` | S3-compatible object storage. |
+| `SecretsProvider` | Secret resolution. |
+| `WorkflowProvider` | Workflow runs, schedules, and event triggers. |
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-)
+The same module includes host-service clients such as `CacheClient`,
+`IndexedDBClient`, `S3Client`, `WorkflowHostClient`, `WorkflowManagerClient`,
+`AgentHostClient`, `AgentManagerClient`, and `InvokerClient`.
 
-type Agent struct {
-	proto.UnimplementedAgentProviderServer
-}
+## API reference
 
-func New() *Agent { return &Agent{} }
+The canonical Go API reference is published on pkg.go.dev:
 
-func (a *Agent) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	return &proto.AgentSession{
-		Id:           req.GetSessionId(),
-		ProviderName: "example",
-		Model:        req.GetModel(),
-		State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
-	}, nil
-}
-
-func (a *Agent) CreateTurn(_ context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	return &proto.AgentTurn{
-		Id:           req.GetTurnId(),
-		SessionId:    req.GetSessionId(),
-		ProviderName: "example",
-		Model:        req.GetModel(),
-		Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
-		Messages:     req.GetMessages(),
-		ExecutionRef: req.GetExecutionRef(),
-	}, nil
-}
-
-func (a *Agent) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
-	return &proto.AgentProviderCapabilities{
-		StreamingText:  true,
-		ToolCalls:      true,
-		Interactions:   true,
-		ResumableTurns: true,
-	}, nil
-}
-
-```
+- [Open the Go SDK reference on pkg.go.dev](https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go)

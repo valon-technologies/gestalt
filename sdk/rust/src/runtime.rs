@@ -271,6 +271,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves a workflow provider over the configured Unix socket.
 pub async fn serve_workflow_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: WorkflowProvider,
@@ -293,6 +294,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves an agent provider over the configured Unix socket.
 pub async fn serve_agent_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: AgentProvider,

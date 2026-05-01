@@ -52,7 +52,7 @@ packaging.
 
     go 1.26
 
-    require github.com/valon-technologies/gestalt/sdk/go v0.0.1-alpha.1
+    require github.com/valon-technologies/gestalt/sdk/go v0.0.1-alpha.14
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -67,7 +67,7 @@ packaging.
     [project]
     name = "my-plugin"
     version = "0.0.1-alpha.1"
-    dependencies = ["gestalt"]
+    dependencies = ["gestalt-sdk"]
 
     [tool.gestalt]
     provider = "provider"
@@ -89,7 +89,7 @@ packaging.
     edition = "2024"
 
     [dependencies]
-    gestalt = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1-alpha.1" }
+    gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
     schemars = { version = "0.8", features = ["derive"] }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
@@ -109,7 +109,7 @@ packaging.
       "version": "0.0.1-alpha.1",
       "type": "module",
       "dependencies": {
-        "@valon-technologies/gestalt": "0.0.1-alpha.1"
+        "@valon-technologies/gestalt": "0.0.1-alpha.16"
       },
       "gestalt": {
         "provider": {
