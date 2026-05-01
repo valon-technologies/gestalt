@@ -98,7 +98,7 @@ func newCatalogBackedProvider(stub coretesting.StubIntegration, ops []core.Opera
 
 func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Services, string) {
 	t.Helper()
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	ctx := context.Background()
 	u, err := svc.Users.FindOrCreateUser(ctx, "test@example.com")
 	if err != nil {
@@ -1286,7 +1286,7 @@ func TestNewServer_HumanListToolsUsesCanonicalSubjectForStaticCollisions(t *test
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	const userID = "viewer-user"
 	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-default",
@@ -1658,7 +1658,7 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	viewer, err := ds.Users.FindOrCreateUser(context.Background(), "viewer@example.test")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser viewer: %v", err)
@@ -1906,7 +1906,7 @@ func TestNewServer_ServiceAccountCallToolDeniedReturnsErrorResult(t *testing.T) 
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
@@ -1972,7 +1972,7 @@ func TestNewServer_ServiceAccountCallToolDeniedForUnboundSessionOnlyProvider(t *
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {},
@@ -2049,7 +2049,7 @@ func TestNewServer_ServiceAccountCallToolUsesBoundConnectionForSessionOnlyProvid
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID:          "tok-service-account",
@@ -2152,7 +2152,7 @@ func TestNewServer_ServiceAccountCallToolUsesRequestedInstance(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID:          "tok-service-account",
@@ -2256,7 +2256,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	const userID = "viewer-user"
 	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-team-b",
@@ -2564,7 +2564,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := coretesting.NewStubServices(t)
+	ds := testutil.NewStubServices(t)
 	const userID = "viewer-user"
 	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-catalog",

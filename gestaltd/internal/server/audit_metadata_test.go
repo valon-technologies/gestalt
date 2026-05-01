@@ -37,7 +37,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
@@ -132,7 +132,7 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
@@ -256,7 +256,7 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 					},
 				}
 				cfg.AuditSink = auditSink
-				cfg.Services = coretesting.NewStubServices(t)
+				cfg.Services = testutil.NewStubServices(t)
 				if tc.pluginName != "" {
 					cfg.AuthProviders = map[string]core.AuthenticationProvider{
 						tc.routeAuth: &coretesting.StubAuthProvider{
@@ -371,7 +371,7 @@ func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 		t.Fatalf("authorization.New: %v", err)
 	}
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.ExternalCredential{
 		ID:          "identity-audit-token",

@@ -1490,7 +1490,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(services)
+	testutil.AttachStubExternalCredentials(services)
 
 	provider, err := externalcredentialsservice.NewExecutable(context.Background(), externalcredentialsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),

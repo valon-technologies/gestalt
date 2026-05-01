@@ -1137,7 +1137,7 @@ func TestSearchToolsExpandsAmbiguousCredentialInstances(t *testing.T) {
 		}}},
 	}
 	providers := testutil.NewProviderRegistry(t, provider)
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	subjectID := principal.UserSubjectID("user-1")
 	for _, instance := range []string{"z", "sa"} {
 		if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{

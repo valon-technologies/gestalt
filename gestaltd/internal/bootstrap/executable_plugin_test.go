@@ -2631,7 +2631,7 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 		t.Fatalf("status connection = %q, want %q", got, "bot")
 	}
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	subjectID := principal.UserSubjectID("u-hybrid")
 	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		SubjectID:   subjectID,
@@ -2974,7 +2974,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(services)
+	testutil.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, brokerOpts...)
@@ -3105,7 +3105,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(services)
+	testutil.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	if len(authCfg.Policies) > 0 {
@@ -3810,7 +3810,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Agent manager turn roundtrip")
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 
 	pluginProviders := registry.New()
 	if err := pluginProviders.Providers.Register("roadmap", &coretesting.StubIntegration{
@@ -6934,7 +6934,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(services)
+	testutil.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
@@ -8887,7 +8887,7 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 			},
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		Services: coretesting.NewStubServices(t),
+		Services: testutil.NewStubServices(t),
 		S3: map[string]s3store.Client{
 			"main": stubS3,
 		},
@@ -8988,7 +8988,7 @@ func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
 			},
 		},
 	}, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		Services: coretesting.NewStubServices(t),
+		Services: testutil.NewStubServices(t),
 		S3: map[string]s3store.Client{
 			"main":    mainS3,
 			"archive": archiveS3,
@@ -9052,7 +9052,7 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 		}
 	}
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	s3Bindings := map[string]s3store.Client{
 		"main":    &coretesting.StubS3{},
 		"archive": &coretesting.StubS3{},

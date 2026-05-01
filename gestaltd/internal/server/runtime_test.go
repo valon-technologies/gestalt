@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -116,7 +117,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 	})
 
 	reg := registry.New()
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	handler, err := New(Config{
 		Auth:               &coretesting.StubAuthProvider{N: "none"},
 		Services:           services,

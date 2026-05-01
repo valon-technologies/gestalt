@@ -15,7 +15,7 @@ import (
 func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	broker := NewBroker(
 		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "weather",
@@ -53,7 +53,7 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
 		ConnMode: core.ConnectionModeUser,
@@ -110,7 +110,7 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	broker := NewBroker(
 		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "slack",
@@ -154,7 +154,7 @@ func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *tes
 func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
+	svc := testutil.NewStubServices(t)
 	cat := &catalog.Catalog{
 		Name: "slack",
 		Operations: []catalog.CatalogOperation{{

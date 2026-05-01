@@ -14,11 +14,12 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func newTestServices(t *testing.T) *coredata.Services {
 	t.Helper()
-	return coretesting.NewStubServices(t)
+	return testutil.NewStubServices(t)
 }
 
 func newTestServicesWithDB(t *testing.T) (*coredata.Services, *coretesting.StubIndexedDB) {
@@ -28,7 +29,7 @@ func newTestServicesWithDB(t *testing.T) (*coredata.Services, *coretesting.StubI
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
-	coretesting.AttachStubExternalCredentials(svc)
+	testutil.AttachStubExternalCredentials(svc)
 	return svc, db
 }
 

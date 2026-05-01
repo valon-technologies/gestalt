@@ -24,6 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -855,7 +856,7 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user, err := services.Users.FindOrCreateUser(context.Background(), "ada@example.test")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
@@ -1072,7 +1073,7 @@ func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnection
 func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	user, err := services.Users.FindOrCreateUser(context.Background(), "ada@example.test")
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
@@ -1157,7 +1158,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
+	services := testutil.NewStubServices(t)
 	ctx := context.Background()
 
 	target := testWorkflowPluginTargetWithInput("roadmap", "export", "analytics", "tenant-a", nil)
