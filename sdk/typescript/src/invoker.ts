@@ -5,27 +5,47 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import { PluginInvoker as PluginInvokerService } from "../gen/v1/plugin_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 
+/** Environment variable containing the plugin-invoker host-service target. */
 export const ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET";
-export const ENV_PLUGIN_INVOKER_SOCKET_TOKEN = `${ENV_PLUGIN_INVOKER_SOCKET}_TOKEN`;
+/** Environment variable containing the optional plugin-invoker relay token. */
+export const ENV_PLUGIN_INVOKER_SOCKET_TOKEN =
+  `${ENV_PLUGIN_INVOKER_SOCKET}_TOKEN`;
 const PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
+/** Options that select the target connection for an operation invocation. */
 export interface PluginInvokeOptions {
+  /** Connected account id or name to invoke against. */
   connection?: string;
+  /** Provider instance id or name to invoke against. */
   instance?: string;
+  /** Idempotency key forwarded to the target operation. */
   idempotencyKey?: string;
 }
 
+/** Grant included when exchanging an invocation token for a child token. */
 export interface PluginInvocationGrant {
+  /** Plugin name that the child token may invoke. */
   plugin: string;
+  /** Specific operation ids allowed by the child token. */
   operations?: string[];
+  /** Surface names allowed by the child token. */
   surfaces?: string[];
+  /** Whether the child token may invoke every operation on the plugin. */
   allOperations?: boolean;
 }
 
+/** Options for invoking a plugin GraphQL surface. */
 export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
+  /** GraphQL variables encoded as a JSON object. */
   variables?: Record<string, unknown>;
 }
 
+/**
+ * Client for invoking sibling plugin operations through the host.
+ *
+ * The constructor accepts either a Gestalt request or an invocation token. The
+ * token is attached to every operation, GraphQL, and token-exchange request.
+ */
 export class PluginInvoker {
   private readonly client: Client<typeof PluginInvokerService>;
   private readonly invocationToken: string;
@@ -48,6 +68,7 @@ export class PluginInvoker {
     this.client = createClient(PluginInvokerService, transport);
   }
 
+  /** Invokes one operation on another plugin. */
   async invoke(
     plugin: string,
     operation: string,
@@ -69,6 +90,7 @@ export class PluginInvoker {
     };
   }
 
+  /** Invokes another plugin's GraphQL surface. */
   async invokeGraphQL(
     plugin: string,
     document: string,
@@ -96,8 +118,11 @@ export class PluginInvoker {
     };
   }
 
+  /** Exchanges this invocation token for a narrower child token. */
   async exchangeInvocationToken(options?: {
+    /** Grants to attach to the child token. */
     grants?: PluginInvocationGrant[];
+    /** Requested child-token time-to-live in seconds. */
     ttlSeconds?: number;
   }): Promise<string> {
     const response = await this.client.exchangeInvocationToken({

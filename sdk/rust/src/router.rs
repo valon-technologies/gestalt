@@ -18,13 +18,21 @@ use crate::provider_server::OperationResult;
 #[derive(Clone, Debug)]
 /// Describes one statically declared executable operation.
 pub struct Operation<In, Out> {
+    /// Stable operation id.
     pub id: String,
+    /// HTTP method advertised in the catalog.
     pub method: String,
+    /// Human-readable title.
     pub title: String,
+    /// Human-readable description.
     pub description: String,
+    /// Host-side roles allowed to invoke the operation.
     pub allowed_roles: Vec<String>,
+    /// Free-form catalog tags.
     pub tags: Vec<String>,
+    /// Whether the operation is read-only.
     pub read_only: bool,
+    /// Optional catalog visibility override.
     pub visible: Option<bool>,
     _types: PhantomData<(In, Out)>,
 }

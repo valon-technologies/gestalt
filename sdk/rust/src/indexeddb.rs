@@ -16,6 +16,7 @@ type IndexedDbTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Default Unix-socket environment variable used by [`IndexedDB::connect`].
 pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
+/// Suffix added to named IndexedDB socket variables for relay-token variables.
 pub const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const INDEXEDDB_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
@@ -25,18 +26,25 @@ const TRANSACTION_CHANNEL_BUFFER: usize = 1;
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by the IndexedDB transport client.
 pub enum IndexedDBError {
+    /// The requested record, object store, index, or cursor entry was missing.
     #[error("not found")]
     NotFound,
+    /// A create operation conflicted with an existing value.
     #[error("already exists")]
     AlreadyExists,
+    /// A cursor was opened in key-only mode and a value was requested.
     #[error("cursor is keys-only; value not available")]
     KeysOnly,
+    /// An explicit transaction failed or was already closed.
     #[error("{0}")]
     Transaction(String),
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
@@ -46,30 +54,42 @@ pub type Record = BTreeMap<String, serde_json::Value>;
 
 /// Constrains a query or cursor by lower and upper bounds.
 pub struct KeyRange {
+    /// Lower bound, inclusive unless `lower_open` is true.
     pub lower: Option<serde_json::Value>,
+    /// Upper bound, inclusive unless `upper_open` is true.
     pub upper: Option<serde_json::Value>,
+    /// Whether the lower bound is exclusive.
     pub lower_open: bool,
+    /// Whether the upper bound is exclusive.
     pub upper_open: bool,
 }
 
 /// Describes one secondary index on an object store.
 pub struct IndexSchema {
+    /// Index name.
     pub name: String,
+    /// Record path used as the index key.
     pub key_path: Vec<String>,
+    /// Whether the index enforces uniqueness.
     pub unique: bool,
 }
 
 /// Describes the indexes attached to an object store.
 pub struct ObjectStoreSchema {
+    /// Secondary indexes to create with the object store.
     pub indexes: Vec<IndexSchema>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Controls cursor traversal order.
 pub enum CursorDirection {
+    /// Iterate in ascending key order.
     Next,
+    /// Iterate in ascending key order while collapsing duplicate index keys.
     NextUnique,
+    /// Iterate in descending key order.
     Prev,
+    /// Iterate in descending key order while collapsing duplicate index keys.
     PrevUnique,
 }
 
@@ -87,7 +107,9 @@ impl CursorDirection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Controls whether an explicit transaction may mutate scoped stores.
 pub enum TransactionMode {
+    /// Transaction may only read from scoped object stores.
     Readonly,
+    /// Transaction may read and write scoped object stores.
     Readwrite,
 }
 
@@ -103,9 +125,12 @@ impl TransactionMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 /// Provider durability hint for explicit transactions.
 pub enum TransactionDurabilityHint {
+    /// Let the host choose its default durability behavior.
     #[default]
     Default,
+    /// Prefer stricter durability.
     Strict,
+    /// Prefer relaxed durability.
     Relaxed,
 }
 
@@ -122,6 +147,7 @@ impl TransactionDurabilityHint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 /// Options for an explicit transaction.
 pub struct TransactionOptions {
+    /// Durability hint for explicit transactions.
     pub durability_hint: TransactionDurabilityHint,
 }
 

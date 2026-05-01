@@ -30,10 +30,13 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
+/** Base environment variable for discovering S3 runtime sockets. */
 export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
 const S3_SOCKET_TOKEN_SUFFIX = "_TOKEN";
 const S3_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
-export const ENV_S3_SOCKET_TOKEN = `${ENV_S3_SOCKET}${S3_SOCKET_TOKEN_SUFFIX}`;
+/** Base environment variable for the default S3 relay token. */
+export const ENV_S3_SOCKET_TOKEN =
+  `${ENV_S3_SOCKET}${S3_SOCKET_TOKEN_SUFFIX}`;
 const WRITE_CHUNK_SIZE = 64 * 1024;
 const textEncoder = new TextEncoder();
 
@@ -288,14 +291,20 @@ export class S3Provider extends RuntimeProvider {
     this.presignObjectHandler = options.presignObject;
   }
 
+  /** Fetches object metadata without reading the object body. */
   async headObject(ref: ObjectRef): Promise<ObjectMeta> {
     return await this.headObjectHandler(ref);
   }
 
-  async readObject(ref: ObjectRef, options?: ReadOptions): Promise<ProviderReadResult> {
+  /** Reads an object body from the provider implementation. */
+  async readObject(
+    ref: ObjectRef,
+    options?: ReadOptions,
+  ): Promise<ProviderReadResult> {
     return await this.readObjectHandler(ref, options);
   }
 
+  /** Writes an object body through the provider implementation. */
   async writeObject(
     ref: ObjectRef,
     body: AsyncIterable<Uint8Array>,
@@ -304,14 +313,17 @@ export class S3Provider extends RuntimeProvider {
     return await this.writeObjectHandler(ref, body, options);
   }
 
+  /** Deletes an object from the provider implementation. */
   async deleteObject(ref: ObjectRef): Promise<void> {
     await this.deleteObjectHandler(ref);
   }
 
+  /** Lists objects from the provider implementation. */
   async listObjects(options: ListOptions): Promise<ListPage> {
     return await this.listObjectsHandler(options);
   }
 
+  /** Copies an object in the provider implementation. */
   async copyObject(
     source: ObjectRef,
     destination: ObjectRef,
@@ -320,7 +332,11 @@ export class S3Provider extends RuntimeProvider {
     return await this.copyObjectHandler(source, destination, options);
   }
 
-  async presignObject(ref: ObjectRef, options?: PresignOptions): Promise<PresignResult> {
+  /** Generates a presigned URL from the provider implementation. */
+  async presignObject(
+    ref: ObjectRef,
+    options?: PresignOptions,
+  ): Promise<PresignResult> {
     return await this.presignObjectHandler(ref, options);
   }
 }
@@ -555,14 +571,17 @@ export class S3 {
     this.client = createClient(S3Service, transport);
   }
 
+  /** Returns a convenience helper for the latest version of an object. */
   object(bucket: string, key: string): S3Object {
     return new S3Object(this, { bucket, key });
   }
 
+  /** Returns a convenience helper pinned to a specific object version. */
   objectVersion(bucket: string, key: string, versionId: string): S3Object {
     return new S3Object(this, { bucket, key, versionId });
   }
 
+  /** Fetches object metadata without reading the object body. */
   async headObject(ref: ObjectRef): Promise<ObjectMeta> {
     const response = await s3Rpc(() =>
       this.client.headObject({
@@ -572,6 +591,7 @@ export class S3 {
     return fromProtoObjectMeta(response.meta);
   }
 
+  /** Opens a streaming read for an object. */
   async readObject(ref: ObjectRef, options?: ReadOptions): Promise<ReadResult> {
     const response = this.client.readObject({
       ref: toProtoObjectRef(ref),
@@ -588,6 +608,7 @@ export class S3 {
     };
   }
 
+  /** Writes an object body and returns the resulting metadata. */
   async writeObject(
     ref: ObjectRef,
     body?: S3BodySource,
@@ -601,6 +622,7 @@ export class S3 {
     return fromProtoObjectMeta(response.meta);
   }
 
+  /** Deletes an object. */
   async deleteObject(ref: ObjectRef): Promise<void> {
     await s3Rpc(() =>
       this.client.deleteObject({
@@ -609,6 +631,7 @@ export class S3 {
     );
   }
 
+  /** Lists objects within a bucket. */
   async listObjects(options: ListOptions): Promise<ListPage> {
     const response = await s3Rpc(() =>
       this.client.listObjects({
@@ -628,6 +651,7 @@ export class S3 {
     };
   }
 
+  /** Copies an object and returns metadata for the destination. */
   async copyObject(
     source: ObjectRef,
     destination: ObjectRef,
@@ -644,7 +668,11 @@ export class S3 {
     return fromProtoObjectMeta(response.meta);
   }
 
-  async presignObject(ref: ObjectRef, options?: PresignOptions): Promise<PresignResult> {
+  /** Generates a presigned URL for an object operation. */
+  async presignObject(
+    ref: ObjectRef,
+    options?: PresignOptions,
+  ): Promise<PresignResult> {
     const requestedMethod = options?.method ?? PresignMethod.Get;
     const response = await s3Rpc(() =>
       this.client.presignObject({
@@ -669,6 +697,7 @@ export class S3 {
     return result;
   }
 
+  /** Creates a host-mediated object access URL. */
   async createObjectAccessURL(
     ref: ObjectRef,
     options?: ObjectAccessURLOptions,
@@ -704,6 +733,7 @@ export class S3 {
     return this.objectAccessClient;
   }
 
+  /** Alias for `createObjectAccessURL`. */
   async createObjectAccessUrl(
     ref: ObjectRef,
     options?: ObjectAccessURLOptions,
@@ -711,6 +741,7 @@ export class S3 {
     return await this.createObjectAccessURL(ref, options);
   }
 
+  /** Alias for `createObjectAccessURL`. */
   async createAccessURL(
     ref: ObjectRef,
     options?: ObjectAccessURLOptions,
@@ -718,6 +749,7 @@ export class S3 {
     return await this.createObjectAccessURL(ref, options);
   }
 
+  /** Alias for `createObjectAccessURL`. */
   async createAccessUrl(
     ref: ObjectRef,
     options?: ObjectAccessURLOptions,
@@ -846,7 +878,10 @@ export class S3Object {
     return await this.client.createObjectAccessURL(this.ref, options);
   }
 
-  async createAccessUrl(options?: ObjectAccessURLOptions): Promise<ObjectAccessURL> {
+  /** Alias for `createAccessURL`. */
+  async createAccessUrl(
+    options?: ObjectAccessURLOptions,
+  ): Promise<ObjectAccessURL> {
     return await this.createAccessURL(options);
   }
 }

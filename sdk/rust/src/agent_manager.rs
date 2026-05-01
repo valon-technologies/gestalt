@@ -13,28 +13,37 @@ use crate::generated::v1::{
 
 type AgentManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
+/// Environment variable containing the agent-manager host-service target.
 pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_AGENT_MANAGER_SOCKET";
+/// Environment variable containing the optional agent-manager relay token.
 pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_MANAGER_SOCKET_TOKEN";
 const AGENT_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`AgentManager`].
 pub enum AgentManagerError {
+    /// The invocation token was empty.
     #[error("agent manager: invocation token is not available")]
     MissingInvocationToken,
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
 
+/// Client for managing agent sessions, turns, events, and interactions.
 pub struct AgentManager {
     client: ProtoAgentManagerHostClient<AgentManagerTransport>,
     invocation_token: String,
 }
 
 impl AgentManager {
+    /// Connects to the agent manager with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
     ) -> std::result::Result<Self, AgentManagerError> {
@@ -77,6 +86,7 @@ impl AgentManager {
         })
     }
 
+    /// Creates an agent session.
     pub async fn create_session(
         &mut self,
         mut request: pb::AgentManagerCreateSessionRequest,
@@ -85,6 +95,7 @@ impl AgentManager {
         Ok(self.client.create_session(request).await?.into_inner())
     }
 
+    /// Fetches one agent session.
     pub async fn get_session(
         &mut self,
         mut request: pb::AgentManagerGetSessionRequest,
@@ -93,6 +104,7 @@ impl AgentManager {
         Ok(self.client.get_session(request).await?.into_inner())
     }
 
+    /// Lists agent sessions visible to the invocation token.
     pub async fn list_sessions(
         &mut self,
         mut request: pb::AgentManagerListSessionsRequest,
@@ -101,6 +113,7 @@ impl AgentManager {
         Ok(self.client.list_sessions(request).await?.into_inner())
     }
 
+    /// Updates mutable fields on an agent session.
     pub async fn update_session(
         &mut self,
         mut request: pb::AgentManagerUpdateSessionRequest,
@@ -109,6 +122,7 @@ impl AgentManager {
         Ok(self.client.update_session(request).await?.into_inner())
     }
 
+    /// Creates an agent turn.
     pub async fn create_turn(
         &mut self,
         mut request: pb::AgentManagerCreateTurnRequest,
@@ -117,6 +131,7 @@ impl AgentManager {
         Ok(self.client.create_turn(request).await?.into_inner())
     }
 
+    /// Fetches one agent turn.
     pub async fn get_turn(
         &mut self,
         mut request: pb::AgentManagerGetTurnRequest,
@@ -125,6 +140,7 @@ impl AgentManager {
         Ok(self.client.get_turn(request).await?.into_inner())
     }
 
+    /// Lists turns for an agent session.
     pub async fn list_turns(
         &mut self,
         mut request: pb::AgentManagerListTurnsRequest,
@@ -133,6 +149,7 @@ impl AgentManager {
         Ok(self.client.list_turns(request).await?.into_inner())
     }
 
+    /// Cancels an in-progress agent turn.
     pub async fn cancel_turn(
         &mut self,
         mut request: pb::AgentManagerCancelTurnRequest,
@@ -141,6 +158,7 @@ impl AgentManager {
         Ok(self.client.cancel_turn(request).await?.into_inner())
     }
 
+    /// Lists events emitted for an agent turn.
     pub async fn list_turn_events(
         &mut self,
         mut request: pb::AgentManagerListTurnEventsRequest,
@@ -149,6 +167,7 @@ impl AgentManager {
         Ok(self.client.list_turn_events(request).await?.into_inner())
     }
 
+    /// Lists pending or completed agent interactions.
     pub async fn list_interactions(
         &mut self,
         mut request: pb::AgentManagerListInteractionsRequest,
@@ -157,6 +176,7 @@ impl AgentManager {
         Ok(self.client.list_interactions(request).await?.into_inner())
     }
 
+    /// Resolves an agent interaction with a host response.
     pub async fn resolve_interaction(
         &mut self,
         mut request: pb::AgentManagerResolveInteractionRequest,

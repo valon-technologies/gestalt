@@ -24,7 +24,9 @@ type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
+/// Suffix added to named S3 socket variables for relay-token variables.
 pub const ENV_S3_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+/// Default relay-token environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_S3_SOCKET_TOKEN";
 const S3_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 const WRITE_CHUNK_SIZE: usize = 64 * 1024;
@@ -32,22 +34,31 @@ const WRITE_CHUNK_SIZE: usize = 64 * 1024;
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by the S3 transport client.
 pub enum S3Error {
+    /// The referenced object does not exist.
     #[error("not found")]
     NotFound,
+    /// Conditional request headers failed.
     #[error("precondition failed")]
     PreconditionFailed,
+    /// The requested byte range is invalid.
     #[error("invalid range")]
     InvalidRange,
+    /// The host returned a protocol value the SDK could not represent.
     #[error("{0}")]
     Protocol(String),
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+    /// JSON encoding or decoding failed.
     #[error("{0}")]
     Json(#[from] serde_json::Error),
+    /// UTF-8 decoding failed.
     #[error("{0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 }
@@ -55,111 +66,164 @@ pub enum S3Error {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Identifies one object or object version.
 pub struct ObjectRef {
+    /// Bucket name.
     pub bucket: String,
+    /// Object key.
     pub key: String,
+    /// Optional object version id.
     pub version_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Describes an object returned by the provider.
 pub struct ObjectMeta {
+    /// Object reference, including version when returned by the provider.
     pub reference: ObjectRef,
+    /// Entity tag returned by storage.
     pub etag: String,
+    /// Object size in bytes.
     pub size: i64,
+    /// MIME content type.
     pub content_type: String,
+    /// Last-modified timestamp, when known.
     pub last_modified: Option<prost_types::Timestamp>,
+    /// User metadata associated with the object.
     pub metadata: BTreeMap<String, String>,
+    /// Storage class reported by the provider.
     pub storage_class: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Requests a half-open slice of an object's bytes.
 pub struct ByteRange {
+    /// Inclusive starting byte offset.
     pub start: Option<i64>,
+    /// Inclusive ending byte offset.
     pub end: Option<i64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Configures conditional and ranged reads.
 pub struct ReadOptions {
+    /// Optional byte range to read.
     pub range: Option<ByteRange>,
+    /// Read only if the current ETag matches this value.
     pub if_match: String,
+    /// Read only if the current ETag does not match this value.
     pub if_none_match: String,
+    /// Read only if the object has changed since this timestamp.
     pub if_modified_since: Option<prost_types::Timestamp>,
+    /// Read only if the object has not changed since this timestamp.
     pub if_unmodified_since: Option<prost_types::Timestamp>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Configures object writes.
 pub struct WriteOptions {
+    /// MIME content type.
     pub content_type: String,
+    /// Cache-Control header value.
     pub cache_control: String,
+    /// Content-Disposition header value.
     pub content_disposition: String,
+    /// Content-Encoding header value.
     pub content_encoding: String,
+    /// Content-Language header value.
     pub content_language: String,
+    /// User metadata to store with the object.
     pub metadata: BTreeMap<String, String>,
+    /// Write only if the current ETag matches this value.
     pub if_match: String,
+    /// Write only if the object does not exist or has a different ETag.
     pub if_none_match: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Configures list-objects requests.
 pub struct ListOptions {
+    /// Bucket to list.
     pub bucket: String,
+    /// Prefix filter.
     pub prefix: String,
+    /// Delimiter for grouping common prefixes.
     pub delimiter: String,
+    /// Continuation token from the previous page.
     pub continuation_token: String,
+    /// Start listing after this key.
     pub start_after: String,
+    /// Maximum number of keys to return.
     pub max_keys: i32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Represents one page of list-objects results.
 pub struct ListPage {
+    /// Object metadata rows in this page.
     pub objects: Vec<ObjectMeta>,
+    /// Common prefixes returned by delimiter grouping.
     pub common_prefixes: Vec<String>,
+    /// Continuation token for the next page.
     pub next_continuation_token: String,
+    /// Whether another page is available.
     pub has_more: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Configures conditional copy requests.
 pub struct CopyOptions {
+    /// Copy only if the source ETag matches this value.
     pub if_match: String,
+    /// Copy only if the source ETag does not match this value.
     pub if_none_match: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 /// Identifies the HTTP verb encoded into a presigned URL.
 pub enum PresignMethod {
+    /// Let the provider choose the default method.
     #[default]
     Unspecified,
+    /// HTTP GET.
     Get,
+    /// HTTP PUT.
     Put,
+    /// HTTP DELETE.
     Delete,
+    /// HTTP HEAD.
     Head,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Configures presigned URL generation.
 pub struct PresignOptions {
+    /// HTTP method encoded into the URL.
     pub method: PresignMethod,
+    /// Requested URL lifetime.
     pub expires: Duration,
+    /// Required content type for upload-style URLs.
     pub content_type: String,
+    /// Required content disposition for upload-style URLs.
     pub content_disposition: String,
+    /// Additional signed headers.
     pub headers: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Contains a presigned URL plus any required headers.
 pub struct PresignResult {
+    /// URL clients should use.
     pub url: String,
+    /// HTTP method clients should use.
     pub method: PresignMethod,
+    /// Expiration timestamp, when known.
     pub expires_at: Option<prost_types::Timestamp>,
+    /// Headers clients must send with the URL.
     pub headers: BTreeMap<String, String>,
 }
 
+/// Options for creating a host-mediated object access URL.
 pub type ObjectAccessURLOptions = PresignOptions;
+/// Result returned when creating a host-mediated object access URL.
 pub type ObjectAccessURL = PresignResult;
 
 #[async_trait]

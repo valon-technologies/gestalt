@@ -1,0 +1,25 @@
+---
+title: SDKs
+---
+
+# SDKs
+
+Use a Gestalt SDK when you want to write an executable provider in a normal
+programming language instead of describing every operation in a manifest.
+
+The manifest still owns static provider metadata, connections, hosted HTTP
+routes, passthrough API surfaces, and release identity. The SDK owns runtime
+code: operation handlers, typed input and output models, provider lifecycle
+hooks, host-service clients, telemetry helpers, and provider-specific runtime
+servers.
+
+## Recommended path
+
+1. Read [Custom Providers](/custom-providers) to understand the provider
+   packaging model.
+2. Read the SDK page for your language:
+   [Python](/reference/python-sdk), [TypeScript](/reference/typescript-sdk),
+   [Go](/reference/go-sdk), or [Rust](/reference/rust-sdk).
+3. Build the smallest plugin provider first.
+4. Add provider-specific surfaces such as authentication, cache, S3, workflow,
+   runtime, or agent support only after the basic provider runs locally.

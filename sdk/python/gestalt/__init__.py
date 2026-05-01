@@ -1,8 +1,8 @@
 """Public authoring surface for Gestalt Python providers.
 
 The package is published as ``gestalt-sdk`` and imported as ``gestalt``.
-Provider authors typically build integrations around the re-exported symbols
-documented in the Sphinx reference:
+Use it for executable provider code: integration operations, host-service
+providers, host-service clients, and provider-owned telemetry.
 
 .. code-block:: python
 

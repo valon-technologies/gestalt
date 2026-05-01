@@ -13,23 +13,30 @@ use crate::generated::v1::{
     self as pb, workflow_host_client::WorkflowHostClient as ProtoWorkflowHostClient,
 };
 
+/// Environment variable containing the workflow-host service socket path.
 pub const ENV_WORKFLOW_HOST_SOCKET: &str = "GESTALT_WORKFLOW_HOST_SOCKET";
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`WorkflowHost`].
 pub enum WorkflowHostError {
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
 
+/// Client for invoking operations from workflow provider code.
 pub struct WorkflowHost {
     client: ProtoWorkflowHostClient<Channel>,
 }
 
 impl WorkflowHost {
+    /// Connects to the workflow host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, WorkflowHostError> {
         let socket_path = std::env::var(ENV_WORKFLOW_HOST_SOCKET).map_err(|_| {
             WorkflowHostError::Env(format!("{ENV_WORKFLOW_HOST_SOCKET} is not set"))
@@ -40,6 +47,7 @@ impl WorkflowHost {
         })
     }
 
+    /// Invokes an operation through the workflow host service.
     pub async fn invoke_operation(
         &mut self,
         request: pb::InvokeWorkflowOperationRequest,
@@ -60,9 +68,11 @@ async fn connect_unix(
 }
 
 #[async_trait]
+/// Provider trait for serving the Gestalt workflow-provider protocol.
 pub trait WorkflowProvider:
     pb::workflow_provider_server::WorkflowProvider + Send + Sync + 'static
 {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -71,22 +81,27 @@ pub trait WorkflowProvider:
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
     async fn start(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }

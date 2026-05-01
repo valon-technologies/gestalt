@@ -1,9 +1,10 @@
 export default {
+  sdk: "SDKs",
   "config-file": "Config File",
-  "go-sdk": "Go SDK API",
-  "python-sdk": "Python SDK API",
-  "rust-sdk": "Rust SDK API",
+  "python-sdk": "Python SDK",
   "typescript-sdk": "TypeScript SDK",
+  "go-sdk": "Go SDK",
+  "rust-sdk": "Rust SDK",
   "plugin-manifests": "Provider Manifests",
   "http-api": "HTTP API",
   cli: "Server CLI",

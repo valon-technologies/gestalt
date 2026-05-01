@@ -1,22 +1,52 @@
 # Gestalt TypeScript SDK
 
-This package provides the TypeScript authoring surface for executable Gestalt
-providers.
+Use the TypeScript SDK to build Bun-based executable Gestalt providers with
+explicit runtime schemas.
 
-It is intended for source providers discovered through `package.json` and for
-packaged providers built from that same source tree.
+The package is published as `@valon-technologies/gestalt`.
+
+```sh
+bun add @valon-technologies/gestalt@0.0.1-alpha.16
+```
+
+```ts
+import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+
+export const plugin = definePlugin({
+  displayName: "Search",
+  operations: [
+    operation({
+      id: "search",
+      method: "GET",
+      readOnly: true,
+      input: s.object({
+        query: s.string({ description: "Search query" }),
+        limit: s.integer({ description: "Maximum results", default: 10 }),
+      }),
+      output: s.object({
+        results: s.array(s.string()),
+      }),
+      async handler(input) {
+        return ok({ results: [input.query].slice(0, input.limit) });
+      },
+    }),
+  ],
+});
+```
 
 ## Provider target
 
 Point the package at the provider module with a top-level `gestalt.provider`
-property in `package.json`:
+property in `package.json`.
 
 ```json
 {
   "name": "my-provider",
-  "version": "0.0.1-alpha.1",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
   "dependencies": {
-    "@valon-technologies/gestalt": "0.0.1-alpha.13"
+    "@valon-technologies/gestalt": "0.0.1-alpha.16"
   },
   "gestalt": {
     "provider": {
@@ -27,83 +57,33 @@ property in `package.json`:
 }
 ```
 
-The target is a relative file path with an optional export suffix. The runtime
-accepts:
+The target is a relative file path with an optional export suffix. If the suffix
+is omitted, the runtime looks for `provider`, then `plugin`, then the default
+export.
 
-- `gestalt.provider` as `{ "kind": "...", "target": "./file.ts#export" }`
-- `gestalt.provider` as a string like `"plugin:./provider.ts#plugin"` or `"cache:./cache.ts#provider"`
+Use `"plugin"` as the kind token for executable plugin providers. Use an object
+target with an explicit kind for authentication, authorization, cache,
+IndexedDB, S3, secrets, workflow, agent, and hosted-runtime providers.
 
-Use `"plugin"` as the kind token for executable plugin providers.
+## Public surface
 
-If the export suffix is omitted, the runtime looks for `provider`, then
-`plugin`, then the default export.
+The root package exports provider definition helpers:
 
-## Authoring
+- `definePlugin` for integration operations and session catalogs.
+- `defineAuthenticationProvider` and `defineAuthorizationProvider` for auth
+  surfaces.
+- `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
+  `defineSecretsProvider` for host-service backends.
+- `defineWorkflowProvider`, `defineAgentProvider`, and
+  `definePluginRuntimeProvider` for workflow, agent, and hosted-runtime
+  backends.
+- `s` schema builders for operation input, output, and catalog metadata.
+- Host-service clients for cache, IndexedDB, S3, workflows, agents,
+  invocations, and telemetry.
 
-Use explicit runtime schemas to define plugin operation inputs and outputs:
-
-```ts
-import {
-  definePlugin,
-  ok,
-  operation,
-  response,
-  s,
-} from "@valon-technologies/gestalt";
-
-export const plugin = definePlugin({
-  displayName: "Example Provider",
-  description: "A provider implemented with the Gestalt TypeScript SDK",
-  configure(name, config) {
-    console.log("configured", name, config);
-  },
-  sessionCatalog(request) {
-    return {
-      name: "example-session",
-      operations: [
-        {
-          id: "session-ping",
-          method: "GET",
-        },
-      ],
-    };
-  },
-  operations: [
-    operation({
-      id: "greet",
-      method: "GET",
-      readOnly: true,
-      input: s.object({
-        name: s.string({ description: "Name to greet", default: "World" }),
-        excited: s.optional(s.boolean()),
-      }),
-      output: s.object({
-        message: s.string(),
-      }),
-      async handler(input) {
-        return ok({
-          message: `Hello, ${input.name}${input.excited ? "!" : "."}`,
-        });
-      },
-    }),
-  ],
-});
-```
-
-Use `ok(body)` for normal responses and `response(status, body)` when a handler
-needs to set a non-200 status. Plain objects with `status` and `body` fields
-are treated as user data.
-
-Authentication providers, cache providers, and secrets providers use dedicated helpers:
-
-```ts
-import {
-  Cache,
-  defineAuthenticationProvider,
-  defineCacheProvider,
-  defineSecretsProvider,
-} from "@valon-technologies/gestalt";
-```
+TypeScript types are not enough to describe runtime payloads. Use the schema
+builders for every operation input and output that should appear in the
+Gestalt catalog.
 
 ## Runtime and build entrypoints
 
@@ -116,7 +96,7 @@ gestalt-ts-runtime ROOT plugin:./provider.ts#plugin
 Release build:
 
 ```sh
-gestalt-ts-build ROOT cache:./cache.ts#provider OUTPUT PROVIDER_NAME GOOS GOARCH
+gestalt-ts-build ROOT plugin:./provider.ts#plugin OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
 
 The build entrypoint compiles a standalone executable with Bun and bundles the
@@ -130,6 +110,15 @@ From the repo root:
 buf generate --template sdk/proto/buf.typescript.gen.yaml sdk/proto
 ```
 
+## API reference
+
+The TypeDoc reference is generated from the authored public surface plus
+entrypoint shims under `docs/entrypoints`.
+
+```sh
+bun run docs:build
+```
+
 ## Local checks
 
 From `sdk/typescript`:
@@ -139,4 +128,5 @@ export PATH="$HOME/.bun/bin:$PATH"
 bun install
 bun run build:proto
 bun run check
+bun run docs:check
 ```

@@ -1,5 +1,10 @@
 /**
- * Public API surface for `@valon-technologies/gestalt`.
+ * Public API surface for executable Gestalt providers.
+ *
+ * Use this package to define provider runtimes, operation schemas, handlers,
+ * host-service clients, and provider-owned telemetry. The provider manifest
+ * still owns static identity, connections, hosted HTTP routes, passthrough
+ * surfaces, and release metadata.
  *
  * @example
  * ```ts

@@ -20,11 +20,16 @@ pub const TELEMETRY_INSTRUMENTATION_NAME: &str = "gestalt.provider";
 /// Default GenAI provider name used for Gestalt-owned agent and tool work.
 pub const GENAI_PROVIDER_NAME: &str = "gestalt";
 
+/// GenAI operation name for chat/model calls.
 pub const GENAI_OPERATION_CHAT: &str = "chat";
+/// GenAI operation name for tool executions.
 pub const GENAI_OPERATION_EXECUTE_TOOL: &str = "execute_tool";
+/// GenAI operation name for agent invocations.
 pub const GENAI_OPERATION_INVOKE_AGENT: &str = "invoke_agent";
 
+/// GenAI tool type for datastore-backed tools.
 pub const GENAI_TOOL_TYPE_DATASTORE: &str = "datastore";
+/// GenAI tool type for extension/plugin-backed tools.
 pub const GENAI_TOOL_TYPE_EXTENSION: &str = "extension";
 
 const OPERATION_DURATION_METRIC: &str = "gen_ai.client.operation.duration";
@@ -43,13 +48,18 @@ static TOKEN_USAGE: OnceLock<Histogram<u64>> = OnceLock::new();
 /// Options for recording an upstream model SDK call.
 #[derive(Clone, Debug, Default)]
 pub struct ModelOperationOptions {
+    /// Upstream model provider name.
     pub provider_name: String,
+    /// Requested model name.
     pub request_model: String,
+    /// Common model request options to record.
     pub request_options: RequestOptions,
+    /// Additional span attributes for the request.
     pub request_attributes: Vec<KeyValue>,
 }
 
 impl ModelOperationOptions {
+    /// Creates model-operation options for a provider and model.
     pub fn new(provider_name: impl Into<String>, request_model: impl Into<String>) -> Self {
         Self {
             provider_name: provider_name.into(),
@@ -58,11 +68,13 @@ impl ModelOperationOptions {
         }
     }
 
+    /// Sets common model request options.
     pub fn with_request_options(mut self, request_options: RequestOptions) -> Self {
         self.request_options = request_options;
         self
     }
 
+    /// Adds one request span attribute.
     pub fn with_request_attribute(mut self, attribute: KeyValue) -> Self {
         self.request_attributes.push(attribute);
         self
@@ -72,26 +84,39 @@ impl ModelOperationOptions {
 /// Common GenAI request options that are useful as span attributes.
 #[derive(Clone, Debug, Default)]
 pub struct RequestOptions {
+    /// Number of choices requested.
     pub choice_count: Option<i64>,
+    /// Frequency penalty requested.
     pub frequency_penalty: Option<f64>,
+    /// Maximum output tokens requested.
     pub max_tokens: Option<i64>,
+    /// Presence penalty requested.
     pub presence_penalty: Option<f64>,
+    /// Sampling seed requested.
     pub seed: Option<i64>,
+    /// Sampling temperature requested.
     pub temperature: Option<f64>,
+    /// Top-k sampling parameter requested.
     pub top_k: Option<i64>,
+    /// Top-p sampling parameter requested.
     pub top_p: Option<f64>,
 }
 
 /// Options for recording provider-owned agent turn execution.
 #[derive(Clone, Debug, Default)]
 pub struct AgentInvocationOptions {
+    /// Agent name.
     pub agent_name: String,
+    /// Agent session id.
     pub session_id: String,
+    /// Agent turn id.
     pub turn_id: String,
+    /// Model used by the agent turn.
     pub model: String,
 }
 
 impl AgentInvocationOptions {
+    /// Creates options for an agent invocation span.
     pub fn new(
         agent_name: impl Into<String>,
         session_id: impl Into<String>,
@@ -110,12 +135,16 @@ impl AgentInvocationOptions {
 /// Options for recording provider-owned tool execution.
 #[derive(Clone, Debug, Default)]
 pub struct ToolExecutionOptions {
+    /// Tool name.
     pub tool_name: String,
+    /// Tool call id, when supplied by the model.
     pub tool_call_id: String,
+    /// GenAI tool type.
     pub tool_type: String,
 }
 
 impl ToolExecutionOptions {
+    /// Creates options for a tool execution span.
     pub fn new(tool_name: impl Into<String>) -> Self {
         Self {
             tool_name: tool_name.into(),
@@ -124,11 +153,13 @@ impl ToolExecutionOptions {
         }
     }
 
+    /// Sets the model-supplied tool call id.
     pub fn with_tool_call_id(mut self, tool_call_id: impl Into<String>) -> Self {
         self.tool_call_id = tool_call_id.into();
         self
     }
 
+    /// Sets the GenAI tool type.
     pub fn with_tool_type(mut self, tool_type: impl Into<String>) -> Self {
         self.tool_type = tool_type.into();
         self
@@ -138,10 +169,15 @@ impl ToolExecutionOptions {
 /// GenAI token usage recorded on spans and token usage metrics.
 #[derive(Clone, Debug, Default)]
 pub struct TokenUsage {
+    /// Input token count.
     pub input_tokens: Option<u64>,
+    /// Output token count.
     pub output_tokens: Option<u64>,
+    /// Anthropic cache-creation input token count.
     pub cache_creation_input_tokens: Option<u64>,
+    /// Cached input token count.
     pub cache_read_input_tokens: Option<u64>,
+    /// Reasoning output token count.
     pub reasoning_output_tokens: Option<u64>,
 }
 

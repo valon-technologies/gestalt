@@ -181,6 +181,7 @@ macro_rules! export_plugin_runtime_provider {
     };
 }
 
+/// Exports the workflow-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_workflow_provider {
     (constructor = $constructor:path $(,)?) => {
@@ -191,6 +192,7 @@ macro_rules! export_workflow_provider {
     };
 }
 
+/// Exports the agent-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_agent_provider {
     (constructor = $constructor:path $(,)?) => {

@@ -17,47 +17,67 @@ use crate::generated::v1::{
 
 type PluginInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
+/// Environment variable containing the plugin-invoker host-service target.
 pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_PLUGIN_INVOKER_SOCKET";
+/// Environment variable containing the optional plugin-invoker relay token.
 pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_PLUGIN_INVOKER_SOCKET_TOKEN";
 const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`PluginInvoker`].
 pub enum PluginInvokerError {
+    /// The invocation token was empty.
     #[error("plugin invoker: invocation token is not available")]
     MissingInvocationToken,
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+    /// Invocation parameters or variables could not be serialized.
     #[error("{0}")]
     Json(#[from] serde_json::Error),
+    /// The host returned a protocol value the SDK could not represent.
     #[error("{0}")]
     Protocol(String),
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Grant included when exchanging an invocation token for a child token.
 pub struct InvocationGrant {
+    /// Plugin name that the child token may invoke.
     pub plugin: String,
+    /// Specific operation ids allowed by the child token.
     pub operations: Vec<String>,
+    /// Surface names allowed by the child token.
     pub surfaces: Vec<String>,
+    /// Whether the child token may invoke every operation on the plugin.
     pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Options that select the target connection for a plugin invocation.
 pub struct InvokeOptions {
+    /// Connected account id or name to invoke against.
     pub connection: String,
+    /// Provider instance id or name to invoke against.
     pub instance: String,
+    /// Idempotency key forwarded to the target operation.
     pub idempotency_key: String,
 }
 
+/// Client for invoking sibling plugin operations through the host.
 pub struct PluginInvoker {
     client: ProtoPluginInvokerClient<PluginInvokerTransport>,
     invocation_token: String,
 }
 
 impl PluginInvoker {
+    /// Connects to the plugin invoker with an invocation token from the host.
     pub async fn connect(
         invocation_token: impl AsRef<str>,
     ) -> std::result::Result<Self, PluginInvokerError> {
@@ -101,6 +121,7 @@ impl PluginInvoker {
         })
     }
 
+    /// Invokes one operation on another plugin.
     pub async fn invoke<P>(
         &mut self,
         plugin: &str,
@@ -147,6 +168,7 @@ impl PluginInvoker {
         })
     }
 
+    /// Invokes another plugin's GraphQL surface.
     pub async fn invoke_graphql<V>(
         &mut self,
         plugin: &str,
@@ -205,6 +227,7 @@ impl PluginInvoker {
         })
     }
 
+    /// Exchanges this invocation token for a narrower child token.
     pub async fn exchange_invocation_token(
         &mut self,
         grants: &[InvocationGrant],

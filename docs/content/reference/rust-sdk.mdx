@@ -1,15 +1,41 @@
 ---
-title: Rust SDK API
+title: Rust SDK
 ---
 
-# Rust SDK API
+# Rust SDK
 
-The Rust SDK is published to crates.io as `gestalt-sdk`, while Rust code
-imports it as `gestalt`.
+Use the Rust SDK to build compiled Gestalt providers with typed routers,
+`serde` input and output types, and schema-derived catalog metadata.
 
-Its canonical API reference is hosted on `docs.rs`:
+The package is published to crates.io as `gestalt-sdk`, while Rust code imports
+the crate as `gestalt`.
 
-- [Open the Rust SDK reference on docs.rs](https://docs.rs/gestalt-sdk/latest/gestalt/)
+## Install
+
+Add the crate under the `gestalt` import name:
+
+```sh
+cargo add gestalt-sdk --rename gestalt
+cargo add serde --features derive
+cargo add schemars --features derive
+```
+
+The equivalent `Cargo.toml` dependency uses the package name explicitly:
+
+```toml
+[dependencies]
+gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
+schemars = { version = "0.8", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+```
+
+Use the current `gestalt-sdk` version from crates.io when you create a new
+provider.
+
+## Create a plugin provider
+
+Register typed operations on a `Router`. The SDK derives catalog metadata from
+the input and output types.
 
 ```rust
 use schemars::JsonSchema;
@@ -17,57 +43,80 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Default)]
-struct EchoProvider;
+struct SearchProvider;
 
 #[gestalt::async_trait]
-impl gestalt::Provider for EchoProvider {}
+impl gestalt::Provider for SearchProvider {}
 
 #[derive(Deserialize, JsonSchema)]
-struct EchoInput {
-    message: String,
+struct SearchInput {
+    #[schemars(description = "Search query")]
+    query: String,
+    #[serde(default = "default_limit")]
+    #[schemars(description = "Maximum results")]
+    limit: u32,
+}
+
+fn default_limit() -> u32 {
+    10
 }
 
 #[derive(Serialize, JsonSchema)]
-struct EchoOutput {
-    echoed: String,
+struct SearchOutput {
+    results: Vec<String>,
 }
 
-fn router() -> gestalt::Result<gestalt::Router<EchoProvider>> {
+fn router() -> gestalt::Result<gestalt::Router<SearchProvider>> {
     gestalt::Router::new().register(
-        gestalt::Operation::<EchoInput, EchoOutput>::new("echo"),
-        |_: Arc<EchoProvider>, input, _request| async move {
-            Ok::<_, gestalt::Error>(gestalt::ok(EchoOutput {
-                echoed: input.message,
+        gestalt::Operation::<SearchInput, SearchOutput>::new("search")
+            .method("GET")
+            .title("Search"),
+        |_: Arc<SearchProvider>, input, _request| async move {
+            Ok::<_, gestalt::Error>(gestalt::ok(SearchOutput {
+                results: vec![input.query]
+                    .into_iter()
+                    .take(input.limit as usize)
+                    .collect(),
             }))
         },
     )
 }
 
-gestalt::export_provider!(constructor = EchoProvider::default, router = router);
+gestalt::export_provider!(constructor = SearchProvider::default, router = router);
 ```
 
-`docs.rs` renders the crate docs, module docs, and symbol docs from the source
-and checked-in generated bindings.
+Fields are required unless they are modeled as `Option<T>` or have a serde
+default. Use `schemars` attributes for catalog descriptions.
 
-Agent host and provider utilities are also part of the crate:
+## Export provider entrypoints
 
-```rust
-use gestalt::generated::v1 as pb;
+Use the export macro that matches the provider surface you are serving.
 
-async fn execute_bound_tool() -> Result<(), Box<dyn std::error::Error>> {
-    let mut host = gestalt::AgentHost::connect().await?;
-    let response = host
-        .execute_tool(pb::ExecuteAgentToolRequest {
-            session_id: "session-123".into(),
-            turn_id: "turn-123".into(),
-            tool_call_id: "call-1".into(),
-            tool_id: "roadmap/sync".into(),
-            arguments: None,
-            tool_grant: "grant-token".into(),
-            idempotency_key: "turn-123:call-1".into(),
-        })
-        .await?;
-    println!("{}", response.status);
-    Ok(())
-}
-```
+| Macro | Use it when you want to serve |
+| --- | --- |
+| `export_provider!` | Integration operations and catalogs. |
+| `export_authentication_provider!` | Login flows. |
+| `export_cache_provider!` | Plugin-bound cache storage. |
+| `export_s3_provider!` | S3-compatible object storage. |
+| `export_secrets_provider!` | Secret resolution. |
+| `export_workflow_provider!` | Workflow runs, schedules, and event triggers. |
+| `export_agent_provider!` | Agent sessions, turns, events, interactions, and capabilities. |
+| `export_plugin_runtime_provider!` | Hosted plugin execution backends. |
+
+The macros export the symbols that `gestaltd` calls when it synthesizes the
+source-provider wrapper.
+
+## Generated bindings
+
+The crate includes checked-in protobuf and gRPC bindings compiled from
+`sdk/proto/v1/*.proto`. Consumers do not need a protobuf toolchain to build
+`gestalt-sdk`.
+
+Maintainers regenerate bindings with the Buf template in
+`sdk/proto/buf.rust.gen.yaml`.
+
+## API reference
+
+The canonical Rust API reference is published on docs.rs:
+
+- [Open the Rust SDK reference on docs.rs](https://docs.rs/gestalt-sdk/latest/gestalt/)

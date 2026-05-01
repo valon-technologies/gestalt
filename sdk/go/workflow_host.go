@@ -11,13 +11,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// EnvWorkflowHostSocket names the environment variable containing the
+// workflow-host service socket path.
 const EnvWorkflowHostSocket = "GESTALT_WORKFLOW_HOST_SOCKET"
 
+// WorkflowHostClient invokes operations from workflow provider code.
 type WorkflowHostClient struct {
 	client proto.WorkflowHostClient
 	conn   *grpc.ClientConn
 }
 
+// WorkflowHost returns a client for the workflow host service.
 func WorkflowHost() (*WorkflowHostClient, error) {
 	socketPath := os.Getenv(EnvWorkflowHostSocket)
 	if socketPath == "" {
@@ -38,6 +42,7 @@ func WorkflowHost() (*WorkflowHostClient, error) {
 	}, nil
 }
 
+// Close closes the underlying workflow-host connection.
 func (c *WorkflowHostClient) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
@@ -45,6 +50,7 @@ func (c *WorkflowHostClient) Close() error {
 	return c.conn.Close()
 }
 
+// InvokeOperation invokes an operation through the workflow host service.
 func (c *WorkflowHostClient) InvokeOperation(ctx context.Context, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
 	return c.client.InvokeOperation(ctx, req)
 }

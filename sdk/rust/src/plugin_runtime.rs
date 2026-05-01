@@ -8,9 +8,11 @@ use crate::error::Result as ProviderResult;
 use crate::generated::v1::{self as pb};
 
 #[async_trait]
+/// Provider trait for serving hosted plugin-runtime sessions.
 pub trait PluginRuntimeProvider:
     pb::plugin_runtime_provider_server::PluginRuntimeProvider + Send + Sync + 'static
 {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -19,22 +21,27 @@ pub trait PluginRuntimeProvider:
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
     async fn start(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }

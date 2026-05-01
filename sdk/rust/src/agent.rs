@@ -18,25 +18,33 @@ use crate::generated::v1::{
 
 type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
 
+/// Environment variable containing the agent-host service target.
 pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_AGENT_HOST_SOCKET";
+/// Environment variable containing the optional agent-host relay token.
 pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
 const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by [`AgentHost`].
 pub enum AgentHostError {
+    /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
+    /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
 }
 
+/// Client for the agent host service available inside agent providers.
 pub struct AgentHost {
     client: ProtoAgentHostClient<AgentHostTransport>,
 }
 
 impl AgentHost {
+    /// Connects to the agent host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, AgentHostError> {
         let target = std::env::var(ENV_AGENT_HOST_SOCKET)
             .map_err(|_| AgentHostError::Env(format!("{ENV_AGENT_HOST_SOCKET} is not set")))?;
@@ -62,6 +70,7 @@ impl AgentHost {
         })
     }
 
+    /// Executes a host tool using an agent protocol request message.
     pub async fn execute_tool(
         &mut self,
         request: pb::ExecuteAgentToolRequest,
@@ -69,6 +78,7 @@ impl AgentHost {
         Ok(self.client.execute_tool(request).await?.into_inner())
     }
 
+    /// Lists host tools visible to the current agent request.
     pub async fn list_tools(
         &mut self,
         request: pb::ListAgentToolsRequest,
@@ -170,7 +180,9 @@ fn parse_agent_host_target(raw: &str) -> std::result::Result<AgentHostTarget, Ag
 }
 
 #[async_trait]
+/// Provider trait for serving the Gestalt agent-provider protocol.
 pub trait AgentProvider: pb::agent_provider_server::AgentProvider + Send + Sync + 'static {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -179,22 +191,27 @@ pub trait AgentProvider: pb::agent_provider_server::AgentProvider + Send + Sync 
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Starts provider-owned background work after configuration.
     async fn start(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }

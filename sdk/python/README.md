@@ -1,27 +1,72 @@
 # Gestalt Python SDK
 
-This package provides the Python authoring surface for executable Gestalt
-providers.
+Use the Python SDK to build executable Gestalt providers with normal Python
+classes, functions, and type annotations.
 
-It is published to PyPI as `gestalt-sdk` and imported in provider code as
-`gestalt`.
+The package is published to PyPI as `gestalt-sdk` and imported in provider code
+as `gestalt`.
 
-It is intended to be used by source providers discovered through
-`[tool.gestalt].provider` in `pyproject.toml` and by packaged providers
-built from that same source tree.
+```sh
+uv add gestalt-sdk
+```
 
-Python source providers are developed locally via `from.source.path` and
-released through `gestaltd provider release` for the host platform by default,
-or for every requested target platform when you pass `--platform`. In CI,
-prefer `--platform all` to build the full supported release matrix.
+```python
+import gestalt
 
-For non-host targets, configure a matching Python build interpreter with
-`GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
-`.venv-<goos>-<goarch>/`.
 
-## Regenerating Protobuf Stubs
+class SearchInput(gestalt.Model):
+    query: str = gestalt.field(description="Search query")
 
-The checked-in Python protobuf stubs live in `gestalt/gen/v1`.
+
+plugin = gestalt.Plugin("search")
+
+
+@plugin.operation(method="GET", title="Search")
+def search(input: SearchInput, request: gestalt.Request):
+    return {"results": [input.query]}
+```
+
+## Provider projects
+
+Python source providers are discovered through `[tool.gestalt].provider` in
+`pyproject.toml`.
+
+```toml
+[project]
+name = "gestalt-search"
+version = "0.0.1"
+dependencies = ["gestalt-sdk"]
+
+[tool.uv]
+package = false
+
+[tool.gestalt]
+provider = "provider"
+```
+
+Use the provider manifest for static provider identity, connections, hosted HTTP
+routes, passthrough surfaces, and release metadata. Use Python code for
+executable operations, provider lifecycle hooks, host-service clients, and
+provider-specific runtimes.
+
+## Public surface
+
+The top-level `gestalt` package exposes the supported authoring API:
+
+- `Model`, `field`, `Plugin`, `operation`, and `Request` for integration
+  providers.
+- `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
+  `WorkflowProvider`, `AgentProvider`, and `PluginRuntimeProvider` for
+  host-service provider runtimes.
+- `Cache`, `IndexedDB`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
+  `AgentManager`, and `PluginInvoker` for calling sibling host services.
+- `gestalt.telemetry` for provider-authored GenAI spans and metrics.
+
+Generated protobuf bindings remain available under `gestalt.gen`, but provider
+authors should prefer the handwritten SDK surface unless they need a low-level
+protocol message directly.
+
+## Regenerating protobuf stubs
 
 This is an SDK maintainer workflow. Provider authors consume the checked-in
 stubs through the `gestalt` package and do not need to regenerate them in
@@ -33,12 +78,12 @@ Regenerate them from the repo root with:
 uv run python sdk/python/scripts/generate_stubs.py
 ```
 
-The script uses pinned `buf` remote Python plugins so the generated stubs stay
+The script uses pinned Buf remote Python plugins so the generated stubs stay
 reproducible while `plugin_pb2.py` tracks the protobuf `6.33.1` runtime floor
 used by this SDK package and remains compatible with protobuf 7 runtimes.
 `buf` must be available on `PATH`.
 
-## API Reference
+## API reference
 
 The authored Python API reference is generated with Sphinx from the SDK's
 docstrings. Build it locally from `sdk/python` with:
@@ -68,32 +113,11 @@ The release workflow normalizes those tag versions to PEP 440 before building
 and publishing with `uv`, so `sdk/python/v0.0.1-alpha.1` becomes package
 version `0.0.1a1`.
 
-Releases are published to PyPI through GitHub Actions Trusted Publishing.
-The release workflow runs in the `pypi` environment and uses GitHub OIDC rather
-than a checked-in upload token. To enable publishing for this repo:
+Releases are published to PyPI through GitHub Actions Trusted Publishing. The
+release workflow runs in the `pypi` environment and uses GitHub OIDC rather
+than a checked-in upload token.
 
-- create or confirm the `gestalt-sdk` project on PyPI
-- add a Trusted Publisher pointing at `valon-technologies/gestalt`
-- set the workflow filename to `release-sdk.yml`
-- set the environment name to `pypi`
-
-Once that publisher is configured, pushing an SDK release tag such as
-`sdk/python/v0.0.1-alpha.1` is enough for the workflow to build and publish the
-package.
-
-Install it in a provider repo with:
-
-```sh
-uv add gestalt-sdk
-```
-
-Then import the authored surface as:
-
-```python
-from gestalt import Model, Plugin
-```
-
-## Local SDK Checks
+## Local SDK checks
 
 From `sdk/python`, install the SDK plus its dev tooling and run the checks used
 in CI:

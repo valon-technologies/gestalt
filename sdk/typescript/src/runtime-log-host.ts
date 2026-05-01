@@ -16,35 +16,59 @@ import {
   PluginRuntimeLogStream,
 } from "../gen/v1/pluginruntime_pb.ts";
 
+/** Environment variable containing the runtime-log host-service target. */
 export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";
-export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = `${ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN`;
+/** Environment variable containing the optional runtime-log relay token. */
+export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN =
+  `${ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN`;
+/** Environment variable containing the current plugin-runtime session id. */
 export const ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID";
 
 const RUNTIME_LOG_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
+/** Named runtime log streams accepted by the authored SDK. */
 export type RuntimeLogStreamName = "stdout" | "stderr" | "runtime";
+/** Runtime log stream input, either a named stream or generated enum value. */
 export type RuntimeLogStreamInput =
   | RuntimeLogStreamName
   | PluginRuntimeLogStream;
+/** Shape accepted by `RuntimeLogHost.appendLogs`. */
 export type RuntimeLogAppendLogsInput = MessageInitShape<
   typeof AppendPluginRuntimeLogsRequestSchema
 >;
+/** Response message returned after appending runtime logs. */
 export type RuntimeLogAppendResponseMessage = AppendPluginRuntimeLogsResponse;
 
+/** One runtime log entry to append through `RuntimeLogHost.append`. */
 export interface RuntimeLogAppendInput {
+  /** Runtime session id. Defaults to `GESTALT_RUNTIME_SESSION_ID`. */
   sessionId?: string;
+  /** Log message bytes or text. */
   message: string | Uint8Array;
+  /** Destination stream. Defaults to `runtime`. */
   stream?: RuntimeLogStreamInput;
+  /** Observation timestamp. Defaults to the current time. */
   observedAt?: Date;
+  /** Monotonic source sequence number. Auto-increments when omitted. */
   sourceSeq?: number | bigint;
 }
 
+/** Options for the `Writable` returned by `RuntimeLogHost.writer`. */
 export interface RuntimeLogWriterOptions {
+  /** Runtime session id. Defaults to `GESTALT_RUNTIME_SESSION_ID`. */
   sessionId?: string;
+  /** Destination stream. Defaults to `stdout`. */
   stream?: RuntimeLogStreamInput;
+  /** Initial sequence number for writes. */
   sourceSeqStart?: number | bigint;
 }
 
+/**
+ * Client for appending plugin-runtime logs to the host.
+ *
+ * Use `append` for a single entry, `appendLogs` for a protocol-shaped batch, or
+ * `writer` to bridge Node streams into the runtime log host.
+ */
 export class RuntimeLogHost {
   private readonly client: Client<typeof PluginRuntimeLogHostService>;
   private sourceSeq = 0n;
@@ -82,6 +106,7 @@ export class RuntimeLogHost {
     return await this.client.appendLogs(request);
   }
 
+  /** Appends one runtime log entry. */
   async append(
     input: RuntimeLogAppendInput,
   ): Promise<RuntimeLogAppendResponseMessage> {
@@ -105,6 +130,7 @@ export class RuntimeLogHost {
     });
   }
 
+  /** Returns a `Writable` that appends chunks to a runtime log stream. */
   writer(options?: RuntimeLogWriterOptions): Writable;
   writer(sessionId: string, options?: RuntimeLogWriterOptions): Writable;
   writer(

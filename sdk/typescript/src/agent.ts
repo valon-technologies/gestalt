@@ -72,10 +72,18 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
+/** Environment variable containing the agent-host service target. */
 export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
+/** Environment variable containing the optional agent-host relay token. */
 export const ENV_AGENT_HOST_SOCKET_TOKEN = `${ENV_AGENT_HOST_SOCKET}_TOKEN`;
 const AGENT_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
+/**
+ * Generated agent protocol message types commonly used by authored providers.
+ *
+ * These are re-exported so provider code can type sessions, turns, messages,
+ * interactions, and host-tool requests without importing from `gen`.
+ */
 export type {
   AgentActor,
   AgentInteraction,
@@ -119,11 +127,13 @@ export {
   AgentToolSourceMode,
 };
 
+/** JSON-like value accepted for an agent turn display payload. */
 export type AgentTurnDisplayValue =
   | JsonValue
   | Value
   | MessageInitShape<typeof ValueSchema>;
 
+/** Initializer for a turn display with JSON-like input/output/error fields. */
 export type AgentTurnDisplayInit = Omit<
   MessageInitShape<typeof AgentTurnDisplaySchema>,
   "$typeName" | "input" | "output" | "error"
@@ -133,6 +143,7 @@ export type AgentTurnDisplayInit = Omit<
   error?: AgentTurnDisplayValue | undefined;
 };
 
+/** Initializer for a turn event with authored display payload helpers. */
 export type AgentTurnEventInit = Omit<
   MessageInitShape<typeof AgentTurnEventSchema>,
   "$typeName" | "display"
@@ -140,6 +151,7 @@ export type AgentTurnEventInit = Omit<
   display?: AgentTurnDisplayInit | undefined;
 };
 
+/** Handlers and runtime metadata for an agent provider. */
 export interface AgentProviderOptions extends RuntimeProviderOptions {
   createSession?: (
     request: CreateAgentProviderSessionRequest,
@@ -182,6 +194,7 @@ export interface AgentProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>>;
 }
 
+/** Runtime provider implementation for the Gestalt agent host contract. */
 export class AgentProvider extends RuntimeProvider {
   readonly kind = "agent" as const;
 
@@ -350,6 +363,7 @@ export class AgentProvider extends RuntimeProvider {
   }
 }
 
+/** Creates an agent provider for export from a provider module. */
 export function defineAgentProvider(options: AgentProviderOptions): AgentProvider {
   return new AgentProvider(options);
 }
@@ -404,6 +418,7 @@ function isValueInit(value: unknown): value is MessageInitShape<typeof ValueSche
   );
 }
 
+/** Runtime type guard for agent providers loaded from user modules. */
 export function isAgentProvider(value: unknown): value is AgentProvider {
   return (
     value instanceof AgentProvider ||
@@ -416,6 +431,7 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
   );
 }
 
+/** Client for the agent host service available inside agent providers. */
 export class AgentHost {
   private readonly client: Client<typeof AgentHostService>;
 
@@ -432,12 +448,14 @@ export class AgentHost {
     this.client = createClient(AgentHostService, transport);
   }
 
+  /** Executes a host tool using an agent protocol request message. */
   async executeTool(
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse> {
     return await this.client.executeTool(request);
   }
 
+  /** Lists host tools visible to the current agent request. */
   async listTools(
     request: ListAgentToolsRequest,
   ): Promise<ListAgentToolsResponse> {
@@ -496,6 +514,7 @@ function agentHostRelayTokenInterceptor(token: string): Interceptor {
   };
 }
 
+/** Builds the Connect service implementation used by the TypeScript runtime. */
 export function createAgentProviderService(
   provider: AgentProvider,
 ): Partial<ServiceImpl<typeof AgentProviderService>> {
