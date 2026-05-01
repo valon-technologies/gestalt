@@ -23,7 +23,7 @@ import (
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
-	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(ctx, pluginservice.ValidationConfigFromConfig(cfg)); err != nil {
+	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(ctx, config.PluginValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 

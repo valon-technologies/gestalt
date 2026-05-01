@@ -16,9 +16,11 @@ import (
 )
 
 type archiveTestFile struct {
-	name string
-	data []byte
-	mode int64
+	name     string
+	data     []byte
+	mode     int64
+	typeflag byte
+	linkname string
 }
 
 const (
@@ -185,9 +187,20 @@ func mustCreateArchive(t *testing.T, archivePath string, files ...archiveTestFil
 	}()
 
 	for _, file := range files {
-		hdr := &tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.data))}
+		typeflag := file.typeflag
+		if typeflag == 0 {
+			typeflag = tar.TypeReg
+		}
+		size := int64(len(file.data))
+		if typeflag != tar.TypeReg {
+			size = 0
+		}
+		hdr := &tar.Header{Name: file.name, Mode: file.mode, Size: size, Typeflag: typeflag, Linkname: file.linkname}
 		if err := tw.WriteHeader(hdr); err != nil {
 			t.Fatalf("WriteHeader(%q): %v", file.name, err)
+		}
+		if size == 0 {
+			continue
 		}
 		if _, err := tw.Write(file.data); err != nil {
 			t.Fatalf("Write(%q): %v", file.name, err)

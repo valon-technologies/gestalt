@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	providerpkg "github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 )
 
 const testCatalogYAML = "name: provider\noperations:\n  - id: echo\n    method: POST\n"
@@ -40,7 +40,7 @@ func TestInstall(t *testing.T) {
 	if installed1.Root != dest1 {
 		t.Fatalf("Root = %q, want %q", installed1.Root, dest1)
 	}
-	if installed1.ManifestPath != filepath.Join(dest1, providerpkg.ManifestFile) {
+	if installed1.ManifestPath != filepath.Join(dest1, packageio.ManifestFile) {
 		t.Fatalf("ManifestPath = %q", installed1.ManifestPath)
 	}
 	if installed1.ExecutablePath != filepath.Join(dest1, "artifacts", runtime.GOOS, runtime.GOARCH, "provider") {
@@ -321,11 +321,11 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, providerpkg.ManifestFile), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, packageio.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
@@ -362,11 +362,11 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, providerpkg.ManifestFile), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, packageio.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
@@ -413,11 +413,11 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, providerpkg.ManifestFile), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, packageio.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
@@ -425,7 +425,7 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 	}
 
 	archivePath := filepath.Join(dir, filepath.Base(srcDir)+".tar.gz")
-	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+	if err := packageio.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return archivePath
@@ -451,7 +451,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
@@ -473,7 +473,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 			t.Fatalf("Write file %s: %v", name, err)
 		}
 	}
-	writeFile(providerpkg.ManifestFile, manifestBytes, 0644)
+	writeFile(packageio.ManifestFile, manifestBytes, 0644)
 	writeFile("catalog.yaml", []byte(testCatalogYAML), 0644)
 	writeFile(filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")), []byte(content), 0755)
 
@@ -511,7 +511,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 			ArtifactPath: artifactName,
 		},
 	}
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
@@ -533,7 +533,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 			t.Fatalf("Write file %s: %v", name, err)
 		}
 	}
-	writeFile(providerpkg.ManifestFile, manifestBytes, 0644)
+	writeFile(packageio.ManifestFile, manifestBytes, 0644)
 	writeFile("catalog.yaml", []byte(testCatalogYAML), 0644)
 	writeFile(artifactName, []byte(firstContent), 0755)
 	writeFile(artifactName, []byte(secondContent), 0755)
@@ -586,11 +586,11 @@ func mustBuildV2Package(t *testing.T, dir, source, version, content string) stri
 	}
 
 	manifest := newV2Manifest(source, version, content)
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sourceDir, providerpkg.ManifestFile), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, packageio.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
@@ -598,7 +598,7 @@ func mustBuildV2Package(t *testing.T, dir, source, version, content string) stri
 	}
 
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
-	if err := providerpkg.CreatePackageFromDir(sourceDir, archivePath); err != nil {
+	if err := packageio.CreatePackageFromDir(sourceDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return archivePath
@@ -618,11 +618,11 @@ func mustBuildV2PluginDir(t *testing.T, dir, source, version, content string) st
 	}
 
 	manifest := newV2Manifest(source, version, content)
-	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	manifestBytes, err := packageio.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sourceDir, providerpkg.ManifestFile), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, packageio.ManifestFile), manifestBytes, 0644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {

@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
+	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 )
 
 type OperationOverride = operationexposure.OperationOverride
@@ -19,7 +20,7 @@ const (
 	SpecSurfaceGraphQL SpecSurface = "graphql"
 	SpecSurfaceMCP     SpecSurface = "mcp"
 
-	StaticCatalogFile = "catalog.yaml"
+	StaticCatalogFile = packageio.StaticCatalogFile
 )
 
 type InvocationDependency struct {
@@ -103,5 +104,5 @@ func resolveManifestRelativeSpecURL(manifestPath, raw string) string {
 }
 
 func staticCatalogRequired(manifest *providermanifestv1.Manifest) bool {
-	return manifest != nil && manifest.Kind == providermanifestv1.KindPlugin && manifest.Spec != nil && !manifest.Spec.IsManifestBacked()
+	return packageio.StaticCatalogRequired(manifest)
 }

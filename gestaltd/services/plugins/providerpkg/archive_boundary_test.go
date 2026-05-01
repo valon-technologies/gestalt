@@ -1,6 +1,7 @@
 package providerpkg
 
 import (
+	"archive/tar"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -124,6 +125,40 @@ func TestExtractPackageRejectsEscapingEntry(t *testing.T) {
 		t.Fatal("expected escaping archive entry error")
 	}
 	if !strings.Contains(err.Error(), "escapes the package root") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReadArchiveEntryRejectsBackslashEntry(t *testing.T) {
+	t.Parallel()
+
+	archivePath := filepath.Join(t.TempDir(), "backslash-entry.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: `dir\evil.txt`, data: []byte("oops"), mode: 0644},
+	)
+
+	_, err := ReadArchiveEntry(archivePath, "dir/evil.txt")
+	if err == nil {
+		t.Fatal("expected backslash archive entry error")
+	}
+	if !strings.Contains(err.Error(), "must use forward slashes") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtractPackageRejectsUnsupportedEntry(t *testing.T) {
+	t.Parallel()
+
+	archivePath := filepath.Join(t.TempDir(), "unsupported-entry.tar.gz")
+	mustCreateArchive(t, archivePath,
+		archiveTestFile{name: "link", mode: 0777, typeflag: tar.TypeSymlink, linkname: "target"},
+	)
+
+	err := ExtractPackage(archivePath, filepath.Join(t.TempDir(), "out"))
+	if err == nil {
+		t.Fatal("expected unsupported tar entry error")
+	}
+	if !strings.Contains(err.Error(), "unsupported tar entry type") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -20,7 +20,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"gopkg.in/yaml.v3"
 )
 
@@ -2800,7 +2800,7 @@ func normalizeAdminConfig(cfg *Config) error {
 		return nil
 	}
 
-	roles, err := providerpkg.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
+	roles, err := packageio.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
 	if err != nil {
 		if admin.AuthorizationPolicy == "" {
 			return fmt.Errorf("normalize admin config: server.admin.allowedRoles requires server.admin.authorizationPolicy")
