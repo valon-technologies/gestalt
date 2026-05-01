@@ -20,13 +20,13 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
-	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 )
 
 func newServerTestAgentToolGrants(t testing.TB) *agentgrant.Manager {

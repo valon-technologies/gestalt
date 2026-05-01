@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func serveJSON(t *testing.T, spec any) *httptest.Server {

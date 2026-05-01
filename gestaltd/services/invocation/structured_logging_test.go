@@ -11,9 +11,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:paralleltest // mutates slog.Default

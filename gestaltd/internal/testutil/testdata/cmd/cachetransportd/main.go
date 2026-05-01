@@ -1,6 +1,6 @@
-// Command s3transportd runs a minimal S3 gRPC server on a Unix socket for SDK
-// transport tests. It prints READY to stdout when listening and serves until
-// killed.
+// Command cachetransportd runs a minimal Cache gRPC server on a Unix socket for
+// SDK transport tests. It prints READY to stdout when listening and serves
+// until killed.
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/valon-technologies/gestalt/server/services/testutil/s3transport"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/cachetransport"
 )
 
 func main() {
@@ -24,11 +24,11 @@ func main() {
 		target = "tcp://" + strings.TrimSpace(*tcp)
 	}
 	if strings.TrimSpace(target) == "" {
-		fmt.Fprintln(os.Stderr, "usage: s3transportd --socket <path> | --tcp <host:port>")
+		fmt.Fprintln(os.Stderr, "usage: cachetransportd --socket <path> | --tcp <host:port>")
 		os.Exit(1)
 	}
 
-	srv, err := s3transport.Start(target, s3transport.Options{
+	srv, err := cachetransport.Start(target, cachetransport.Options{
 		ExpectRelayToken: strings.TrimSpace(*expectToken),
 	})
 	if err != nil {

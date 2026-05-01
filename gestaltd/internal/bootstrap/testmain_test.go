@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 var (
@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 		{
 			name:   "echo plugin",
 			dir:    filepath.Join(root, "gestaltd"),
-			target: "./services/testutil/testdata/testproviders/echo",
+			target: "./internal/testutil/testdata/testproviders/echo",
 			output: sharedEchoPluginBin,
 		},
 		{
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 		{
 			name:   "agent provider",
 			dir:    filepath.Join(root, "gestaltd"),
-			target: "./services/testutil/testdata/testproviders/agent",
+			target: "./internal/testutil/testdata/testproviders/agent",
 			output: sharedAgentProviderBin,
 		},
 		{

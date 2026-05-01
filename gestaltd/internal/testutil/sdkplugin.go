@@ -29,7 +29,7 @@ func MustExampleProviderPluginPath() string {
 	if !ok {
 		panic("runtime.Caller failed")
 	}
-	return filepath.Join(root, "gestaltd", "services", "testutil", "testdata", "provider-go")
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-go")
 }
 
 func CopyExampleProviderPlugin(t *testing.T, dst string) {

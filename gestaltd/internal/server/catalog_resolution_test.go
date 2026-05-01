@@ -11,11 +11,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/testutil"
-	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 )
 
 type stubProvider struct {
