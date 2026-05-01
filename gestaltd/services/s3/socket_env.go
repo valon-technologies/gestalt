@@ -1,17 +1,17 @@
-package providerenv
+package s3
 
 import "strings"
 
-const DefaultS3SocketEnv = "GESTALT_S3_SOCKET"
-const defaultS3SocketTokenSuffix = "_TOKEN"
+const DefaultSocketEnv = "GESTALT_S3_SOCKET"
+const socketTokenEnvSuffix = "_TOKEN"
 
-func S3SocketEnv(name string) string {
+func SocketEnv(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return DefaultS3SocketEnv
+		return DefaultSocketEnv
 	}
 	var b strings.Builder
-	b.WriteString(DefaultS3SocketEnv)
+	b.WriteString(DefaultSocketEnv)
 	b.WriteByte('_')
 	for _, r := range name {
 		switch {
@@ -26,6 +26,6 @@ func S3SocketEnv(name string) string {
 	return b.String()
 }
 
-func S3SocketTokenEnv(name string) string {
-	return S3SocketEnv(name) + defaultS3SocketTokenSuffix
+func SocketTokenEnv(name string) string {
+	return SocketEnv(name) + socketTokenEnvSuffix
 }
