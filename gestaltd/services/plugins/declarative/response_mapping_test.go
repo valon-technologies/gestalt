@@ -143,6 +143,43 @@ func TestResponseMappingPassesThroughErrors(t *testing.T) {
 	}
 }
 
+func TestResponseMappingPassesThroughWhenDataPathMissing(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"not_abc123","title":"Meeting notes","hasMore":true,"cursor":"next"}`))
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		ResponseMapping: &ResponseMappingConfig{
+			Pagination: &PaginationProjectionConfig{
+				HasMore: &apiexec.ValueSelector{
+					Source: apiexec.ValueSelectorSourceBody,
+					Path:   "hasMore",
+				},
+				Cursor: &apiexec.ValueSelector{
+					Source: apiexec.ValueSelectorSourceBody,
+					Path:   "cursor",
+				},
+			},
+		},
+	}
+	setTestCatalog(b, restCatalogOp("get", http.MethodGet, "/get"))
+
+	result, err := b.Execute(context.Background(), "get", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if result.Body != `{"id":"not_abc123","title":"Meeting notes","hasMore":true,"cursor":"next"}` {
+		t.Fatalf("body = %s, want original response", result.Body)
+	}
+}
+
 func TestResponseMappingWithoutConfig(t *testing.T) {
 	t.Parallel()
 

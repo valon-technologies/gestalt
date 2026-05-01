@@ -30,12 +30,14 @@ func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConf
 
 	output := make(map[string]any)
 
-	if cfg.DataPath != "" {
-		if data, ok := apiexec.ExtractJSONPath(raw, cfg.DataPath); ok {
-			output["data"] = data
-		} else {
-			return result
-		}
+	if cfg.DataPath == "" {
+		return result
+	}
+
+	if data, ok := apiexec.ExtractJSONPath(raw, cfg.DataPath); ok {
+		output["data"] = data
+	} else {
+		return result
 	}
 
 	if cfg.Pagination != nil {
