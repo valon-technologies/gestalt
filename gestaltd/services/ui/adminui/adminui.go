@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/ui"
+	"github.com/valon-technologies/gestalt/server/services/ui"
 )
 
 //go:embed all:out
