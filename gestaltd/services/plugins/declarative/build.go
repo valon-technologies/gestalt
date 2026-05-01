@@ -1,4 +1,4 @@
-package provider
+package declarative
 
 import (
 	"encoding/json"
@@ -12,7 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
-	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 )
 
@@ -20,12 +19,12 @@ import (
 type BuildOption func(*buildOptions)
 
 type buildOptions struct {
-	authOverride coreintegration.AuthHandler
+	authOverride AuthHandler
 	egressCheck  func(string) error
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
-func WithAuthHandler(h coreintegration.AuthHandler) BuildOption {
+func WithAuthHandler(h AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
 }
 
@@ -50,7 +49,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	var auth coreintegration.AuthHandler
+	var auth AuthHandler
 	var err error
 	if bo.authOverride != nil {
 		auth = bo.authOverride
@@ -63,9 +62,9 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	cat := CatalogFromDefinition(def)
 	cat.BaseURL = baseURL
-	coreintegration.CompileSchemas(cat)
+	CompileSchemas(cat)
 
-	base := &coreintegration.Base{
+	base := &Base{
 		IntegrationName:    def.Provider,
 		IntegrationDisplay: def.DisplayName,
 		IntegrationDesc:    def.Description,
@@ -93,11 +92,11 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	switch def.AuthStyle {
 	case "", "bearer":
 	case "raw":
-		base.AuthStyle = coreintegration.AuthStyleRaw
+		base.AuthStyle = AuthStyleRaw
 	case "none":
-		base.AuthStyle = coreintegration.AuthStyleNone
+		base.AuthStyle = AuthStyleNone
 	case "basic":
-		base.AuthStyle = coreintegration.AuthStyleBasic
+		base.AuthStyle = AuthStyleBasic
 	default:
 		return nil, fmt.Errorf("%s: unknown authStyle %q", def.Provider, def.AuthStyle)
 	}
@@ -123,12 +122,12 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	switch {
 	case def.AuthMapping != nil && (len(def.AuthMapping.Headers) > 0 || def.AuthMapping.Basic != nil):
-		if base.AuthStyle != coreintegration.AuthStyleBasic {
+		if base.AuthStyle != AuthStyleBasic {
 			if def.AuthMapping.Basic != nil {
 				return nil, fmt.Errorf("%s: authMapping.basic requires authStyle basic", def.Provider)
 			}
 		}
-		base.TokenParser = coreintegration.MappedCredentialParser(def.AuthMapping)
+		base.TokenParser = MappedCredentialParser(def.AuthMapping)
 	case def.AuthHeader != "":
 		headerName := def.AuthHeader
 		base.TokenParser = func(token string) (string, map[string]string, error) {
@@ -148,11 +147,11 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	base.ManualAuthEnabled = def.ManualAuth
 
 	if def.ResponseMapping != nil {
-		rm := &coreintegration.ResponseMappingConfig{
+		rm := &ResponseMappingConfig{
 			DataPath: def.ResponseMapping.DataPath,
 		}
 		if def.ResponseMapping.Pagination != nil {
-			rm.Pagination = &coreintegration.PaginationProjectionConfig{
+			rm.Pagination = &PaginationProjectionConfig{
 				HasMore: buildValueSelector(def.ResponseMapping.Pagination.HasMore),
 				Cursor:  buildValueSelector(def.ResponseMapping.Pagination.Cursor),
 			}
@@ -261,7 +260,7 @@ func setStr(dst *string, val string) {
 	}
 }
 
-func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (coreintegration.AuthHandler, error) {
+func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (AuthHandler, error) {
 	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
 		return oauth.ManualAuthHandler{}, nil
 	}
@@ -270,7 +269,7 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 	if err != nil {
 		return nil, err
 	}
-	return coreintegration.UpstreamAuth{UpstreamHandler: upstream}, nil
+	return UpstreamAuth{UpstreamHandler: upstream}, nil
 }
 
 // BuildOAuthUpstream creates an oauth.UpstreamHandler from a provider

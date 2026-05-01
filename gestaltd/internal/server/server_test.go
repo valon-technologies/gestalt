@@ -49,7 +49,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -66,7 +65,7 @@ import (
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
-	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -10473,15 +10472,15 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 			name: "plugin auth unset uses provider auth types",
 			provider: func(t *testing.T) core.Provider {
 				t.Helper()
-				prov, err := provider.Build(&provider.Definition{
+				prov, err := declarative.Build(&declarative.Definition{
 					Provider:    "example",
 					DisplayName: "Example",
-					Auth:        provider.AuthDef{Type: "manual"},
-					CredentialFields: []provider.CredentialFieldDef{
+					Auth:        declarative.AuthDef{Type: "manual"},
+					CredentialFields: []declarative.CredentialFieldDef{
 						{Name: "primary_token", Label: "Primary Token"},
 						{Name: "secondary_token", Label: "Secondary Token"},
 					},
-					Operations: map[string]provider.OperationDef{
+					Operations: map[string]declarative.OperationDef{
 						"list_items": {Method: http.MethodGet, Path: "/items"},
 					},
 				}, config.ConnectionDef{})
@@ -10600,14 +10599,14 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 
 	newIconProvider := func(t *testing.T) core.Provider {
 		t.Helper()
-		prov, err := provider.Build(&provider.Definition{
+		prov, err := declarative.Build(&declarative.Definition{
 			Provider:    "iconprov",
 			DisplayName: "Icon Provider",
 			Description: "Has an icon",
 			IconSVG:     testSVG,
 			BaseURL:     "https://api.example.com",
-			Auth:        provider.AuthDef{Type: "manual"},
-			Operations: map[string]provider.OperationDef{
+			Auth:        declarative.AuthDef{Type: "manual"},
+			Operations: map[string]declarative.OperationDef{
 				"op": {Description: "An op", Method: http.MethodGet, Path: "/op"},
 			},
 		}, config.ConnectionDef{})
@@ -12402,7 +12401,7 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 	if err != nil {
 		t.Fatalf("NewMergedWithConnections: %v", err)
 	}
-	apiProv := coreintegration.NewRestricted(merged, map[string]string{"find": "search"})
+	apiProv := declarative.NewRestricted(merged, map[string]string{"find": "search"})
 	prov := composite.New("svc", apiProv, &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "svc-mcp", ConnMode: core.ConnectionModeNone},
@@ -17304,7 +17303,7 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 			}, nil
 		},
 	}
-	restricted := coreintegration.NewRestricted(baseProvider, map[string]string{"handle_event": ""})
+	restricted := declarative.NewRestricted(baseProvider, map[string]string{"handle_event": ""})
 	otherProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "events-mcp",
@@ -18257,7 +18256,7 @@ func serverTestCatalogFromOperations(name string, ops []core.Operation) *catalog
 			Transport:   catalog.TransportREST,
 		})
 	}
-	coreintegration.CompileSchemas(cat)
+	declarative.CompileSchemas(cat)
 	return cat
 }
 
@@ -18266,7 +18265,7 @@ func serverTestCatalog(name string, ops []catalog.CatalogOperation) *catalog.Cat
 		Name:       name,
 		Operations: append([]catalog.CatalogOperation(nil), ops...),
 	}
-	coreintegration.CompileSchemas(cat)
+	declarative.CompileSchemas(cat)
 	return cat
 }
 
@@ -19740,7 +19739,7 @@ func TestConnectManual(t *testing.T) {
 		t.Parallel()
 
 		var auditBuf bytes.Buffer
-		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+		prov := declarative.NewRestricted(&stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			},
@@ -19784,7 +19783,7 @@ func TestConnectManual(t *testing.T) {
 	t.Run("credential validation still wins before connection params", func(t *testing.T) {
 		t.Parallel()
 
-		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+		prov := declarative.NewRestricted(&stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			},
@@ -19916,7 +19915,7 @@ func TestConnectManual(t *testing.T) {
 		testutil.CloseOnCleanup(t, discoverySrv)
 
 		svc := coretesting.NewStubServices(t)
-		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+		prov := declarative.NewRestricted(&stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			},
@@ -21569,14 +21568,14 @@ func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
 	}))
 	testutil.CloseOnCleanup(t, upstream)
 
-	prov, err := provider.Build(&provider.Definition{
+	prov, err := declarative.Build(&declarative.Definition{
 		Provider:         "test-int",
 		DisplayName:      "Test Integration",
 		BaseURL:          upstream.URL,
 		ConnectionMode:   "none",
-		Auth:             provider.AuthDef{Type: "manual"},
+		Auth:             declarative.AuthDef{Type: "manual"},
 		ErrorMessagePath: "error.message",
-		Operations: map[string]provider.OperationDef{
+		Operations: map[string]declarative.OperationDef{
 			"do_thing": {Description: "Do a thing", Method: http.MethodGet, Path: "/do_thing"},
 		},
 	}, config.ConnectionDef{})
