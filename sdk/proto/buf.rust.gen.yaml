@@ -1,0 +1,23 @@
+version: v2
+clean: true
+inputs:
+  - directory: .
+    paths:
+      - v1/agent.proto
+      - v1/authentication.proto
+      - v1/plugin.proto
+      - v1/pluginruntime.proto
+      - v1/runtime.proto
+      - v1/cache.proto
+      - v1/secrets.proto
+      - v1/datastore.proto
+      - v1/s3.proto
+      - v1/workflow.proto
+plugins:
+  - remote: buf.build/community/neoeinstein-prost:v0.5.0
+    out: ../rust/src/generated
+    include_imports: true
+    opt:
+      - btree_map=.
+  - remote: buf.build/community/neoeinstein-tonic:v0.5.0
+    out: ../rust/src/generated
