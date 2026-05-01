@@ -11,7 +11,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
@@ -116,7 +115,7 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		authType = auth.Type
 		authorizationURL = auth.AuthorizationURL
 		if auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil) {
-			base.TokenParser = provider.MappedCredentialParser(auth.AuthMapping)
+			base.TokenParser = integration.MappedCredentialParser(auth.AuthMapping)
 		}
 	}
 	base.SetCatalog(cat)
