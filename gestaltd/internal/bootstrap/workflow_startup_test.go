@@ -17,9 +17,9 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -175,7 +175,7 @@ func workflowStartupTestFactories() *FactoryRegistry {
 	f.Auth = func(yaml.Node, Deps) (core.AuthenticationProvider, error) {
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
-	f.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, Deps) (core.ExternalCredentialProvider, error) {
+	f.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (core.ExternalCredentialProvider, error) {
 		return coretesting.NewStubExternalCredentialProvider(), nil
 	}
 	f.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
@@ -212,7 +212,7 @@ func buildModifiedExampleProviderBinary(t *testing.T, mutate func(string) string
 	return bin, root
 }
 
-func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []providerhost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
 	t.Helper()
 
 	if len(hostServices) != 1 {
@@ -296,7 +296,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 	}
 
 	factories := workflowStartupTestFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
@@ -429,7 +429,7 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 	}
 
 	factories := workflowStartupTestFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}

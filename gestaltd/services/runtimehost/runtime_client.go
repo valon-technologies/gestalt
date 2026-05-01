@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	providerRPCTimeout   = 10 * time.Second
+	// ProviderRPCTimeout is the default deadline for individual provider RPCs.
+	ProviderRPCTimeout   = 10 * time.Second
 	providerStartTimeout = 2 * time.Minute
 )
 
@@ -86,7 +87,7 @@ func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecy
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}
-	healthCtx, cancel := providerCallContext(ctx)
+	healthCtx, cancel := ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := client.HealthCheck(healthCtx, &emptypb.Empty{})
 	if err != nil {
@@ -142,11 +143,12 @@ func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
 	return nil
 }
 
-func providerCallContext(parent context.Context) (context.Context, context.CancelFunc) {
+// ProviderCallContext returns a child context with the default provider RPC deadline.
+func ProviderCallContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return context.WithTimeout(parent, providerRPCTimeout)
+	return context.WithTimeout(parent, ProviderRPCTimeout)
 }
 
 func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {

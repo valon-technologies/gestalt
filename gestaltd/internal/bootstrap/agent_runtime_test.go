@@ -19,17 +19,17 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1343,6 +1343,11 @@ func TestHostedAgentProviderPoolGetTurnRetriesAfterStalePreferredMiss(t *testing
 func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailure(t *testing.T) {
 	t.Parallel()
 
+	second := &hostedAgentPoolBackend{
+		id:        2,
+		provider:  &listSessionsAgentProvider{sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}}},
+		liveTurns: map[string]struct{}{},
+	}
 	pool := &hostedAgentProviderPool{
 		name:            "simple",
 		ctx:             context.Background(),
@@ -1353,11 +1358,7 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 				provider:  &listSessionsAgentProvider{err: context.DeadlineExceeded},
 				liveTurns: map[string]struct{}{},
 			},
-			{
-				id:        2,
-				provider:  &listSessionsAgentProvider{sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}}},
-				liveTurns: map[string]struct{}{},
-			},
+			second,
 		},
 	}
 
@@ -1368,7 +1369,7 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 	if len(sessions) != 1 || sessions[0].ID != "session-1" {
 		t.Fatalf("ListSessions = %#v, want session-1", sessions)
 	}
-	if backend := pool.sessionBackend("session-1"); backend != pool.backends[1] {
+	if backend := pool.sessionBackend("session-1"); backend != second {
 		t.Fatalf("session backend = %#v, want second backend", backend)
 	}
 }
@@ -2404,7 +2405,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 
 	bin := buildAgentProviderBinary(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()

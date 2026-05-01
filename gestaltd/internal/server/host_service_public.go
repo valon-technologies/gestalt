@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -200,7 +199,7 @@ func (s *Server) newCoreRoutableHostServiceHandlerEntry(ctx context.Context, plu
 		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
 		return hostServiceHandlerEntry{
 			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(pluginName, s.workflowSchedules, s.invocationTokens))
+				proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer(pluginName, s.workflowSchedules, s.invocationTokens))
 			}),
 		}, true
 	case target.Service == "agent_manager" &&
@@ -212,7 +211,7 @@ func (s *Server) newCoreRoutableHostServiceHandlerEntry(ctx context.Context, plu
 		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
 		return hostServiceHandlerEntry{
 			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterAgentManagerHostServer(srv, providerhost.NewAgentManagerServer(pluginName, s.agentRuns, s.invocationTokens))
+				proto.RegisterAgentManagerHostServer(srv, agentservice.NewManagerServer(pluginName, s.agentRuns, s.invocationTokens))
 			}),
 		}, true
 	case target.Service == "plugin_invoker" &&
@@ -228,7 +227,7 @@ func (s *Server) newCoreRoutableHostServiceHandlerEntry(ctx context.Context, plu
 		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
 		return hostServiceHandlerEntry{
 			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, s.invoker, s.invocationTokens))
+				proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewPluginInvokerServer(pluginName, entry.Invokes, s.invoker, s.invocationTokens))
 			}),
 		}, true
 	default:

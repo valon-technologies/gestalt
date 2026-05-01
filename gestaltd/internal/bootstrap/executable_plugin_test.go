@@ -37,7 +37,6 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -45,13 +44,12 @@ import (
 	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
@@ -62,6 +60,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -3840,7 +3839,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -5983,7 +5982,7 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -6303,7 +6302,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -6561,7 +6560,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -6689,7 +6688,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -6834,7 +6833,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -7228,7 +7227,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 }
 
-func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *providerhost.PublicHostServiceRegistry) http.Handler {
+func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *runtimehost.PublicHostServiceRegistry) http.Handler {
 	t.Helper()
 
 	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(stateSecret)
@@ -7262,7 +7261,7 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 	})
 }
 
-func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
+func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
 	handler, err := runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, target.SessionID)
 	if handler != nil || err != nil || strings.TrimSpace(target.SessionID) == "" {
 		return handler, err
@@ -7270,7 +7269,7 @@ func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *provide
 	return runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, "")
 }
 
-func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *providerhost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
+func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
 	if registry == nil {
 		return nil, nil
 	}
@@ -7493,7 +7492,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()
@@ -7633,7 +7632,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	publicHostServices := providerhost.NewPublicHostServiceRegistry()
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
 	relaySrv.StartTLS()

@@ -142,8 +142,8 @@ func TestStartRuntimeProviderUsesStartupTimeout(t *testing.T) {
 	if err := StartRuntimeProvider(context.Background(), client); err != nil {
 		t.Fatalf("StartRuntimeProvider: %v", err)
 	}
-	if remaining <= providerRPCTimeout {
-		t.Fatalf("StartProvider remaining deadline = %s, want above request timeout %s", remaining, providerRPCTimeout)
+	if remaining <= ProviderRPCTimeout {
+		t.Fatalf("StartProvider remaining deadline = %s, want above request timeout %s", remaining, ProviderRPCTimeout)
 	}
 	if remaining > providerStartTimeout {
 		t.Fatalf("StartProvider remaining deadline = %s, want at most startup timeout %s", remaining, providerStartTimeout)
