@@ -2511,6 +2511,9 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 			Plugin:     "ashby",
 			Operations: []string{"sync"},
 		},
+		{
+			Plugin: "managed",
+		},
 	})
 	p := &principal.Principal{
 		SubjectID:           "user:user-123",
@@ -2792,6 +2795,9 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 
 	permissions := []core.AccessPermission{
 		{
+			Plugin: "managed",
+		},
+		{
 			Plugin:     "linear",
 			Operations: []string{"list_issues", "list_comments", "list_customers", "list_documents"},
 		},
@@ -2933,6 +2939,8 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	perms := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "docs",
 		Operations: []string{"alpha_search", "beta_list", "delta_export", "gamma_get", "hidden_admin"},
+	}, {
+		Plugin: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3122,6 +3130,8 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 			"events.reply",
 			"events.setStatus",
 		},
+	}, {
+		Plugin: "managed",
 	}})
 	p := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3729,6 +3739,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	perms := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "roadmap",
 		Operations: []string{"sync"},
+	}, {
+		Plugin: "managed",
 	}})
 	full := &principal.Principal{
 		SubjectID:        "user:user-123",
@@ -3770,8 +3782,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
 		Source:           principal.SourceSession,
-		TokenPermissions: principal.PermissionSet{},
-		Scopes:           []string{},
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{Plugin: "managed"}}),
+		Scopes:           []string{"managed"},
 	}
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 

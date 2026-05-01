@@ -3991,6 +3991,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	perms := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "roadmap",
 		Operations: []string{"sync"},
+	}, {
+		Plugin: "managed",
 	}})
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:        "user:user-123",

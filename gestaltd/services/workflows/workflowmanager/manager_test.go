@@ -11,6 +11,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -36,9 +37,13 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle"},
+	}, {
+		Plugin: "simple",
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID:        "system:http_binding:github:event",
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
 		TokenPermissions: callerPermissions,
 		Scopes:           principal.PermissionPlugins(callerPermissions),
 	})
@@ -81,6 +86,8 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 			"bot.openPullRequest",
 			"events.handle",
 		},
+	}, {
+		Plugin: "simple",
 	}}
 	if !reflect.DeepEqual(managed.ExecutionRef.Permissions, wantPermissions) {
 		t.Fatalf("execution ref permissions = %#v, want %#v", managed.ExecutionRef.Permissions, wantPermissions)
@@ -169,8 +176,8 @@ func TestSignalOrStartRunRejectsDeniedExecutionRefPermissionsBeforeEnqueue(t *te
 		TokenPermissions: principal.PermissionSet{},
 	})
 	_, err := manager.SignalOrStartRun(context.Background(), denyAll, req)
-	if !errors.Is(err, core.ErrNotFound) {
-		t.Fatalf("SignalOrStartRun(deny-all) error = %v, want not found from unauthorized target", err)
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("SignalOrStartRun(deny-all) error = %v, want authorization denied from unauthorized target", err)
 	}
 	if provider.signalOrStartCalls != 1 {
 		t.Fatalf("SignalOrStartRun provider calls = %d, want 1", provider.signalOrStartCalls)
@@ -308,6 +315,8 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 	initialPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle"},
+	}, {
+		Plugin: "simple",
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
 		SubjectID:        "system:http_binding:github:event",
@@ -339,6 +348,8 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 	broaderPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle", "bot.admin"},
+	}, {
+		Plugin: "simple",
 	}})
 	broaderCaller := principal.Canonicalize(&principal.Principal{
 		SubjectID:        caller.SubjectID,
@@ -395,9 +406,13 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle"},
+	}, {
+		Plugin: "simple",
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID:        "system:http_binding:github:event",
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
 		TokenPermissions: callerPermissions,
 		Scopes:           principal.PermissionPlugins(callerPermissions),
 	})
@@ -417,6 +432,94 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 	})
 	if !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("SignalOrStartRun error = %v, want not found from unauthorized target", err)
+	}
+}
+
+func TestSignalOrStartRunRejectsUnauthorizedAgentProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        "system:http_binding:github:event",
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("SignalOrStartRun error = %v, want authorization denied from unauthorized agent provider", err)
+	}
+	if provider.signalOrStartCalls != 0 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
+	}
+}
+
+func TestSignalOrStartRunRejectsRuntimeDeniedAgentProvider(t *testing.T) {
+	t.Parallel()
+
+	authz, err := authorization.New(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
+			"agent_policy": {Default: "deny"},
+		},
+		ProviderPolicies: map[string]string{"simple": "agent_policy"},
+	})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+		Authorizer:   authz,
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle"},
+	}, {
+		Plugin: "simple",
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err = manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("SignalOrStartRun error = %v, want authorization denied from runtime-denied agent provider", err)
+	}
+	if provider.signalOrStartCalls != 0 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
 	}
 }
 
@@ -444,6 +547,8 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		Permissions: []core.AccessPermission{{
 			Plugin:     "github",
 			Operations: []string{"events.handle"},
+		}, {
+			Plugin: "simple",
 		}},
 	}
 	provider.refs[ref.ID] = ref
@@ -457,6 +562,8 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle", "bot.openPullRequest"},
+	}, {
+		Plugin: "simple",
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
 		SubjectID:        "system:http_binding:github:event",

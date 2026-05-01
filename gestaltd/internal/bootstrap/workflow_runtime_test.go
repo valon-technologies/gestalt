@@ -562,6 +562,8 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
+		}, {
+			Plugin: "managed",
 		}}),
 	})
 

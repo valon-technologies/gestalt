@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,11 +18,14 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
@@ -32,6 +36,261 @@ func newServerTestAgentToolGrants(t testing.TB) *agentgrant.Manager {
 		t.Fatalf("agentgrant.NewManager: %v", err)
 	}
 	return grants
+}
+
+type dynamicProviderAuthorizer struct {
+	allowed atomic.Bool
+}
+
+func (a *dynamicProviderAuthorizer) Start(context.Context) error                    { return nil }
+func (a *dynamicProviderAuthorizer) Close() error                                   { return nil }
+func (a *dynamicProviderAuthorizer) ReloadAuthorizationState(context.Context) error { return nil }
+
+func (a *dynamicProviderAuthorizer) AllowProvider(context.Context, *principal.Principal, string) bool {
+	return a.allowed.Load()
+}
+
+func (a *dynamicProviderAuthorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
+	return a.AllowProvider(ctx, p, provider)
+}
+
+func (a *dynamicProviderAuthorizer) ResolveAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, a.allowed.Load()
+}
+
+func (a *dynamicProviderAuthorizer) ResolvePolicyAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, a.allowed.Load()
+}
+
+func (a *dynamicProviderAuthorizer) ResolveAdminAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, a.allowed.Load()
+}
+
+func (a *dynamicProviderAuthorizer) AllowCatalogOperation(context.Context, *principal.Principal, string, catalog.CatalogOperation) bool {
+	return a.allowed.Load()
+}
+
+func (a *dynamicProviderAuthorizer) PolicyNameForProvider(string) string { return "agent_policy" }
+
+func (a *dynamicProviderAuthorizer) StaticRoleForPolicyIdentity(string, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, false
+}
+
+func (a *dynamicProviderAuthorizer) StaticRoleForProviderIdentity(string, string) (authorization.AccessContext, bool) {
+	return authorization.AccessContext{}, false
+}
+
+func (a *dynamicProviderAuthorizer) StaticMembersForPolicy(string) ([]authorization.StaticSubjectMember, bool) {
+	return nil, false
+}
+
+func (a *dynamicProviderAuthorizer) StaticMembersForProvider(string) (string, []authorization.StaticSubjectMember, bool) {
+	return "", nil, false
+}
+
+func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	var createSessionCalled atomic.Bool
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := coretesting.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"managed": {AuthorizationPolicy: "agent_policy"},
+		}
+		authz := mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.SubjectPolicyDef{
+				"agent_policy": {Default: "deny"},
+			},
+		}, cfg.PluginDefs)
+		cfg.Authorizer = authz
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:      agentControl,
+			Authorizer: authz,
+			ToolGrants: newServerTestAgentToolGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	provider.createSessionHook = func() {
+		createSessionCalled.Store(true)
+	}
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s, want 403", sessionResp.StatusCode, body)
+	}
+	if createSessionCalled.Load() {
+		t.Fatal("agent provider CreateSession was called despite authorization denial")
+	}
+}
+
+func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	authz := &dynamicProviderAuthorizer{}
+	authz.allowed.Store(true)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := coretesting.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.Authorizer = authz
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:      agentControl,
+			Authorizer: authz,
+			ToolGrants: newServerTestAgentToolGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	authz.allowed.Store(false)
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s, want 403", turnResp.StatusCode, body)
+	}
+	if got := len(provider.capturedGetSessionRequests()); got != 0 {
+		t.Fatalf("provider get session requests len = %d, want 0", got)
+	}
+	if got := len(provider.capturedTurnRequests()); got != 0 {
+		t.Fatalf("provider turn requests len = %d, want 0", got)
+	}
+}
+
+func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	services := coretesting.NewStubServices(t)
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	user := seedAPITokenWithPermissions(t, services, plaintext, hashed, "agent-user", []core.AccessPermission{{
+		Plugin:     "roadmap",
+		Operations: []string{"sync"},
+	}})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
+				return nil, core.ErrNotFound
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:      agentControl,
+			ToolGrants: newServerTestAgentToolGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	var createSessionCalled atomic.Bool
+	provider.createSessionHook = func() {
+		createSessionCalled.Store(true)
+	}
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.Header.Set("Authorization", "Bearer "+plaintext)
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s, want 403", sessionResp.StatusCode, body)
+	}
+	if createSessionCalled.Load() {
+		t.Fatal("agent provider CreateSession was called despite missing provider token permission")
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	provider.mu.Lock()
+	provider.sessions["session-managed"] = &coreagent.Session{
+		ID:           "session-managed",
+		ProviderName: "managed",
+		Model:        "gpt-5.4",
+		State:        coreagent.SessionStateActive,
+		CreatedBy: coreagent.Actor{
+			SubjectID:   principal.UserSubjectID(user.ID),
+			SubjectKind: string(principal.KindUser),
+		},
+		CreatedAt: &now,
+		UpdatedAt: &now,
+	}
+	provider.mu.Unlock()
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq.Header.Set("Authorization", "Bearer "+plaintext)
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s, want 403", turnResp.StatusCode, body)
+	}
+	if got := len(provider.capturedGetSessionRequests()); got != 0 {
+		t.Fatalf("provider get session requests len = %d, want 0", got)
+	}
+	if got := len(provider.capturedTurnRequests()); got != 0 {
+		t.Fatalf("provider turn requests len = %d, want 0", got)
+	}
 }
 
 type stubAgentControl struct {
@@ -74,8 +333,10 @@ type memoryAgentProvider struct {
 	turnEvents          map[string][]*coreagent.TurnEvent
 	interactions        map[string]*coreagent.Interaction
 	turnRequests        []coreagent.CreateTurnRequest
+	getSessionRequests  []coreagent.GetSessionRequest
 	listSessionRequests []coreagent.ListSessionsRequest
 	listTurnRequests    []coreagent.ListTurnsRequest
+	createSessionHook   func()
 }
 
 func newMemoryAgentProvider() *memoryAgentProvider {
@@ -90,6 +351,9 @@ func newMemoryAgentProvider() *memoryAgentProvider {
 func (p *memoryAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.createSessionHook != nil {
+		p.createSessionHook()
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
@@ -111,6 +375,7 @@ func (p *memoryAgentProvider) GetSession(_ context.Context, req coreagent.GetSes
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.getSessionRequests = append(p.getSessionRequests, req)
 	session, ok := p.sessions[req.SessionID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -239,6 +504,13 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		session.UpdatedAt = &now
 	}
 	return cloneTurn(turn), nil
+}
+
+func (p *memoryAgentProvider) capturedGetSessionRequests() []coreagent.GetSessionRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return append([]coreagent.GetSessionRequest(nil), p.getSessionRequests...)
 }
 
 func (p *memoryAgentProvider) capturedTurnRequests() []coreagent.CreateTurnRequest {
