@@ -40,6 +40,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Local planning notes
+thoughts/shared/plans/
+
 # Build artifacts
 build/
 dist/
