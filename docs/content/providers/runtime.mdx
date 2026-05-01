@@ -4,9 +4,9 @@ Runtime providers manage **where executable plugins and hosted agent providers r
 
 A runtime provider is not the plugin itself, and it is not a host provider like
 authentication, IndexedDB, or workflow. Instead, it is a control-plane backend
-that lets `gestaltd` create a plugin runtime session, bind host-local services
-into that session, start the plugin process there, and dial the plugin back
-over gRPC.
+that lets `gestaltd` create a plugin runtime session, prepare relay-backed
+host-service environment variables, start the plugin process there, and dial
+the plugin back over gRPC.
 
 ## Scope
 
@@ -27,11 +27,11 @@ By default, executable plugins and agent providers run on the same machine as
 
 When a provider does opt in, Gestalt selects a backend from `runtime.providers`,
 reads the backend's support profile, starts a runtime session, waits for that
-session to become ready, binds any required host-local services, starts the
-provider process inside the session, then dials it back over gRPC. From that
-point on, the hosted provider behaves like any other configured provider from
-the caller's point of view. Gestalt stops the runtime session during shutdown
-or after a bootstrap failure.
+session to become ready, prepares any required host-service relay bindings,
+starts the provider process inside the session, then dials it back over gRPC.
+From that point on, the hosted provider behaves like any other configured
+provider from the caller's point of view. Gestalt stops the runtime session
+during shutdown or after a bootstrap failure.
 
 That is why the runtime interface is bigger than a single `StartPlugin` call:
 Gestalt needs an explicit lifecycle boundary, not just a fire-and-forget launch
