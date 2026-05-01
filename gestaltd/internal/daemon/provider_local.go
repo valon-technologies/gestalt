@@ -27,10 +27,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
@@ -1429,7 +1429,7 @@ func canonicalPath(path string) (string, error) {
 
 func derivedPluginKey(manifest *providermanifestv1.Manifest, manifestPath string) string {
 	if manifest != nil {
-		if src, err := pluginsource.Parse(manifest.Source); err == nil {
+		if src, err := source.Parse(manifest.Source); err == nil {
 			if name := sanitizeDerivedPluginKey(src.PluginName()); name != "" {
 				return name
 			}
@@ -1473,7 +1473,7 @@ func defaultProviderLocalMountPath(manifest *providermanifestv1.Manifest, manife
 
 func derivedProviderLocalMountSlug(manifest *providermanifestv1.Manifest, manifestPath string) string {
 	if manifest != nil {
-		if src, err := pluginsource.Parse(manifest.Source); err == nil {
+		if src, err := source.Parse(manifest.Source); err == nil {
 			if slug := strings.TrimSpace(src.PluginName()); slug != "" {
 				return slug
 			}

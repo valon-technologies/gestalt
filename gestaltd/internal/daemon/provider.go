@@ -13,10 +13,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/pluginvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"gopkg.in/yaml.v3"
 )
 
@@ -109,7 +109,7 @@ func runProviderRelease(args []string) (err error) {
 		return fmt.Errorf("--version is required")
 	}
 
-	if err := pluginsource.ValidateVersion(*version); err != nil {
+	if err := source.ValidateVersion(*version); err != nil {
 		return fmt.Errorf("invalid --version: %w", err)
 	}
 
@@ -148,7 +148,7 @@ func runProviderRelease(args []string) (err error) {
 	if err := providerpkg.EnsureSourceStaticCatalog(manifestPath, releaseManifest); err != nil {
 		return err
 	}
-	src, err := pluginsource.Parse(releaseManifest.Source)
+	src, err := source.Parse(releaseManifest.Source)
 	if err != nil {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
@@ -409,7 +409,7 @@ func validateStagedReleaseCatalog(staged *providerpkg.StagedPreparedInstall) err
 	if staged == nil || staged.Manifest == nil || staged.Manifest.Kind != providermanifestv1.KindPlugin {
 		return nil
 	}
-	src, err := pluginsource.Parse(staged.Manifest.Source)
+	src, err := source.Parse(staged.Manifest.Source)
 	if err != nil {
 		return fmt.Errorf("invalid source in staged manifest: %w", err)
 	}

@@ -1,4 +1,4 @@
-package pluginsource
+package source
 
 import (
 	"testing"
