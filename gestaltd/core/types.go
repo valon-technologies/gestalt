@@ -14,15 +14,14 @@ type User struct {
 }
 
 type ManagedSubject struct {
-	SubjectID           string
-	Kind                string
-	DisplayName         string
-	Description         string
-	CredentialSubjectID string
-	CreatedBySubjectID  string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	DeletedAt           *time.Time
+	SubjectID          string
+	Kind               string
+	DisplayName        string
+	Description        string
+	CreatedBySubjectID string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	DeletedAt          *time.Time
 }
 
 type ExternalCredential struct {

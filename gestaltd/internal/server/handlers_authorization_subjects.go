@@ -31,16 +31,15 @@ type updateManagedSubjectRequest struct {
 }
 
 type managedSubjectInfo struct {
-	ID                  string     `json:"id"`
-	SubjectID           string     `json:"subjectId"`
-	Kind                string     `json:"kind"`
-	DisplayName         string     `json:"displayName"`
-	Description         string     `json:"description,omitempty"`
-	CredentialSubjectID string     `json:"credentialSubjectId"`
-	CreatedBySubjectID  string     `json:"createdBySubjectId,omitempty"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
-	DeletedAt           *time.Time `json:"deletedAt,omitempty"`
+	ID                 string     `json:"id"`
+	SubjectID          string     `json:"subjectId"`
+	Kind               string     `json:"kind"`
+	DisplayName        string     `json:"displayName"`
+	Description        string     `json:"description,omitempty"`
+	CreatedBySubjectID string     `json:"createdBySubjectId,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+	DeletedAt          *time.Time `json:"deletedAt,omitempty"`
 }
 
 type managedSubjectMemberInfo struct {
@@ -108,12 +107,11 @@ func (s *Server) createManagedSubject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subject, err := s.managedSubjects.CreateManagedSubject(r.Context(), &core.ManagedSubject{
-		SubjectID:           subjectID,
-		Kind:                coredata.ManagedSubjectKindServiceAccount,
-		DisplayName:         displayName,
-		Description:         req.Description,
-		CredentialSubjectID: subjectID,
-		CreatedBySubjectID:  creatorSubjectID,
+		SubjectID:          subjectID,
+		Kind:               coredata.ManagedSubjectKindServiceAccount,
+		DisplayName:        displayName,
+		Description:        req.Description,
+		CreatedBySubjectID: creatorSubjectID,
 	})
 	if err != nil {
 		if errors.Is(err, core.ErrAlreadyRegistered) {
@@ -177,22 +175,16 @@ func (s *Server) listManagedSubjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getManagedSubject(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionView)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
 		return
 	}
 	writeJSON(w, http.StatusOK, managedSubjectInfoFromCore(subject))
 }
 
 func (s *Server) updateManagedSubject(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManage)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionManage) {
 		return
 	}
 
@@ -250,11 +242,8 @@ func (s *Server) deleteManagedSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listManagedSubjectMembers(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionView)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
 		return
 	}
 	members, err := s.managedSubjectMemberRows(r.Context(), subject.SubjectID)
@@ -266,11 +255,8 @@ func (s *Server) listManagedSubjectMembers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) putManagedSubjectMember(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManage)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionManage) {
 		return
 	}
 	var req putAdminAuthorizationMemberRequest
@@ -299,11 +285,8 @@ func (s *Server) putManagedSubjectMember(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) deleteManagedSubjectMember(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManage)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionManage) {
 		return
 	}
 	memberSubjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "memberSubjectID")))
@@ -325,11 +308,8 @@ func (s *Server) deleteManagedSubjectMember(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) listManagedSubjectGrants(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionView)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
 		return
 	}
 	grants, err := s.managedSubjectGrantRows(r.Context(), subject.SubjectID)
@@ -341,11 +321,8 @@ func (s *Server) listManagedSubjectGrants(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) putManagedSubjectGrant(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionGrant)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionGrant) {
 		return
 	}
 	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
@@ -388,11 +365,8 @@ func (s *Server) putManagedSubjectGrant(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionGrant)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionGrant) {
 		return
 	}
 	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
@@ -416,55 +390,24 @@ func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) listManagedSubjectIntegrations(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
-	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
-		return
-	}
-	s.listIntegrations(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+	s.withManagedSubjectCredential(w, r, authorization.ProviderManagedSubjectActionView, s.listIntegrations)
 }
 
 func (s *Server) startManagedSubjectIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
-	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
-		return
-	}
-	s.startIntegrationOAuth(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+	s.withManagedSubjectCredential(w, r, authorization.ProviderManagedSubjectActionConnect, s.startIntegrationOAuth)
 }
 
 func (s *Server) connectManagedSubjectManual(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
-	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
-		return
-	}
-	s.connectManual(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+	s.withManagedSubjectCredential(w, r, authorization.ProviderManagedSubjectActionConnect, s.connectManual)
 }
 
 func (s *Server) disconnectManagedSubjectIntegration(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
-	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionConnect) {
-		return
-	}
-	s.disconnectIntegration(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
+	s.withManagedSubjectCredential(w, r, authorization.ProviderManagedSubjectActionConnect, s.disconnectIntegration)
 }
 
 func (s *Server) createManagedSubjectAPIToken(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionCreateToken)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionCreateToken) {
 		return
 	}
 	var req createTokenRequest
@@ -499,11 +442,8 @@ func (s *Server) createManagedSubjectAPIToken(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) listManagedSubjectAPITokens(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionView)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionView) {
 		return
 	}
 	tokens, err := s.apiTokens.ListAPITokensByOwner(r.Context(), core.APITokenOwnerKindSubject, subject.SubjectID)
@@ -519,11 +459,8 @@ func (s *Server) listManagedSubjectAPITokens(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) revokeManagedSubjectAPIToken(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManage)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionManage) {
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
@@ -539,11 +476,8 @@ func (s *Server) revokeManagedSubjectAPIToken(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) revokeAllManagedSubjectAPITokens(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.managedSubjectFromPath(w, r)
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManage)
 	if !ok {
-		return
-	}
-	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, authorization.ProviderManagedSubjectActionManage) {
 		return
 	}
 	count, err := s.apiTokens.RevokeAllAPITokensByOwner(r.Context(), core.APITokenOwnerKindSubject, subject.SubjectID)
@@ -618,6 +552,17 @@ func (s *Server) managedSubjectFromPath(w http.ResponseWriter, r *http.Request) 
 	return subject, true
 }
 
+func (s *Server) managedSubjectForAction(w http.ResponseWriter, r *http.Request, action string) (*core.ManagedSubject, bool) {
+	subject, ok := s.managedSubjectFromPath(w, r)
+	if !ok {
+		return nil, false
+	}
+	if !s.requireManagedSubjectAction(w, r, subject.SubjectID, action) {
+		return nil, false
+	}
+	return subject, true
+}
+
 func (s *Server) managedSubjectIDFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if !s.ensureManagedSubjectsAvailable(w) {
 		return "", false
@@ -683,6 +628,14 @@ func managedSubjectCredentialContext(ctx context.Context, subjectID string) cont
 	}
 	p.CredentialSubjectID = strings.TrimSpace(subjectID)
 	return principal.WithPrincipal(ctx, p)
+}
+
+func (s *Server) withManagedSubjectCredential(w http.ResponseWriter, r *http.Request, action string, handler http.HandlerFunc) {
+	subject, ok := s.managedSubjectForAction(w, r, action)
+	if !ok {
+		return
+	}
+	handler(w, r.WithContext(managedSubjectCredentialContext(r.Context(), subject.SubjectID)))
 }
 
 func (s *Server) writeManagedSubjectMembership(ctx context.Context, subjectID, memberSubjectID, role string) error {
@@ -867,16 +820,15 @@ func managedSubjectInfoFromCore(subject *core.ManagedSubject) managedSubjectInfo
 	}
 	_, id, _ := core.ParseSubjectID(subject.SubjectID)
 	return managedSubjectInfo{
-		ID:                  id,
-		SubjectID:           subject.SubjectID,
-		Kind:                subject.Kind,
-		DisplayName:         subject.DisplayName,
-		Description:         subject.Description,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		CreatedBySubjectID:  subject.CreatedBySubjectID,
-		CreatedAt:           subject.CreatedAt,
-		UpdatedAt:           subject.UpdatedAt,
-		DeletedAt:           subject.DeletedAt,
+		ID:                 id,
+		SubjectID:          subject.SubjectID,
+		Kind:               subject.Kind,
+		DisplayName:        subject.DisplayName,
+		Description:        subject.Description,
+		CreatedBySubjectID: subject.CreatedBySubjectID,
+		CreatedAt:          subject.CreatedAt,
+		UpdatedAt:          subject.UpdatedAt,
+		DeletedAt:          subject.DeletedAt,
 	}
 }
 

@@ -47,7 +47,6 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 		"kind":                  kind,
 		"display_name":          strings.TrimSpace(subject.DisplayName),
 		"description":           strings.TrimSpace(subject.Description),
-		"credential_subject_id": subjectID,
 		"created_by_subject_id": strings.TrimSpace(subject.CreatedBySubjectID),
 		"deleted":               false,
 		"created_at":            now,
@@ -153,15 +152,14 @@ func (s *ManagedSubjectService) RemoveManagedSubjectForRollback(ctx context.Cont
 
 func recordToManagedSubject(rec indexeddb.Record) *core.ManagedSubject {
 	return &core.ManagedSubject{
-		SubjectID:           recString(rec, "subject_id"),
-		Kind:                recString(rec, "kind"),
-		DisplayName:         recString(rec, "display_name"),
-		Description:         recString(rec, "description"),
-		CredentialSubjectID: recString(rec, "credential_subject_id"),
-		CreatedBySubjectID:  recString(rec, "created_by_subject_id"),
-		CreatedAt:           recTime(rec, "created_at"),
-		UpdatedAt:           recTime(rec, "updated_at"),
-		DeletedAt:           recTimePtr(rec, "deleted_at"),
+		SubjectID:          recString(rec, "subject_id"),
+		Kind:               recString(rec, "kind"),
+		DisplayName:        recString(rec, "display_name"),
+		Description:        recString(rec, "description"),
+		CreatedBySubjectID: recString(rec, "created_by_subject_id"),
+		CreatedAt:          recTime(rec, "created_at"),
+		UpdatedAt:          recTime(rec, "updated_at"),
+		DeletedAt:          recTimePtr(rec, "deleted_at"),
 	}
 }
 
@@ -172,7 +170,6 @@ func managedSubjectToRecord(subject *core.ManagedSubject) indexeddb.Record {
 		"kind":                  strings.TrimSpace(subject.Kind),
 		"display_name":          strings.TrimSpace(subject.DisplayName),
 		"description":           strings.TrimSpace(subject.Description),
-		"credential_subject_id": strings.TrimSpace(subject.CredentialSubjectID),
 		"created_by_subject_id": strings.TrimSpace(subject.CreatedBySubjectID),
 		"deleted":               subject.DeletedAt != nil,
 		"created_at":            subject.CreatedAt,
