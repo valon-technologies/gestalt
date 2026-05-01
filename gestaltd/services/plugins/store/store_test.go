@@ -1,4 +1,4 @@
-package pluginstore
+package store
 
 import (
 	"archive/tar"
