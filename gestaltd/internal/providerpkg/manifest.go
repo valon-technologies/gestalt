@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"gopkg.in/yaml.v3"
 )
 
@@ -126,10 +126,10 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	if manifest.Source == "" {
 		return fmt.Errorf("manifest source is required")
 	}
-	if _, err := pluginsource.Parse(manifest.Source); err != nil {
+	if _, err := source.Parse(manifest.Source); err != nil {
 		return fmt.Errorf("manifest source: %w", err)
 	}
-	if err := pluginsource.ValidateVersion(manifest.Version); err != nil {
+	if err := source.ValidateVersion(manifest.Version); err != nil {
 		return fmt.Errorf("manifest version: %w", err)
 	}
 	if manifest.IconFile != "" {

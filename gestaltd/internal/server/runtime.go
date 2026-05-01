@@ -17,8 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -285,7 +285,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 			continue
 		}
 		if entry.ResolvedManifest != nil {
-			if src, err := pluginsource.Parse(strings.TrimSpace(entry.ResolvedManifest.Source)); err == nil {
+			if src, err := source.Parse(strings.TrimSpace(entry.ResolvedManifest.Source)); err == nil {
 				toolPrefixes[name] = src.PluginName() + "_"
 			}
 		}

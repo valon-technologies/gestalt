@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 )
 
 const (
@@ -115,7 +115,7 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 	}
 	pluginName := strings.TrimSpace(opts.PluginName)
 	if pluginName == "" {
-		src, err := pluginsource.Parse(srcManifest.Source)
+		src, err := source.Parse(srcManifest.Source)
 		if err != nil {
 			return nil, fmt.Errorf("invalid source in manifest: %w", err)
 		}

@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"gopkg.in/yaml.v3"
 )
 
@@ -105,10 +105,10 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 	if metadata.SchemaVersion != providerReleaseSchemaVersion {
 		return fmt.Errorf("unsupported provider release schema version %d", metadata.SchemaVersion)
 	}
-	if _, err := pluginsource.Parse(strings.TrimSpace(metadata.Package)); err != nil {
+	if _, err := source.Parse(strings.TrimSpace(metadata.Package)); err != nil {
 		return fmt.Errorf("provider release package: %w", err)
 	}
-	if err := pluginsource.ValidateVersion(strings.TrimSpace(metadata.Version)); err != nil {
+	if err := source.ValidateVersion(strings.TrimSpace(metadata.Version)); err != nil {
 		return fmt.Errorf("provider release version: %w", err)
 	}
 	switch metadata.Kind {

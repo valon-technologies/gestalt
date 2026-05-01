@@ -1,4 +1,4 @@
-package pluginsource
+package source
 
 import (
 	"fmt"
@@ -27,23 +27,23 @@ type Source struct {
 
 func Parse(raw string) (Source, error) {
 	if raw != strings.TrimSpace(raw) {
-		return Source{}, fmt.Errorf("pluginsource: input contains leading or trailing whitespace")
+		return Source{}, fmt.Errorf("plugin source: input contains leading or trailing whitespace")
 	}
 
 	parts := strings.Split(raw, "/")
 	if len(parts) < minSegmentCount {
-		return Source{}, fmt.Errorf("pluginsource: expected at least %d segments, got %d", minSegmentCount, len(parts))
+		return Source{}, fmt.Errorf("plugin source: expected at least %d segments, got %d", minSegmentCount, len(parts))
 	}
 
 	host, owner, repo := parts[0], parts[1], parts[2]
 
 	if host != HostGitHub {
-		return Source{}, fmt.Errorf("pluginsource: unsupported host %q (only %s is supported)", host, HostGitHub)
+		return Source{}, fmt.Errorf("plugin source: unsupported host %q (only %s is supported)", host, HostGitHub)
 	}
 
 	for _, seg := range parts[1:] {
 		if !segmentRe.MatchString(seg) {
-			return Source{}, fmt.Errorf("pluginsource: invalid segment %q", seg)
+			return Source{}, fmt.Errorf("plugin source: invalid segment %q", seg)
 		}
 	}
 
