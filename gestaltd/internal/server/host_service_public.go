@@ -18,7 +18,6 @@ import (
 
 type hostServiceHandlerKey struct {
 	pluginName string
-	sessionID  string
 	service    string
 	envVar     string
 }
@@ -39,7 +38,7 @@ func validatePublicHostServices(services []runtimehost.PublicHostService) error 
 		if !ok {
 			continue
 		}
-		if key.sessionID == "" && service.SessionVerifier == nil {
+		if service.SessionVerifier == nil {
 			return fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		entry := hostServiceHandlerEntry{verifier: service.SessionVerifier}
@@ -74,7 +73,6 @@ func checkHostServiceHandlerDuplicate(key hostServiceHandlerKey, entries []hostS
 func publicHostServiceHandlerKey(service runtimehost.PublicHostService) (hostServiceHandlerKey, bool) {
 	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(service.PluginName),
-		sessionID:  strings.TrimSpace(service.SessionID),
 		service:    strings.TrimSpace(service.Service.Name),
 		envVar:     strings.TrimSpace(service.Service.EnvVar),
 	}
@@ -85,11 +83,7 @@ func publicHostServiceHandlerKey(service runtimehost.PublicHostService) (hostSer
 }
 
 func (k hostServiceHandlerKey) String() string {
-	parts := []string{k.pluginName, k.service, k.envVar}
-	if k.sessionID != "" {
-		parts = append(parts, "session="+k.sessionID)
-	}
-	return strings.Join(parts, "/")
+	return strings.Join([]string{k.pluginName, k.service, k.envVar}, "/")
 }
 
 func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
@@ -110,29 +104,13 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 		return nil, nil
 	}
 
-	exactKey := hostServiceHandlerKey{
+	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(target.PluginName),
-		sessionID:  strings.TrimSpace(target.SessionID),
 		service:    strings.TrimSpace(target.Service),
 		envVar:     strings.TrimSpace(target.EnvVar),
 	}
-	providerKey := exactKey
-	providerKey.sessionID = ""
 
-	if exactKey.sessionID != "" {
-		entry, found, ok, err := s.hostServiceHandlerEntry(ctx, exactKey, exactKey.sessionID)
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			if !ok {
-				return nil, nil
-			}
-			return entry.handler, nil
-		}
-	}
-
-	entry, _, ok, err := s.hostServiceHandlerEntry(ctx, providerKey, exactKey.sessionID)
+	entry, _, ok, err := s.hostServiceHandlerEntry(ctx, key, target.SessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,15 +192,6 @@ func (s *Server) verifyRegisteredCoreRoutableHostServiceSession(ctx context.Cont
 		key, ok := publicHostServiceHandlerKey(service)
 		if !ok || key.pluginName != pluginName || key.service != serviceName || key.envVar != envVar {
 			continue
-		}
-		if key.sessionID != "" {
-			if key.sessionID != sessionID {
-				continue
-			}
-			if service.SessionVerifier == nil {
-				return true, nil
-			}
-			return true, service.SessionVerifier.VerifyHostServiceSession(ctx, sessionID)
 		}
 		if service.SessionVerifier == nil {
 			continue
@@ -333,7 +302,7 @@ func (s *Server) hostServiceHandlerEntry(ctx context.Context, key hostServiceHan
 		if !ok || serviceKey != key {
 			continue
 		}
-		if serviceKey.sessionID == "" && service.SessionVerifier == nil {
+		if service.SessionVerifier == nil {
 			return hostServiceHandlerEntry{}, true, false, fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		entry, ok := s.publicHostServiceHandlerEntry(service)
@@ -427,7 +396,7 @@ func selectHostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKe
 	var lastErr error
 	for _, entry := range entries {
 		if entry.verifier == nil {
-			return entry, true, nil
+			return hostServiceHandlerEntry{}, false, fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		if err := entry.verifier.VerifyHostServiceSession(ctx, sessionID); err != nil {
 			lastErr = err

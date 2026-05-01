@@ -10,12 +10,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestHostServiceHandlerDoesNotFallbackWhenExactSessionEntryFails(t *testing.T) {
+func TestHostServiceHandlerReturnsVerifierError(t *testing.T) {
 	t.Parallel()
 
 	registry := runtimehost.NewPublicHostServiceRegistry()
-	registry.RegisterSession("support", "session-1", testHostService(), testHostService())
-	registry.RegisterVerified("support", allowHostServiceSessionVerifier{}, testHostService())
+	registry.RegisterVerified("support", rejectHostServiceSessionVerifier{}, testHostService())
 	s := &Server{publicHostServices: registry}
 
 	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
@@ -24,11 +23,11 @@ func TestHostServiceHandlerDoesNotFallbackWhenExactSessionEntryFails(t *testing.
 		Service:    "cache",
 		EnvVar:     "GESTALT_TEST_CACHE_SOCKET",
 	})
-	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET/session=session-1") {
-		t.Fatalf("hostServiceHandler err = %v, want exact session duplicate failure", err)
+	if err == nil || !strings.Contains(err.Error(), `runtime session "session-1" is not active`) {
+		t.Fatalf("hostServiceHandler err = %v, want verifier failure", err)
 	}
 	if handler != nil {
-		t.Fatalf("handler = %v, want no provider-wide fallback", handler)
+		t.Fatalf("handler = %v, want no handler", handler)
 	}
 }
 
@@ -52,40 +51,6 @@ func TestValidatePublicHostServicesAllowsDuplicateVerifiedServices(t *testing.T)
 	})
 	if err != nil {
 		t.Fatalf("validatePublicHostServices: %v", err)
-	}
-}
-
-func TestValidatePublicHostServicesAllowsSessionServiceWithoutVerifier(t *testing.T) {
-	t.Parallel()
-
-	err := validatePublicHostServices([]runtimehost.PublicHostService{{
-		PluginName: "support",
-		SessionID:  "session-1",
-		Service:    testHostService(),
-	}})
-	if err != nil {
-		t.Fatalf("validatePublicHostServices: %v", err)
-	}
-}
-
-func TestRegisterSessionRejectsBlankSessionID(t *testing.T) {
-	t.Parallel()
-
-	registry := runtimehost.NewPublicHostServiceRegistry()
-	registry.RegisterSession("support", "", testHostService())
-	s := &Server{publicHostServices: registry}
-	key := hostServiceHandlerKey{
-		pluginName: "support",
-		service:    "cache",
-		envVar:     "GESTALT_TEST_CACHE_SOCKET",
-	}
-
-	_, found, ok, err := s.hostServiceHandlerEntry(context.Background(), key, "session-1")
-	if err != nil {
-		t.Fatalf("hostServiceHandlerEntry: %v", err)
-	}
-	if found || ok {
-		t.Fatalf("hostServiceHandlerEntry found=%v ok=%v, want no dynamic provider-wide registration", found, ok)
 	}
 }
 

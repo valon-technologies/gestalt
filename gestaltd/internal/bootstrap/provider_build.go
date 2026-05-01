@@ -1762,12 +1762,12 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 			return nil, fmt.Errorf("host service %q requires a service name for public relay", hostService.EnvVar)
 		}
 	}
-	deps.PublicHostServices.RegisterVerified(providerName, runtimeHostServiceSessionVerifier{
+	registration := deps.PublicHostServices.RegisterVerified(providerName, runtimeHostServiceSessionVerifier{
 		providerName: providerName,
 		provider:     runtimeProvider,
 	}, registerHostServices...)
 	return func() {
-		deps.PublicHostServices.Unregister(providerName, registerHostServices...)
+		registration.Unregister()
 	}, nil
 }
 

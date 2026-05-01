@@ -761,7 +761,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 		},
 	}
 	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), hostService1)
-	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-2"), hostService2)
+	session2Registration := publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-2"), hostService2)
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
@@ -802,15 +802,49 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 	if got := cacheSrv2.calls(); got != 1 {
 		t.Fatalf("second backend calls = %d, want 1", got)
 	}
+
+	session2Registration.Unregister()
+	session1Token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		Service:      "cache",
+		EnvVar:       envVar,
+		MethodPrefix: "/gestalt.provider.v1.Cache/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken(session-1): %v", err)
+	}
+	session1Ctx, session1Cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer session1Cancel()
+	session1Ctx = metadata.NewOutgoingContext(session1Ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, session1Token))
+	if _, err := proto.NewCacheClient(conn).Get(session1Ctx, &proto.CacheGetRequest{Key: "still-active"}); err != nil {
+		t.Fatalf("Cache.Get via remaining duplicate relay: %v", err)
+	}
+	if got := cacheSrv1.calls(); got != 1 {
+		t.Fatalf("first backend calls after unregistering second registration = %d, want 1", got)
+	}
+
+	removedCtx, removedCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer removedCancel()
+	removedCtx = metadata.NewOutgoingContext(removedCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	_, err = proto.NewCacheClient(conn).Get(removedCtx, &proto.CacheGetRequest{Key: "removed"})
+	if grpcstatus.Code(err) != codes.Unauthenticated {
+		t.Fatalf("Cache.Get removed duplicate code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+	}
+	if got := cacheSrv2.calls(); got != 1 {
+		t.Fatalf("second backend calls after unregister = %d, want 1", got)
+	}
 }
 
-func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
+func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &relayTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	sessionVerifier := newRelayTestSessionVerifier("session-1")
 	hostService := runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
@@ -818,7 +852,7 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
 	}
-	publicHostServices.RegisterSession("support", "session-1", hostService)
+	publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
@@ -852,16 +886,16 @@ func TestHostServiceRelayStopsServingUnregisteredSession(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	if _, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "active"}); err != nil {
-		t.Fatalf("Cache.Get via session relay: %v", err)
+		t.Fatalf("Cache.Get via relay: %v", err)
 	}
 
-	publicHostServices.UnregisterSession("support", "session-1", hostService)
+	publicHostServices.Unregister("support", hostService)
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 	_, err = proto.NewCacheClient(conn).Get(staleCtx, &proto.CacheGetRequest{Key: "stale"})
 	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("Cache.Get unregistered session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+		t.Fatalf("Cache.Get unregistered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
 	}
 	if got := cacheSrv.calls(); got != 1 {
 		t.Fatalf("backend calls = %d, want only the registered call", got)
@@ -1136,7 +1170,7 @@ func TestHostServiceRelayCoreRoutableProviderDevUsesRegisteredSessionVerifier(t 
 		CredentialMode: core.ConnectionModeNone,
 	}}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.RegisterSession("support", "provider-dev-session", runtimehost.HostService{
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("provider-dev-session"), runtimehost.HostService{
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(*grpc.Server) {

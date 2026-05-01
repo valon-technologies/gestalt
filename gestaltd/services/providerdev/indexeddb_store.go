@@ -1080,24 +1080,6 @@ func (s *sharedSession) invokeRaw(ctx context.Context, providerName, method stri
 	return s.store.waitCall(ctx, s.id, callID)
 }
 
-func (m *Manager) VerifyHostServiceSession(ctx context.Context, providerName, sessionID string) error {
-	if m == nil || m.shared == nil {
-		return status.Error(codes.FailedPrecondition, "provider dev indexeddb attachment state is not configured")
-	}
-	session, err := m.shared.getActiveAttachment(ctx, sessionID, time.Now())
-	if err != nil {
-		return err
-	}
-	providerName = strings.TrimSpace(providerName)
-	for i := range session.targets {
-		target := &session.targets[i]
-		if target.Name == providerName {
-			return nil
-		}
-	}
-	return status.Errorf(codes.NotFound, "provider dev session %q does not include provider %q", sessionID, providerName)
-}
-
 func (r indexedDBSessionRecord) attachmentInfo() AttachmentInfo {
 	providers := make([]AttachmentProviderInfo, 0, len(r.targets))
 	for i := range r.targets {
