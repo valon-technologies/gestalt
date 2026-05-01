@@ -2,17 +2,9 @@ package runtimehost
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 )
-
-// ErrProviderNotHostedRuntime means a public host-service callback did not
-// belong to a provider backed by a hosted runtime.
-//
-// Deprecated: public host-service relay callbacks now resolve exclusively
-// through registered PublicHostService entries and their session verifiers.
-var ErrProviderNotHostedRuntime = errors.New("provider does not use a hosted runtime")
 
 type PublicHostServiceSessionVerifier interface {
 	VerifyHostServiceSession(context.Context, string) error
@@ -107,47 +99,6 @@ func (r *PublicHostServiceRegistry) unregisterIDs(ids ...uint64) {
 	r.services = filtered
 }
 
-func (r *PublicHostServiceRegistry) Unregister(pluginName string, services ...HostService) {
-	if r == nil {
-		return
-	}
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		return
-	}
-	removing := make(map[string]struct{}, len(services))
-	for _, service := range services {
-		key := publicHostServiceKey(service)
-		if key != "" {
-			removing[key] = struct{}{}
-		}
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	originalLen := len(r.services)
-	filtered := r.services[:0]
-	for _, service := range r.services {
-		if strings.TrimSpace(service.PluginName) == pluginName {
-			if len(removing) == 0 {
-				continue
-			}
-			if _, ok := removing[publicHostServiceKey(service.Service)]; ok {
-				continue
-			}
-		}
-		filtered = append(filtered, service)
-	}
-	for i := len(filtered); i < originalLen; i++ {
-		r.services[i] = PublicHostService{}
-	}
-	r.services = filtered
-}
-
-func (r *PublicHostServiceRegistry) Services() []PublicHostService {
-	return r.Snapshot()
-}
-
 func (r *PublicHostServiceRegistry) Snapshot() []PublicHostService {
 	if r == nil {
 		return nil
@@ -158,15 +109,6 @@ func (r *PublicHostServiceRegistry) Snapshot() []PublicHostService {
 		return nil
 	}
 	return append([]PublicHostService(nil), r.services...)
-}
-
-func publicHostServiceKey(service HostService) string {
-	name := strings.TrimSpace(service.Name)
-	envVar := strings.TrimSpace(service.EnvVar)
-	if name == "" || envVar == "" {
-		return ""
-	}
-	return name + "\x00" + envVar
 }
 
 func (s PublicHostService) RegistrationID() uint64 {

@@ -6081,7 +6081,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 	if calls := cacheFactoryCalls.Load(); calls != 1 {
 		t.Fatalf("cache factory calls after CreateSession = %d, want startup-only open", calls)
 	}
-	for _, service := range publicHostServices.Services() {
+	for _, service := range publicHostServices.Snapshot() {
 		if strings.TrimSpace(service.Service.Name) != "s3" || strings.TrimSpace(service.Service.EnvVar) != s3service.SocketEnv("main") {
 			continue
 		}
@@ -6099,7 +6099,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 		}
 		return
 	}
-	t.Fatalf("public host services = %#v, want s3/%s", publicHostServices.Services(), s3service.SocketEnv("main"))
+	t.Fatalf("public host services = %#v, want s3/%s", publicHostServices.Snapshot(), s3service.SocketEnv("main"))
 }
 
 func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -7284,7 +7284,7 @@ func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.Public
 		t.Fatalf("public host services registry is nil, want %s/%s verifier entry", serviceName, envVar)
 	}
 	found := false
-	for _, service := range registry.Services() {
+	for _, service := range registry.Snapshot() {
 		if strings.TrimSpace(service.Service.Name) != strings.TrimSpace(serviceName) {
 			continue
 		}
@@ -7293,11 +7293,11 @@ func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.Public
 		}
 		found = true
 		if service.SessionVerifier == nil {
-			t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Services(), serviceName, envVar)
+			t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Snapshot(), serviceName, envVar)
 		}
 	}
 	if !found {
-		t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Services(), serviceName, envVar)
+		t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Snapshot(), serviceName, envVar)
 	}
 }
 
@@ -7381,7 +7381,7 @@ func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtime
 	if registry == nil {
 		return nil, nil
 	}
-	for _, entry := range registry.Services() {
+	for _, entry := range registry.Snapshot() {
 		if strings.TrimSpace(entry.PluginName) != strings.TrimSpace(target.PluginName) {
 			continue
 		}
