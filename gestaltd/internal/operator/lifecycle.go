@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/store"
 	"gopkg.in/yaml.v3"
 )
@@ -283,7 +283,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
-	if err := pluginvalidation.ValidateEffectiveCatalogsAndDependencies(context.Background(), cfg); err != nil {
+	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), pluginservice.ValidationConfigFromConfig(cfg)); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
 	return lock, cfg, paths, nil
@@ -473,7 +473,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, err
 	}
 	if !secretsValidated && !dependenciesValidated {
-		if err := pluginvalidation.ValidateDependencies(context.Background(), cfg); err != nil {
+		if err := pluginservice.ValidateDependencies(context.Background(), pluginservice.ValidationConfigFromConfig(cfg)); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -499,7 +499,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, err
 	}
-	if err := pluginvalidation.ValidateDependencies(context.Background(), cfg); err != nil {
+	if err := pluginservice.ValidateDependencies(context.Background(), pluginservice.ValidationConfigFromConfig(cfg)); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -536,7 +536,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return err
 	}
-	if err := pluginvalidation.ValidateEffectiveCatalogsAndDependencies(context.Background(), cfg); err != nil {
+	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), pluginservice.ValidationConfigFromConfig(cfg)); err != nil {
 		return err
 	}
 	return nil
