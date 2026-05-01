@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	providerpkg "github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 )
 
 type InstalledPlugin struct {
@@ -25,20 +25,20 @@ type InstalledPlugin struct {
 }
 
 func isUIOnly(manifest *providermanifestv1.Manifest) bool {
-	kind, err := providerpkg.ManifestKind(manifest)
+	kind, err := packageio.ManifestKind(manifest)
 	return err == nil && kind == providermanifestv1.KindUI
 }
 
 func manifestNeedsExecutableArtifact(manifest *providermanifestv1.Manifest) bool {
-	kind, err := providerpkg.ManifestKind(manifest)
+	kind, err := packageio.ManifestKind(manifest)
 	if err != nil {
 		return false
 	}
-	return providerpkg.EntrypointForKind(manifest, kind) != nil
+	return packageio.EntrypointForKind(manifest, kind) != nil
 }
 
 func Install(packagePath, destDir string) (*InstalledPlugin, error) {
-	_, manifest, err := providerpkg.ReadPackageManifest(packagePath)
+	_, manifest, err := packageio.ReadPackageManifest(packagePath)
 	if err != nil {
 		return nil, err
 	}
@@ -47,12 +47,12 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create plugin directory: %w", err)
 		}
-		if err := providerpkg.ExtractPackage(packagePath, destDir); err != nil {
+		if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
 			return nil, err
 		}
-		manifestPath, _ := providerpkg.FindManifestFile(destDir)
+		manifestPath, _ := packageio.FindManifestFile(destDir)
 		if manifestPath == "" {
-			manifestPath = filepath.Join(destDir, providerpkg.ManifestFile)
+			manifestPath = filepath.Join(destDir, packageio.ManifestFile)
 		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
@@ -61,11 +61,11 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 
 	var artifact *providermanifestv1.Artifact
 	if manifestNeedsExecutableArtifact(manifest) {
-		artifact, err = providerpkg.CurrentPlatformArtifact(manifest)
+		artifact, err = packageio.CurrentPlatformArtifact(manifest)
 		if err != nil {
 			return nil, err
 		}
-		artifactBytes, err := providerpkg.ReadArchiveEntry(packagePath, artifact.Path)
+		artifactBytes, err := packageio.ReadArchiveEntry(packagePath, artifact.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -78,15 +78,15 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
-	if err := providerpkg.ExtractPackage(packagePath, destDir); err != nil {
+	if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
 		return nil, err
 	}
 
-	manifestPath, _ := providerpkg.FindManifestFile(destDir)
+	manifestPath, _ := packageio.FindManifestFile(destDir)
 	if manifestPath == "" {
-		manifestPath = filepath.Join(destDir, providerpkg.ManifestFile)
+		manifestPath = filepath.Join(destDir, packageio.ManifestFile)
 	}
-	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestPath)
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 }
 
 func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
-	_, manifest, _, err := providerpkg.LoadManifestFromPath(dirPath)
+	_, manifest, _, err := packageio.LoadManifestFromPath(dirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +109,9 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		if err := copyDir(dirPath, destDir); err != nil {
 			return nil, fmt.Errorf("copy plugin directory: %w", err)
 		}
-		mfPath, _ := providerpkg.FindManifestFile(destDir)
+		mfPath, _ := packageio.FindManifestFile(destDir)
 		if mfPath == "" {
-			mfPath = filepath.Join(destDir, providerpkg.ManifestFile)
+			mfPath = filepath.Join(destDir, packageio.ManifestFile)
 		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, mfPath, "", nil, assetRoot)
@@ -120,7 +120,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 
 	var artifact *providermanifestv1.Artifact
 	if manifestNeedsExecutableArtifact(manifest) {
-		artifact, err = providerpkg.CurrentPlatformArtifact(manifest)
+		artifact, err = packageio.CurrentPlatformArtifact(manifest)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
 	}
 
-	manifestSrc, err := providerpkg.FindManifestFile(dirPath)
+	manifestSrc, err := packageio.FindManifestFile(dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("find manifest: %w", err)
 	}
@@ -167,7 +167,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 	if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
 		return nil, err
 	}
-	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestDest)
+	manifest = packageio.ResolveManifestLocalReferences(manifest, manifestDest)
 
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
@@ -202,11 +202,11 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 	if isUIOnly(manifest) {
 		return "", nil
 	}
-	kind, err := providerpkg.ManifestKind(manifest)
+	kind, err := packageio.ManifestKind(manifest)
 	if err != nil {
 		return "", err
 	}
-	entry := providerpkg.EntrypointForKind(manifest, kind)
+	entry := packageio.EntrypointForKind(manifest, kind)
 	if entry == nil {
 		if manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
 			return "", nil
@@ -220,7 +220,7 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 }
 
 func copyManifestReferencedFiles(srcDir, destDir string, manifest *providermanifestv1.Manifest) error {
-	for _, ref := range providerpkg.LocalPackageReferences(manifest) {
+	for _, ref := range packageio.LocalPackageReferences(manifest) {
 		src := filepath.Join(srcDir, filepath.FromSlash(ref.Path))
 		dest := filepath.Join(destDir, filepath.FromSlash(ref.Path))
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
@@ -231,16 +231,16 @@ func copyManifestReferencedFiles(srcDir, destDir string, manifest *providermanif
 		}
 	}
 	if manifest != nil && manifest.Spec != nil {
-		src := providerpkg.StaticCatalogPath(srcDir)
-		dest := providerpkg.StaticCatalogPath(destDir)
+		src := packageio.StaticCatalogPath(srcDir)
+		dest := packageio.StaticCatalogPath(destDir)
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 			return fmt.Errorf("create provider static catalog directory: %w", err)
 		}
 		if err := copyFile(src, dest); err != nil {
-			if os.IsNotExist(err) && !providerpkg.StaticCatalogRequired(manifest) {
+			if os.IsNotExist(err) && !packageio.StaticCatalogRequired(manifest) {
 				return nil
 			}
-			return fmt.Errorf("copy provider static catalog %s: %w", providerpkg.StaticCatalogFile, err)
+			return fmt.Errorf("copy provider static catalog %s: %w", packageio.StaticCatalogFile, err)
 		}
 	}
 	return nil

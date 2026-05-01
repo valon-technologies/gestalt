@@ -17,7 +17,7 @@ import (
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
@@ -399,7 +399,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
 			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved ui manifest", name)
 		}
-		if err := providerpkg.ValidatePolicyBoundUIRoutes(entry.ManifestSpec().Routes); err != nil {
+		if err := packageio.ValidatePolicyBoundUIRoutes(entry.ManifestSpec().Routes); err != nil {
 			return fmt.Errorf("config validation: ui %q authorizationPolicy: %w", name, err)
 		}
 	}
