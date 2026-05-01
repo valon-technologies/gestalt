@@ -51,6 +51,7 @@ func declarativeConnectionParamDefs(params map[string]config.ConnectionParamDef)
 		out[name] = declarative.ConnectionParamDef{
 			Required:    param.Required,
 			Description: param.Description,
+			Default:     param.Default,
 			From:        param.From,
 			Field:       param.Field,
 		}

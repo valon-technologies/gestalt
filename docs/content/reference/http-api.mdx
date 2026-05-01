@@ -29,10 +29,32 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/integrations` | List plugins, connection state, authentication types, instances, icons, and connection parameter hints. |
+| `GET` | `/api/v1/integrations` | List plugins, aggregate status, icons, and nested connection metadata. Authentication types, instances, credential fields, and connection parameter hints are returned per item in `connections[]`. |
 | `DELETE` | `/api/v1/integrations/{name}` | Disconnect a plugin. Use `?_connection=...` and `?_instance=...` to target one stored connection. |
 | `GET` | `/api/v1/integrations/{name}/operations` | List operations for one plugin. Supports `_connection` and `_instance` selectors. |
 | `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke a plugin operation. Supports `_connection` and `_instance`. |
+
+`GET /api/v1/integrations` returns one object per plugin. Use top-level `status`,
+`credentialState`, `healthState`, and `actions` for aggregate display state. Use
+`connections[]` for connection-specific auth and credential metadata:
+
+```json
+{
+  "name": "github",
+  "status": "ready",
+  "credentialState": "connected",
+  "connections": [
+    {
+      "name": "default",
+      "status": "ready",
+      "authTypes": ["oauth"],
+      "instances": [{"id": "acme", "name": "Acme"}],
+      "connectionParams": {},
+      "credentialFields": []
+    }
+  ]
+}
+```
 
 ### Plugin Connection Flows
 

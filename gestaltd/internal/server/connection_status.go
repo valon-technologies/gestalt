@@ -50,16 +50,15 @@ const (
 	ownerKindUnknown         = "unknown"
 )
 
-func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, p *principal.Principal) {
-	status := s.defaultIntegrationStatus(info, prov, instances, p)
+func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) {
+	status := s.defaultIntegrationStatus(info, prov, instances, authTypes, p)
 	info.Status = status.Status
 	info.CredentialState = status.CredentialState
 	info.HealthState = status.HealthState
 	info.Actions = status.Actions
-	info.Connected = status.Connected
 }
 
-func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, p *principal.Principal) connectionStatusInfo {
+func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) connectionStatusInfo {
 	if info == nil {
 		return unknownConnectionStatus()
 	}
@@ -70,7 +69,7 @@ func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provi
 		return statusFromConnectionInfo(conn)
 	}
 	if len(info.Connections) == 0 {
-		return s.implicitIntegrationStatus(info.Name, prov, instances, info.AuthTypes, p)
+		return s.implicitIntegrationStatus(info.Name, prov, instances, authTypes, p)
 	}
 	return summarizeConnectionStatuses(info.Connections)
 }
@@ -172,8 +171,8 @@ func statusFromConnectionInfo(conn *connectionDefInfo) connectionStatusInfo {
 		Actions:         cloneStatusActions(conn.Actions),
 		CredentialMode:  conn.CredentialMode,
 		OwnerKind:       conn.OwnerKind,
-		Disconnectable:  conn.Disconnectable,
-		Connected:       conn.Connected,
+		Disconnectable:  conn.disconnectable,
+		Connected:       conn.connected,
 		StatusCode:      conn.StatusCode,
 		StatusReason:    conn.StatusReason,
 	}

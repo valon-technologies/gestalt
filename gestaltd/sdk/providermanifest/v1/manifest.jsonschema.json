@@ -411,6 +411,9 @@
         "description": {
           "type": "string"
         },
+        "default": {
+          "type": "string"
+        },
         "from": {
           "type": "string",
           "enum": [

@@ -18,13 +18,7 @@ struct IntegrationInfo {
     #[serde(default)]
     description: Option<String>,
     #[serde(default)]
-    auth_types: Vec<String>,
-    #[serde(default)]
-    connection_params: BTreeMap<String, ConnectionParamDef>,
-    #[serde(default)]
     connections: Vec<ConnectionDefInfo>,
-    #[serde(default)]
-    credential_fields: Vec<CredentialFieldInfo>,
     #[serde(default)]
     status: Option<String>,
 }
@@ -37,6 +31,8 @@ struct ConnectionDefInfo {
     display_name: Option<String>,
     #[serde(default)]
     auth_types: Vec<String>,
+    #[serde(default)]
+    connection_params: BTreeMap<String, ConnectionParamDef>,
     #[serde(default)]
     credential_fields: Vec<CredentialFieldInfo>,
     #[serde(default)]
@@ -156,6 +152,7 @@ struct ResolvedConnectFlow<'a> {
     integration: &'a IntegrationInfo,
     connection: Option<ResolvedConnection<'a>>,
     mode: ConnectMode,
+    connection_params: Option<&'a BTreeMap<String, ConnectionParamDef>>,
     credential_fields: &'a [CredentialFieldInfo],
 }
 
@@ -167,19 +164,19 @@ impl<'a> ResolvedConnectFlow<'a> {
         let connection = resolve_connection(integration, requested_connection)?;
         let definition = connection.as_ref().and_then(|selected| selected.definition);
         let auth_types = definition
-            .filter(|connection| !connection.auth_types.is_empty())
             .map(|connection| connection.auth_types.as_slice())
-            .unwrap_or(integration.auth_types.as_slice());
+            .unwrap_or(&[]);
+        let connection_params = definition.map(|connection| &connection.connection_params);
         let credential_fields = definition
-            .filter(|connection| !connection.credential_fields.is_empty())
             .map(|connection| connection.credential_fields.as_slice())
-            .unwrap_or(integration.credential_fields.as_slice());
+            .unwrap_or(&[]);
         validate_user_connectable(integration, connection.as_ref())?;
 
         Ok(Self {
             integration,
             connection,
             mode: resolve_connect_mode(&integration.name, auth_types)?,
+            connection_params,
             credential_fields,
         })
     }
@@ -206,8 +203,8 @@ impl<'a> ResolvedConnectFlow<'a> {
             .map(ResolvedConnection::selector_name)
     }
 
-    fn connection_param_defs(&self) -> &BTreeMap<String, ConnectionParamDef> {
-        &self.integration.connection_params
+    fn connection_param_defs(&self) -> Option<&BTreeMap<String, ConnectionParamDef>> {
+        self.connection_params.filter(|params| !params.is_empty())
     }
 
     fn credential_fields(&self) -> &[CredentialFieldInfo] {
@@ -564,11 +561,11 @@ fn rewrite_connect_api_error(err: anyhow::Error) -> anyhow::Error {
 }
 
 fn prompt_connection_params(
-    connection_params: &BTreeMap<String, ConnectionParamDef>,
+    connection_params: Option<&BTreeMap<String, ConnectionParamDef>>,
 ) -> Result<Option<BTreeMap<String, String>>> {
-    if connection_params.is_empty() {
+    let Some(connection_params) = connection_params else {
         return Ok(None);
-    }
+    };
 
     let mut values = BTreeMap::new();
     for (name, def) in connection_params {

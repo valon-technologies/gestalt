@@ -25,10 +25,16 @@ fn test_list_plugins() {
 #[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
-            .create();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
+    )
+    .create();
     let mock = authed_json_mock!(
         server,
         Method::POST,
@@ -56,12 +62,18 @@ fn test_connect_includes_connection_and_instance() {
 }
 
 #[test]
-fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_and_instance() {
+fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth","manual"],"connected":false}]"#)
-            .create();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"name":"acme_crm","connections":[{"name":"plugin","authTypes":["oauth","manual"]}]}]"#,
+    )
+    .create();
     let mock = authed_json_mock!(
         server,
         Method::POST,
@@ -70,7 +82,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"integration":"acme_crm"}"#.to_string(),
+        r#"{"connection":"plugin","integration":"acme_crm"}"#.to_string(),
     ))
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
     .create();
@@ -98,17 +110,17 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
 }
 
 #[test]
-fn test_connect_uses_defined_plugin_connection_name_on_the_wire() {
+fn test_connect_uses_user_facing_plugin_connection_name_on_the_wire() {
     let mut server = Server::new();
-    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-        .with_body(
-            r#"[{
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
                 "name":"acme_crm",
-                "authTypes":["oauth"],
-                "connections":[{"name":"_plugin","displayName":"Plugin OAuth","authTypes":["oauth"]}]
+                "connections":[{"name":"plugin","displayName":"Plugin OAuth","authTypes":["oauth"]}]
             }]"#,
-        )
-        .create();
+            )
+            .create();
     let mock = authed_json_mock!(
         server,
         Method::POST,
@@ -117,7 +129,7 @@ fn test_connect_uses_defined_plugin_connection_name_on_the_wire() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"connection":"_plugin","integration":"acme_crm"}"#.to_string(),
+        r#"{"connection":"plugin","integration":"acme_crm"}"#.to_string(),
     ))
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
     .create();
@@ -168,39 +180,6 @@ fn test_connect_platform_connection_uses_admin_copy_without_starting_flow() {
 
     assert!(message.contains("requires deployment/admin configuration"));
     assert!(!message.contains("OAuth"));
-}
-
-#[test]
-fn test_connect_preserves_requested_plugin_connection_when_no_definitions_exist() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
-            .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"plugin","integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::plugins::connect_with_browser_opener(
-        &client,
-        "acme_crm",
-        Some("plugin"),
-        None,
-        |_| Ok(()),
-    );
-
-    mock.assert();
-    assert!(result.is_ok());
 }
 
 #[test]
@@ -269,30 +248,33 @@ fn test_disconnect_without_optional_params() {
 fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let mut server = Server::new();
     let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(
-                r#"[{
+		authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+			.with_body(
+				r#"[{
                 "name":"widget_metrics",
                 "displayName":"Widget Metrics",
                 "description":"Metrics and logs",
-                "authTypes":["manual"],
-                "connectionParams":{"region":{"description":"API region","default":"us-east","required":true}},
-                "credentialFields":[{"name":"api_key","label":"API key","description":"Use a personal API key"}]
+                "connections":[{
+                    "name":"plugin",
+                    "authTypes":["manual"],
+                    "connectionParams":{"region":{"description":"API region","default":"us-east","required":true}},
+                    "credentialFields":[{"name":"api_key","label":"API key","description":"Use a personal API key"}]
+                }]
             }]"#,
-            )
-            .create();
+			)
+			.create();
     let _connect = authed_json_mock!(
         server,
         Method::POST,
         "/api/v1/auth/connect-manual",
         StatusCode::OK
     )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connectionParams":{"region":"eu-west"},"credential":"wm-key","integration":"widget_metrics"}"#.to_string(),
-    ))
-    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
-    .create();
+		.match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+		.match_body(Matcher::JsonString(
+			r#"{"connection":"plugin","connectionParams":{"region":"eu-west"},"credential":"wm-key","integration":"widget_metrics"}"#.to_string(),
+		))
+		.with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+		.create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -314,9 +296,8 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
                 r#"[{
                     "name":"manual-svc",
                     "displayName":"Manual Service",
-                    "authTypes":["manual"],
                     "connections":[
-                        {"name":"workspace","displayName":"Workspace OAuth","credentialFields":[{"name":"token","label":"Workspace token"}]},
+                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Workspace token"}]},
                         {"name":"plugin","displayName":"Plugin OAuth","authTypes":["oauth"]}
                     ]
                 }]"#,
@@ -391,7 +372,6 @@ fn test_connection_selection_uses_selected_connection_auth_type() {
                 r#"[{
                     "name":"manual-svc",
                     "displayName":"Manual Service",
-                    "authTypes":["manual"],
                     "connections":[
                         {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]},
                         {"name":"apikey","displayName":"API Key","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Token"}]}
@@ -436,7 +416,6 @@ fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
                 r#"[{
                     "name":"single-svc",
                     "displayName":"Single Service",
-                    "authTypes":["manual"],
                     "connections":[
                         {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
                     ]
@@ -503,11 +482,14 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
                 r#"[{
                 "name":"widget_metrics",
                 "displayName":"Widget Metrics",
-                "authTypes":["manual"],
-                "credentialFields":[
-                    {"name":"api_key","label":"API key"},
-                    {"name":"workspace_id","label":"Workspace ID"}
-                ]
+                "connections":[{
+                    "name":"plugin",
+                    "authTypes":["manual"],
+                    "credentialFields":[
+                        {"name":"api_key","label":"API key"},
+                        {"name":"workspace_id","label":"Workspace ID"}
+                    ]
+                }]
             }]"#,
             )
             .create();
@@ -517,12 +499,12 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
         "/api/v1/auth/connect-manual",
         StatusCode::OK
     )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"credentials":{"api_key":"wm-key","workspace_id":"workspace-42"},"integration":"widget_metrics"}"#.to_string(),
-    ))
-    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
-    .create();
+		.match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+		.match_body(Matcher::JsonString(
+			r#"{"connection":"plugin","credentials":{"api_key":"wm-key","workspace_id":"workspace-42"},"integration":"widget_metrics"}"#.to_string(),
+		))
+		.with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+		.create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -538,10 +520,16 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
 #[test]
 fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"manual-svc","authTypes":["manual"]}]"#)
-            .create();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"name":"manual-svc","connections":[{"name":"plugin","authTypes":["manual"]}]}]"#,
+    )
+    .create();
     let _connect = authed_json_mock!(
         server,
         Method::POST,
@@ -550,7 +538,7 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"credential":"secret","integration":"manual-svc"}"#.to_string(),
+        r#"{"connection":"plugin","credential":"secret","integration":"manual-svc"}"#.to_string(),
     ))
     .with_body(r#"{"status":"connected","integration":"manual-svc"}"#)
     .create();
@@ -568,10 +556,16 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
 #[test]
 fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"manual-svc","authTypes":["manual"]}]"#)
-            .create();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"name":"manual-svc","connections":[{"name":"plugin","authTypes":["manual"]}]}]"#,
+    )
+    .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -597,9 +591,9 @@ fn test_cli_plugins_list_table_output() {
         }),
     );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-        .with_body(
-            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true,"status":"ready","connections":[{"name":"workspace","status":"ready"}]}]"#,
-        )
+		.with_body(
+			r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","status":"ready","connections":[{"name":"workspace","status":"ready"}]}]"#,
+		)
         .create();
 
     let mut cmd = cli_command(home.path());
@@ -616,9 +610,9 @@ fn test_cli_plugins_list_table_output() {
     mock.assert();
 
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-        .with_body(
-            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
-        )
+		.with_body(
+			r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","status":"ready"}]"#,
+		)
         .create();
 
     let mut cmd = cli_command(home.path());
@@ -630,9 +624,9 @@ fn test_cli_plugins_list_table_output() {
     mock.assert();
 
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-        .with_body(
-            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
-        )
+		.with_body(
+			r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","status":"ready"}]"#,
+		)
         .create();
 
     let mut cmd = cli_command(home.path());

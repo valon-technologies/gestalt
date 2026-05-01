@@ -5113,7 +5113,6 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	}
 	var integrations []struct {
 		Name            string `json:"name"`
-		Connected       bool   `json:"connected"`
 		Status          string `json:"status"`
 		CredentialState string `json:"credentialState"`
 	}
@@ -5124,7 +5123,6 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	_ = resp.Body.Close()
 	var manualIntegration *struct {
 		Name            string `json:"name"`
-		Connected       bool   `json:"connected"`
 		Status          string `json:"status"`
 		CredentialState string `json:"credentialState"`
 	}
@@ -5137,7 +5135,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	if manualIntegration == nil {
 		t.Fatalf("manual-svc missing from managed subject integrations: %+v", integrations)
 	}
-	if !manualIntegration.Connected || manualIntegration.Status != "ready" || manualIntegration.CredentialState != "connected" {
+	if manualIntegration.Status != "ready" || manualIntegration.CredentialState != "connected" {
 		t.Fatalf("manual-svc status = %+v, want connected ready", *manualIntegration)
 	}
 
@@ -8520,10 +8518,11 @@ func TestListIntegrations(t *testing.T) {
 	}
 
 	var integrations []struct {
-		Name        string `json:"name"`
-		DisplayName string `json:"displayName"`
-		Description string `json:"description"`
-		Connected   bool   `json:"connected"`
+		Name            string `json:"name"`
+		DisplayName     string `json:"displayName"`
+		Description     string `json:"description"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -8537,8 +8536,8 @@ func TestListIntegrations(t *testing.T) {
 	if integrations[0].DisplayName != "Slack" {
 		t.Fatalf("expected display name Slack, got %q", integrations[0].DisplayName)
 	}
-	if integrations[0].Connected {
-		t.Fatal("expected connected=false when no tokens stored")
+	if integrations[0].Status != "needs_user_connection" || integrations[0].CredentialState != "missing" {
+		t.Fatalf("status = {%q, %q}, want needs_user_connection/missing", integrations[0].Status, integrations[0].CredentialState)
 	}
 }
 
@@ -8920,13 +8919,13 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	}
 
 	var integrations []struct {
-		Name             string                    `json:"name"`
-		Connected        bool                      `json:"connected"`
-		Instances        []map[string]any          `json:"instances"`
-		AuthTypes        []string                  `json:"authTypes"`
-		Connections      []map[string]any          `json:"connections"`
-		CredentialFields []map[string]any          `json:"credentialFields"`
-		ConnectionParams map[string]map[string]any `json:"connectionParams"`
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+		Connections     []struct {
+			Name      string           `json:"name"`
+			Instances []map[string]any `json:"instances"`
+		} `json:"connections"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -8936,28 +8935,25 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	}
 
 	got := map[string]struct {
-		Connected        bool
-		Instances        []map[string]any
-		AuthTypes        []string
-		Connections      []map[string]any
-		CredentialFields []map[string]any
-		ConnectionParams map[string]map[string]any
+		Status          string
+		CredentialState string
+		Connections     []struct {
+			Name      string           `json:"name"`
+			Instances []map[string]any `json:"instances"`
+		}
 	}{}
 	for _, integration := range integrations {
 		got[integration.Name] = struct {
-			Connected        bool
-			Instances        []map[string]any
-			AuthTypes        []string
-			Connections      []map[string]any
-			CredentialFields []map[string]any
-			ConnectionParams map[string]map[string]any
+			Status          string
+			CredentialState string
+			Connections     []struct {
+				Name      string           `json:"name"`
+				Instances []map[string]any `json:"instances"`
+			}
 		}{
-			Connected:        integration.Connected,
-			Instances:        integration.Instances,
-			AuthTypes:        integration.AuthTypes,
-			Connections:      integration.Connections,
-			CredentialFields: integration.CredentialFields,
-			ConnectionParams: integration.ConnectionParams,
+			Status:          integration.Status,
+			CredentialState: integration.CredentialState,
+			Connections:     integration.Connections,
 		}
 	}
 	if _, ok := got["secret"]; ok {
@@ -8966,14 +8962,18 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 	if _, ok := got["mcp-only"]; ok {
 		t.Fatalf("mcp-only integration should not be visible over HTTP: %+v", integrations)
 	}
-	if !got["svc"].Connected {
+	if got["svc"].Status != "ready" || got["svc"].CredentialState != "connected" {
 		t.Fatalf("expected service account integration to be connected, got %+v", got["svc"])
 	}
-	if !got["weather"].Connected {
+	if got["weather"].Status != "ready" || got["weather"].CredentialState != "not_required" {
 		t.Fatalf("expected connection-mode none integration to be connected, got %+v", got["weather"])
 	}
-	if len(got["svc"].Instances) != 1 {
-		t.Fatalf("expected service-account-owned svc instance to be listed, got %+v", got["svc"].Instances)
+	var svcInstances []map[string]any
+	for _, conn := range got["svc"].Connections {
+		svcInstances = append(svcInstances, conn.Instances...)
+	}
+	if len(svcInstances) != 1 {
+		t.Fatalf("expected service-account-owned svc instance to be listed, got %+v", got["svc"])
 	}
 
 	provider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
@@ -9155,8 +9155,9 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	}
 
 	var integrations []struct {
-		Name      string `json:"name"`
-		Connected bool   `json:"connected"`
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -9164,8 +9165,8 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
-	if !integrations[0].Connected {
-		t.Fatal("expected connected=true when token exists")
+	if integrations[0].Status != "ready" || integrations[0].CredentialState != "connected" {
+		t.Fatalf("status = {%q, %q}, want ready/connected", integrations[0].Status, integrations[0].CredentialState)
 	}
 }
 
@@ -9244,15 +9245,12 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 	type statusConnection struct {
 		Name             string           `json:"name"`
 		Mode             string           `json:"mode"`
-		Connected        bool             `json:"connected"`
-		Connectable      bool             `json:"connectable"`
 		Status           string           `json:"status"`
 		CredentialState  string           `json:"credentialState"`
 		HealthState      string           `json:"healthState"`
 		Actions          []string         `json:"actions"`
 		CredentialMode   string           `json:"credentialMode"`
 		OwnerKind        string           `json:"ownerKind"`
-		Disconnectable   bool             `json:"disconnectable"`
 		Instances        []map[string]any `json:"instances"`
 		StatusCode       string           `json:"statusCode"`
 		StatusReason     string           `json:"statusReason"`
@@ -9260,17 +9258,12 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 		CredentialFields []map[string]any `json:"credentialFields"`
 	}
 	type statusIntegration struct {
-		Name             string                    `json:"name"`
-		Connected        bool                      `json:"connected"`
-		Instances        []map[string]any          `json:"instances"`
-		AuthTypes        []string                  `json:"authTypes"`
-		ConnectionParams map[string]map[string]any `json:"connectionParams"`
-		Connections      []statusConnection        `json:"connections"`
-		CredentialFields []map[string]any          `json:"credentialFields"`
-		Status           string                    `json:"status"`
-		CredentialState  string                    `json:"credentialState"`
-		HealthState      string                    `json:"healthState"`
-		Actions          []string                  `json:"actions"`
+		Name            string             `json:"name"`
+		Connections     []statusConnection `json:"connections"`
+		Status          string             `json:"status"`
+		CredentialState string             `json:"credentialState"`
+		HealthState     string             `json:"healthState"`
+		Actions         []string           `json:"actions"`
 	}
 	var integrations []statusIntegration
 	if err := json.Unmarshal(body, &integrations); err != nil {
@@ -9279,37 +9272,33 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 	got := make(map[string]statusIntegration, len(integrations))
 	for _, integration := range integrations {
 		got[integration.Name] = integration
-		credentialPresent := integration.CredentialState == "not_required" || integration.CredentialState == "connected" || integration.CredentialState == "configured"
-		if integration.Connected != credentialPresent {
-			t.Fatalf("%s legacy connected=%v status=%q violates compatibility invariant", integration.Name, integration.Connected, integration.Status)
-		}
-		if integration.Instances == nil || integration.AuthTypes == nil || integration.ConnectionParams == nil || integration.Connections == nil || integration.CredentialFields == nil {
-			t.Fatalf("%s legacy collections must stay non-nil: %+v", integration.Name, integration)
+		if integration.Connections == nil {
+			t.Fatalf("%s connections must stay non-nil: %+v", integration.Name, integration)
 		}
 	}
 
-	assertIntegrationStatus := func(name, status, credentialState, healthState string, connected bool, actions []string) statusIntegration {
+	assertIntegrationStatus := func(name, status, credentialState, healthState string, actions []string) statusIntegration {
 		t.Helper()
 		integration, ok := got[name]
 		if !ok {
 			t.Fatalf("integration %q missing from response: %s", name, body)
 		}
-		if integration.Status != status || integration.CredentialState != credentialState || integration.HealthState != healthState || integration.Connected != connected || !reflect.DeepEqual(integration.Actions, actions) {
-			t.Fatalf("%s status = {status:%q credential:%q health:%q connected:%v actions:%v}, want {%q %q %q %v %v}",
-				name, integration.Status, integration.CredentialState, integration.HealthState, integration.Connected, integration.Actions,
-				status, credentialState, healthState, connected, actions)
+		if integration.Status != status || integration.CredentialState != credentialState || integration.HealthState != healthState || !reflect.DeepEqual(integration.Actions, actions) {
+			t.Fatalf("%s status = {status:%q credential:%q health:%q actions:%v}, want {%q %q %q %v}",
+				name, integration.Status, integration.CredentialState, integration.HealthState, integration.Actions,
+				status, credentialState, healthState, actions)
 		}
 		return integration
 	}
 
-	assertIntegrationStatus("no-auth", "ready", "not_required", "not_applicable", true, []string{})
-	assertIntegrationStatus("manual-disconnected", "needs_user_connection", "missing", "not_applicable", false, []string{"connect"})
-	assertIntegrationStatus("manual-connected", "ready", "connected", "not_checked", true, []string{"disconnect", "add_instance"})
-	assertIntegrationStatus("manual-multi", "needs_instance_selection", "connected", "not_checked", true, []string{"select_instance", "disconnect", "add_instance"})
+	assertIntegrationStatus("no-auth", "ready", "not_required", "not_applicable", []string{})
+	assertIntegrationStatus("manual-disconnected", "needs_user_connection", "missing", "not_applicable", []string{"connect"})
+	assertIntegrationStatus("manual-connected", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
+	assertIntegrationStatus("manual-multi", "needs_instance_selection", "connected", "not_checked", []string{"select_instance", "disconnect", "add_instance"})
 
-	platformBearer := assertIntegrationStatus("platform-bearer", "ready", "configured", "not_checked", true, []string{})
-	platformManual := assertIntegrationStatus("platform-manual", "ready", "configured", "not_checked", true, []string{})
-	platformMissing := assertIntegrationStatus("platform-missing", "needs_admin_configuration", "missing", "unknown", false, []string{"admin_configure"})
+	platformBearer := assertIntegrationStatus("platform-bearer", "ready", "configured", "not_checked", []string{})
+	platformManual := assertIntegrationStatus("platform-manual", "ready", "configured", "not_checked", []string{})
+	platformMissing := assertIntegrationStatus("platform-missing", "needs_admin_configuration", "missing", "unknown", []string{"admin_configure"})
 
 	for _, tc := range []struct {
 		name        string
@@ -9328,7 +9317,7 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 				t.Fatalf("connections = %+v, want one platform connection", tc.integration.Connections)
 			}
 			conn := tc.integration.Connections[0]
-			if conn.Mode != string(core.ConnectionModePlatform) || conn.CredentialMode != "platform" || conn.OwnerKind != "platform" || conn.Connectable || conn.Disconnectable {
+			if conn.Mode != string(core.ConnectionModePlatform) || conn.CredentialMode != "platform" || conn.OwnerKind != "platform" {
 				t.Fatalf("platform connection fields = %+v", conn)
 			}
 			if conn.Status != tc.wantStatus {
@@ -9373,8 +9362,10 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 
 	var integrations []struct {
-		Name      string   `json:"name"`
-		AuthTypes []string `json:"authTypes"`
+		Name        string `json:"name"`
+		Connections []struct {
+			AuthTypes []string `json:"authTypes"`
+		} `json:"connections"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -9385,7 +9376,9 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 
 	authTypes := make(map[string][]string)
 	for _, i := range integrations {
-		authTypes[i.Name] = i.AuthTypes
+		if len(i.Connections) > 0 {
+			authTypes[i.Name] = i.Connections[0].AuthTypes
+		}
 	}
 	if len(authTypes["manual-svc"]) != 1 || authTypes["manual-svc"][0] != "manual" {
 		t.Fatalf("expected manual-svc auth_types=[manual], got %v", authTypes["manual-svc"])
@@ -9444,8 +9437,10 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 	}
 
 	var integrations []struct {
-		Name      string   `json:"name"`
-		AuthTypes []string `json:"authTypes"`
+		Name        string `json:"name"`
+		Connections []struct {
+			AuthTypes []string `json:"authTypes"`
+		} `json:"connections"`
 	}
 	if err := json.Unmarshal(body, &integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -9453,8 +9448,13 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
 	}
-	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
-		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	if len(integrations[0].Connections) == 0 {
+		t.Fatalf("connections = %+v, want manual connection metadata", integrations[0].Connections)
+	}
+	for _, conn := range integrations[0].Connections {
+		if !reflect.DeepEqual(conn.AuthTypes, []string{"manual"}) {
+			t.Fatalf("connection auth types = %+v, want [manual]", conn)
+		}
 	}
 	if strings.Contains(text, `"authTypes":null`) {
 		t.Fatalf("unexpected null authTypes in response: %s", text)
@@ -9511,7 +9511,6 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 
 	var integrations []struct {
 		Name        string `json:"name"`
-		AuthTypes   []string
 		Connections []struct {
 			Name      string   `json:"name"`
 			AuthTypes []string `json:"authTypes"`
@@ -9522,9 +9521,6 @@ func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *te
 	}
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
-	}
-	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
-		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
 	}
 	if len(integrations[0].Connections) != 2 {
 		t.Fatalf("connections = %+v, want plugin and default user-facing connections", integrations[0].Connections)
@@ -9575,10 +9571,8 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 		Description string `json:"description"`
 	}
 	var integrations []struct {
-		Name             string            `json:"name"`
-		AuthTypes        []string          `json:"authTypes"`
-		CredentialFields []credentialField `json:"credentialFields"`
-		Connections      []struct {
+		Name        string `json:"name"`
+		Connections []struct {
 			Name             string            `json:"name"`
 			AuthTypes        []string          `json:"authTypes"`
 			CredentialFields []credentialField `json:"credentialFields"`
@@ -9592,12 +9586,6 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	}
 
 	wantFields := []credentialField{{Name: "credential", Label: "Credential"}}
-	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
-		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
-	}
-	if !reflect.DeepEqual(integrations[0].CredentialFields, wantFields) {
-		t.Fatalf("credential fields = %+v, want %+v", integrations[0].CredentialFields, wantFields)
-	}
 	if len(integrations[0].Connections) != 1 {
 		t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
 	}
@@ -9634,6 +9622,9 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 							{Name: "workspace_token", Label: "Workspace Config Token"},
 							{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
 						},
+					},
+					ConnectionParams: map[string]config.ConnectionParamDef{
+						"region": {Required: true, Description: "Workspace region", Default: "us-east"},
 					},
 				},
 			},
@@ -9691,7 +9682,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		text := string(body)
 		for _, fragment := range []string{
 			`"instances":[]`,
-			`"connectionParams":{}`,
 			`"connections":[`,
 			`"credentialFields":[`,
 		} {
@@ -9715,20 +9705,22 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			Label       string `json:"label"`
 			Description string `json:"description"`
 		}
+		type connectionParam struct {
+			Required    bool   `json:"required"`
+			Description string `json:"description"`
+			Default     string `json:"default"`
+		}
 		type connectionInfo struct {
-			DisplayName      string            `json:"displayName"`
-			Name             string            `json:"name"`
-			AuthTypes        []string          `json:"authTypes"`
-			CredentialFields []credentialField `json:"credentialFields"`
+			DisplayName      string                     `json:"displayName"`
+			Name             string                     `json:"name"`
+			AuthTypes        []string                   `json:"authTypes"`
+			CredentialFields []credentialField          `json:"credentialFields"`
+			ConnectionParams map[string]connectionParam `json:"connectionParams"`
 		}
 
 		var integrations []struct {
-			Name             string           `json:"name"`
-			AuthTypes        []string         `json:"authTypes"`
-			Instances        []map[string]any `json:"instances"`
-			ConnectionParams map[string]any   `json:"connectionParams"`
-			CredentialFields []map[string]any `json:"credentialFields"`
-			Connections      []connectionInfo `json:"connections"`
+			Name        string           `json:"name"`
+			Connections []connectionInfo `json:"connections"`
 		}
 		if err := json.Unmarshal(body, &integrations); err != nil {
 			t.Fatalf("decoding: %v", err)
@@ -9736,8 +9728,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		if len(integrations) != 1 {
 			t.Fatalf("expected 1 integration, got %d", len(integrations))
 		}
-		if integrations[0].Instances == nil || integrations[0].ConnectionParams == nil || integrations[0].CredentialFields == nil || integrations[0].Connections == nil {
-			t.Fatalf("expected non-nil collections, got %+v", integrations[0])
+		if integrations[0].Connections == nil {
+			t.Fatalf("expected non-nil connections, got %+v", integrations[0])
 		}
 
 		got := make(map[string]connectionInfo, len(integrations[0].Connections))
@@ -9761,6 +9753,11 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
 		}) {
 			t.Fatalf("workspace connection info = %+v", got["workspace"])
+		}
+		if !reflect.DeepEqual(got["workspace"].ConnectionParams, map[string]connectionParam{
+			"region": {Required: true, Description: "Workspace region", Default: "us-east"},
+		}) {
+			t.Fatalf("workspace connection params = %+v", got["workspace"].ConnectionParams)
 		}
 	})
 
@@ -9900,14 +9897,12 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			Default     string `json:"default"`
 		}
 		var integrations []struct {
-			Name             string                     `json:"name"`
-			AuthTypes        []string                   `json:"authTypes"`
-			CredentialFields []credentialField          `json:"credentialFields"`
-			ConnectionParams map[string]connectionParam `json:"connectionParams"`
-			Connections      []struct {
-				Name             string            `json:"name"`
-				AuthTypes        []string          `json:"authTypes"`
-				CredentialFields []credentialField `json:"credentialFields"`
+			Name        string `json:"name"`
+			Connections []struct {
+				Name             string                     `json:"name"`
+				AuthTypes        []string                   `json:"authTypes"`
+				CredentialFields []credentialField          `json:"credentialFields"`
+				ConnectionParams map[string]connectionParam `json:"connectionParams"`
 			} `json:"connections"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
@@ -9918,21 +9913,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 
 		wantFields := []credentialField{{Name: "api_key", Label: "API Key", Description: "Docs API key"}}
-		if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
-			t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
-		}
-		if !reflect.DeepEqual(integrations[0].CredentialFields, wantFields) {
-			t.Fatalf("credential fields = %+v, want %+v", integrations[0].CredentialFields, wantFields)
-		}
-		if !reflect.DeepEqual(integrations[0].ConnectionParams, map[string]connectionParam{
-			"tenant": {
-				Required:    true,
-				Description: "Tenant slug",
-				Default:     "acme",
-			},
-		}) {
-			t.Fatalf("connection params = %+v", integrations[0].ConnectionParams)
-		}
 		if len(integrations[0].Connections) != 1 {
 			t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
 		}
@@ -9944,6 +9924,15 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if !reflect.DeepEqual(integrations[0].Connections[0].CredentialFields, wantFields) {
 			t.Fatalf("connection credential fields = %+v, want %+v", integrations[0].Connections[0].CredentialFields, wantFields)
+		}
+		if !reflect.DeepEqual(integrations[0].Connections[0].ConnectionParams, map[string]connectionParam{
+			"tenant": {
+				Required:    true,
+				Description: "Tenant slug",
+				Default:     "acme",
+			},
+		}) {
+			t.Fatalf("connection params = %+v", integrations[0].Connections[0].ConnectionParams)
 		}
 	})
 
@@ -9990,8 +9979,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		defer func() { _ = resp.Body.Close() }()
 
 		var integrations []struct {
-			Name        string   `json:"name"`
-			AuthTypes   []string `json:"authTypes"`
+			Name        string `json:"name"`
 			Connections []struct {
 				Name      string   `json:"name"`
 				AuthTypes []string `json:"authTypes"`
@@ -10002,9 +9990,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if len(integrations) != 1 {
 			t.Fatalf("expected 1 integration, got %d", len(integrations))
-		}
-		if len(integrations[0].AuthTypes) != 0 {
-			t.Fatalf("expected no auth types, got %+v", integrations[0].AuthTypes)
 		}
 		if len(integrations[0].Connections) != 0 {
 			t.Fatalf("expected no connectable connections, got %+v", integrations[0].Connections)
@@ -10055,8 +10040,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		defer func() { _ = resp.Body.Close() }()
 
 		var integrations []struct {
-			Name        string   `json:"name"`
-			AuthTypes   []string `json:"authTypes"`
+			Name        string `json:"name"`
 			Connections []struct {
 				Name        string   `json:"name"`
 				DisplayName string   `json:"displayName"`
@@ -10068,9 +10052,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if len(integrations) != 1 {
 			t.Fatalf("expected 1 integration, got %d", len(integrations))
-		}
-		if len(integrations[0].AuthTypes) != 0 {
-			t.Fatalf("expected no top-level auth types, got %+v", integrations[0].AuthTypes)
 		}
 		if len(integrations[0].Connections) != 1 {
 			t.Fatalf("expected one explicit no-auth connection, got %+v", integrations[0].Connections)
@@ -10125,8 +10106,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		defer func() { _ = resp.Body.Close() }()
 
 		var integrations []struct {
-			Name        string   `json:"name"`
-			AuthTypes   []string `json:"authTypes"`
+			Name        string `json:"name"`
 			Connections []struct {
 				Name string `json:"name"`
 			} `json:"connections"`
@@ -10136,9 +10116,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if len(integrations) != 1 {
 			t.Fatalf("expected 1 integration, got %d", len(integrations))
-		}
-		if len(integrations[0].AuthTypes) != 0 {
-			t.Fatalf("expected no top-level auth types, got %+v", integrations[0].AuthTypes)
 		}
 		if len(integrations[0].Connections) != 0 {
 			t.Fatalf("expected passive default connection to stay hidden, got %+v", integrations[0].Connections)
@@ -10499,8 +10476,9 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	}
 
 	var integrations []struct {
-		Name      string `json:"name"`
-		Connected bool   `json:"connected"`
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -10509,15 +10487,21 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 		t.Fatalf("expected 2 integrations, got %d", len(integrations))
 	}
 
-	connected := make(map[string]bool)
+	states := make(map[string]struct {
+		Status          string
+		CredentialState string
+	})
 	for _, i := range integrations {
-		connected[i.Name] = i.Connected
+		states[i.Name] = struct {
+			Status          string
+			CredentialState string
+		}{Status: i.Status, CredentialState: i.CredentialState}
 	}
-	if !connected["slack"] {
-		t.Fatal("expected slack to be connected")
+	if states["slack"].Status != "ready" || states["slack"].CredentialState != "connected" {
+		t.Fatalf("expected slack to be connected, got %+v", states["slack"])
 	}
-	if connected["github"] {
-		t.Fatal("expected github to be disconnected")
+	if states["github"].Status != "needs_user_connection" || states["github"].CredentialState != "missing" {
+		t.Fatalf("expected github to be disconnected, got %+v", states["github"])
 	}
 }
 
@@ -12672,32 +12656,36 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		t.Fatalf("integrations status = %d: %s", integrationsResp.StatusCode, payload)
 	}
 	var integrations []struct {
-		Name        string `json:"name"`
-		Connected   bool   `json:"connected"`
-		Connections []struct {
-			Name        string   `json:"name"`
-			Mode        string   `json:"mode"`
-			Connected   bool     `json:"connected"`
-			Connectable bool     `json:"connectable"`
-			AuthTypes   []string `json:"authTypes"`
+		Name            string `json:"name"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+		Connections     []struct {
+			Name            string   `json:"name"`
+			Mode            string   `json:"mode"`
+			Status          string   `json:"status"`
+			CredentialState string   `json:"credentialState"`
+			Actions         []string `json:"actions"`
+			AuthTypes       []string `json:"authTypes"`
 		} `json:"connections"`
 	}
 	if err := json.NewDecoder(integrationsResp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decode integrations: %v", err)
 	}
 	var defaultConnection *struct {
-		Name        string   `json:"name"`
-		Mode        string   `json:"mode"`
-		Connected   bool     `json:"connected"`
-		Connectable bool     `json:"connectable"`
-		AuthTypes   []string `json:"authTypes"`
+		Name            string   `json:"name"`
+		Mode            string   `json:"mode"`
+		Status          string   `json:"status"`
+		CredentialState string   `json:"credentialState"`
+		Actions         []string `json:"actions"`
+		AuthTypes       []string `json:"authTypes"`
 	}
-	slackConnected := false
+	var slackStatus, slackCredentialState string
 	for i := range integrations {
 		if integrations[i].Name != "slack" {
 			continue
 		}
-		slackConnected = integrations[i].Connected
+		slackStatus = integrations[i].Status
+		slackCredentialState = integrations[i].CredentialState
 		for j := range integrations[i].Connections {
 			if integrations[i].Connections[j].Name == "default" {
 				defaultConnection = &integrations[i].Connections[j]
@@ -12710,10 +12698,10 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if defaultConnection == nil {
 		t.Fatal("default connection missing from integrations response")
 	}
-	if !slackConnected {
-		t.Fatal("slack integration connected = false, want true when the user connection is connected")
+	if slackStatus != "ready" || slackCredentialState != "connected" {
+		t.Fatalf("slack status = {%q, %q}, want ready/connected", slackStatus, slackCredentialState)
 	}
-	if defaultConnection.Mode != "user" || !defaultConnection.Connected || !defaultConnection.Connectable {
+	if defaultConnection.Mode != "user" || defaultConnection.Status != "ready" || defaultConnection.CredentialState != "connected" || !reflect.DeepEqual(defaultConnection.Actions, []string{"disconnect", "add_instance"}) {
 		t.Fatalf("default connection metadata = %+v, want connected user connection", *defaultConnection)
 	}
 	for _, tc := range []struct {
