@@ -15,8 +15,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/metricspipeline"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
+	"github.com/valon-technologies/gestalt/server/services/observability/drivers/metricspipeline"
+	"github.com/valon-technologies/gestalt/server/services/observability/drivers/telemetryutil"
 	"gopkg.in/yaml.v3"
 )
 
