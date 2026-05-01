@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 )
 
 type ResponseMappingConfig struct {

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 )
 
 const defaultTimeout = 10 * time.Second

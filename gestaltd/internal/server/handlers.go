@@ -15,12 +15,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"

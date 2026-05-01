@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 )
 
 const (
