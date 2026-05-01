@@ -114,6 +114,11 @@ func defaultManagedConfig(dbPath, encryptionKey string) string {
 server:
   public:
     port: 8080
+  management:
+    host: 127.0.0.1
+    port: 8081
+  admin:
+    allowUnauthenticated: true
   encryptionKey: %q
   providers:
     indexeddb: main
@@ -127,6 +132,7 @@ providers:
     root:
       source: %s
       path: /
+      public: true
   secrets:
     env:
       source: env
@@ -149,6 +155,11 @@ func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string
 server:
   public:
     port: 8080
+  management:
+    host: 127.0.0.1
+    port: 8081
+  admin:
+    allowUnauthenticated: true
   encryptionKey: %q
   providers:
     externalCredentials: default
@@ -169,6 +180,7 @@ providers:
       source:
         path: %q
       path: /
+      public: true
   secrets:
     env:
       source: env

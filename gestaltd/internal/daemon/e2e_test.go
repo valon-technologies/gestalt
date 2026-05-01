@@ -1674,6 +1674,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
       source:
         path: %q
       path: %s
+      public: true
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
@@ -1720,6 +1721,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
       source:
         path: %q
       path: %s
+      public: true
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
 
@@ -1731,6 +1733,8 @@ server:
   management:
     host: 127.0.0.1
     port: %d
+  admin:
+    allowUnauthenticated: true
   encryptionKey: test-serve-e2e-key
   providers:
     indexeddb: inmem
@@ -2346,6 +2350,7 @@ providers:
     roadmap:
       source:
         path: %s
+      public: true
 plugins:
   example:
     source:
@@ -2353,6 +2358,7 @@ plugins:
     ui:
       bundle: roadmap
       path: /roadmap
+      public: true
 `, publicURL, publicPort, indexedDBManifest, mountedUI.ManifestPath, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui config: %v", err)
@@ -2789,6 +2795,7 @@ plugins:
       path: %s
     ui:
       path: /roadmap
+      public: true
 `, e2eLoopbackBaseURL(0), indexedDBManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui lock/sync config: %v", err)

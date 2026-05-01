@@ -67,7 +67,7 @@ func (s *Server) mountedUIForProvider(provider, mountedPath string) (MountedUI, 
 
 func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principal.Principal, mounted MountedUI) bool {
 	if mounted.AuthorizationPolicy == "" {
-		return true
+		return mounted.Public
 	}
 	if s.authorizer == nil || p == nil || principal.IsNonUserPrincipal(p) {
 		return false

@@ -107,6 +107,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
 			return err
 		}
+		if entry.Public && strings.TrimSpace(entry.AuthorizationPolicy) != "" {
+			return fmt.Errorf("config validation: ui.%s.public cannot be combined with ui.%s.authorizationPolicy", name, name)
+		}
 		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
 			return err
 		}
@@ -1014,6 +1017,9 @@ func validateAdminConfig(cfg *Config) error {
 			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")
 		}
 	} else {
+		if admin.AllowUnauthenticated {
+			return fmt.Errorf("config validation: server.admin.allowUnauthenticated cannot be combined with server.admin.authorizationPolicy")
+		}
 		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err

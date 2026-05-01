@@ -117,9 +117,22 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 			return &reg.Providers
 		}(),
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Admin: server.AdminRouteConfig{
+			AllowUnauthenticated: true,
+		},
 	}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+	for i := range cfg.MountedUIs {
+		if cfg.MountedUIs[i].AuthorizationPolicy == "" {
+			cfg.MountedUIs[i].Public = true
+		}
+	}
+	for _, entry := range cfg.ProviderUIs {
+		if entry != nil && entry.AuthorizationPolicy == "" {
+			entry.Public = true
+		}
 	}
 	brokerOpts := []invocation.BrokerOption{}
 	if cfg.DefaultConnection != nil {
@@ -2558,6 +2571,33 @@ func TestNewServerRequiresExternalCredentialsProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "external credentials provider is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAdminAPIFailsClosedWithoutAuthorizationPolicy(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	reg := registry.New()
+	s, err := server.New(server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   &reg.Providers,
+		Invoker:     invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/v1/authorization/plugins", nil)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "admin authorization is not configured") {
+		t.Fatalf("body = %q, want admin authorization error", rec.Body.String())
 	}
 }
 
@@ -6591,6 +6631,29 @@ func TestMountedUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestMountedUIRequiresPolicyOrExplicitPublic(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	reg := registry.New()
+	_, err := server.New(server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   &reg.Providers,
+		Invoker:     invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Admin:       server.AdminRouteConfig{AllowUnauthenticated: true},
+		MountedUIs: []server.MountedUI{{
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
+			Handler: http.NotFoundHandler(),
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "AuthorizationPolicy or Public is required") {
+		t.Fatalf("server.New error = %v, want mounted ui auth/public requirement", err)
 	}
 }
 

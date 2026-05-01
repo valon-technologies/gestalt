@@ -596,7 +596,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 	}
 
 	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, "", "", ""); err != nil {
+	if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, "", "", "", false); err != nil {
 		return nil, err
 	}
 
@@ -619,7 +619,8 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
 			return nil, err
 		}
-		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, "", ""); err != nil {
+		uiPublic := providerLocalPluginOverlayUIPublic(loadedCfg, resolvedKey, "")
+		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, "", "", uiPublic); err != nil {
 			return nil, err
 		}
 	case siblingUIManifestPath != "":
@@ -637,7 +638,8 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 				return nil, err
 			}
 		}
-		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, uiName, siblingUIManifestPath); err != nil {
+		uiPublic := providerLocalPluginOverlayUIPublic(loadedCfg, resolvedKey, uiName)
+		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, uiName, siblingUIManifestPath, uiPublic); err != nil {
 			return nil, err
 		}
 	}
@@ -645,6 +647,10 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 	loadedCfg, err = config.LoadPaths(configPaths)
 	if err != nil {
 		return nil, fmt.Errorf("loading provider dev config with mounted ui: %w", err)
+	}
+	configPaths, loadedCfg, err = ensureProviderLocalAdminOverlay(sessionDir, configPaths, loadedCfg)
+	if err != nil {
+		return nil, err
 	}
 
 	publicURL := providerLocalPublicURL(loadedCfg)
@@ -675,14 +681,16 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 	}
 
 	autoMountPath := defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
+	uiPublic := true
 	if configuredUIs, err := loadConfiguredUIs(opts.ConfigPaths); err == nil {
 		if entry := configuredUIs[resolvedKey]; entry != nil && strings.TrimSpace(entry.Path) != "" {
 			autoMountPath = strings.TrimSpace(entry.Path)
 		}
+		uiPublic = providerLocalUIOverlayPublic(configuredUIs[resolvedKey])
 	}
 
 	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	if err := writeProviderLocalUIOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath); err != nil {
+	if err := writeProviderLocalUIOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, uiPublic); err != nil {
 		return nil, err
 	}
 
@@ -692,6 +700,10 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 	loadedCfg, err := config.LoadPaths(configPaths)
 	if err != nil {
 		return nil, fmt.Errorf("loading provider dev config: %w", err)
+	}
+	configPaths, loadedCfg, err = ensureProviderLocalAdminOverlay(sessionDir, configPaths, loadedCfg)
+	if err != nil {
+		return nil, err
 	}
 
 	publicURL := providerLocalPublicURL(loadedCfg)
@@ -1115,7 +1127,7 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 	return writeYAMLFile(path, cfg)
 }
 
-func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string, port int, mountPath, uiName, uiManifestPath string) error {
+func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string, port int, mountPath, uiName, uiManifestPath string, uiPublic bool) error {
 	pluginEntry := map[string]any{
 		"source":    providerLocalSourceOverride(manifestPath),
 		"execution": nil,
@@ -1127,6 +1139,9 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 		}
 		if uiName != "" {
 			ui["bundle"] = uiName
+		}
+		if uiPublic {
+			ui["public"] = true
 		}
 		pluginEntry["ui"] = ui
 	}
@@ -1145,11 +1160,15 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 		},
 	}
 	if uiName != "" && uiManifestPath != "" {
+		uiProviderEntry := map[string]any{
+			"source": providerLocalSourceOverride(uiManifestPath),
+		}
+		if uiPublic {
+			uiProviderEntry["public"] = true
+		}
 		cfg["providers"] = map[string]any{
 			"ui": map[string]any{
-				uiName: map[string]any{
-					"source": providerLocalSourceOverride(uiManifestPath),
-				},
+				uiName: uiProviderEntry,
 			},
 		}
 	}
@@ -1169,12 +1188,15 @@ func writeProviderRemotePluginOverlayConfig(path, pluginKey, manifestPath string
 	return writeYAMLFile(path, cfg)
 }
 
-func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port int, mountPath string) error {
+func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port int, mountPath string, uiPublic bool) error {
 	uiEntry := map[string]any{
 		"source": providerLocalSourceOverride(manifestPath),
 	}
 	if mountPath != "" {
 		uiEntry["path"] = mountPath
+	}
+	if uiPublic {
+		uiEntry["public"] = true
 	}
 
 	cfg := map[string]any{
@@ -1189,6 +1211,53 @@ func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port in
 		"providers": map[string]any{
 			"ui": map[string]any{
 				uiKey: uiEntry,
+			},
+		},
+	}
+	return writeYAMLFile(path, cfg)
+}
+
+func providerLocalPluginOverlayUIPublic(cfg *config.Config, pluginKey, uiName string) bool {
+	if cfg == nil {
+		return true
+	}
+	if plugin := cfg.Plugins[pluginKey]; plugin != nil && strings.TrimSpace(plugin.AuthorizationPolicy) != "" {
+		return false
+	}
+	if uiName != "" {
+		if ui := cfg.Providers.UI[uiName]; ui != nil && strings.TrimSpace(ui.AuthorizationPolicy) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func providerLocalUIOverlayPublic(entry *config.UIEntry) bool {
+	return entry == nil || strings.TrimSpace(entry.AuthorizationPolicy) == ""
+}
+
+func ensureProviderLocalAdminOverlay(sessionDir string, configPaths []string, loadedCfg *config.Config) ([]string, *config.Config, error) {
+	if loadedCfg == nil || strings.TrimSpace(loadedCfg.Server.Admin.AuthorizationPolicy) != "" || loadedCfg.Server.Admin.AllowUnauthenticated {
+		return configPaths, loadedCfg, nil
+	}
+	overlayConfigPath := filepath.Join(sessionDir, "provider-admin.yaml")
+	if err := writeProviderLocalAdminOverlayConfig(overlayConfigPath); err != nil {
+		return nil, nil, err
+	}
+	configPaths = append(configPaths, overlayConfigPath)
+	reloadedCfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, nil, fmt.Errorf("loading provider dev config with local admin: %w", err)
+	}
+	return configPaths, reloadedCfg, nil
+}
+
+func writeProviderLocalAdminOverlayConfig(path string) error {
+	cfg := map[string]any{
+		"apiVersion": config.ConfigAPIVersion,
+		"server": map[string]any{
+			"admin": map[string]any{
+				"allowUnauthenticated": true,
 			},
 		},
 	}

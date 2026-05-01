@@ -109,6 +109,106 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	}
 }
 
+func TestProviderLocalSessionPreservesProtectedOwnedUI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	pluginManifest := componentProviderManifestPath(t, pluginDir)
+	cfgPath := filepath.Join(dir, "protected.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
+authorization:
+  policies:
+    dev_policy:
+      default: deny
+plugins:
+  provider:
+    source:
+      path: %s
+    authorizationPolicy: dev_policy
+`, pluginManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Path:        pluginManifest,
+		ConfigPaths: []string{cfgPath},
+		Port:        18080,
+	})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(session.Dir) }()
+
+	loaded, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("config.LoadPaths: %v", err)
+	}
+	plugin := loaded.Plugins["provider"]
+	if plugin == nil {
+		t.Fatal(`Plugins["provider"] = nil`)
+	}
+	if got := plugin.AuthorizationPolicy; got != "dev_policy" {
+		t.Fatalf("AuthorizationPolicy = %q, want dev_policy", got)
+	}
+	if plugin.UIPublic {
+		t.Fatal("UIPublic = true, want protected provider-dev overlay to preserve policy-bound UI")
+	}
+}
+
+func TestProviderLocalSessionPreservesProtectedSourceUI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mountedUI := setupMountedUIDir(t, dir)
+	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
+	cfgPath := filepath.Join(dir, "protected-ui.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
+authorization:
+  policies:
+    dev_policy:
+      default: deny
+providers:
+  ui:
+    roadmap_review:
+      source:
+        path: %s
+      path: /roadmap.review
+      authorizationPolicy: dev_policy
+`, mountedUI.ManifestPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
+		Path:        mountedUI.ManifestPath,
+		ConfigPaths: []string{cfgPath},
+		Port:        18080,
+	})
+	if err != nil {
+		t.Fatalf("prepareProviderLocalSession: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(session.Dir) }()
+
+	loaded, err := config.LoadPaths(session.ConfigPaths)
+	if err != nil {
+		t.Fatalf("config.LoadPaths: %v", err)
+	}
+	entry := loaded.Providers.UI["roadmap_review"]
+	if entry == nil {
+		t.Fatal(`Providers.UI["roadmap_review"] = nil`)
+	}
+	if got := entry.AuthorizationPolicy; got != "dev_policy" {
+		t.Fatalf("AuthorizationPolicy = %q, want dev_policy", got)
+	}
+	if entry.Public {
+		t.Fatal("Public = true, want protected provider-dev overlay to preserve policy-bound UI")
+	}
+}
+
 func TestResolveProviderRemoteAttachTokenPrecedence(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)

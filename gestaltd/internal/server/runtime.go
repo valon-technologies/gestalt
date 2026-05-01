@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -66,6 +67,11 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	}
 
 	managementAddr := cfg.Server.ManagementAddr()
+	if cfg.Server.Admin.AuthorizationPolicy == "" && cfg.Server.Admin.AllowUnauthenticated {
+		if !adminUnauthenticatedRouteHostIsLoopback(cfg.Server) {
+			return fmt.Errorf("server.admin.allowUnauthenticated requires admin routes to be served on a loopback listener")
+		}
+	}
 	mcpSlot := &switchableHandler{}
 	workflowProvidersReady := make(chan struct{})
 	baseConfig := Config{
@@ -102,8 +108,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		ProviderDevAttach:     cfg.Server.Dev.AttachmentState != "",
 		PublicHostServices:    result.PublicHostServices,
 		Admin: AdminRouteConfig{
-			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
-			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
+			AuthorizationPolicy:  cfg.Server.Admin.AuthorizationPolicy,
+			AllowedRoles:         append([]string(nil), cfg.Server.Admin.AllowedRoles...),
+			AllowUnauthenticated: cfg.Server.Admin.AllowUnauthenticated,
 		},
 		AdminUIProvider: strings.TrimSpace(cfg.Server.Admin.UI),
 	}
@@ -253,6 +260,22 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 	case <-ctx.Done():
 		return nil
 	}
+}
+
+func adminManagementHostIsLoopback(host string) bool {
+	host = strings.TrimSpace(host)
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func adminUnauthenticatedRouteHostIsLoopback(cfg config.ServerConfig) bool {
+	if management, ok := cfg.ManagementListener(); ok {
+		return adminManagementHostIsLoopback(management.Host)
+	}
+	return adminManagementHostIsLoopback(cfg.PublicListener().Host)
 }
 
 func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, invoker invocation.Invoker) (http.Handler, error) {
