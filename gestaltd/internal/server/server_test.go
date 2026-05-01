@@ -623,6 +623,20 @@ func (v *relayTestRuntimeSessionVerifier) ListPluginRuntimeSessionLogs(context.C
 	return nil, nil
 }
 
+type nonHostedRuntimeSessionVerifier struct{}
+
+func (nonHostedRuntimeSessionVerifier) VerifyPluginRuntimeSession(context.Context, string, string) error {
+	return runtimehost.ErrProviderNotHostedRuntime
+}
+
+func (nonHostedRuntimeSessionVerifier) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
+	return nil, nil
+}
+
+func (nonHostedRuntimeSessionVerifier) ListPluginRuntimeSessionLogs(context.Context, string, string, int64, int) ([]runtimelogs.Record, error) {
+	return nil, nil
+}
+
 func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	t.Parallel()
 
@@ -868,7 +882,7 @@ func TestHostServiceRelayCoreRoutableTokenDoesNotUseNonCoreRegistry(t *testing.T
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
 	}
-	publicHostServices.Register("support", hostService)
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), hostService)
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
@@ -929,7 +943,7 @@ func TestHostServiceRelayCoreRoutablePluginInvokerIgnoresRegistry(t *testing.T) 
 		t.Fatalf("NewInvocationTokenManager registry: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("support", runtimehost.HostService{
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-core"), runtimehost.HostService{
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -1111,6 +1125,89 @@ func TestHostServiceRelayRejectsCoreRoutableWithoutRuntimeVerifier(t *testing.T)
 	}
 }
 
+func TestHostServiceRelayCoreRoutableProviderDevUsesRegisteredSessionVerifier(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	pluginInvoker := &relayTestInvoker{}
+	invokes := []invocation.PluginInvocationDependency{{
+		Plugin:         "slack",
+		Operation:      "events.reply",
+		CredentialMode: core.ConnectionModeNone,
+	}}
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	publicHostServices.RegisterSession("support", "provider-dev-session", runtimehost.HostService{
+		Name:   "plugin_invoker",
+		EnvVar: plugininvokerservice.DefaultSocketEnv,
+		Register: func(*grpc.Server) {
+		},
+	})
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+		cfg.Invoker = pluginInvoker
+		cfg.PluginInvoker = pluginInvoker
+		cfg.PluginRuntimes = nonHostedRuntimeSessionVerifier{}
+		cfg.PublicHostServices = publicHostServices
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"support": {Invokes: configPluginInvocationDependencies(invokes)},
+		}
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "provider-dev-session",
+		Service:      "plugin_invoker",
+		EnvVar:       plugininvokerservice.DefaultSocketEnv,
+		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
+		CoreRoutable: true,
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user:test-user",
+		UserID:    "test-user",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+	})
+	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", plugininvokerservice.InvocationDependencyGrants(invokes))
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
+		InvocationToken: invocationToken,
+		Plugin:          "slack",
+		Operation:       "events.reply",
+		Instance:        "prod",
+		IdempotencyKey:  "provider-dev-call",
+	})
+	if err != nil {
+		t.Fatalf("PluginInvoker.Invoke via provider-dev core relay: %v", err)
+	}
+	if call := pluginInvoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" {
+		t.Fatalf("plugin invoker call = %+v, want slack events.reply", call)
+	}
+}
+
 func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t *testing.T) {
 	t.Parallel()
 
@@ -1126,7 +1223,7 @@ func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t 
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("support", runtimehost.HostService{
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("provider-dev-session"), runtimehost.HostService{
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -1536,7 +1633,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 	cacheSrv := &relayTestCacheServer{}
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("support", runtimehost.HostService{
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
 		Name:   "cache",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
@@ -1588,7 +1685,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	stubDB := &coretesting.StubIndexedDB{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.Register("relay-plugin", runtimehost.HostService{
+	publicHostServices.RegisterVerified("relay-plugin", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
