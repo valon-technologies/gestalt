@@ -15,7 +15,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -23,6 +22,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
 	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"

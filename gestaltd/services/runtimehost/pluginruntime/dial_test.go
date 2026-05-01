@@ -9,9 +9,9 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/testutil/metrictest"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

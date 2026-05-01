@@ -131,7 +131,7 @@ func builtHelperBinary() (string, error) {
 			return
 		}
 
-		cmd := exec.Command(goBinaryPath(), "build", "-o", helperBinary, "./internal/testutil/cmd/fakebun")
+		cmd := exec.Command(goBinaryPath(), "build", "-o", helperBinary, "./services/testutil/testdata/cmd/fakebun")
 		cmd.Dir = filepath.Join(root, "gestaltd")
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr

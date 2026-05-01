@@ -28,7 +28,7 @@ beforeAll(async () => {
   socketPath = join(tmpDir, "cache.sock");
 
   const build = spawn(
-    ["go", "build", "-o", harnessBinPath, "./internal/testutil/cmd/cachetransportd/"],
+    ["go", "build", "-o", harnessBinPath, "./services/testutil/testdata/cmd/cachetransportd/"],
     { cwd: GESTALTD_DIR, stdout: "pipe", stderr: "pipe" },
   );
   const buildExit = await build.exited;

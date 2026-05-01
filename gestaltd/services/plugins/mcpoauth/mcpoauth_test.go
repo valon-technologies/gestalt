@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/mcpoauth"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 type memStore struct {

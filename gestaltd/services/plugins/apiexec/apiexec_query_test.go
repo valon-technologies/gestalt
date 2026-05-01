@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
 )
 
 func TestAddQueryValue_Scalar(t *testing.T) {

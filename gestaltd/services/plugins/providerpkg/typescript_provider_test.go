@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/testutil/fakebun"
 )
 
 const (

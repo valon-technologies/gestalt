@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type Subprocess } from "bun";
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   IndexedDB,
@@ -21,17 +21,15 @@ const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");
 
 let tmpDir: string;
 let harnessBinPath: string;
-let socketPath: string;
 let proc: Subprocess;
 let db: IndexedDB;
 
 beforeAll(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), "indexeddb-transport-test-"));
   harnessBinPath = join(tmpDir, "indexeddbtransportd");
-  socketPath = join(tmpDir, "indexeddb.sock");
 
   const build = spawn(
-    ["go", "build", "-o", harnessBinPath, "./internal/testutil/cmd/indexeddbtransportd/"],
+    ["go", "build", "-o", harnessBinPath, "./services/testutil/testdata/cmd/indexeddbtransportd/"],
     { cwd: GESTALTD_DIR, stdout: "pipe", stderr: "pipe" },
   );
   const buildExit = await build.exited;
@@ -40,7 +38,9 @@ beforeAll(async () => {
     throw new Error(`go build failed (exit ${buildExit}): ${stderr}`);
   }
 
-  proc = spawn([harnessBinPath, "--socket", socketPath], {
+  const address = await reserveTCPAddress();
+  const target = `tcp://${address}`;
+  proc = spawn([harnessBinPath, "--tcp", address], {
     stdout: "pipe",
     stderr: "inherit",
   });
@@ -57,10 +57,13 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
-  process.env[indexedDBSocketEnv("named")] = `unix://${socketPath}`;
-  db = new IndexedDB();
+  process.env.GESTALT_INDEXEDDB_SOCKET = target;
+  process.env[indexedDBSocketEnv("named")] = target;
 }, 60_000);
+
+beforeEach(() => {
+  db = new IndexedDB();
+});
 
 async function reserveTCPAddress(): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -221,7 +224,8 @@ describe("IndexedDB transport", () => {
     await tx.objectStore(store).put({ id: "row-1", value: "pending" });
     await tx.abort();
 
-    await expect(os.get("row-1")).rejects.toBeInstanceOf(NotFoundError);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(new IndexedDB().objectStore(store).get("row-1")).rejects.toBeInstanceOf(NotFoundError);
   });
 
   test("readonly transaction rejects writes", async () => {
@@ -276,7 +280,7 @@ describe("IndexedDB transport", () => {
     expect(await os.index("by_status").count(undefined, "inactive")).toBe(1);
   });
 
-  test("named socket env selects the requested binding", async () => {
+  test("named target env selects the requested binding", async () => {
     const namedDb = new IndexedDB("named");
     const store = "named_socket_env";
     await namedDb.createObjectStore(store);

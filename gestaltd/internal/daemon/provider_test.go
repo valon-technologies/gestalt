@@ -25,8 +25,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
@@ -37,6 +35,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
+	"github.com/valon-technologies/gestalt/server/services/testutil"
+	"github.com/valon-technologies/gestalt/server/services/testutil/fakebun"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -3538,7 +3538,7 @@ func rustProviderFixturePath(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust")
+	return filepath.Join(root, "gestaltd", "services", "testutil", "testdata", "provider-rust")
 }
 
 func rustAuthProviderFixturePath(t *testing.T) string {
@@ -3548,7 +3548,7 @@ func rustAuthProviderFixturePath(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-auth")
+	return filepath.Join(root, "gestaltd", "services", "testutil", "testdata", "provider-rust-auth")
 }
 
 func buildGoSourceAuthBinary(t *testing.T) string {
