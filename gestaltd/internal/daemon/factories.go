@@ -11,22 +11,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	agentprovider "github.com/valon-technologies/gestalt/server/internal/drivers/agent/provider"
-	authprovider "github.com/valon-technologies/gestalt/server/internal/drivers/auth/provider"
-	authorizationprovider "github.com/valon-technologies/gestalt/server/internal/drivers/authorization/provider"
-	cacheprovider "github.com/valon-technologies/gestalt/server/internal/drivers/cache/provider"
-	externalcredentialsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/externalcredentials/provider"
-	indexeddbprovider "github.com/valon-technologies/gestalt/server/internal/drivers/indexeddb/provider"
-	s3provider "github.com/valon-technologies/gestalt/server/internal/drivers/s3/provider"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
-	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
-	workflowprovider "github.com/valon-technologies/gestalt/server/internal/drivers/workflow/provider"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/operator"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 )
 
 type bootstrapEnv struct {
@@ -119,17 +111,17 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Source.Builtin)
 		}
 	}
-	factories.Auth = authprovider.Factory
-	factories.Authorization = authorizationprovider.Factory
-	factories.ExternalCredentials = externalcredentialsprovider.Factory
-	factories.IndexedDB = indexeddbprovider.Factory
-	factories.Cache = cacheprovider.Factory
-	factories.S3 = s3provider.Factory
-	factories.Workflow = workflowprovider.Factory
-	factories.Agent = agentprovider.Factory
+	factories.Auth = providerdrivers.AuthenticationFactory
+	factories.Authorization = providerdrivers.AuthorizationFactory
+	factories.ExternalCredentials = providerdrivers.ExternalCredentialsFactory
+	factories.IndexedDB = providerdrivers.IndexedDBFactory
+	factories.Cache = providerdrivers.CacheFactory
+	factories.S3 = providerdrivers.S3Factory
+	factories.Workflow = providerdrivers.WorkflowFactory
+	factories.Agent = providerdrivers.AgentFactory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
-	factories.Secrets["provider"] = secretsprovider.Factory
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
 	return factories
 }
 
