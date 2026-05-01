@@ -7,9 +7,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
+
+type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 // Policy normalizes allowed_operations handling so every provider type uses the
 // same validation, aliasing, and description override behavior.
@@ -21,7 +22,7 @@ type Policy struct {
 	tags              map[string][]string
 }
 
-func New(allowed map[string]*config.OperationOverride) (*Policy, error) {
+func New(allowed map[string]*OperationOverride) (*Policy, error) {
 	if allowed == nil {
 		return nil, nil
 	}
@@ -96,10 +97,25 @@ func (p *Policy) Validate(ops []core.Operation) error {
 }
 
 func (p *Policy) ValidateCatalog(cat *catalog.Catalog) error {
-	if cat == nil {
+	if p == nil || cat == nil {
 		return nil
 	}
-	return p.Validate(coreintegration.OperationsList(cat))
+
+	opSet := make(map[string]struct{}, len(cat.Operations))
+	for i := range cat.Operations {
+		op := cat.Operations[i]
+		if op.Transport == "graphql" && op.Query == "" {
+			continue
+		}
+		opSet[op.ID] = struct{}{}
+	}
+	for original := range p.originalToExposed {
+		if _, ok := opSet[original]; !ok {
+			return fmt.Errorf("allowed_operations contains unknown operation %q", original)
+		}
+	}
+
+	return nil
 }
 
 func (p *Policy) Resolve(name string) (string, bool) {
@@ -115,17 +131,17 @@ func (p *Policy) Wrap(prov core.Provider) core.Provider {
 		return prov
 	}
 
-	var opts []coreintegration.RestrictedOption
+	var opts []RestrictedOption
 	if len(p.descriptions) > 0 {
-		opts = append(opts, coreintegration.WithDescriptions(p.DescriptionOverrides()))
+		opts = append(opts, WithDescriptions(p.DescriptionOverrides()))
 	}
 	if len(p.allowedRoles) > 0 {
-		opts = append(opts, coreintegration.WithAllowedRoles(p.AllowedRoles()))
+		opts = append(opts, WithAllowedRoles(p.AllowedRoles()))
 	}
 	if len(p.tags) > 0 {
-		opts = append(opts, coreintegration.WithTags(p.Tags()))
+		opts = append(opts, WithTags(p.Tags()))
 	}
-	return coreintegration.NewRestricted(prov, p.RestrictedMap(), opts...)
+	return NewRestricted(prov, p.RestrictedMap(), opts...)
 }
 
 func (p *Policy) RestrictedMap() map[string]string {
@@ -234,7 +250,7 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 // MatchingAllowedOperations returns the subset of allowed operations that are
 // present in the provided catalog. It returns nil when either input is empty or
 // when no allowed operations match the catalog.
-func MatchingAllowedOperations(allowed map[string]*config.OperationOverride, cat *catalog.Catalog) map[string]*config.OperationOverride {
+func MatchingAllowedOperations(allowed map[string]*OperationOverride, cat *catalog.Catalog) map[string]*OperationOverride {
 	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
 		return nil
 	}
@@ -242,7 +258,7 @@ func MatchingAllowedOperations(allowed map[string]*config.OperationOverride, cat
 	for i := range cat.Operations {
 		available[cat.Operations[i].ID] = struct{}{}
 	}
-	filtered := make(map[string]*config.OperationOverride)
+	filtered := make(map[string]*OperationOverride)
 	for name, override := range allowed {
 		if _, ok := available[name]; ok {
 			filtered[name] = override

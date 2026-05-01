@@ -10,11 +10,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
-	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
 type resolvedDependencyCatalog struct {

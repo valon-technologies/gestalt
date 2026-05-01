@@ -1,4 +1,4 @@
-package config
+package headerutil
 
 import (
 	"net/http"

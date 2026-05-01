@@ -30,10 +30,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
-	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
-	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -49,6 +47,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -597,7 +597,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	filtered := operationexposure.MatchingAllowedOperations(allowedOperations, mcpUp.Catalog())
 	if len(filtered) > 0 {
 		filterable, ok := any(mcpUp).(interface {
-			FilterOperations(map[string]*config.OperationOverride) error
+			FilterOperations(map[string]*operationexposure.OperationOverride) error
 		})
 		if !ok {
 			closeIfPossible(mcpUp, apiProv)
