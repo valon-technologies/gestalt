@@ -1343,6 +1343,11 @@ func TestHostedAgentProviderPoolGetTurnRetriesAfterStalePreferredMiss(t *testing
 func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailure(t *testing.T) {
 	t.Parallel()
 
+	second := &hostedAgentPoolBackend{
+		id:        2,
+		provider:  &listSessionsAgentProvider{sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}}},
+		liveTurns: map[string]struct{}{},
+	}
 	pool := &hostedAgentProviderPool{
 		name:            "simple",
 		ctx:             context.Background(),
@@ -1353,11 +1358,7 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 				provider:  &listSessionsAgentProvider{err: context.DeadlineExceeded},
 				liveTurns: map[string]struct{}{},
 			},
-			{
-				id:        2,
-				provider:  &listSessionsAgentProvider{sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}}},
-				liveTurns: map[string]struct{}{},
-			},
+			second,
 		},
 	}
 
@@ -1368,7 +1369,7 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 	if len(sessions) != 1 || sessions[0].ID != "session-1" {
 		t.Fatalf("ListSessions = %#v, want session-1", sessions)
 	}
-	if backend := pool.sessionBackend("session-1"); backend != pool.backends[1] {
+	if backend := pool.sessionBackend("session-1"); backend != second {
 		t.Fatalf("session backend = %#v, want second backend", backend)
 	}
 }
