@@ -82,6 +82,22 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+func configPluginInvocationDependencies(deps []invocation.PluginInvocationDependency) []config.PluginInvocationDependency {
+	if len(deps) == 0 {
+		return nil
+	}
+	out := make([]config.PluginInvocationDependency, 0, len(deps))
+	for _, dep := range deps {
+		out = append(out, config.PluginInvocationDependency{
+			Plugin:         dep.Plugin,
+			Operation:      dep.Operation,
+			Surface:        dep.Surface,
+			CredentialMode: providermanifestv1.ConnectionMode(dep.CredentialMode),
+		})
+	}
+	return out
+}
+
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
 	t.Helper()
 	return newTestHTTPServer(t, httptest.NewServer, opts...)
@@ -904,10 +920,10 @@ func TestHostServiceRelayCoreRoutablePluginInvokerIgnoresRegistry(t *testing.T) 
 	pluginInvoker := &relayTestInvoker{}
 	registryInvoker := &relayTestInvoker{}
 	runtimeSessions := newRelayTestRuntimeSessionVerifier("support", "session-core")
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "slack",
 		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	registryTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
 	if err != nil {
@@ -929,7 +945,7 @@ func TestHostServiceRelayCoreRoutablePluginInvokerIgnoresRegistry(t *testing.T) 
 		cfg.PluginRuntimes = runtimeSessions
 		cfg.PublicHostServices = publicHostServices
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: invokes},
+			"support": {Invokes: configPluginInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true
@@ -1030,17 +1046,17 @@ func TestHostServiceRelayRejectsCoreRoutableWithoutRuntimeVerifier(t *testing.T)
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	pluginInvoker := &relayTestInvoker{}
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "slack",
 		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.PluginInvoker = pluginInvoker
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: invokes},
+			"support": {Invokes: configPluginInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true
@@ -1101,10 +1117,10 @@ func TestHostServiceRelayServesRegisteredCoreServiceWithoutCoreRoutableToken(t *
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "slack",
 		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
 	if err != nil {
@@ -1183,10 +1199,10 @@ func TestHostServiceRelayServesCoreRoutableWorkflowManagerWithoutRegistry(t *tes
 	workflowProvider := newRelayTestWorkflowProvider()
 	agentProvider := newMemoryAgentProvider()
 	runtimeSessions := newRelayTestRuntimeSessionVerifier("github", "session-workflow")
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "github",
 		Operation:      "bot.commentFinal",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		providers := registry.New()
@@ -1217,7 +1233,7 @@ func TestHostServiceRelayServesCoreRoutableWorkflowManagerWithoutRegistry(t *tes
 		}
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{Agent: cfg.Agent})
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"github": {Invokes: invokes},
+			"github": {Invokes: configPluginInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true
@@ -1392,17 +1408,17 @@ func TestHostServiceRelayDoesNotFallbackWithoutCoreRoutableToken(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "slack",
 		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.Invoker = invoker
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: invokes},
+			"support": {Invokes: configPluginInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true
@@ -1444,17 +1460,17 @@ func TestHostServiceRelayRejectsCoreRoutableWithWrongCoreMethodPrefix(t *testing
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []config.PluginInvocationDependency{{
+	invokes := []invocation.PluginInvocationDependency{{
 		Plugin:         "slack",
 		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
+		CredentialMode: core.ConnectionModeNone,
 	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.Invoker = invoker
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: invokes},
+			"support": {Invokes: configPluginInvocationDependencies(invokes)},
 		}
 	}))
 	ts.EnableHTTP2 = true

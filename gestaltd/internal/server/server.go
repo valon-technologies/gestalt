@@ -422,19 +422,35 @@ func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) 
 	return false
 }
 
-func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]config.PluginInvocationDependency {
+func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]invocation.PluginInvocationDependency {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make(map[string][]config.PluginInvocationDependency, len(entries))
+	out := make(map[string][]invocation.PluginInvocationDependency, len(entries))
 	for pluginName, entry := range entries {
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = append([]config.PluginInvocationDependency(nil), entry.Invokes...)
+		out[pluginName] = pluginInvocationDependencies(entry.Invokes)
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+func pluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
+	if len(deps) == 0 {
+		return nil
+	}
+	out := make([]invocation.PluginInvocationDependency, 0, len(deps))
+	for _, dep := range deps {
+		out = append(out, invocation.PluginInvocationDependency{
+			Plugin:         dep.Plugin,
+			Operation:      dep.Operation,
+			Surface:        dep.Surface,
+			CredentialMode: core.ConnectionMode(dep.CredentialMode),
+		})
 	}
 	return out
 }

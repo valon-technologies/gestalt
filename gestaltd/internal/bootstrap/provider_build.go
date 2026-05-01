@@ -977,7 +977,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if invTokens != nil {
 		opts = append(opts,
 			pluginservice.WithInvocationTokens(invTokens),
-			pluginservice.WithInvocationTokenSubject(name, plugininvokerservice.InvocationDependencyGrants(entry.Invokes)),
+			pluginservice.WithInvocationTokenSubject(name, plugininvokerservice.InvocationDependencyGrants(pluginInvocationDependencies(entry.Invokes))),
 		)
 	}
 	prov, err := pluginservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -2234,7 +2234,7 @@ func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntr
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(pluginName, entry.Invokes, invoker, tokens))
+			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(pluginName, pluginInvocationDependencies(entry.Invokes), invoker, tokens))
 		},
 	}
 }

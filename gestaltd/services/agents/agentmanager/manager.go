@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -119,7 +118,7 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	PluginInvokes     map[string][]config.PluginInvocationDependency
+	PluginInvokes     map[string][]invocation.PluginInvocationDependency
 }
 
 type Manager struct {
@@ -131,7 +130,7 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
-	pluginInvokes     map[string][]config.PluginInvocationDependency
+	pluginInvokes     map[string][]invocation.PluginInvocationDependency
 	// Route caches are process-local accelerators; providers remain the durable source of truth.
 	routeMu       sync.Mutex
 	sessionRoutes agentRouteCache
@@ -139,10 +138,6 @@ type Manager struct {
 }
 
 func New(cfg Config) *Manager {
-	pluginInvokes := make(map[string][]config.PluginInvocationDependency, len(cfg.PluginInvokes))
-	for pluginName, deps := range cfg.PluginInvokes {
-		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
-	}
 	return &Manager{
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
@@ -152,7 +147,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:     pluginInvokes,
+		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		sessionRoutes:     newAgentRouteCache(),
 		turnRoutes:        newAgentRouteCache(),
 	}
@@ -1524,12 +1519,12 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	}
 
 	connection := strings.TrimSpace(ref.Connection)
-	if connection != "" && !config.SafeConnectionValue(connection) {
+	if connection != "" && !core.SafeConnectionValue(connection) {
 		return coreagent.Tool{}, fmt.Errorf("connection name contains invalid characters")
 	}
-	connection = config.ResolveConnectionAlias(connection)
+	connection = core.ResolveConnectionAlias(connection)
 	instance := strings.TrimSpace(ref.Instance)
-	if instance != "" && !config.SafeInstanceValue(instance) {
+	if instance != "" && !core.SafeInstanceValue(instance) {
 		return coreagent.Tool{}, fmt.Errorf("instance name contains invalid characters")
 	}
 	credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
@@ -1640,7 +1635,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 		system:         strings.TrimSpace(ref.System),
 		plugin:         strings.TrimSpace(ref.Plugin),
 		operation:      strings.TrimSpace(ref.Operation),
-		connection:     config.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		instance:       strings.TrimSpace(ref.Instance),
 		credentialMode: ref.CredentialMode,
 	}
@@ -1651,7 +1646,7 @@ func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKe
 		system:         strings.TrimSpace(target.System),
 		plugin:         strings.TrimSpace(target.Plugin),
 		operation:      strings.TrimSpace(target.Operation),
-		connection:     config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		instance:       strings.TrimSpace(target.Instance),
 		credentialMode: target.CredentialMode,
 	}
@@ -1812,7 +1807,7 @@ func (m *Manager) searchToolCandidatesForLoadRefs(ctx context.Context, p *princi
 func configuredExactAgentLoadRef(loadRef coreagent.ToolRef, refs []coreagent.ToolRef) (coreagent.ToolRef, bool) {
 	loadPlugin := strings.TrimSpace(loadRef.Plugin)
 	loadOperation := strings.TrimSpace(loadRef.Operation)
-	loadConnection := config.ResolveConnectionAlias(strings.TrimSpace(loadRef.Connection))
+	loadConnection := core.ResolveConnectionAlias(strings.TrimSpace(loadRef.Connection))
 	loadInstance := strings.TrimSpace(loadRef.Instance)
 	exactRefs := exactAgentToolRefs(refs)
 	for i := range exactRefs {
@@ -1820,7 +1815,7 @@ func configuredExactAgentLoadRef(loadRef coreagent.ToolRef, refs []coreagent.Too
 		if strings.TrimSpace(ref.Plugin) != loadPlugin || strings.TrimSpace(ref.Operation) != loadOperation {
 			continue
 		}
-		if loadConnection != "" && config.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)) != loadConnection {
+		if loadConnection != "" && core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)) != loadConnection {
 			continue
 		}
 		if loadInstance != "" && strings.TrimSpace(ref.Instance) != loadInstance {
@@ -1852,11 +1847,11 @@ func agentToolSearchRefSkipsUnavailable(ref coreagent.ToolRef) bool {
 
 func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) ([]agentToolSearchCatalog, error) {
 	connection := strings.TrimSpace(ref.Connection)
-	if connection != "" && !config.SafeConnectionValue(connection) {
+	if connection != "" && !core.SafeConnectionValue(connection) {
 		return nil, fmt.Errorf("connection name contains invalid characters")
 	}
 	instance := strings.TrimSpace(ref.Instance)
-	if instance != "" && !config.SafeInstanceValue(instance) {
+	if instance != "" && !core.SafeInstanceValue(instance) {
 		return nil, fmt.Errorf("instance name contains invalid characters")
 	}
 	credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
@@ -1920,10 +1915,10 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	for _, target := range targets {
 		target.Connection = strings.TrimSpace(target.Connection)
 		target.Instance = strings.TrimSpace(target.Instance)
-		if target.Connection != "" && !config.SafeConnectionValue(target.Connection) {
+		if target.Connection != "" && !core.SafeConnectionValue(target.Connection) {
 			return nil, fmt.Errorf("connection name contains invalid characters")
 		}
-		if target.Instance != "" && !config.SafeInstanceValue(target.Instance) {
+		if target.Instance != "" && !core.SafeInstanceValue(target.Instance) {
 			return nil, fmt.Errorf("instance name contains invalid characters")
 		}
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
@@ -2085,11 +2080,11 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, pluginName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
-		if connection != "" && !config.SafeConnectionValue(connection) {
+		if connection != "" && !core.SafeConnectionValue(connection) {
 			return fmt.Errorf("connection name contains invalid characters")
 		}
 		instance := strings.TrimSpace(ref.Instance)
-		if instance != "" && !config.SafeInstanceValue(instance) {
+		if instance != "" && !core.SafeInstanceValue(instance) {
 			return fmt.Errorf("instance name contains invalid characters")
 		}
 	}
@@ -2627,7 +2622,7 @@ func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs
 			if pluginName == "" || operation == "" {
 				continue
 			}
-			mode, err := normalizeAgentToolCredentialMode(core.ConnectionMode(invoke.CredentialMode))
+			mode, err := normalizeAgentToolCredentialMode(invoke.CredentialMode)
 			if err != nil {
 				return nil, err
 			}

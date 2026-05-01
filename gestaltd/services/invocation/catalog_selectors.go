@@ -1,6 +1,6 @@
 package invocation
 
-import "github.com/valon-technologies/gestalt/server/internal/config"
+import "github.com/valon-technologies/gestalt/server/core"
 
 type CatalogSelectorConfig struct {
 	Invoker           any
@@ -10,7 +10,7 @@ type CatalogSelectorConfig struct {
 
 func (cfg CatalogSelectorConfig) SessionCatalogConnections(providerName string, explicit string) []string {
 	if explicit != "" {
-		return []string{config.ResolveConnectionAlias(explicit)}
+		return []string{core.ResolveConnectionAlias(explicit)}
 	}
 
 	connections := make([]string, 0, 2)

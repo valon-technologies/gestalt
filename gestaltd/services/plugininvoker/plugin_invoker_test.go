@@ -6,7 +6,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -68,7 +67,7 @@ func TestPluginInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	invoker := &recordingPluginInvoker{}
 	server := NewPluginInvokerServer(
 		"caller",
-		[]config.PluginInvocationDependency{
+		[]invocation.PluginInvocationDependency{
 			{Plugin: "github", Operation: "issues.create"},
 			{Plugin: "linear", Surface: "graphql"},
 		},
