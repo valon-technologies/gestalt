@@ -10,8 +10,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 type repeatedStringFlag []string
@@ -58,7 +58,7 @@ func run(args []string, version string) error {
 		case "validate":
 			return runValidate(args[1:])
 		case "__sandbox":
-			return sandbox.RunSubcommand(args[1:])
+			return runtimehost.RunSandboxSubcommand(args[1:])
 		}
 	}
 
