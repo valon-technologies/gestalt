@@ -17,9 +17,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
@@ -1022,7 +1022,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 		t.Fatalf("Register provider: %v", err)
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := authorization.New(config.AuthorizationStaticConfig(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"roadmap-policy": {
 				Default: "deny",
@@ -1033,7 +1033,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 		},
 	}, map[string]*config.ProviderEntry{
 		"roadmap": {AuthorizationPolicy: "roadmap-policy"},
-	})
+	}))
 
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)

@@ -11,7 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -507,7 +506,7 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -564,7 +563,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
@@ -613,7 +612,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowTreatsUnmatchedUsersAsViewer
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
@@ -663,7 +662,7 @@ func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperati
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{}, nil)
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{}, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -710,7 +709,7 @@ func TestFilterCatalogForPrincipal_SubjectFilteringUsesMergedCatalog(t *testing.
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"clash_policy": {
 				Members: []config.SubjectPolicyMemberDef{{

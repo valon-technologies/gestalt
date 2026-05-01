@@ -12,7 +12,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -366,7 +365,7 @@ func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	authz, err := authorization.New(config.AuthorizationConfig{}, nil)
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{}, nil)
 
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)

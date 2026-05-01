@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
 const (

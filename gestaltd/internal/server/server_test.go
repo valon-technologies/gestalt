@@ -42,7 +42,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
-	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -59,6 +58,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -2417,11 +2417,15 @@ func seedSubjectToken(t *testing.T, svc *coredata.Services, subjectID, integrati
 
 func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) *authorization.Authorizer {
 	t.Helper()
-	authz, err := authorization.New(cfg, pluginDefs)
+	authz, err := newTestAuthorizer(cfg, pluginDefs)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	return authz
+}
+
+func newTestAuthorizer(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*authorization.Authorizer, error) {
+	return authorization.New(config.AuthorizationStaticConfig(cfg, pluginDefs))
 }
 
 func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
@@ -3185,7 +3189,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	adminUser := seedUser(t, svc, "admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -4735,7 +4739,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -4968,7 +4972,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		"open-svc":            {AuthorizationPolicy: "open_policy"},
 		"svc":                 {AuthorizationPolicy: "svc_policy"},
 	}
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"discover_manual_policy": {Default: "deny"},
 			"manual_policy":          {Default: "deny"},
@@ -5524,7 +5528,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -5707,7 +5711,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -6046,7 +6050,7 @@ func TestAdminAPI_ProviderBackedWritesUseAuthorizationProvider(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"sample_policy": {
 					Default: "deny",
@@ -6260,7 +6264,7 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	authz, err := authorization.New(config.AuthorizationConfig{
+	authz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -6455,7 +6459,7 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -10820,7 +10824,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -10903,7 +10907,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -10988,7 +10992,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -11842,7 +11846,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	pluginDefs := map[string]*config.ProviderEntry{
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -13660,7 +13664,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	pluginDefs := map[string]*config.ProviderEntry{
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
-	baseAuthz, err := authorization.New(config.AuthorizationConfig{
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
@@ -15301,7 +15305,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -15505,7 +15509,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -15713,7 +15717,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -19225,7 +19229,7 @@ func TestConnectManual(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		base, err := authorization.New(config.AuthorizationConfig{
+		base, err := newTestAuthorizer(config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"manual_policy": {
 					Members: []config.SubjectPolicyMemberDef{{
@@ -19297,7 +19301,7 @@ func TestConnectManual(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -19392,7 +19396,7 @@ func TestConnectManual(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		baseAuthz, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
