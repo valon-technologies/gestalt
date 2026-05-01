@@ -12,7 +12,6 @@ import (
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/core/session"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,14 +19,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
-	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -121,7 +121,7 @@ type Server struct {
 	prometheusMetrics       http.Handler
 	mcpHandler              http.Handler
 	hostServiceRelayTokens  *runtimehost.HostServiceRelayTokenManager
-	invocationTokens        *providerhost.InvocationTokenManager
+	invocationTokens        *plugininvokerservice.InvocationTokenManager
 	hostServiceMu           sync.Mutex
 	hostServiceHandlers     map[hostServiceHandlerKey][]hostServiceHandlerEntry
 	coreHostServiceHandlers map[hostServiceHandlerKey]hostServiceHandlerEntry
@@ -296,7 +296,7 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	var hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
-	var invocationTokens *providerhost.InvocationTokenManager
+	var invocationTokens *plugininvokerservice.InvocationTokenManager
 	var egressProxyTokens *egressproxy.TokenManager
 	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
@@ -304,7 +304,7 @@ func New(cfg Config) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
 		}
-		invocationTokens, err = providerhost.NewInvocationTokenManager(cfg.StateSecret)
+		invocationTokens, err = plugininvokerservice.NewInvocationTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init invocation tokens: %w", err)
 		}

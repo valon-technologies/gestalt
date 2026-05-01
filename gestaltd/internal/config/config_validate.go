@@ -15,9 +15,9 @@ import (
 	"time"
 
 	cronv3 "github.com/robfig/cron/v3"
-	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
 // ValidateStructure checks config shape: integration references, plugin
@@ -1120,7 +1120,7 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 		if !ok || boundEntry == nil {
 			return fmt.Errorf("config validation: plugin %q s3[%d] references unknown s3 %q", name, i, binding)
 		}
-		envName := providerenv.S3SocketEnv(binding)
+		envName := s3.SocketEnv(binding)
 		if otherBinding, exists := envNames[envName]; exists {
 			return fmt.Errorf("config validation: plugin %q s3[%d] %q conflicts with %q after S3 env normalization (%s)", name, i, binding, otherBinding, envName)
 		}

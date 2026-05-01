@@ -32,7 +32,6 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -40,12 +39,13 @@ import (
 	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -197,7 +197,7 @@ func (p *stubAuthorizationProvider) WriteModel(context.Context, *core.WriteModel
 }
 
 func stubAuthorizationFactory(name string) bootstrap.AuthorizationFactory {
-	return func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	return func(yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return &stubAuthorizationProvider{name: name}, nil
 	}
 }
@@ -364,7 +364,7 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 }
 
 func memoryAuthorizationFactory(provider *memoryAuthorizationProvider) bootstrap.AuthorizationFactory {
-	return func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	return func(yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return provider, nil
 	}
 }
@@ -896,7 +896,7 @@ func (p *recordingAgentProvider) CancelTurnRequests() []coreagent.CancelTurnRequ
 
 type callbackAgentProvider struct {
 	*recordingAgentProvider
-	started                *providerhost.StartedHostServices
+	started                *runtimehost.StartedHostServices
 	socketPath             string
 	searchQuery            string
 	searchMaxResults       int32
@@ -917,7 +917,7 @@ func (p *callbackSessionCatalogIntegration) CatalogForRequest(context.Context, s
 	return p.sessionCatalog, nil
 }
 
-func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callbackAgentProvider, error) {
+func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callbackAgentProvider, error) {
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
 	}
@@ -1620,7 +1620,7 @@ func selectedAuthenticationEntry(t *testing.T, cfg *config.Config) *config.Provi
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth = stubAuthFactory("test-auth")
-	f.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+	f.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 		return coretesting.NewStubExternalCredentialProvider(), nil
 	}
 	f.IndexedDB = stubIndexedDBFactory()
@@ -1629,7 +1629,7 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
-func invokeWorkflowHostCallback(t *testing.T, hostServices []providerhost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+func invokeWorkflowHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
 	t.Helper()
 
 	if len(hostServices) != 1 {
@@ -1664,7 +1664,7 @@ func invokeWorkflowHostCallback(t *testing.T, hostServices []providerhost.HostSe
 	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
 }
 
-func invokeAgentHostCallback(t *testing.T, hostServices []providerhost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
+func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
 	t.Helper()
 
 	if len(hostServices) != 1 {
@@ -1699,7 +1699,7 @@ func invokeAgentHostCallback(t *testing.T, hostServices []providerhost.HostServi
 	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
 }
 
-func withIndexedDBHostClient(t *testing.T, hostService providerhost.HostService, fn func(proto.IndexedDBClient)) {
+func withIndexedDBHostClient(t *testing.T, hostService runtimehost.HostService, fn func(proto.IndexedDBClient)) {
 	t.Helper()
 	if hostService.Register == nil {
 		t.Fatal("indexeddb host register func is nil")
@@ -2298,7 +2298,7 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Workflow))
 	hostSockets := make(map[string]string, len(cfg.Providers.Workflow))
-	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
 		}
@@ -2348,7 +2348,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Agent))
 	hostSockets := make(map[string]string, len(cfg.Providers.Agent))
-	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
 		}
@@ -2477,8 +2477,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	)
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -2768,8 +2768,8 @@ func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing
 	)
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -2906,8 +2906,8 @@ func TestBootstrapAgentHostToolSearchReturnsCandidatesAndLoadsRefs(t *testing.T)
 	})
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3094,8 +3094,8 @@ func TestBootstrapHTTPCallerWildcardSearchUsesResolvedUserToolScope(t *testing.T
 	})
 
 	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3176,8 +3176,8 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3286,8 +3286,8 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3384,8 +3384,8 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3467,8 +3467,8 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3549,8 +3549,8 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3617,8 +3617,8 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 
 	var provider *callbackAgentProvider
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
 			return nil, err
 		}
@@ -3715,7 +3715,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	})
 
 	provider := newRecordingAgentProvider()
-	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
 		return provider, nil
 	}
 
@@ -3817,7 +3817,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 
 	factories := validFactories()
 	hostEnvs := map[string][]string{}
-	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		var runtime struct {
 			Name string `yaml:"name"`
 		}
@@ -3883,14 +3883,14 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	factories := validFactories()
 	var (
 		boundDB      *trackedIndexedDB
-		hostServices []providerhost.HostService
+		hostServices []runtimehost.HostService
 	)
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
 		boundDB = &trackedIndexedDB{StubIndexedDB: &coretesting.StubIndexedDB{}}
 		return boundDB, nil
 	}
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		hostServices = append([]providerhost.HostService(nil), services...)
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		hostServices = append([]runtimehost.HostService(nil), services...)
 		return newRecordingAgentProvider(), nil
 	}
 
@@ -3972,9 +3972,9 @@ func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.
 	cfg.Server.Providers.Authorization = "indexeddb"
 
 	factories := validFactories()
-	var hostServices []providerhost.HostService
-	factories.Authorization = func(_ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
-		hostServices = append([]providerhost.HostService(nil), services...)
+	var hostServices []runtimehost.HostService
+	factories.Authorization = func(_ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+		hostServices = append([]runtimehost.HostService(nil), services...)
 		return &stubAuthorizationProvider{name: "test-authorization"}, nil
 	}
 
@@ -4048,7 +4048,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 			closed:        counter,
 		}, nil
 	}
-	factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
 		return &stubWorkflowProvider{}, nil
 	}
 
@@ -4097,9 +4097,9 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	}
 
 	factories := validFactories()
-	var hostServices []providerhost.HostService
-	factories.ExternalCredentials = func(_ context.Context, _ string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
-		hostServices = append([]providerhost.HostService(nil), services...)
+	var hostServices []runtimehost.HostService
+	factories.ExternalCredentials = func(_ context.Context, _ string, _ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		hostServices = append([]runtimehost.HostService(nil), services...)
 		return coretesting.NewStubExternalCredentialProvider(), nil
 	}
 
@@ -4150,7 +4150,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	var (
 		closeCount atomic.Int32
 		boundDB    *trackedIndexedDB
-		hostEnv    []providerhost.HostService
+		hostEnv    []runtimehost.HostService
 	)
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
 		boundDB = &trackedIndexedDB{
@@ -4160,8 +4160,8 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		return boundDB, nil
 	}
 	workflowProvider := &recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		hostEnv = append([]providerhost.HostService(nil), hostServices...)
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		hostEnv = append([]runtimehost.HostService(nil), hostServices...)
 		return workflowProvider, nil
 	}
 
@@ -4176,7 +4176,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatalf("workflow host services = %d, want 2", len(hostEnv))
 	}
 
-	var indexedDBHost providerhost.HostService
+	var indexedDBHost runtimehost.HostService
 	for _, hostService := range hostEnv {
 		if hostService.EnvVar == indexeddbservice.DefaultSocketEnv {
 			indexedDBHost = hostService
@@ -4276,7 +4276,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -4350,7 +4350,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -4390,7 +4390,7 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	})
 
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return &recordingWorkflowProvider{}, nil
 	}
 
@@ -4412,7 +4412,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	recorders := []*recordingWorkflowProvider{}
 	sharedSchedules := map[string]*coreworkflow.Schedule{}
 	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{
 			schedules:     sharedSchedules,
 			executionRefs: sharedExecutionRefs,
@@ -4500,7 +4500,7 @@ func TestBootstrapIgnoresUserSchedulesThatOnlyShareCfgPrefix(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{
 			listedSchedules: []*coreworkflow.Schedule{{ID: "cfg_backup"}},
 		}
@@ -4534,7 +4534,7 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedSchedules := map[string]map[string]*coreworkflow.Schedule{}
 	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if sharedSchedules[name] == nil {
 			sharedSchedules[name] = map[string]*coreworkflow.Schedule{}
 		}
@@ -4651,7 +4651,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 	temporalSchedules := map[string]*coreworkflow.Schedule{}
 	temporalExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	temporalStarts := 0
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name == "temporal" {
 			temporalStarts++
 			provider := &recordingWorkflowProvider{
@@ -4735,7 +4735,7 @@ func TestBootstrapDoesNotApplyConfiguredWorkflowSchedulesWhenAuditBuildFails(t *
 
 	factories := validFactories()
 	recorder := &recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return recorder, nil
 	}
 	factories.Audit = func(context.Context, config.ProviderEntry, core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
@@ -4778,7 +4778,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 		},
 	}
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return recorder, nil
 	}
 
@@ -4798,7 +4798,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	provider := &recordingWorkflowProvider{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return provider, nil
 	}
 
@@ -4858,7 +4858,7 @@ func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenMetadataChanges(t *
 	provider := &recordingWorkflowProvider{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return provider, nil
 	}
 
@@ -4922,7 +4922,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	provider := &recordingWorkflowProvider{deleteMissingNotFound: true}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return provider, nil
 	}
 
@@ -4986,7 +4986,7 @@ func TestBootstrapIgnoresMissingPreviousScheduleDuringWorkflowProviderMove(t *te
 	backup := &recordingWorkflowProvider{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name == "backup" {
 			return backup, nil
 		}
@@ -5054,7 +5054,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 	provider := &recordingWorkflowProvider{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return provider, nil
 	}
 
@@ -5130,7 +5130,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -5214,11 +5214,11 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 	}
 
 	factories := validFactories()
-	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
 		return newRecordingAgentProvider(), nil
 	}
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -5292,7 +5292,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	factories := validFactories()
 	recorders := map[string]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		recorders[name] = recorder
 		return recorder, nil
@@ -5324,7 +5324,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 	recorders := []*recordingWorkflowProvider{}
 	sharedEventTriggers := map[string]*coreworkflow.EventTrigger{}
 	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{
 			eventTriggers: sharedEventTriggers,
 			executionRefs: sharedExecutionRefs,
@@ -5398,7 +5398,7 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 	recorders := map[string][]*recordingWorkflowProvider{}
 	sharedEventTriggers := map[string]map[string]*coreworkflow.EventTrigger{}
 	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if sharedEventTriggers[name] == nil {
 			sharedEventTriggers[name] = map[string]*coreworkflow.EventTrigger{}
 		}
@@ -5481,7 +5481,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerIDDuringProviderMo
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		recorder := &recordingWorkflowProvider{}
 		if name == "backup" && len(recorders[name]) == 1 {
 			recorder.getEventTrigger = &coreworkflow.EventTrigger{ID: workflowConfigEventTriggerID("task_updated")}
@@ -5571,7 +5571,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 		},
 	}
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return recorder, nil
 	}
 
@@ -5591,7 +5591,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 	provider := &recordingWorkflowProvider{deleteEventMissingNotFound: true}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		return provider, nil
 	}
 
@@ -5656,7 +5656,7 @@ func TestBootstrapIgnoresMissingPreviousEventTriggerDuringWorkflowProviderMove(t
 	backup := &recordingWorkflowProvider{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name == "backup" {
 			return backup, nil
 		}
@@ -5743,7 +5743,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig(srv.URL)
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
@@ -5796,7 +5796,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig(srv.URL)
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
@@ -5855,7 +5855,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 	}
 
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
@@ -5927,14 +5927,14 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		},
 	}
 
-	var capturedHostServices []providerhost.HostService
+	var capturedHostServices []runtimehost.HostService
 	providerImpl := newRecordingAgentProvider()
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
 			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
 		}
-		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
+		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 		return providerImpl, nil
 	}
 
@@ -6106,15 +6106,15 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		},
 	}
 
-	var capturedHostServices []providerhost.HostService
+	var capturedHostServices []runtimehost.HostService
 	providerImpl := newRecordingAgentProvider()
 	providerImpl.cancelTurnStatus = coreagent.ExecutionStatusRunning
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
 			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
 		}
-		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
+		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 		return providerImpl, nil
 	}
 
@@ -6216,13 +6216,13 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	providerImpl := &generatedIDAgentProvider{}
-	var capturedHostServices []providerhost.HostService
+	var capturedHostServices []runtimehost.HostService
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
 			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
 		}
-		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
+		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 		return providerImpl, nil
 	}
 
@@ -6358,13 +6358,13 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	})
 
 	recorder := &recordingWorkflowProvider{}
-	var hostServices []providerhost.HostService
+	var hostServices []runtimehost.HostService
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		hostServices = append([]providerhost.HostService(nil), services...)
+		hostServices = append([]runtimehost.HostService(nil), services...)
 		return recorder, nil
 	}
 
@@ -6447,7 +6447,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 			})
 
 			factories := validFactories()
-			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 				if name != "temporal" {
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
@@ -6532,7 +6532,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 	})
 
 	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
@@ -6666,7 +6666,7 @@ func TestResultCloseClosesAuthorizationProvider(t *testing.T) {
 
 	closed := &atomic.Bool{}
 	factories := validFactories()
-	factories.Authorization = func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	factories.Authorization = func(yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return &closableAuthorizationProvider{
 			stubAuthorizationProvider: &stubAuthorizationProvider{name: "test-authorization"},
 			closed:                    closed,
@@ -6991,7 +6991,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		factories := validFactories()
-		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+		factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
 			return &stubWorkflowProvider{}, nil
 		}
 
@@ -7036,7 +7036,7 @@ func TestValidate(t *testing.T) {
 		}
 
 		factories := validFactories()
-		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+		factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
 			return &stubWorkflowProvider{}, nil
 		}
 
@@ -7326,10 +7326,10 @@ func TestBootstrapClosesExternalCredentialsProviderWhenAuthorizationBuildFails(t
 
 	closed := &atomic.Int32{}
 	factories := validFactories()
-	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 		return &closableExternalCredentialProvider{closed: closed}, nil
 	}
-	factories.Authorization = func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	factories.Authorization = func(yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return nil, fmt.Errorf("authorization broke")
 	}
 
@@ -7355,7 +7355,7 @@ func TestBootstrapRejectsNilExternalCredentialsProvider(t *testing.T) {
 	cfg.Server.Providers.ExternalCredentials = "remote"
 
 	factories := validFactories()
-	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 		var provider *closableExternalCredentialProvider
 		return provider, nil
 	}
@@ -8615,7 +8615,7 @@ func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *t
 	cfg.Authorization = config.AuthorizationConfig{}
 
 	factories := validFactories()
-	factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
 		return &stubWorkflowProvider{}, nil
 	}
 

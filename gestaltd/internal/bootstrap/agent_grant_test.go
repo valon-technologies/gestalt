@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 )
 
 func newTestAgentToolGrants(t testing.TB) *agentgrant.Manager {

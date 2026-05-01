@@ -27,7 +27,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
-	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
@@ -36,6 +35,7 @@ import (
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsservice "github.com/valon-technologies/gestalt/server/services/secrets"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -1495,7 +1495,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	provider, err := externalcredentialsservice.NewExecutable(context.Background(), externalcredentialsservice.ExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    externalCredentialReleasePluginName,
-		HostServices: []providerhost.HostService{{
+		HostServices: []runtimehost.HostService{{
 			Name:   "external-credentials",
 			EnvVar: externalcredentialsservice.DefaultSocketEnv,
 			Register: func(srv *grpc.Server) {
