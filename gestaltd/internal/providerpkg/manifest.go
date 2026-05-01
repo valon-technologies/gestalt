@@ -12,8 +12,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/httpbinding"
 	"github.com/valon-technologies/gestalt/server/services/plugins/source"
 	"gopkg.in/yaml.v3"
 )
