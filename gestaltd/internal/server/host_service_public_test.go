@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -11,32 +10,13 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestHostServiceHandlerFallsBackWhenExactVerifierRejects(t *testing.T) {
+func TestHostServiceHandlerDoesNotFallbackWhenExactSessionEntryFails(t *testing.T) {
 	t.Parallel()
 
-	exactKey := hostServiceHandlerKey{
-		pluginName: "support",
-		sessionID:  "session-1",
-		service:    "cache",
-		envVar:     "GESTALT_TEST_CACHE_SOCKET",
-	}
-	providerKey := exactKey
-	providerKey.sessionID = ""
-	exactHandler := markerHostServiceHandler("exact")
-	providerHandler := markerHostServiceHandler("provider")
-
-	s := &Server{
-		hostServiceHandlers: map[hostServiceHandlerKey][]hostServiceHandlerEntry{
-			exactKey: {{
-				handler:  exactHandler,
-				verifier: rejectHostServiceSessionVerifier{},
-			}},
-			providerKey: {{
-				handler:  providerHandler,
-				verifier: allowHostServiceSessionVerifier{},
-			}},
-		},
-	}
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	registry.RegisterSession("support", "session-1", testHostService(), testHostService())
+	registry.RegisterVerified("support", allowHostServiceSessionVerifier{}, testHostService())
+	s := &Server{publicHostServices: registry}
 
 	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
 		PluginName: "support",
@@ -44,43 +24,35 @@ func TestHostServiceHandlerFallsBackWhenExactVerifierRejects(t *testing.T) {
 		Service:    "cache",
 		EnvVar:     "GESTALT_TEST_CACHE_SOCKET",
 	})
-	if err != nil {
-		t.Fatalf("hostServiceHandler: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET/session=session-1") {
+		t.Fatalf("hostServiceHandler err = %v, want exact session duplicate failure", err)
 	}
-	if handler != providerHandler {
-		t.Fatalf("handler = %v, want provider-wide fallback", handler)
+	if handler != nil {
+		t.Fatalf("handler = %v, want no provider-wide fallback", handler)
 	}
 }
 
-func TestNewPublicHostServiceHandlersRejectsDuplicateUnverifiedServices(t *testing.T) {
+func TestValidatePublicHostServicesRejectsDuplicateUnverifiedServices(t *testing.T) {
 	t.Parallel()
 
-	_, err := newPublicHostServiceHandlers([]runtimehost.PublicHostService{
+	err := validatePublicHostServices([]runtimehost.PublicHostService{
 		testPublicHostService("support", nil),
 		testPublicHostService("support", nil),
 	})
 	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET") {
-		t.Fatalf("newPublicHostServiceHandlers err = %v, want duplicate public host service", err)
+		t.Fatalf("validatePublicHostServices err = %v, want duplicate public host service", err)
 	}
 }
 
-func TestNewPublicHostServiceHandlersAllowsDuplicateVerifiedServices(t *testing.T) {
+func TestValidatePublicHostServicesAllowsDuplicateVerifiedServices(t *testing.T) {
 	t.Parallel()
 
-	handlers, err := newPublicHostServiceHandlers([]runtimehost.PublicHostService{
+	err := validatePublicHostServices([]runtimehost.PublicHostService{
 		testPublicHostService("support", allowHostServiceSessionVerifier{}),
 		testPublicHostService("support", rejectHostServiceSessionVerifier{}),
 	})
 	if err != nil {
-		t.Fatalf("newPublicHostServiceHandlers: %v", err)
-	}
-	key := hostServiceHandlerKey{
-		pluginName: "support",
-		service:    "cache",
-		envVar:     "GESTALT_TEST_CACHE_SOCKET",
-	}
-	if got := len(handlers[key]); got != 2 {
-		t.Fatalf("handlers[%s] = %d, want 2", key.String(), got)
+		t.Fatalf("validatePublicHostServices: %v", err)
 	}
 }
 
@@ -95,15 +67,11 @@ func TestHostServiceHandlerEntryRejectsDynamicDuplicateUnverifiedServices(t *tes
 		service:    "cache",
 		envVar:     "GESTALT_TEST_CACHE_SOCKET",
 	}
-	_, _, err := s.hostServiceHandlerEntry(context.Background(), key, "")
+	_, _, _, err := s.hostServiceHandlerEntry(context.Background(), key, "")
 	if err == nil || !strings.Contains(err.Error(), "duplicate public host service support/cache/GESTALT_TEST_CACHE_SOCKET") {
 		t.Fatalf("hostServiceHandlerEntry err = %v, want duplicate public host service", err)
 	}
 }
-
-type markerHostServiceHandler string
-
-func (h markerHostServiceHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 
 func testPublicHostService(pluginName string, verifier runtimehost.PublicHostServiceSessionVerifier) runtimehost.PublicHostService {
 	return runtimehost.PublicHostService{

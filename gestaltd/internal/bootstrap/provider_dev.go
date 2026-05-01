@@ -181,10 +181,7 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
 	if sharedAttachmentState {
 		for _, hostService := range hostServices {
-			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, runtimehost.StartedHostService{
-				Name:   hostService.Name,
-				EnvVar: hostService.EnvVar,
-			}, deps, false, false)
+			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromConfigured(hostService), deps, false, false)
 			if err != nil {
 				return providerdev.RuntimeEnv{}, err
 			}
@@ -227,7 +224,7 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 		})
 	}
 	for _, hostService := range startedHostServices.Bindings() {
-		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, false, false)
+		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromStarted(hostService), deps, false, false)
 		if err != nil {
 			return providerdev.RuntimeEnv{}, err
 		}

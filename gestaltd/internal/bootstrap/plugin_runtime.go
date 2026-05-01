@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -46,6 +47,53 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, 
 
 	provider, err := r.resolveConfigured(ctx, effective)
 	return effective, provider, err
+}
+
+func (r *pluginRuntimeRegistry) VerifyPluginRuntimeSession(ctx context.Context, providerName, sessionID string) error {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return fmt.Errorf("runtime provider owner is required")
+	}
+	if r == nil || r.cfg == nil {
+		return fmt.Errorf("plugin runtime registry is not configured")
+	}
+
+	effective, err := r.effectiveHostedRuntimeForProvider(providerName)
+	if err != nil {
+		return err
+	}
+	if !effective.Enabled || strings.TrimSpace(effective.ProviderName) == "" {
+		return fmt.Errorf("provider %q does not use a hosted runtime", providerName)
+	}
+
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return fmt.Errorf("plugin runtime registry is closed")
+	}
+	runtimeProvider := r.providers[effective.ProviderName]
+	r.mu.Unlock()
+	if runtimeProvider == nil {
+		return fmt.Errorf("runtime provider %q is not loaded", effective.ProviderName)
+	}
+
+	return runtimeHostServiceSessionVerifier{
+		providerName: providerName,
+		provider:     runtimeProvider,
+	}.VerifyHostServiceSession(ctx, sessionID)
+}
+
+func (r *pluginRuntimeRegistry) effectiveHostedRuntimeForProvider(providerName string) (config.EffectiveHostedRuntime, error) {
+	if r == nil || r.cfg == nil {
+		return config.EffectiveHostedRuntime{}, fmt.Errorf("plugin runtime registry is not configured")
+	}
+	if entry := r.cfg.Plugins[providerName]; entry != nil {
+		return r.cfg.EffectiveHostedRuntime("plugins."+providerName, entry)
+	}
+	if entry := r.cfg.Providers.Agent[providerName]; entry != nil {
+		return r.cfg.EffectiveHostedRuntime("providers.agent."+providerName, entry)
+	}
+	return config.EffectiveHostedRuntime{}, fmt.Errorf("provider %q does not have a hosted runtime configuration", providerName)
 }
 
 func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveHostedRuntime) (pluginruntime.Provider, error) {

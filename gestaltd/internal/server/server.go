@@ -101,6 +101,7 @@ type Server struct {
 	resolver                *principal.Resolver
 	authResolvers           map[string]*principal.Resolver
 	invoker                 invocation.Invoker
+	pluginInvoker           invocation.Invoker
 	defaultConnection       map[string]string
 	catalogConnection       map[string]string
 	connectionAuth          func() map[string]map[string]bootstrap.OAuthHandler
@@ -123,9 +124,8 @@ type Server struct {
 	hostServiceRelayTokens  *runtimehost.HostServiceRelayTokenManager
 	invocationTokens        *plugininvokerservice.InvocationTokenManager
 	hostServiceMu           sync.Mutex
-	hostServiceHandlers     map[hostServiceHandlerKey][]hostServiceHandlerEntry
 	coreHostServiceHandlers map[hostServiceHandlerKey]hostServiceHandlerEntry
-	hostServiceVersion      uint64
+	hostServiceHandlers     map[uint64]http.Handler
 	publicHostServices      *runtimehost.PublicHostServiceRegistry
 	s3                      map[string]s3store.Client
 	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
@@ -160,6 +160,7 @@ type Config struct {
 	Workflow              bootstrap.WorkflowControl
 	PluginRuntimes        bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
+	PluginInvoker         invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
@@ -192,6 +193,10 @@ type Config struct {
 func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
+	}
+	pluginInvoker := cfg.PluginInvoker
+	if pluginInvoker == nil {
+		pluginInvoker = cfg.Invoker
 	}
 	noAuth := cfg.Auth == nil || cfg.Auth.Name() == "none"
 	serverAuthProvider := strings.TrimSpace(cfg.SelectedAuthProvider)
@@ -317,9 +322,7 @@ func New(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("init s3 object access URLs: %w", err)
 		}
 	}
-	publicHostServices, hostServiceVersion := cfg.PublicHostServices.Snapshot()
-	hostServiceHandlers, err := newPublicHostServiceHandlers(publicHostServices)
-	if err != nil {
+	if err := validatePublicHostServices(cfg.PublicHostServices.Snapshot()); err != nil {
 		return nil, fmt.Errorf("init public host services: %w", err)
 	}
 	s := &Server{
@@ -342,6 +345,7 @@ func New(cfg Config) (*Server, error) {
 		resolver:               resolver,
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,
+		pluginInvoker:          pluginInvoker,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
 		connectionAuth:         cfg.ConnectionAuth,
@@ -362,8 +366,6 @@ func New(cfg Config) (*Server, error) {
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
 		invocationTokens:       invocationTokens,
-		hostServiceHandlers:    hostServiceHandlers,
-		hostServiceVersion:     hostServiceVersion,
 		publicHostServices:     cfg.PublicHostServices,
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,
@@ -386,6 +388,7 @@ func New(cfg Config) (*Server, error) {
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
+		PluginInvokes:     pluginInvokesFromProviderEntries(cfg.PluginDefs),
 		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {
@@ -417,6 +420,23 @@ func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) 
 		}
 	}
 	return false
+}
+
+func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]config.PluginInvocationDependency {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make(map[string][]config.PluginInvocationDependency, len(entries))
+	for pluginName, entry := range entries {
+		if entry == nil || len(entry.Invokes) == 0 {
+			continue
+		}
+		out[pluginName] = append([]config.PluginInvocationDependency(nil), entry.Invokes...)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

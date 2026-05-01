@@ -80,6 +80,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Workflow:             result.WorkflowControl,
 		PluginRuntimes:       result.PluginRuntimes,
 		Invoker:              httpInvoker,
+		PluginInvoker:        result.PluginInvoker,
 		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps

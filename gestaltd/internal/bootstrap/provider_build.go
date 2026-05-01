@@ -895,13 +895,14 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, err
 	}
 	hostServices = appendRuntimeLogHostService(hostServices, runtimeConfig, deps, runtimePlan)
+	startHostServices, relayOnlyHostServices := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, runtimePlan, runtimeProvider)
 	if err != nil {
 		return nil, err
 	}
 	cleanup = chainCleanup(cleanup, runtimeCleanup, publicHostServicesCleanup)
 	startedHostServices, err := runtimehost.StartHostServices(
-		hostServices,
+		startHostServices,
 		runtimehost.WithHostServicesProviderName(name),
 		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
 	)
@@ -916,7 +917,8 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	startEnv := maps.Clone(env)
 	startEnv = withRuntimeSessionEnv(startEnv, sessionID)
 	allowedHosts := entry.EffectiveAllowedHosts()
-	for _, hostService := range startedHostServices.Bindings() {
+	bindingTargets := append(hostServiceBindingDescriptorsFromStarted(startedHostServices), hostServiceBindingDescriptorsFromConfigured(relayOnlyHostServices)...)
+	for _, hostService := range bindingTargets {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect, true)
 		if err != nil {
 			return nil, err
@@ -1176,9 +1178,10 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, nil)
 
+	startHostServices, relayOnlyHostServices := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
 	phaseStarted = time.Now()
 	startedHostServices, err := runtimehost.StartHostServices(
-		hostServices,
+		startHostServices,
 		runtimehost.WithHostServicesProviderName(name),
 		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
 	)
@@ -1197,7 +1200,8 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 	allowedHosts := hostedAgentAllowedHosts(agentAllowedHosts, runtimePlan)
 	phaseStarted = time.Now()
-	for _, hostService := range startedHostServices.Bindings() {
+	bindingTargets := append(hostServiceBindingDescriptorsFromStarted(startedHostServices), hostServiceBindingDescriptorsFromConfigured(relayOnlyHostServices)...)
+	for _, hostService := range bindingTargets {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect, true)
 		if err != nil {
 			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
@@ -1625,7 +1629,51 @@ func withRuntimeSessionEnv(env map[string]string, sessionID string) map[string]s
 	return env
 }
 
-func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService runtimehost.StartedHostService, deps Deps, allowUnixRelay bool, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+type hostServiceBindingDescriptor struct {
+	Name       string
+	EnvVar     string
+	SocketPath string
+}
+
+func hostServiceBindingDescriptorFromStarted(hostService runtimehost.StartedHostService) hostServiceBindingDescriptor {
+	return hostServiceBindingDescriptor{
+		Name:       strings.TrimSpace(hostService.Name),
+		EnvVar:     strings.TrimSpace(hostService.EnvVar),
+		SocketPath: strings.TrimSpace(hostService.SocketPath),
+	}
+}
+
+func hostServiceBindingDescriptorFromConfigured(hostService runtimehost.HostService) hostServiceBindingDescriptor {
+	return hostServiceBindingDescriptor{
+		Name:   strings.TrimSpace(hostService.Name),
+		EnvVar: strings.TrimSpace(hostService.EnvVar),
+	}
+}
+
+func hostServiceBindingDescriptorsFromStarted(hostServices *runtimehost.StartedHostServices) []hostServiceBindingDescriptor {
+	started := hostServices.Bindings()
+	if len(started) == 0 {
+		return nil
+	}
+	out := make([]hostServiceBindingDescriptor, 0, len(started))
+	for _, hostService := range started {
+		out = append(out, hostServiceBindingDescriptorFromStarted(hostService))
+	}
+	return out
+}
+
+func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.HostService) []hostServiceBindingDescriptor {
+	if len(hostServices) == 0 {
+		return nil
+	}
+	out := make([]hostServiceBindingDescriptor, 0, len(hostServices))
+	for _, hostService := range hostServices {
+		out = append(out, hostServiceBindingDescriptorFromConfigured(hostService))
+	}
+	return out
+}
+
+func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowUnixRelay bool, allowCoreRoutable bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
 	if !allowUnixRelay {
 		var (
 			serviceKey   string
@@ -1680,7 +1728,7 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			serviceKey,
 			serviceLabel,
 			methodPrefix,
-			allowCoreRoutable && coreRoutableHostedRuntimeService(serviceKey),
+			allowCoreRoutable && isCoreRoutableHostedRuntimeHostService(hostService, serviceKey, methodPrefix),
 		)
 		if err != nil {
 			return pluginruntime.BindHostServiceRequest{}, nil, "", err
@@ -1746,7 +1794,11 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
-	for _, hostService := range hostServices {
+	registerHostServices, _ := splitRelayOnlyCoreHostServices(hostServices, runtimePlan)
+	if len(registerHostServices) == 0 {
+		return nil, nil
+	}
+	for _, hostService := range registerHostServices {
 		if strings.TrimSpace(hostService.Name) == "" {
 			return nil, fmt.Errorf("host service %q requires a service name for public relay", hostService.EnvVar)
 		}
@@ -1754,9 +1806,9 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	deps.PublicHostServices.RegisterVerified(providerName, runtimeHostServiceSessionVerifier{
 		providerName: providerName,
 		provider:     runtimeProvider,
-	}, hostServices...)
+	}, registerHostServices...)
 	return func() {
-		deps.PublicHostServices.Unregister(providerName, hostServices...)
+		deps.PublicHostServices.Unregister(providerName, registerHostServices...)
 	}, nil
 }
 
@@ -1790,16 +1842,57 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	}, nil
 }
 
-func coreRoutableHostedRuntimeService(serviceKey string) bool {
+func isCoreRoutableHostedRuntimeHostService(hostService hostServiceBindingDescriptor, serviceKey, methodPrefix string) bool {
+	methodPrefix = strings.TrimSpace(methodPrefix)
 	switch serviceKey {
-	case "workflow_manager", "agent_manager", "plugin_invoker":
-		return true
+	case "workflow_manager":
+		return hostService.Name == "workflow_manager" &&
+			hostService.EnvVar == workflowservice.DefaultManagerSocketEnv &&
+			methodPrefix == "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/"
+	case "agent_manager":
+		return hostService.Name == "agent_manager" &&
+			hostService.EnvVar == agentservice.DefaultManagerSocketEnv &&
+			methodPrefix == "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/"
+	case "plugin_invoker":
+		return hostService.Name == "plugin_invoker" &&
+			hostService.EnvVar == plugininvokerservice.DefaultSocketEnv &&
+			methodPrefix == "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/"
 	default:
 		return false
 	}
 }
 
-func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService runtimehost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+func splitRelayOnlyCoreHostServices(hostServices []runtimehost.HostService, runtimePlan HostedRuntimePlan) ([]runtimehost.HostService, []runtimehost.HostService) {
+	if len(hostServices) == 0 || runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay {
+		return hostServices, nil
+	}
+	startHostServices := make([]runtimehost.HostService, 0, len(hostServices))
+	relayOnlyHostServices := make([]runtimehost.HostService, 0, 3)
+	for _, hostService := range hostServices {
+		if isRelayOnlyCoreHostService(hostService) {
+			relayOnlyHostServices = append(relayOnlyHostServices, hostService)
+			continue
+		}
+		startHostServices = append(startHostServices, hostService)
+	}
+	return startHostServices, relayOnlyHostServices
+}
+
+func isRelayOnlyCoreHostService(hostService runtimehost.HostService) bool {
+	desc := hostServiceBindingDescriptorFromConfigured(hostService)
+	switch desc.EnvVar {
+	case workflowservice.DefaultManagerSocketEnv:
+		return isCoreRoutableHostedRuntimeHostService(desc, "workflow_manager", "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/")
+	case agentservice.DefaultManagerSocketEnv:
+		return isCoreRoutableHostedRuntimeHostService(desc, "agent_manager", "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/")
+	case plugininvokerservice.DefaultSocketEnv:
+		return isCoreRoutableHostedRuntimeHostService(desc, "plugin_invoker", "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/")
+	default:
+		return false
+	}
+}
+
+func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
 	}

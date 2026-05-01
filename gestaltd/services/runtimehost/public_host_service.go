@@ -17,12 +17,13 @@ type PublicHostService struct {
 	SessionID       string
 	SessionVerifier PublicHostServiceSessionVerifier
 	Service         HostService
+	registrationID  uint64
 }
 
 type PublicHostServiceRegistry struct {
 	mu       sync.Mutex
 	services []PublicHostService
-	version  uint64
+	nextID   uint64
 }
 
 func NewPublicHostServiceRegistry() *PublicHostServiceRegistry {
@@ -50,15 +51,14 @@ func (r *PublicHostServiceRegistry) register(pluginName, sessionID string, verif
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, service := range services {
+		r.nextID++
 		r.services = append(r.services, PublicHostService{
 			PluginName:      pluginName,
 			SessionID:       sessionID,
 			SessionVerifier: verifier,
 			Service:         service,
+			registrationID:  r.nextID,
 		})
-	}
-	if len(services) > 0 {
-		r.version++
 	}
 }
 
@@ -110,35 +110,22 @@ func (r *PublicHostServiceRegistry) unregister(pluginName, sessionID string, ser
 		r.services[i] = PublicHostService{}
 	}
 	r.services = filtered
-	if len(r.services) != originalLen {
-		r.version++
-	}
 }
 
 func (r *PublicHostServiceRegistry) Services() []PublicHostService {
-	services, _ := r.Snapshot()
-	return services
+	return r.Snapshot()
 }
 
-func (r *PublicHostServiceRegistry) Snapshot() ([]PublicHostService, uint64) {
+func (r *PublicHostServiceRegistry) Snapshot() []PublicHostService {
 	if r == nil {
-		return nil, 0
+		return nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.services) == 0 {
-		return nil, r.version
+		return nil
 	}
-	return append([]PublicHostService(nil), r.services...), r.version
-}
-
-func (r *PublicHostServiceRegistry) Version() uint64 {
-	if r == nil {
-		return 0
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.version
+	return append([]PublicHostService(nil), r.services...)
 }
 
 func publicHostServiceKey(service HostService) string {
@@ -148,4 +135,8 @@ func publicHostServiceKey(service HostService) string {
 		return ""
 	}
 	return name + "\x00" + envVar
+}
+
+func (s PublicHostService) RegistrationID() uint64 {
+	return s.registrationID
 }
