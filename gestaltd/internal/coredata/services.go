@@ -14,6 +14,7 @@ type Services struct {
 	ExternalCredentials core.ExternalCredentialProvider
 	APITokens           *APITokenService
 	ManagedSubjects     *ManagedSubjectService
+	MCPOAuthGrants      *MCPOAuthGrantService
 	RuntimeSessionLogs  runtimelogs.Store
 	DB                  indexeddb.IndexedDB
 }
@@ -35,17 +36,22 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_subjects store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreMCPOAuthGrants, MCPOAuthGrantsSchema); err != nil {
+		return nil, fmt.Errorf("create mcp_oauth_grants store: %w", err)
+	}
 
 	runtimeSessionLogs := runtimelogs.NewMemoryStore()
 
 	users := NewUserService(ds)
 	apiTokens := NewAPITokenService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
+	mcpOAuthGrants := NewMCPOAuthGrantService(ds)
 	return &Services{
 		ExternalCredentials: nil,
 		Users:               users,
 		APITokens:           apiTokens,
 		ManagedSubjects:     managedSubjects,
+		MCPOAuthGrants:      mcpOAuthGrants,
 		RuntimeSessionLogs:  runtimeSessionLogs,
 		DB:                  ds,
 	}, nil

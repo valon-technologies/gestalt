@@ -91,6 +91,7 @@ type Server struct {
 	externalCredentials     core.ExternalCredentialProvider
 	apiTokens               *coredata.APITokenService
 	managedSubjects         *coredata.ManagedSubjectService
+	mcpOAuthGrants          *coredata.MCPOAuthGrantService
 	agent                   bootstrap.AgentControl
 	workflowSchedules       *workflowmanager.Manager
 	agentRuns               agentmanager.Service
@@ -277,6 +278,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	apiTokens := cfg.Services.APITokens
 	managedSubjects := cfg.Services.ManagedSubjects
+	mcpOAuthGrants := cfg.Services.MCPOAuthGrants
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -336,6 +338,7 @@ func New(cfg Config) (*Server, error) {
 		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
 		managedSubjects:        managedSubjects,
+		mcpOAuthGrants:         mcpOAuthGrants,
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,

@@ -11,6 +11,11 @@ import (
 
 var ErrNotJWT = errors.New("not a JWT")
 
+const (
+	Issuer   = "gestaltd"
+	Audience = "gestalt-session"
+)
+
 type claims struct {
 	jwt.RegisteredClaims
 	Email       string `json:"email"`
@@ -21,6 +26,8 @@ type claims struct {
 func IssueToken(identity *core.UserIdentity, secret []byte, ttl time.Duration) (string, error) {
 	c := claims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    Issuer,
+			Audience:  jwt.ClaimStrings{Audience},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -33,12 +40,19 @@ func IssueToken(identity *core.UserIdentity, secret []byte, ttl time.Duration) (
 }
 
 func ValidateToken(tokenStr string, secret []byte) (*core.UserIdentity, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return secret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&claims{},
+		func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secret, nil
+		},
+		jwt.WithIssuer(Issuer),
+		jwt.WithAudience(Audience),
+		jwt.WithExpirationRequired(),
+	)
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenMalformed) {
 			return nil, ErrNotJWT
