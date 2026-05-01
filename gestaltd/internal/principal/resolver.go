@@ -12,7 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type TokenType int
