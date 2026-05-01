@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -47,7 +47,7 @@ func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, crea
 	rec := indexeddb.Record{
 		"id":               id,
 		"email":            email,
-		"normalized_email": emailutil.Normalize(email),
+		"normalized_email": strings.ToLower(strings.TrimSpace(email)),
 		"display_name":     "",
 		"created_at":       createdAt,
 		"updated_at":       createdAt,

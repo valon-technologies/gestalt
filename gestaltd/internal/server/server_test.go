@@ -46,7 +46,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -2531,7 +2530,7 @@ func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, crea
 	rec := indexeddb.Record{
 		"id":               id,
 		"email":            email,
-		"normalized_email": emailutil.Normalize(email),
+		"normalized_email": strings.ToLower(strings.TrimSpace(email)),
 		"display_name":     "",
 		"created_at":       createdAt,
 		"updated_at":       createdAt,

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 )
 
 type UserService struct {
@@ -32,7 +32,7 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error
 }
 
 func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
-	email = emailutil.Normalize(email)
+	email = normalizeEmail(email)
 	if email == "" {
 		return nil, fmt.Errorf("find user: email is required")
 	}
@@ -65,7 +65,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 }
 
 func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.User, error) {
-	email = emailutil.Normalize(email)
+	email = normalizeEmail(email)
 	if email == "" {
 		return nil, fmt.Errorf("find user: email is required")
 	}
@@ -84,6 +84,10 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, normalizedE
 		return nil, fmt.Errorf("find user: ambiguous duplicate users for %q", normalizedEmail)
 	}
 	return recordToUser(recs[0]), nil
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func recordToUser(rec indexeddb.Record) *core.User {
