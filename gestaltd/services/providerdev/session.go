@@ -706,6 +706,49 @@ func (m *Manager) VerifyDispatcherSecretOnly(sessionID, dispatcherSecret string)
 	return err
 }
 
+func (m *Manager) VerifyHostServiceSession(ctx context.Context, providerName, sessionID string) error {
+	if m == nil {
+		return status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return status.Error(codes.InvalidArgument, "provider name is required")
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return status.Error(codes.InvalidArgument, "session id is required")
+	}
+	if m.shared != nil {
+		session, err := m.shared.getActiveAttachment(ctx, sessionID, time.Now())
+		if err != nil {
+			return err
+		}
+		for i := range session.targets {
+			target := &session.targets[i]
+			if target.Name == providerName {
+				return nil
+			}
+		}
+		return status.Errorf(codes.NotFound, "provider dev session %q does not include provider %q", sessionID, providerName)
+	}
+	m.closeIdleSessions(time.Now())
+	m.mu.RLock()
+	session := m.sessions[sessionID]
+	m.mu.RUnlock()
+	if session == nil {
+		return status.Errorf(codes.NotFound, "provider dev session %q not found", sessionID)
+	}
+	return session.verifyHostServiceProvider(providerName)
+}
+
 func (m *Manager) CloseSessionWithDispatcherSecret(sessionID, dispatcherSecret string) error {
 	if m != nil && m.shared != nil {
 		if err := m.shared.closeSessionWithDispatcherSecret(context.Background(), sessionID, dispatcherSecret); err != nil {
@@ -1284,6 +1327,25 @@ func (s *Session) verifyDispatcherSecret(secret string) error {
 	}
 	if subtle.ConstantTimeCompare([]byte(hashDispatcherSecret(secret)), []byte(s.dispatcherSecretHash)) != 1 {
 		return status.Error(codes.PermissionDenied, "provider dev dispatcher secret is invalid")
+	}
+	return nil
+}
+
+func (s *Session) verifyHostServiceProvider(providerName string) error {
+	if s == nil {
+		return status.Error(codes.NotFound, "provider dev session not found")
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return status.Error(codes.InvalidArgument, "provider name is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return status.Errorf(codes.NotFound, "provider dev session %q not found", s.id)
+	}
+	if _, ok := s.targets[providerName]; !ok {
+		return status.Errorf(codes.NotFound, "provider dev session %q does not include provider %q", s.id, providerName)
 	}
 	return nil
 }

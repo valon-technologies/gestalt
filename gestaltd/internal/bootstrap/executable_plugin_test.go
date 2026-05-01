@@ -57,6 +57,7 @@ import (
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/plugins/graphql"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
@@ -65,6 +66,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
@@ -6039,50 +6041,163 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	relaySrv.StartTLS()
 	testutil.CloseOnCleanup(t, relaySrv)
 
-	env, err := buildProviderDevRuntimeEnv("echoext", &config.ProviderEntry{
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Source: "local://echoext",
+		},
 		S3: []string{"main"},
-	}, Deps{
+	}
+	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
 		PublicHostServices: publicHostServices,
 		S3: map[string]s3store.Client{
 			"main": &coretesting.StubS3{},
 		},
-	}, "provider-dev-session", false)
-	if err != nil {
-		t.Fatalf("buildProviderDevRuntimeEnv: %v", err)
 	}
-	cleanup := env.Cleanup
+	runtimeHostServiceDescriptors := map[string][]hostServiceBindingDescriptor{}
+	manager, err := providerdev.NewManager([]providerdev.Target{{
+		Name: "echoext",
+		RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
+			return buildProviderDevRuntimeEnv("echoext", entry, deps, sessionID, runtimeHostServiceDescriptors["echoext"])
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
 	t.Cleanup(func() {
-		if cleanup != nil {
-			cleanup()
+		if err := manager.Close(); err != nil {
+			t.Fatalf("provider dev manager close: %v", err)
 		}
 	})
+	targets := []providerdev.Target{{Name: "echoext"}}
+	if err := registerProviderDevPublicHostServices(&config.Config{
+		Plugins: map[string]*config.ProviderEntry{"echoext": entry},
+	}, manager, deps, targets, runtimeHostServiceDescriptors); err != nil {
+		t.Fatalf("registerProviderDevPublicHostServices: %v", err)
+	}
+	session, err := manager.CreateSession(context.Background(), &principal.Principal{
+		SubjectID: "user:test-user",
+		UserID:    "test-user",
+		Kind:      principal.KindUser,
+	}, providerdev.CreateSessionRequest{
+		Providers: []providerdev.AttachProvider{{Name: "echoext"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if len(session.Providers) != 1 {
+		t.Fatalf("session providers = %#v, want one", session.Providers)
+	}
+	env := session.Providers[0].Env
 
 	for _, binding := range []string{"", "main"} {
 		socketEnv := s3service.SocketEnv(binding)
-		if got := env.Env[socketEnv]; !strings.HasPrefix(got, "tls://") {
+		if got := env[socketEnv]; !strings.HasPrefix(got, "tls://") {
 			t.Fatalf("runtime env %s = %q, want tls relay target", socketEnv, got)
 		}
 		tokenEnv := s3service.SocketTokenEnv(binding)
-		if got := env.Env[tokenEnv]; got == "" {
+		if got := env[tokenEnv]; got == "" {
 			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
 		}
 	}
-	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env.Env)
+	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env)
 	if err != nil {
 		t.Fatalf("S3 round trip via provider-dev relay: %v", err)
 	}
 	if got := record["body"]; got != "ship-it" {
 		t.Fatalf("S3 body = %#v, want ship-it", got)
 	}
-	if cleanup != nil {
-		cleanup()
-		cleanup = nil
+	if err := manager.CloseSession(&principal.Principal{
+		SubjectID: "user:test-user",
+		UserID:    "test-user",
+		Kind:      principal.KindUser,
+	}, session.AttachID); err != nil {
+		t.Fatalf("CloseSession: %v", err)
 	}
-	if _, err := fakeHostedS3RoundTrip("assets", "plans/stale.txt", "stale", "main", env.Env); err == nil {
-		t.Fatalf("S3 round trip after provider-dev cleanup succeeded, want stale relay failure")
+	if _, err := fakeHostedS3RoundTrip("assets", "plans/stale.txt", "stale", "main", env); err == nil {
+		t.Fatalf("S3 round trip after provider-dev session close succeeded, want stale relay failure")
 	}
+}
+
+func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t *testing.T) {
+	t.Parallel()
+
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	providers := registry.New()
+	if err := providers.Providers.Register("echoext", &connectedCapabilityProvider{}); err != nil {
+		t.Fatalf("Register provider: %v", err)
+	}
+	entry := &config.ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Source: "local://echoext",
+		},
+		Cache: []string{"main"},
+		S3:    []string{"main"},
+	}
+	var cacheFactoryCalls atomic.Int64
+	manager, err := buildProviderDevManager(&config.Config{
+		Plugins: map[string]*config.ProviderEntry{"echoext": entry},
+	}, &providers.Providers, Deps{
+		BaseURL:            "https://gestalt.example.test",
+		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		PublicHostServices: publicHostServices,
+		CacheDefs: map[string]*config.ProviderEntry{
+			"main": {},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			if cacheFactoryCalls.Add(1) > 1 {
+				return nil, fmt.Errorf("cache factory opened more than once")
+			}
+			return coretesting.NewStubCache(), nil
+		},
+		S3: map[string]s3store.Client{
+			"main": &coretesting.StubS3{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProviderDevManager: %v", err)
+	}
+	if manager == nil {
+		t.Fatal("buildProviderDevManager returned nil manager")
+	}
+	t.Cleanup(func() {
+		if err := manager.Close(); err != nil {
+			t.Fatalf("provider dev manager close: %v", err)
+		}
+	})
+	assertPublicHostServicesVerified(t, publicHostServices, "s3", s3service.SocketEnv("main"))
+	assertPublicHostServicesVerified(t, publicHostServices, "cache", cacheservice.SocketEnv("main"))
+
+	p := &principal.Principal{SubjectID: "user:test-user", UserID: "test-user", Kind: principal.KindUser}
+	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{
+		Providers: []providerdev.AttachProvider{{Name: "echoext"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if calls := cacheFactoryCalls.Load(); calls != 1 {
+		t.Fatalf("cache factory calls after CreateSession = %d, want startup-only open", calls)
+	}
+	for _, service := range publicHostServices.Services() {
+		if strings.TrimSpace(service.Service.Name) != "s3" || strings.TrimSpace(service.Service.EnvVar) != s3service.SocketEnv("main") {
+			continue
+		}
+		if service.SessionVerifier == nil {
+			t.Fatal("S3 public host service verifier is nil")
+		}
+		if err := service.SessionVerifier.VerifyHostServiceSession(context.Background(), session.AttachID); err != nil {
+			t.Fatalf("VerifyHostServiceSession(active memory session): %v", err)
+		}
+		if err := manager.CloseSession(p, session.AttachID); err != nil {
+			t.Fatalf("CloseSession: %v", err)
+		}
+		if err := service.SessionVerifier.VerifyHostServiceSession(context.Background(), session.AttachID); grpcstatus.Code(err) != codes.NotFound {
+			t.Fatalf("VerifyHostServiceSession(closed memory session) code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.NotFound, err)
+		}
+		return
+	}
+	t.Fatalf("public host services = %#v, want s3/%s", publicHostServices.Services(), s3service.SocketEnv("main"))
 }
 
 func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -7524,22 +7639,11 @@ func testRuntimePublicEndpointDeps(t *testing.T, deps Deps, opts ...runtimeRelay
 }
 
 func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
-	handler, err := runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, target.SessionID)
-	if handler != nil || err != nil || strings.TrimSpace(target.SessionID) == "" {
-		return handler, err
-	}
-	return runtimeRelayPublicHostServiceHandlerForSession(ctx, registry, target, "")
-}
-
-func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget, sessionID string) (http.Handler, error) {
 	if registry == nil {
 		return nil, nil
 	}
 	for _, entry := range registry.Services() {
 		if strings.TrimSpace(entry.PluginName) != strings.TrimSpace(target.PluginName) {
-			continue
-		}
-		if strings.TrimSpace(entry.SessionID) != strings.TrimSpace(sessionID) {
 			continue
 		}
 		if strings.TrimSpace(entry.Service.Name) != strings.TrimSpace(target.Service) {
@@ -7551,10 +7655,11 @@ func runtimeRelayPublicHostServiceHandlerForSession(ctx context.Context, registr
 		if entry.Service.Register == nil {
 			continue
 		}
-		if entry.SessionVerifier != nil {
-			if err := entry.SessionVerifier.VerifyHostServiceSession(ctx, target.SessionID); err != nil {
-				return nil, err
-			}
+		if entry.SessionVerifier == nil {
+			return nil, fmt.Errorf("public host service %s/%s/%s requires a session verifier", strings.TrimSpace(target.PluginName), strings.TrimSpace(target.Service), strings.TrimSpace(target.EnvVar))
+		}
+		if err := entry.SessionVerifier.VerifyHostServiceSession(ctx, target.SessionID); err != nil {
+			return nil, err
 		}
 		srv := grpc.NewServer()
 		entry.Service.Register(srv)

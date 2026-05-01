@@ -246,6 +246,37 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 }
 
+func TestVerifyHostServiceSessionUsesActiveMemorySession(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{Name: "roadmap"}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := manager.Close(); err != nil {
+			t.Fatalf("manager close: %v", err)
+		}
+	})
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	session, err := manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := manager.VerifyHostServiceSession(context.Background(), "roadmap", session.AttachID); err != nil {
+		t.Fatalf("VerifyHostServiceSession active session: %v", err)
+	}
+	if err := manager.VerifyHostServiceSession(context.Background(), "billing", session.AttachID); status.Code(err) != codes.NotFound {
+		t.Fatalf("VerifyHostServiceSession missing provider code = %v, want %v (err=%v)", status.Code(err), codes.NotFound, err)
+	}
+	if err := manager.CloseSession(p, session.AttachID); err != nil {
+		t.Fatalf("CloseSession: %v", err)
+	}
+	if err := manager.VerifyHostServiceSession(context.Background(), "roadmap", session.AttachID); status.Code(err) != codes.NotFound {
+		t.Fatalf("VerifyHostServiceSession closed session code = %v, want %v (err=%v)", status.Code(err), codes.NotFound, err)
+	}
+}
+
 func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	t.Parallel()
 
