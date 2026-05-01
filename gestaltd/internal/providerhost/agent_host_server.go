@@ -19,18 +19,21 @@ import (
 
 type agentExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
 type agentSearchToolsFunc func(context.Context, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
+type agentListToolsFunc func(context.Context, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
 
 type AgentHostServer struct {
 	proto.UnimplementedAgentHostServer
 	providerName string
 	searchTools  agentSearchToolsFunc
+	listTools    agentListToolsFunc
 	executeTool  agentExecuteToolFunc
 }
 
-func NewAgentHostServer(providerName string, searchTools agentSearchToolsFunc, executeTool agentExecuteToolFunc) *AgentHostServer {
+func NewAgentHostServer(providerName string, searchTools agentSearchToolsFunc, listTools agentListToolsFunc, executeTool agentExecuteToolFunc) *AgentHostServer {
 	return &AgentHostServer{
 		providerName: providerName,
 		searchTools:  searchTools,
+		listTools:    listTools,
 		executeTool:  executeTool,
 	}
 }
@@ -76,6 +79,41 @@ func (s *AgentHostServer) SearchTools(ctx context.Context, req *proto.SearchAgen
 	}
 	out.Candidates = agentToolCandidatesToProto(resp.Candidates)
 	out.HasMore = resp.HasMore
+	return out, nil
+}
+
+func (s *AgentHostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {
+	if s == nil || s.listTools == nil {
+		return nil, status.Error(codes.FailedPrecondition, "agent host tool listing is not configured")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if turnID == "" {
+		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
+	}
+	resp, err := s.listTools(ctx, coreagent.ListToolsRequest{
+		ProviderName: strings.TrimSpace(s.providerName),
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		PageSize:     int(req.GetPageSize()),
+		PageToken:    strings.TrimSpace(req.GetPageToken()),
+		ToolGrant:    strings.TrimSpace(req.GetToolGrant()),
+	})
+	if err != nil {
+		return nil, status.Errorf(agentHostErrorCode(err), "agent list tools: %v", err)
+	}
+	out := &proto.ListAgentToolsResponse{}
+	if resp == nil {
+		return out, nil
+	}
+	out.Tools = listedAgentToolsToProto(resp.Tools)
+	out.NextPageToken = resp.NextPageToken
 	return out, nil
 }
 

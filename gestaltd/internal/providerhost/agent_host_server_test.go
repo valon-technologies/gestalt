@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -19,7 +20,7 @@ func TestAgentHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
 	var captured coreagent.ExecuteToolRequest
-	server := NewAgentHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewAgentHostServer("agent-provider", nil, nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		captured = req
 		return &coreagent.ExecuteToolResponse{Status: 207, Body: `{"ok":true}`}, nil
 	})
@@ -60,7 +61,7 @@ func TestAgentHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 func TestAgentHostServerExecuteToolRequiresReplayKey(t *testing.T) {
 	t.Parallel()
 
-	server := NewAgentHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewAgentHostServer("agent-provider", nil, nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		t.Fatal("executeTool should not be called")
 		return nil, nil
 	})
@@ -87,7 +88,7 @@ func TestAgentHostServerExecuteToolRecordsGenAITelemetry(t *testing.T) {
 
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	server := NewAgentHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewAgentHostServer("agent-provider", nil, nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		return &coreagent.ExecuteToolResponse{Status: 200, Body: `{"ok":true}`}, nil
 	})
 
@@ -111,6 +112,62 @@ func TestAgentHostServerExecuteToolRecordsGenAITelemetry(t *testing.T) {
 	}
 	metrictest.RequireFloat64Histogram(t, rm, "gen_ai.client.operation.duration", attrs)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gen_ai.client.operation.duration", attrs, "gen_ai.tool.call.id")
+}
+
+func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
+	t.Parallel()
+
+	var captured coreagent.ListToolsRequest
+	server := NewAgentHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+		captured = req
+		readOnly := true
+		return &coreagent.ListToolsResponse{
+			Tools: []coreagent.ListedTool{{
+				ToolID:          "tool-1",
+				MCPName:         "linear__issues_create",
+				Title:           "Create issue",
+				Description:     "Create a Linear issue",
+				InputSchemaJSON: `{"type":"object"}`,
+				Annotations:     core.CapabilityAnnotations{ReadOnlyHint: &readOnly},
+				Ref: coreagent.ToolRef{
+					Plugin:    "linear",
+					Operation: "issues.create",
+				},
+			}},
+			NextPageToken: "10",
+		}, nil
+	}, nil)
+	conn := newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAgentHostServer(srv, server)
+	})
+	client := proto.NewAgentHostClient(conn)
+
+	resp, err := client.ListTools(context.Background(), &proto.ListAgentToolsRequest{
+		SessionId: "session-1",
+		TurnId:    "turn-1",
+		PageSize:  10,
+		PageToken: " 0 ",
+		ToolGrant: " grant-token ",
+	})
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if captured.ProviderName != "agent-provider" || captured.SessionID != "session-1" || captured.TurnID != "turn-1" {
+		t.Fatalf("captured request = %#v", captured)
+	}
+	if captured.PageSize != 10 || captured.PageToken != "0" || captured.ToolGrant != "grant-token" {
+		t.Fatalf("captured paging/grant = %#v", captured)
+	}
+	if resp.GetNextPageToken() != "10" || len(resp.GetTools()) != 1 {
+		t.Fatalf("ListTools response = %#v", resp)
+	}
+	tool := resp.GetTools()[0]
+	if tool.GetMcpName() != "linear__issues_create" || tool.GetInputSchema() != `{"type":"object"}` {
+		t.Fatalf("listed tool = %#v", tool)
+	}
+	if tool.GetAnnotations() == nil || !tool.GetAnnotations().GetReadOnlyHint() {
+		t.Fatalf("annotations = %#v, want read_only_hint", tool.GetAnnotations())
+	}
 }
 
 func TestGenAIToolExecutionAttrsAvoidDuplicateAgentIdentity(t *testing.T) {

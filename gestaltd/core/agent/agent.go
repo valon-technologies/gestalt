@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -145,7 +146,37 @@ type ToolSourceMode string
 const (
 	ToolSourceModeUnspecified  ToolSourceMode = ""
 	ToolSourceModeNativeSearch ToolSourceMode = "native_search"
+	ToolSourceModeMCPCatalog   ToolSourceMode = "mcp_catalog"
 )
+
+func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
+	fieldName = strings.TrimSpace(fieldName)
+	if fieldName == "" {
+		fieldName = "toolRefs"
+	}
+	if len(refs) == 0 {
+		return fmt.Errorf("mcp catalog requires explicit %s", fieldName)
+	}
+	for i := range refs {
+		ref := refs[i]
+		system := strings.TrimSpace(ref.System)
+		pluginName := strings.TrimSpace(ref.Plugin)
+		operation := strings.TrimSpace(ref.Operation)
+		if operation == "" {
+			return fmt.Errorf("mcp catalog %s[%d].operation is required", fieldName, i)
+		}
+		if system == "" && (pluginName == "" || pluginName == "*") {
+			return fmt.Errorf("mcp catalog %s[%d].plugin must be explicit", fieldName, i)
+		}
+		if system != "" && system != SystemToolWorkflow {
+			return fmt.Errorf("mcp catalog %s[%d].system %q is not supported", fieldName, i, system)
+		}
+		if system != "" && pluginName != "" {
+			return fmt.Errorf("mcp catalog %s[%d] must set exactly one of plugin or system", fieldName, i)
+		}
+	}
+	return nil
+}
 
 type Session struct {
 	ID           string
@@ -293,6 +324,7 @@ type ProviderCapabilities struct {
 	ReasoningSummaries   bool
 	NativeToolSearch     bool
 	BoundedListHydration bool
+	SupportedToolSources []ToolSourceMode
 }
 
 type GetInteractionRequest struct {
@@ -344,6 +376,35 @@ type SearchToolsResponse struct {
 	Tools      []Tool
 	Candidates []ToolCandidate
 	HasMore    bool
+}
+
+type ListedTool struct {
+	ToolID           string
+	MCPName          string
+	Title            string
+	Description      string
+	InputSchemaJSON  string
+	OutputSchemaJSON string
+	Annotations      core.CapabilityAnnotations
+	Ref              ToolRef
+	Target           ToolTarget
+	Hidden           bool
+}
+
+type ListToolsRequest struct {
+	ProviderName string
+	SessionID    string
+	TurnID       string
+	PageSize     int
+	PageToken    string
+	ToolRefs     []ToolRef
+	ToolSource   ToolSourceMode
+	ToolGrant    string
+}
+
+type ListToolsResponse struct {
+	Tools         []ListedTool
+	NextPageToken string
 }
 
 type InteractionType string
@@ -444,6 +505,7 @@ type Provider interface {
 
 type Host interface {
 	SearchTools(ctx context.Context, req SearchToolsRequest) (*SearchToolsResponse, error)
+	ListTools(ctx context.Context, req ListToolsRequest) (*ListToolsResponse, error)
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
 }
 

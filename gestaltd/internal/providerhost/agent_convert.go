@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
@@ -171,6 +172,30 @@ func agentToolCandidatesToProto(candidates []coreagent.ToolCandidate) []*proto.A
 	return out
 }
 
+func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
+	return &proto.ListedAgentTool{
+		Id:           tool.ToolID,
+		McpName:      tool.MCPName,
+		Title:        tool.Title,
+		Description:  tool.Description,
+		InputSchema:  tool.InputSchemaJSON,
+		OutputSchema: tool.OutputSchemaJSON,
+		Annotations:  operationAnnotationsToProto(tool.Annotations),
+		Ref:          agentToolRefToProto(tool.Ref),
+	}
+}
+
+func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]*proto.ListedAgentTool, 0, len(tools))
+	for i := range tools {
+		out = append(out, listedAgentToolToProto(tools[i]))
+	}
+	return out
+}
+
 func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 	if ref == nil {
 		return coreagent.ToolRef{}
@@ -224,6 +249,8 @@ func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.Tool
 	switch mode {
 	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH:
 		return coreagent.ToolSourceModeNativeSearch
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG:
+		return coreagent.ToolSourceModeMCPCatalog
 	default:
 		return coreagent.ToolSourceModeUnspecified
 	}
@@ -233,8 +260,35 @@ func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSo
 	switch mode {
 	case coreagent.ToolSourceModeNativeSearch:
 		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH
+	case coreagent.ToolSourceModeMCPCatalog:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 	default:
 		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+	}
+}
+
+func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagent.ToolSourceMode {
+	if len(modes) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ToolSourceMode, 0, len(modes))
+	for _, mode := range modes {
+		if converted := agentToolSourceModeFromProto(mode); converted != coreagent.ToolSourceModeUnspecified {
+			out = append(out, converted)
+		}
+	}
+	return out
+}
+
+func operationAnnotationsToProto(value core.CapabilityAnnotations) *proto.OperationAnnotations {
+	if value.ReadOnlyHint == nil && value.IdempotentHint == nil && value.DestructiveHint == nil && value.OpenWorldHint == nil {
+		return nil
+	}
+	return &proto.OperationAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
 	}
 }
 
@@ -663,6 +717,7 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		ReasoningSummaries:   value.GetReasoningSummaries(),
 		NativeToolSearch:     value.GetNativeToolSearch(),
 		BoundedListHydration: value.GetBoundedListHydration(),
+		SupportedToolSources: agentToolSourceModesFromProto(value.GetSupportedToolSources()),
 	}
 }
 

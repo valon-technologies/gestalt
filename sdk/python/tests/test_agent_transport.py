@@ -49,6 +49,7 @@ _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
 _host_relay_tokens: list[str] = []
 _host_search_requests: list[dict[str, Any]] = []
+_host_list_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -291,6 +292,34 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                 )
             ],
             has_more=True,
+        )
+
+    def ListTools(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_host_relay_tokens(context)
+        _host_list_requests.append(
+            {
+                "session_id": request.session_id,
+                "turn_id": request.turn_id,
+                "page_size": request.page_size,
+                "page_token": request.page_token,
+                "tool_grant": request.tool_grant,
+            }
+        )
+        return agent_pb2.ListAgentToolsResponse(
+            tools=[
+                agent_pb2.ListedAgentTool(
+                    id="tool-1",
+                    mcp_name="slack__chat_post_message",
+                    title="Send Slack message",
+                    description="Send a direct message",
+                    input_schema='{"type":"object"}',
+                    ref=agent_pb2.AgentToolRef(
+                        plugin="slack",
+                        operation="chat.postMessage",
+                    ),
+                )
+            ],
+            next_page_token="next-1",
         )
 
     def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
@@ -644,6 +673,7 @@ class AgentTransportTests(unittest.TestCase):
         _provider.configured.clear()
         _host_relay_tokens.clear()
         _host_search_requests.clear()
+        _host_list_requests.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
@@ -802,6 +832,15 @@ class AgentTransportTests(unittest.TestCase):
                     ],
                 )
             )
+            list_response = host.list_tools(
+                agent_pb2.ListAgentToolsRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    page_size=10,
+                    page_token="page-0",
+                    tool_grant="grant-token",
+                )
+            )
             response = host.execute_tool(
                 agent_pb2.ExecuteAgentToolRequest(
                     session_id="session-1",
@@ -821,9 +860,14 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(search_response.tools[0].name, "Send Slack message")
         self.assertEqual(search_response.tools[1].id, "system.workflow.schedules.list")
         self.assertEqual(search_response.tools[1].name, "List workflow schedules")
+        self.assertEqual(len(list_response.tools), 1)
+        self.assertEqual(list_response.tools[0].mcp_name, "slack__chat_post_message")
+        self.assertEqual(list_response.next_page_token, "next-1")
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7")
-        self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(
+            _host_relay_tokens, ["relay-token-py", "relay-token-py", "relay-token-py"]
+        )
         self.assertEqual(
             _host_search_requests,
             [
@@ -842,6 +886,18 @@ class AgentTransportTests(unittest.TestCase):
                             "instance": "primary",
                         }
                     ],
+                }
+            ],
+        )
+        self.assertEqual(
+            _host_list_requests,
+            [
+                {
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                    "page_size": 10,
+                    "page_token": "page-0",
+                    "tool_grant": "grant-token",
                 }
             ],
         )

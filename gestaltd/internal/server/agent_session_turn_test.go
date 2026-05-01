@@ -394,6 +394,10 @@ func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapa
 		ResumableTurns:       true,
 		StructuredOutput:     true,
 		BoundedListHydration: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeNativeSearch,
+			coreagent.ToolSourceModeMCPCatalog,
+		},
 	}, nil
 }
 
@@ -595,9 +599,10 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 			Name         string `json:"name"`
 			Default      bool   `json:"default"`
 			Capabilities struct {
-				StreamingText        bool `json:"streamingText"`
-				NativeToolSearch     bool `json:"nativeToolSearch"`
-				BoundedListHydration bool `json:"boundedListHydration"`
+				StreamingText        bool     `json:"streamingText"`
+				NativeToolSearch     bool     `json:"nativeToolSearch"`
+				BoundedListHydration bool     `json:"boundedListHydration"`
+				SupportedToolSources []string `json:"supportedToolSources"`
 			} `json:"capabilities"`
 		} `json:"providers"`
 	}
@@ -614,8 +619,11 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.NativeToolSearch || !gotProvider.Capabilities.BoundedListHydration {
 		t.Fatalf("provider capabilities = %#v, want streaming text, native tool search, and bounded list hydration", gotProvider.Capabilities)
 	}
+	if got := gotProvider.Capabilities.SupportedToolSources; strings.Join(got, ",") != "native_search,mcp_catalog" {
+		t.Fatalf("supported tool sources = %#v, want native_search,mcp_catalog", got)
+	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"plugin":"docs","operation":"search"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -634,8 +642,29 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if len(turnRequests[0].Tools) != 0 {
-		t.Fatalf("provider turn tools len = %d, want 0", len(turnRequests[0].Tools))
+	if got := turnRequests[0].Tools; len(got) != 1 || got[0].Target.Plugin != "docs" || got[0].Target.Operation != "search" {
+		t.Fatalf("provider turn tools = %#v, want docs.search", got)
+	}
+	if turnRequests[0].ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].ToolSource)
+	}
+	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "search" {
+		t.Fatalf("provider turn tool refs = %#v, want docs.search", got)
+	}
+
+	broadTurnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"plugin":"docs"}]}`))
+	broadTurnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	broadTurnResp, err := http.DefaultClient.Do(broadTurnReq)
+	if err != nil {
+		t.Fatalf("create broad mcp catalog turn: %v", err)
+	}
+	defer func() { _ = broadTurnResp.Body.Close() }()
+	if broadTurnResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(broadTurnResp.Body)
+		t.Fatalf("create broad mcp catalog turn status = %d body=%s, want 400", broadTurnResp.StatusCode, body)
+	}
+	if got := len(provider.capturedTurnRequests()); got != 1 {
+		t.Fatalf("provider turn requests len after broad mcp catalog turn = %d, want 1", got)
 	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)

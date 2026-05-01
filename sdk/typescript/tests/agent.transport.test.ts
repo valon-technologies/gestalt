@@ -14,6 +14,8 @@ import {
   AgentHost as AgentHostService,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
+  ListAgentToolsRequestSchema,
+  ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
   SearchAgentToolsRequestSchema,
   SearchAgentToolsResponseSchema,
@@ -207,6 +209,12 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       instance: string;
     }>;
   }> = [];
+  const lists: Array<{
+    turnId: string;
+    pageSize: number;
+    pageToken: string;
+    toolGrant: string;
+  }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -266,6 +274,30 @@ test("AgentHost executes tools through the configured unix socket", async () => 
               },
             ],
             hasMore: true,
+          });
+        },
+        async listTools(input) {
+          lists.push({
+            turnId: input.turnId,
+            pageSize: input.pageSize,
+            pageToken: input.pageToken,
+            toolGrant: input.toolGrant,
+          });
+          return create(ListAgentToolsResponseSchema, {
+            tools: [
+              {
+                id: "tool-1",
+                mcpName: "slack__chat_post_message",
+                title: "Send Slack message",
+                description: "Send a direct message",
+                inputSchema: "{\"type\":\"object\"}",
+                ref: {
+                  plugin: "slack",
+                  operation: "chat.postMessage",
+                },
+              },
+            ],
+            nextPageToken: "next-1",
           });
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
@@ -353,6 +385,28 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             instance: "primary",
           },
         ],
+      },
+    ]);
+
+    const listResponse = await host.listTools(
+      create(ListAgentToolsRequestSchema, {
+        sessionId: "session-123",
+        turnId: "turn-123",
+        pageSize: 10,
+        pageToken: "page-0",
+        toolGrant: "grant-token",
+      }),
+    );
+
+    expect(listResponse.tools).toHaveLength(1);
+    expect(listResponse.tools[0]?.mcpName).toBe("slack__chat_post_message");
+    expect(listResponse.nextPageToken).toBe("next-1");
+    expect(lists).toEqual([
+      {
+        turnId: "turn-123",
+        pageSize: 10,
+        pageToken: "page-0",
+        toolGrant: "grant-token",
       },
     ]);
   } finally {

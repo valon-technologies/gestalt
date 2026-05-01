@@ -75,6 +75,13 @@ impl AgentHost {
     ) -> std::result::Result<pb::SearchAgentToolsResponse, AgentHostError> {
         Ok(self.client.search_tools(request).await?.into_inner())
     }
+
+    pub async fn list_tools(
+        &mut self,
+        request: pb::ListAgentToolsRequest,
+    ) -> std::result::Result<pb::ListAgentToolsResponse, AgentHostError> {
+        Ok(self.client.list_tools(request).await?.into_inner())
+    }
 }
 
 async fn connect_unix(

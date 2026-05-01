@@ -322,6 +322,7 @@ impl AgentProviderGrpc for TestAgentProvider {
             reasoning_summaries: false,
             native_tool_search: true,
             bounded_list_hydration: true,
+            supported_tool_sources: vec![pb::AgentToolSourceMode::NativeSearch as i32],
         }))
     }
 }
@@ -358,6 +359,29 @@ impl AgentHostRpc for TestAgentHostService {
                 score: 2.5,
             }],
             has_more: true,
+        }))
+    }
+
+    async fn list_tools(
+        &self,
+        request: GrpcRequest<pb::ListAgentToolsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentToolsResponse>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::ListAgentToolsResponse {
+            tools: vec![pb::ListedAgentTool {
+                id: format!("{}:{}:lookup", request.session_id, request.turn_id),
+                mcp_name: "search__lookup".to_string(),
+                title: "lookup".to_string(),
+                description: "Look up records".to_string(),
+                input_schema: r#"{"type":"object"}"#.to_string(),
+                r#ref: Some(pb::AgentToolRef {
+                    plugin: "search".to_string(),
+                    operation: "lookup".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            next_page_token: "next-1".to_string(),
         }))
     }
 
@@ -686,6 +710,20 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             .operation,
         "lookup_more"
     );
+
+    let listed = host
+        .list_tools(pb::ListAgentToolsRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            page_size: 10,
+            page_token: "page-0".to_string(),
+            tool_grant: "grant-token".to_string(),
+        })
+        .await
+        .expect("list tools");
+    assert_eq!(listed.tools.len(), 1);
+    assert_eq!(listed.tools[0].mcp_name, "search__lookup");
+    assert_eq!(listed.next_page_token, "next-1");
 
     let invoked = host
         .execute_tool(pb::ExecuteAgentToolRequest {

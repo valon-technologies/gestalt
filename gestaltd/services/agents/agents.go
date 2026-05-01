@@ -36,9 +36,10 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 func NewHostServer(
 	providerName string,
 	searchTools func(context.Context, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error),
+	listTools func(context.Context, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error),
 	executeTool func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error),
 ) proto.AgentHostServer {
-	return providerhost.NewAgentHostServer(providerName, searchTools, executeTool)
+	return providerhost.NewAgentHostServer(providerName, searchTools, listTools, executeTool)
 }
 
 func NewManagerServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) proto.AgentManagerHostServer {

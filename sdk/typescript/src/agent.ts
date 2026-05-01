@@ -58,10 +58,13 @@ import {
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
   type GetAgentProviderTurnRequest,
+  type ListAgentToolsRequest,
+  type ListAgentToolsResponse,
   type ListAgentProviderInteractionsRequest,
   type ListAgentProviderSessionsRequest,
   type ListAgentProviderTurnEventsRequest,
   type ListAgentProviderTurnsRequest,
+  type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
   type SearchAgentToolsRequest,
@@ -98,10 +101,13 @@ export type {
   GetAgentProviderInteractionRequest,
   GetAgentProviderSessionRequest,
   GetAgentProviderTurnRequest,
+  ListAgentToolsRequest,
+  ListAgentToolsResponse,
   ListAgentProviderInteractionsRequest,
   ListAgentProviderSessionsRequest,
   ListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest,
+  ListedAgentTool,
   ResolveAgentProviderInteractionRequest,
   ResolvedAgentTool,
   SearchAgentToolsRequest,
@@ -440,6 +446,12 @@ export class AgentHost {
     request: SearchAgentToolsRequest,
   ): Promise<SearchAgentToolsResponse> {
     return await this.client.searchTools(request);
+  }
+
+  async listTools(
+    request: ListAgentToolsRequest,
+  ): Promise<ListAgentToolsResponse> {
+    return await this.client.listTools(request);
   }
 }
 

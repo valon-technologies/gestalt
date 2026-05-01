@@ -36,6 +36,9 @@ class AgentHost:
     def search_tools(self, request: Any) -> Any:
         return _grpc_call(self._stub.SearchTools, request)
 
+    def list_tools(self, request: Any) -> Any:
+        return _grpc_call(self._stub.ListTools, request)
+
     def __enter__(self) -> AgentHost:
         return self
 

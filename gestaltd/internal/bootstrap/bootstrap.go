@@ -1726,7 +1726,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: agentservice.DefaultHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, agentservice.NewHostServer(name, deps.AgentRuntime.SearchTools, deps.AgentRuntime.ExecuteTool))
+			proto.RegisterAgentHostServer(srv, agentservice.NewHostServer(name, deps.AgentRuntime.SearchTools, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool))
 		},
 	}}
 	var cleanup func()

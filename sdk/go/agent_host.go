@@ -48,3 +48,7 @@ func (c *AgentHostClient) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 func (c *AgentHostClient) SearchTools(ctx context.Context, req *proto.SearchAgentToolsRequest) (*proto.SearchAgentToolsResponse, error) {
 	return c.client.SearchTools(ctx, req)
 }
+
+func (c *AgentHostClient) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {
+	return c.client.ListTools(ctx, req)
+}
