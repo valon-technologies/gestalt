@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/staticui"
+	"github.com/valon-technologies/gestalt/server/internal/ui"
 )
 
 //go:embed all:out
@@ -26,7 +26,7 @@ func EmbeddedHandler(opts Options) http.Handler {
 	if err != nil {
 		return nil
 	}
-	handler, err := staticui.Handler(staticui.Config{
+	handler, err := ui.StaticHandler(ui.StaticConfig{
 		FS:          sub,
 		RenderIndex: renderFunc(opts),
 	})
@@ -37,7 +37,7 @@ func EmbeddedHandler(opts Options) http.Handler {
 }
 
 func DirHandler(path string, opts Options) (http.Handler, error) {
-	return staticui.Handler(staticui.Config{
+	return ui.StaticHandler(ui.StaticConfig{
 		FS:          os.DirFS(path),
 		RenderIndex: renderFunc(opts),
 	})
