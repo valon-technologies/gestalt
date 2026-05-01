@@ -1041,6 +1041,9 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 		return coreworkflow.Target{}, err
 	}
 	target.ProviderName = strings.TrimSpace(providerName)
+	if !m.allowProvider(ctx, p, target.ProviderName) || !principal.AllowsProviderPermission(p, target.ProviderName) {
+		return coreworkflow.Target{}, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, target.ProviderName)
+	}
 	target.Model = strings.TrimSpace(target.Model)
 	target.Prompt = strings.TrimSpace(target.Prompt)
 	if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
@@ -1427,6 +1430,10 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 
 func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
 	if target.Agent != nil {
+		agentProviderName := strings.TrimSpace(target.Agent.ProviderName)
+		if agentProviderName == "" || !m.allowProvider(ctx, p, agentProviderName) || !principal.AllowsProviderPermission(p, agentProviderName) {
+			return false
+		}
 		hasSystemTools := workflowAgentToolRefsContainSystem(target.Agent.ToolRefs)
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]

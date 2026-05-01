@@ -411,6 +411,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
+	if !m.allowsAgentProvider(ctx, p, providerName) {
+		return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	sessionID := uuid.NewString()
 	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
@@ -464,7 +467,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	if providerName != "" {
 		observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
 	}
-	candidates, err := m.providerCandidates(providerName)
+	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -917,6 +920,26 @@ func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider,
 	return candidates, nil
 }
 
+func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal.Principal, providerName string) ([]namedAgentProvider, error) {
+	candidates, err := m.providerCandidates(providerName)
+	if err != nil {
+		return nil, err
+	}
+	authorized := make([]namedAgentProvider, 0, len(candidates))
+	for _, candidate := range candidates {
+		if m.allowsAgentProvider(ctx, p, candidate.name) {
+			authorized = append(authorized, candidate)
+		}
+	}
+	if len(authorized) == 0 {
+		if providerName = strings.TrimSpace(providerName); providerName != "" {
+			return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+		}
+		return nil, invocation.ErrAuthorizationDenied
+	}
+	return authorized, nil
+}
+
 func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -951,7 +974,7 @@ func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, 
 }
 
 func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
-	candidates, err := m.providerCandidates(providerName)
+	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1023,7 +1046,7 @@ func (m *Manager) findOwnedTurn(ctx context.Context, p *principal.Principal, tur
 }
 
 func (m *Manager) findOwnedTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName string) (*ownedAgentTurn, error) {
-	candidates, err := m.providerCandidates(providerName)
+	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -2076,7 +2099,7 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if !m.allowProvider(ctx, p, pluginName) || !principal.AllowsProviderPermission(p, pluginName) {
+		if !m.allowsAgentProvider(ctx, p, pluginName) {
 			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, pluginName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
@@ -2096,6 +2119,10 @@ func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, pro
 		return true
 	}
 	return m.authorizer.AllowProvider(ctx, p, provider)
+}
+
+func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principal, provider string) bool {
+	return m.allowProvider(ctx, p, provider) && principal.AllowsProviderPermission(p, provider)
 }
 
 func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {

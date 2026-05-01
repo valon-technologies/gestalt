@@ -1356,6 +1356,8 @@ func TestHostServiceRelayServesCoreRoutableWorkflowManagerWithoutRegistry(t *tes
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "github",
 		Operations: []string{"events.handle"},
+	}, {
+		Plugin: "managed",
 	}})
 	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
