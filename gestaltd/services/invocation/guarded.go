@@ -16,9 +16,11 @@ const (
 )
 
 var (
-	_ Invoker          = (*GuardedInvoker)(nil)
-	_ GraphQLInvoker   = (*GuardedInvoker)(nil)
-	_ CapabilityLister = (*GuardedInvoker)(nil)
+	_ Invoker              = (*GuardedInvoker)(nil)
+	_ GraphQLInvoker       = (*GuardedInvoker)(nil)
+	_ CapabilityLister     = (*GuardedInvoker)(nil)
+	_ TokenResolver        = (*GuardedInvoker)(nil)
+	_ subjectTokenResolver = (*GuardedInvoker)(nil)
 )
 
 type GuardedInvoker struct {
@@ -217,20 +219,14 @@ func (g *GuardedInvoker) check(meta *InvocationMeta, providerName, instance, ope
 }
 
 func (g *GuardedInvoker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	type resolver interface {
-		ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
-	}
-	if r, ok := g.inner.(resolver); ok {
+	if r, ok := g.inner.(TokenResolver); ok {
 		return r.ResolveToken(ctx, p, providerName, connection, instance)
 	}
 	return ctx, "", fmt.Errorf("token resolution not supported")
 }
 
 func (g *GuardedInvoker) ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error) {
-	type resolver interface {
-		ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error)
-	}
-	if r, ok := g.inner.(resolver); ok {
+	if r, ok := g.inner.(subjectTokenResolver); ok {
 		return r.ResolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance)
 	}
 	return ctx, "", fmt.Errorf("subject token resolution not supported")

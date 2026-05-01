@@ -100,9 +100,11 @@ type UserStore interface {
 }
 
 var (
-	_ Invoker          = (*Broker)(nil)
-	_ GraphQLInvoker   = (*Broker)(nil)
-	_ CapabilityLister = (*Broker)(nil)
+	_ Invoker              = (*Broker)(nil)
+	_ GraphQLInvoker       = (*Broker)(nil)
+	_ CapabilityLister     = (*Broker)(nil)
+	_ TokenResolver        = (*Broker)(nil)
+	_ subjectTokenResolver = (*Broker)(nil)
 )
 
 type ConnectionMapper interface {
