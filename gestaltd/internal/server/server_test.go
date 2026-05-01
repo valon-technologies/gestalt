@@ -7122,7 +7122,7 @@ func TestMountedRootUIRoutes(t *testing.T) {
 		t.Fatalf("health body unexpectedly served root UI: %q", body)
 	}
 
-	resp, err = http.Get(ts.URL + "/api/v1/identities")
+	resp, err = http.Get(ts.URL + "/api/v1/not-a-real-provider")
 	if err != nil {
 		t.Fatalf("GET unknown API route: %v", err)
 	}
@@ -22500,79 +22500,6 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
-	}
-}
-
-func TestServerAllowsProviderNamedIdentities(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "admin@example.test")
-
-	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "identities",
-			ConnMode: core.ConnectionModeNone,
-			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q}`, operation)}, nil
-			},
-		},
-		ops: []core.Operation{
-			{Name: "read", Method: http.MethodGet},
-			{Name: "write", Method: http.MethodPost},
-		},
-	})
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("unknown session %q", token)
-				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.Providers = providers
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	readReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/read", nil)
-	readReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	readResp, err := http.DefaultClient.Do(readReq)
-	if err != nil {
-		t.Fatalf("GET identities/read: %v", err)
-	}
-	defer func() { _ = readResp.Body.Close() }()
-	if readResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(readResp.Body)
-		t.Fatalf("GET identities/read status = %d, want %d: %s", readResp.StatusCode, http.StatusOK, body)
-	}
-
-	writeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/write", bytes.NewBufferString(`{}`))
-	writeReq.Header.Set("Content-Type", "application/json")
-	writeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	writeResp, err := http.DefaultClient.Do(writeReq)
-	if err != nil {
-		t.Fatalf("POST identities/write: %v", err)
-	}
-	defer func() { _ = writeResp.Body.Close() }()
-	if writeResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(writeResp.Body)
-		t.Fatalf("POST identities/write status = %d, want %d: %s", writeResp.StatusCode, http.StatusOK, body)
-	}
-
-	missingReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/missing", nil)
-	missingReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	missingResp, err := http.DefaultClient.Do(missingReq)
-	if err != nil {
-		t.Fatalf("GET identities/missing: %v", err)
-	}
-	defer func() { _ = missingResp.Body.Close() }()
-	if missingResp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(missingResp.Body)
-		t.Fatalf("GET identities/missing status = %d, want %d: %s", missingResp.StatusCode, http.StatusNotFound, body)
 	}
 }
 

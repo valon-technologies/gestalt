@@ -42,12 +42,11 @@ const (
 	credentialModeSubject  = "subject"
 	credentialModePlatform = "platform"
 
-	ownerKindNone            = "none"
-	ownerKindCurrentUser     = "current_user"
-	ownerKindManagedIdentity = "managed_identity"
-	ownerKindServiceAccount  = "service_account"
-	ownerKindPlatform        = "platform"
-	ownerKindUnknown         = "unknown"
+	ownerKindNone           = "none"
+	ownerKindCurrentUser    = "current_user"
+	ownerKindServiceAccount = "service_account"
+	ownerKindPlatform       = "platform"
+	ownerKindUnknown        = "unknown"
 )
 
 func (s *Server) applyIntegrationConnectionStatus(info *integrationInfo, prov core.Provider, instances []instanceInfo, authTypes []string, p *principal.Principal) {
@@ -354,8 +353,6 @@ func ownerKindForPrincipal(p *principal.Principal) string {
 	switch kind {
 	case string(principal.KindUser):
 		return ownerKindCurrentUser
-	case ownerKindManagedIdentity:
-		return ownerKindManagedIdentity
 	case ownerKindServiceAccount:
 		return ownerKindServiceAccount
 	default:
