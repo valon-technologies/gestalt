@@ -16,7 +16,7 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !isGRPCRequest(r) || s.routeProfile == RouteProfileManagement || s.hostServiceRelayTokens == nil {
+		if !isGRPCRequest(r) || s.hostServiceRelayTokens == nil {
 			next.ServeHTTP(w, r)
 			return
 		}

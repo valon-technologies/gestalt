@@ -151,7 +151,7 @@ authorization:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
-`runtime.defaultHostedProvider` selects the runtime provider used when a plugin or agent opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private deployment URL while browser and OAuth flows still use the public origin.
+`runtime.defaultHostedProvider` selects the runtime provider used when a plugin or agent opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
@@ -185,7 +185,9 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
 | `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
 
-When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
+When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener can also serve token-authenticated hosted-runtime host-service relay and egress proxy callbacks when `server.runtime.relayBaseUrl` points at that origin.
+
+The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
 ## `runtime`
 
@@ -262,13 +264,15 @@ When a plugin uses the Modal runtime provider,
 `plugins.<name>.execution.runtime.image` is required. Modal can still run
 hosted plugins that need Gestalt-owned services or hostname-based egress when
 the host is configured for the public relay and proxy path. In practice that
-means `server.baseUrl` and `server.encryptionKey` must be set, and the runtime
-must report a compatible support profile. Without those prerequisites, Gestalt
-will reject Modal for plugins that need relay-backed host services,
+means `server.baseUrl` (or `server.runtime.relayBaseUrl`) and
+`server.encryptionKey` must be set, and the runtime must report a compatible
+support profile. Without those prerequisites, Gestalt will reject Modal for
+plugins that need relay-backed host services,
 `egress.allowedHosts`, or a server-wide default-deny egress policy.
 When hosted runtimes cannot reach `server.baseUrl` directly, set
 `server.runtime.relayBaseUrl` to the private HTTP(S) origin they should use for
-host-service relay and egress proxy callbacks.
+host-service relay and egress proxy callbacks. The origin can point at the
+management listener or another internal reverse proxy that reaches gestaltd.
 
 Hosted runtime images are expected to contain the provider package at the image
 working directory. Gestalt starts the executable declared by the provider
