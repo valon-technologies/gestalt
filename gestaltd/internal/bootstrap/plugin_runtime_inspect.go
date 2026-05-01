@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 )
 

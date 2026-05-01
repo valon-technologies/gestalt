@@ -161,7 +161,15 @@ func repoRootForPluginRuntimeTests(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "sdk", "go", "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find repository root from %s", file)
+		}
+	}
 }
 
 const runtimeLogProviderSource = `package main
