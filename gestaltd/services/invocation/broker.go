@@ -583,7 +583,10 @@ func (b *Broker) resolveConnectionExposure(providerName, connection string) core
 }
 
 func allowsInternalConnection(ctx context.Context) bool {
-	return InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTPBinding && HTTPBindingFromContext(ctx) != ""
+	if InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTPBinding && HTTPBindingFromContext(ctx) != "" {
+		return true
+	}
+	return InternalConnectionAccessFromContext(ctx)
 }
 
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {

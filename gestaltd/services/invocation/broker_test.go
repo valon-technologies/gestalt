@@ -107,6 +107,50 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	}
 }
 
+func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionRuntime(ConnectionRuntimeMap{
+			"slack": {
+				"bot": {
+					Mode:     core.ConnectionModePlatform,
+					Exposure: core.ConnectionExposureInternal,
+					Token:    "bot-token",
+				},
+			},
+		}.Resolve),
+	)
+	subject := &principal.Principal{
+		SubjectID: "service_account:workflow-config",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	}
+
+	_, _, err := broker.ResolveToken(context.Background(), subject, "slack", "bot", "")
+	if err == nil {
+		t.Fatal("ResolveToken without internal connection access succeeded, want denial")
+	}
+
+	ctx, token, err := broker.ResolveToken(WithInternalConnectionAccess(context.Background()), subject, "slack", "bot", "")
+	if err != nil {
+		t.Fatalf("ResolveToken with internal connection access: %v", err)
+	}
+	if token != "bot-token" {
+		t.Fatalf("token = %q, want bot-token", token)
+	}
+	if cred := CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.Connection != "bot" {
+		t.Fatalf("credential context = %#v, want platform bot", cred)
+	}
+}
+
 func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
 	t.Parallel()
 

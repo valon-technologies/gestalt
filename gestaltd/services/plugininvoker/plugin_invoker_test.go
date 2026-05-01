@@ -14,6 +14,7 @@ import (
 
 type recordingPluginInvoker struct {
 	idempotencyKey        string
+	internalConnection    bool
 	providerName          string
 	instance              string
 	operation             string
@@ -27,11 +28,57 @@ type recordingPluginInvoker struct {
 
 func (i *recordingPluginInvoker) Invoke(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
+	i.internalConnection = invocation.InternalConnectionAccessFromContext(ctx)
 	i.providerName = providerName
 	i.instance = instance
 	i.operation = operation
 	i.params = params
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
+}
+
+func TestPluginInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "service_account:workflow-config",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	})
+	ctx = invocation.WithInternalConnectionAccess(ctx)
+	rootToken, err := tokens.MintRootToken(ctx, "brain", InvocationGrants{
+		"slack": {Operations: map[string]core.ConnectionMode{"conversations.history": ""}},
+	})
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+
+	invoker := &recordingPluginInvoker{}
+	server := NewPluginInvokerServer(
+		"brain",
+		[]invocation.PluginInvocationDependency{
+			{Plugin: "slack", Operation: "conversations.history"},
+		},
+		invoker,
+		tokens,
+	)
+	client := proto.NewPluginInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterPluginInvokerServer(srv, server)
+	}))
+	if _, err := client.Invoke(context.Background(), &proto.PluginInvokeRequest{
+		InvocationToken: rootToken,
+		Plugin:          "slack",
+		Operation:       "conversations.history",
+		Connection:      "bot",
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if !invoker.internalConnection {
+		t.Fatal("internal connection access was not restored from the invocation token")
+	}
 }
 
 func (i *recordingPluginInvoker) InvokeGraphQL(ctx context.Context, _ *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error) {

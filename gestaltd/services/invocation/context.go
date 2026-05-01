@@ -58,6 +58,7 @@ type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type accessCtxKey struct{}
 type workflowCtxKey struct{}
+type internalConnectionAccessCtxKey struct{}
 
 type InvocationSurface string
 
@@ -173,6 +174,15 @@ func WithHTTPBinding(ctx context.Context, binding string) context.Context {
 func HTTPBindingFromContext(ctx context.Context) string {
 	binding, _ := ctx.Value(httpBindingCtxKey{}).(string)
 	return strings.TrimSpace(binding)
+}
+
+func WithInternalConnectionAccess(ctx context.Context) context.Context {
+	return context.WithValue(ctx, internalConnectionAccessCtxKey{}, true)
+}
+
+func InternalConnectionAccessFromContext(ctx context.Context) bool {
+	allowed, _ := ctx.Value(internalConnectionAccessCtxKey{}).(bool)
+	return allowed
 }
 
 const xForwardedForHeader = "X-Forwarded-For"
