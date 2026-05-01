@@ -63,10 +63,11 @@ type credentialClaims struct {
 }
 
 type invocationClaims struct {
-	RequestID string   `json:"request_id,omitempty"`
-	Depth     int      `json:"depth,omitempty"`
-	CallChain []string `json:"call_chain,omitempty"`
-	Surface   string   `json:"surface,omitempty"`
+	RequestID                string   `json:"request_id,omitempty"`
+	Depth                    int      `json:"depth,omitempty"`
+	CallChain                []string `json:"call_chain,omitempty"`
+	Surface                  string   `json:"surface,omitempty"`
+	InternalConnectionAccess bool     `json:"internal_connection_access,omitempty"`
 }
 
 type invocationTokenContext struct {
@@ -76,6 +77,7 @@ type invocationTokenContext struct {
 	credentialModeOverride core.ConnectionMode
 	invocation             *invocation.InvocationMeta
 	surface                invocation.InvocationSurface
+	internalConnection     bool
 	connection             string
 	grants                 InvocationGrants
 }
@@ -169,9 +171,10 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 			Depth:     claims.Invocation.Depth,
 			CallChain: append([]string(nil), claims.Invocation.CallChain...),
 		},
-		surface:    invocation.InvocationSurface(strings.TrimSpace(claims.Invocation.Surface)),
-		connection: strings.TrimSpace(claims.Connection),
-		grants:     decodeInvocationGrantClaims(claims.Grants),
+		surface:            invocation.InvocationSurface(strings.TrimSpace(claims.Invocation.Surface)),
+		internalConnection: claims.Invocation.InternalConnectionAccess,
+		connection:         strings.TrimSpace(claims.Connection),
+		grants:             decodeInvocationGrantClaims(claims.Grants),
 	}, nil
 }
 
@@ -295,10 +298,11 @@ func claimsFromContext(ctx context.Context, pluginName string, grants Invocation
 			Instance:   cred.Instance,
 		},
 		Invocation: invocationClaims{
-			RequestID: meta.RequestID,
-			Depth:     meta.Depth,
-			CallChain: append([]string(nil), meta.CallChain...),
-			Surface:   string(invocation.InvocationSurfaceFromContext(ctx)),
+			RequestID:                meta.RequestID,
+			Depth:                    meta.Depth,
+			CallChain:                append([]string(nil), meta.CallChain...),
+			Surface:                  string(invocation.InvocationSurfaceFromContext(ctx)),
+			InternalConnectionAccess: invocation.InternalConnectionAccessFromContext(ctx),
 		},
 		Connection: invocation.ConnectionFromContext(ctx),
 	}
@@ -329,6 +333,9 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 	}
 	if tokenCtx.surface != "" {
 		ctx = invocation.WithInvocationSurface(ctx, tokenCtx.surface)
+	}
+	if tokenCtx.internalConnection {
+		ctx = invocation.WithInternalConnectionAccess(ctx)
 	}
 
 	connection := strings.TrimSpace(connectionOverride)

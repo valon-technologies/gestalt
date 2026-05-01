@@ -226,6 +226,9 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		}
 		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
+		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
+			ctx = invocation.WithInternalConnectionAccess(ctx)
+		}
 		if target.Plugin != nil {
 			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
 			invokeInstance = strings.TrimSpace(target.Plugin.Instance)
@@ -297,6 +300,16 @@ func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
 	return target.Agent != nil && target.Plugin != nil
 }
 
+func workflowExecutionRefAllowsInternalConnectionAccess(ref *coreworkflow.ExecutionReference) bool {
+	if ref == nil {
+		return false
+	}
+	return strings.TrimSpace(ref.AuthSource) == "config" &&
+		strings.TrimSpace(ref.SubjectKind) == "system" &&
+		strings.TrimSpace(ref.SubjectID) == workflowConfigOwnerSubjectID() &&
+		strings.TrimSpace(ref.CredentialSubjectID) == workflowConfigOwnerSubjectID()
+}
+
 func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker) (*coreworkflow.InvokeOperationResponse, error) {
 	if agentManager == nil {
 		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
@@ -315,6 +328,9 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
 		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
+		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
+			ctx = invocation.WithInternalConnectionAccess(ctx)
+		}
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}

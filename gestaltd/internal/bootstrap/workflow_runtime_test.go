@@ -975,6 +975,98 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.
 	}
 }
 
+func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testing.T) {
+	t.Parallel()
+
+	target := testWorkflowPluginTarget("brain", "sources.sync")
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-config-source-sync",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           "system:config",
+		SubjectKind:         string(principal.Kind("system")),
+		AuthSource:          "config",
+		CredentialSubjectID: "system:config",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "brain",
+			Operations: []string{"sources.sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+
+	var gotInternalConnectionAccess bool
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, _ map[string]any) (*core.OperationResult, error) {
+			gotInternalConnectionAccess = invocation.InternalConnectionAccessFromContext(ctx)
+			if providerName != "brain" || operation != "sources.sync" {
+				t.Fatalf("target = %s.%s, want brain.sources.sync", providerName, operation)
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "exec-ref-config-source-sync",
+		Target:       target,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if !gotInternalConnectionAccess {
+		t.Fatal("workflow execution ref did not authorize internal connection access")
+	}
+}
+
+func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnections(t *testing.T) {
+	t.Parallel()
+
+	target := testWorkflowPluginTarget("brain", "sources.sync")
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-user-source-sync",
+		ProviderName: "temporal",
+		Target:       target,
+		SubjectID:    "user:ada",
+		SubjectKind:  string(principal.KindUser),
+		AuthSource:   "session",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "brain",
+			Operations: []string{"sources.sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+
+	var gotInternalConnectionAccess bool
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
+			gotInternalConnectionAccess = invocation.InternalConnectionAccessFromContext(ctx)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "exec-ref-user-source-sync",
+		Target:       target,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotInternalConnectionAccess {
+		t.Fatal("user-owned workflow execution ref unexpectedly authorized internal connection access")
+	}
+}
+
 func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *testing.T) {
 	t.Parallel()
 
