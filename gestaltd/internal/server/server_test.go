@@ -1112,7 +1112,7 @@ func TestHostServiceRelayRejectsCoreRoutableWithoutRuntimeVerifier(t *testing.T)
 	}
 }
 
-func TestHostServiceRelayServesRegisteredCoreServiceWithoutCoreRoutableToken(t *testing.T) {
+func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
@@ -1174,21 +1174,18 @@ func TestHostServiceRelayServesRegisteredCoreServiceWithoutCoreRoutableToken(t *
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	resp, err := proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
+	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
 		InvocationToken: invocationToken,
 		Plugin:          "slack",
 		Operation:       "events.reply",
 		Instance:        "prod",
 		IdempotencyKey:  "provider-dev-call",
 	})
-	if err != nil {
-		t.Fatalf("PluginInvoker.Invoke via registered relay: %v", err)
+	if grpcstatus.Code(err) != codes.Unavailable {
+		t.Fatalf("PluginInvoker.Invoke registered non-core relay code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
 	}
-	if resp.GetStatus() != 202 || resp.GetBody() != "relayed" {
-		t.Fatalf("PluginInvoker.Invoke response = %+v, want status=202 body=relayed", resp)
-	}
-	if call := invoker.snapshot(); call.providerName != "slack" || call.operation != "events.reply" || call.idempotencyKey != "provider-dev-call" {
-		t.Fatalf("registry invocation call = %+v, want slack.events.reply provider-dev-call", call)
+	if call := invoker.snapshot(); call.providerName != "" {
+		t.Fatalf("registered core handler was called for non-core relay: %+v", call)
 	}
 }
 

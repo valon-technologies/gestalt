@@ -10,9 +10,8 @@ import (
 type RuntimeHostServiceAccess string
 
 const (
-	RuntimeHostServiceAccessNone   RuntimeHostServiceAccess = "none"
-	RuntimeHostServiceAccessRelay  RuntimeHostServiceAccess = "relay"
-	RuntimeHostServiceAccessDirect RuntimeHostServiceAccess = "direct"
+	RuntimeHostServiceAccessNone  RuntimeHostServiceAccess = "none"
+	RuntimeHostServiceAccessRelay RuntimeHostServiceAccess = "relay"
 )
 
 type RuntimeEgressMode string
@@ -27,7 +26,6 @@ type RuntimeHostnameEgressDelivery string
 
 const (
 	RuntimeHostnameEgressDeliveryNone        RuntimeHostnameEgressDelivery = "none"
-	RuntimeHostnameEgressDeliveryRuntime     RuntimeHostnameEgressDelivery = "runtime"
 	RuntimeHostnameEgressDeliveryPublicProxy RuntimeHostnameEgressDelivery = "public_proxy"
 )
 
@@ -65,17 +63,19 @@ func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps
 func runtimeAdvertisedBehavior(support pluginruntime.Support) RuntimeBehavior {
 	return RuntimeBehavior{
 		CanHostPlugins:    support.CanHostPlugins,
-		HostServiceAccess: runtimeHostServiceAccessFromSupport(support.HostServiceAccess),
+		HostServiceAccess: RuntimeHostServiceAccessNone,
 		EgressMode:        runtimeEgressModeFromSupport(support.EgressMode),
 	}
 }
 
 func runtimeResolvedBehavior(advertised RuntimeBehavior, deps Deps) RuntimeBehavior {
 	resolved := advertised
-	if resolved.HostServiceAccess == RuntimeHostServiceAccessNone && hostCanRelayPluginRuntimeHostServices(deps) {
+	if hostCanRelayPluginRuntimeHostServices(deps) {
 		resolved.HostServiceAccess = RuntimeHostServiceAccessRelay
+	} else {
+		resolved.HostServiceAccess = RuntimeHostServiceAccessNone
 	}
-	if resolved.EgressMode == RuntimeEgressModeHostname && resolved.HostServiceAccess != RuntimeHostServiceAccessDirect && !hostCanProvideHostedHostnameEgress(deps) {
+	if resolved.EgressMode == RuntimeEgressModeHostname && !hostCanProvideHostedHostnameEgress(deps) {
 		resolved.EgressMode = RuntimeEgressModeNone
 	}
 	return resolved
@@ -84,9 +84,6 @@ func runtimeResolvedBehavior(advertised RuntimeBehavior, deps Deps) RuntimeBehav
 func runtimeHostnameEgressDelivery(required bool, resolved RuntimeBehavior) RuntimeHostnameEgressDelivery {
 	if !required || resolved.EgressMode != RuntimeEgressModeHostname {
 		return RuntimeHostnameEgressDeliveryNone
-	}
-	if resolved.HostServiceAccess == RuntimeHostServiceAccessDirect {
-		return RuntimeHostnameEgressDeliveryRuntime
 	}
 	if resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
 		return RuntimeHostnameEgressDeliveryPublicProxy
@@ -160,15 +157,6 @@ func (p HostedRuntimePlan) Validate(label string) error {
 		return fmt.Errorf("%s cannot preserve hostname-based egress required by this provider", label)
 	}
 	return nil
-}
-
-func runtimeHostServiceAccessFromSupport(src pluginruntime.HostServiceAccess) RuntimeHostServiceAccess {
-	switch src {
-	case pluginruntime.HostServiceAccessDirect:
-		return RuntimeHostServiceAccessDirect
-	default:
-		return RuntimeHostServiceAccessNone
-	}
 }
 
 func runtimeEgressModeFromSupport(src pluginruntime.EgressMode) RuntimeEgressMode {

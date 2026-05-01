@@ -514,6 +514,8 @@ func envSlice(values map[string]string) []string {
 var safeEnvKeys = []string{
 	"PATH", "HOME", "TMPDIR", "LANG", "TZ",
 	"SSL_CERT_FILE", "SSL_CERT_DIR",
+	"GESTALT_HOST_SERVICE_TLS_CA_FILE",
+	"GESTALT_HOST_SERVICE_TLS_CA_PEM",
 }
 
 func safeBaseEnv() []string {

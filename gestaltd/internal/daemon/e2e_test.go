@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -150,6 +151,7 @@ func TestE2EValidateAcceptsV3TelemetryBuiltins(t *testing.T) {
 			cfgPath := filepath.Join(dir, "config.yaml")
 			cfg := fmt.Sprintf(`apiVersion: %s
 server:
+  baseUrl: %s
   encryptionKey: valid-config-e2e-key
   providers:
     telemetry: primary
@@ -167,7 +169,7 @@ plugins:
   example:
     source:
       path: %s
-`, config.ConfigAPIVersion, tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
+`, config.ConfigAPIVersion, e2eLoopbackBaseURL(8080), tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("write config: %v", err)
 			}
@@ -193,6 +195,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: canonical-config-shapes-key
   providers:
     indexeddb: inmem
@@ -279,7 +282,7 @@ workflows:
           operation: sync
           input:
             mode: event
-`, indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -668,6 +671,7 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
 	baseConfig := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: test-key
   providers:
     indexeddb: sqlite
@@ -682,7 +686,7 @@ plugins:
   example:
     source:
       path: ./missing/manifest.yaml
-`, indexedDBManifest, filepath.Join(rootDir, "gestalt.db"))
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(rootDir, "gestalt.db"))
 	if err := os.WriteFile(baseConfigPath, []byte(baseConfig), 0o644); err != nil {
 		t.Fatalf("WriteFile base config: %v", err)
 	}
@@ -726,6 +730,7 @@ func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: test-key
   providers:
     indexeddb: sqlite
@@ -740,7 +745,7 @@ plugins:
   example:
     source:
       path: %s
-`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, pluginDir))
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, pluginDir))
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -788,6 +793,7 @@ func TestE2EValidateRejectsInvalidPluginInvokesDependency(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: test-key
   providers:
     indexeddb: sqlite
@@ -808,7 +814,7 @@ plugins:
   target:
     source:
       path: %s
-`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, callerDir), componentProviderManifestPath(t, targetDir))
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, callerDir), componentProviderManifestPath(t, targetDir))
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -861,6 +867,7 @@ paths:
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: test-key
   providers:
     indexeddb: sqlite
@@ -875,7 +882,7 @@ plugins:
   target:
     source:
       path: %s
-`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), manifestPath)
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), manifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -1672,6 +1679,7 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   encryptionKey: test-serve-e2e-key
@@ -1686,7 +1694,7 @@ providers:
   example:
     source:
       path: %s
-`, port, indexedDBManifest, uiBlock, pluginManifest)
+`, e2eLoopbackBaseURL(port), port, indexedDBManifest, uiBlock, pluginManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1717,6 +1725,7 @@ func writeServeConfigWithManagement(t *testing.T, dir string, publicPort, manage
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   management:
@@ -1734,7 +1743,7 @@ providers:
   example:
     source:
       path: %s
-`, publicPort, managementPort, indexedDBManifest, uiBlock, pluginManifest)
+`, e2eLoopbackBaseURL(publicPort), publicPort, managementPort, indexedDBManifest, uiBlock, pluginManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1758,6 +1767,10 @@ func startGestaltdWithConfigsAndArgs(t *testing.T, cfgPaths []string, args []str
 		t.Fatalf("read config: %v", err)
 	}
 	cfg := strings.Replace(string(cfgBytes), "port: 0", fmt.Sprintf("port: %d", port), 1)
+	cfg = strings.Replace(cfg, "baseUrl: "+e2eLoopbackBaseURL(0), "baseUrl: "+baseURL, 1)
+	if !strings.Contains(cfg, "server:\n  baseUrl:") {
+		cfg = strings.Replace(cfg, "server:\n", "server:\n  baseUrl: "+baseURL+"\n", 1)
+	}
 	if err := os.WriteFile(primaryCfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -1931,6 +1944,13 @@ func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
 	t.Helper()
 	return startGestaltdWithConfig(t, writeServeConfig(t, dir, 0, mountedUI))
+}
+
+func e2eLoopbackBaseURL(port int) string {
+	return (&url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort("127.0.0.1", fmt.Sprint(port)),
+	}).String()
 }
 
 func TestE2EServeAndHealthCheck(t *testing.T) {
@@ -2311,6 +2331,7 @@ func TestE2EServePluginOwnedUIWiring(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config-owned-ui.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   encryptionKey: test-plugin-owned-ui-key
@@ -2332,7 +2353,7 @@ plugins:
     ui:
       bundle: roadmap
       path: /roadmap
-`, publicPort, indexedDBManifest, mountedUI.ManifestPath, pluginManifest)
+`, publicURL, publicPort, indexedDBManifest, mountedUI.ManifestPath, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui config: %v", err)
 	}
@@ -2401,6 +2422,7 @@ func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
 
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: 0
   encryptionKey: test-cache-serve-e2e-key
@@ -2421,7 +2443,7 @@ plugins:
       path: %s
     cache:
       - session
-`, indexedDBManifest, cacheManifest, pluginManifest)
+`, e2eLoopbackBaseURL(0), indexedDBManifest, cacheManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -2499,6 +2521,7 @@ func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t
 	cfgPath := filepath.Join(dir, "config-subject-resolution.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   encryptionKey: test-http-subject-resolution-key
@@ -2523,7 +2546,7 @@ plugins:
     invokes:
       - plugin: example
         operation: request_context
-`, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, pluginManifest)
+`, baseURL, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -2749,6 +2772,7 @@ func TestE2ELockSyncPluginOwnedUI(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config-owned-ui-lock-sync.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: 0
   encryptionKey: test-lock-sync-owned-ui-key
@@ -2765,7 +2789,7 @@ plugins:
       path: %s
     ui:
       path: /roadmap
-`, indexedDBManifest, pluginManifest)
+`, e2eLoopbackBaseURL(0), indexedDBManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui lock/sync config: %v", err)
 	}
@@ -3011,6 +3035,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: valid-config-e2e-key
   providers:
     indexeddb: inmem
@@ -3028,7 +3053,7 @@ plugins:
   example:
     source:
       path: %s
-`, externalCredentialsManifest, indexedDBManifest, pluginManifest)
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write valid config: %v", err)
 	}
@@ -3043,6 +3068,7 @@ func writeInvalidValidateConfig(t *testing.T, path string) {
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   encryptionKey: invalid-config-e2e-key
   providers:
     indexeddb: inmem
@@ -3060,7 +3086,7 @@ plugins:
   example:
     source:
       path: %s
-`, externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "missing-plugin", "manifest.yaml"))
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "missing-plugin", "manifest.yaml"))
 	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write invalid config: %v", err)
 	}
@@ -3097,6 +3123,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 	overridePath := filepath.Join(overrideDir, "local.yaml")
 	baseCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   encryptionKey: test-layered-e2e-key
@@ -3116,7 +3143,7 @@ plugins:
   example:
     source:
       path: %s
-`, port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
+`, e2eLoopbackBaseURL(port), port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
 	overrideCfg := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
   providers:
@@ -3153,10 +3180,11 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	serverBlock := fmt.Sprintf(`apiVersion: gestaltd.config/v4
 server:
+  baseUrl: %s
   public:
     port: %d
   encryptionKey: test-e2e-key
-`, port)
+`, e2eLoopbackBaseURL(port), port)
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}

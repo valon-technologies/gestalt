@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
 func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap[core.Provider], deps Deps) (*providerdev.Manager, error) {
@@ -168,7 +167,7 @@ func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
 }
 
 func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string, sharedAttachmentState bool) (providerdev.RuntimeEnv, error) {
-	hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps, false)
+	hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
 	if err != nil {
 		return providerdev.RuntimeEnv{}, err
 	}
@@ -179,9 +178,10 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 		}
 	}()
 	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
+	env = withHostServiceTLSCAEnv(env, deps)
 	if sharedAttachmentState {
 		for _, hostService := range hostServices {
-			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromConfigured(hostService), deps, false, false)
+			bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromConfigured(hostService), deps, true)
 			if err != nil {
 				return providerdev.RuntimeEnv{}, err
 			}
@@ -210,21 +210,8 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 			deps.PublicHostServices.UnregisterSession(name, sessionID, hostServices...)
 		})
 	}
-	startedHostServices, err := runtimehost.StartHostServices(
-		hostServices,
-		runtimehost.WithHostServicesProviderName(name),
-		runtimehost.WithHostServicesTelemetry(deps.Telemetry),
-	)
-	if err != nil {
-		return providerdev.RuntimeEnv{}, fmt.Errorf("start host services: %w", err)
-	}
-	if startedHostServices != nil {
-		cleanup = chainCleanup(cleanup, func() {
-			_ = startedHostServices.Close()
-		})
-	}
-	for _, hostService := range startedHostServices.Bindings() {
-		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromStarted(hostService), deps, false, false)
+	for _, hostService := range hostServices {
+		bindingReq, bindingEnv, _, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostServiceBindingDescriptorFromConfigured(hostService), deps, true)
 		if err != nil {
 			return providerdev.RuntimeEnv{}, err
 		}
@@ -275,7 +262,7 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps, false)
+		hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
 		if err != nil {
 			if cleanup != nil {
 				cleanup()

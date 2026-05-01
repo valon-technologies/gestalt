@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -166,6 +167,8 @@ type Deps struct {
 	PluginRuntime         pluginruntime.Provider
 	PluginRuntimeRegistry *pluginRuntimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile  string
+	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
 }
 
@@ -780,13 +783,19 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: agent tool grants: %w", err)
 	}
+	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
+	if err != nil {
+		return nil, err
+	}
 
 	deps := Deps{
-		EncryptionKey:   encKey,
-		BaseURL:         cfg.Server.BaseURL,
-		SecretManager:   sm,
-		Telemetry:       tp,
-		AgentToolGrants: agentToolGrants,
+		EncryptionKey:        encKey,
+		BaseURL:              cfg.Server.BaseURL,
+		SecretManager:        sm,
+		Telemetry:            tp,
+		AgentToolGrants:      agentToolGrants,
+		HostServiceTLSCAFile: hostServiceTLSCAFile,
+		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
@@ -930,6 +939,24 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		Deps:                  deps,
 		pluginRuntimeRegistry: runtimeRegistry,
 	}, nil
+}
+
+func hostServiceTLSCAFromEnv() (caFile string, caPEM string, err error) {
+	if pemValue := strings.TrimSpace(os.Getenv(hostServiceTLSCAPEMEnv)); pemValue != "" {
+		return "", pemValue, nil
+	}
+	caFile = strings.TrimSpace(os.Getenv(hostServiceTLSCAFileEnv))
+	if caFile == "" {
+		return "", "", nil
+	}
+	data, err := os.ReadFile(caFile)
+	if err != nil {
+		return "", "", fmt.Errorf("bootstrap: read %s %q: %w", hostServiceTLSCAFileEnv, caFile, err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return "", "", fmt.Errorf("bootstrap: %s %q is empty", hostServiceTLSCAFileEnv, caFile)
+	}
+	return "", strings.TrimSpace(string(data)), nil
 }
 
 func (p *preparedCore) Close(ctx context.Context) error {

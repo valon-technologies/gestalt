@@ -3,7 +3,6 @@ package gestalt
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -225,13 +224,13 @@ func S3(name ...string) (*S3Client, error) {
 		if splitErr != nil {
 			return nil, fmt.Errorf("s3: parse tls target %q: %w", address, splitErr)
 		}
+		tlsConfig, tlsErr := hostServiceTLSConfig("s3", host)
+		if tlsErr != nil {
+			return nil, tlsErr
+		}
 		conn, err = grpc.DialContext(ctx, address,
 			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-					MinVersion: tls.VersionTLS12,
-					ServerName: host,
-					NextProtos: []string{"h2"},
-				})),
+				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 				grpc.WithBlock(),
 			), opts...)...,
 		)

@@ -75,7 +75,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	}
 
 	factories := NewFactoryRegistry()
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, testRuntimePublicEndpointDeps(t, Deps{}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
