@@ -123,7 +123,7 @@ still honor each event's `visibility`.
 
 ### Managed Subjects
 
-Managed subjects are service-account identities for release bots, service accounts, and shared automation. Their canonical subject ID is always `service_account:<id>`, and their upstream credentials and subject-owned API tokens use that same `credentialSubjectId`. These management routes require a browser session or an unscoped user-owned API token; scoped API tokens and subject-owned API tokens cannot manage managed subjects.
+Managed subjects are service-account identities for release bots, service accounts, and shared automation. Their canonical subject ID is always `service_account:<id>`, and their upstream credentials and subject-owned API tokens use that same subject ID. These management routes require a browser session or an unscoped user-owned API token; scoped API tokens and subject-owned API tokens cannot manage managed subjects.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -147,7 +147,7 @@ Managed subjects are service-account identities for release bots, service accoun
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens/{id}` | Revoke one subject-owned API token. Requires managed subject `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/tokens` | Revoke all API tokens owned by the managed subject. Requires managed subject `admin`. |
 
-The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's `credentialSubjectId`.
+The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's canonical subject ID.
 
 ### Operator Surfaces
 

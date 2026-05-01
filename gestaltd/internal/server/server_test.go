@@ -4227,11 +4227,10 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	stub := newStub("svc")
 	openStub := newStub("open-svc")
 	var created struct {
-		ID                  string `json:"id"`
-		SubjectID           string `json:"subjectId"`
-		Kind                string `json:"kind"`
-		DisplayName         string `json:"displayName"`
-		CredentialSubjectID string `json:"credentialSubjectId"`
+		ID          string `json:"id"`
+		SubjectID   string `json:"subjectId"`
+		Kind        string `json:"kind"`
+		DisplayName string `json:"displayName"`
 	}
 	assertManagedSubjectCredentialContext := func(label string) func(context.Context, *core.ExternalCredential) (map[string]string, error) {
 		return func(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
@@ -4375,7 +4374,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("decode created managed subject: %v", err)
 	}
 	_ = resp.Body.Close()
-	if created.ID != "reporting-bot" || created.SubjectID != "service_account:reporting-bot" || created.Kind != "service_account" || created.CredentialSubjectID != created.SubjectID {
+	if created.ID != "reporting-bot" || created.SubjectID != "service_account:reporting-bot" || created.Kind != "service_account" {
 		t.Fatalf("created managed subject = %+v", created)
 	}
 	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{

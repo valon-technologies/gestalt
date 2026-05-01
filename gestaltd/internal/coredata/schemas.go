@@ -58,7 +58,6 @@ var ManagedSubjectsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "kind", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "display_name", Type: indexeddb.TypeString},
 		{Name: "description", Type: indexeddb.TypeString},
-		{Name: "credential_subject_id", Type: indexeddb.TypeString},
 		{Name: "created_by_subject_id", Type: indexeddb.TypeString},
 		{Name: "deleted", Type: indexeddb.TypeBool},
 		{Name: "created_at", Type: indexeddb.TypeTime},
