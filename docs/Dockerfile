@@ -17,6 +17,10 @@ server {
         try_files $uri $uri.html $uri/ =404;
     }
 
+    location ~ ^/reference/(python|typescript|go|rust)-sdk(\.html)?$ {
+        return 301 /reference/sdk/$1;
+    }
+
     error_page 404 /404.html;
 }
 EOF
