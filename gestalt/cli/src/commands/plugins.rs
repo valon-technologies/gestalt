@@ -76,10 +76,7 @@ fn plugin_status(item: &serde_json::Value) -> String {
     item["status"]
         .as_str()
         .map(str::to_string)
-        .unwrap_or_else(|| match item["connected"].as_bool() {
-            Some(true) => "ready".to_string(),
-            _ => "needs_user_connection".to_string(),
-        })
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 fn plugin_connections(item: &serde_json::Value) -> String {
@@ -94,22 +91,14 @@ fn plugin_connections(item: &serde_json::Value) -> String {
                 let status = connection["status"]
                     .as_str()
                     .map(str::to_string)
-                    .unwrap_or_else(|| match connection["connected"].as_bool() {
-                        Some(true) => "ready".to_string(),
-                        _ => "needs_user_connection".to_string(),
-                    });
+                    .unwrap_or_else(|| "unknown".to_string());
                 format!("{name}: {status}")
             })
             .collect::<Vec<_>>()
             .join(", ");
     }
 
-    let instance_count = item["instances"].as_array().map(Vec::len).unwrap_or(0);
-    match instance_count {
-        0 => "-".to_string(),
-        1 => "1 instance".to_string(),
-        n => format!("{n} instances"),
-    }
+    "-".to_string()
 }
 
 pub fn disconnect(

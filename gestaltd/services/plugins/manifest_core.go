@@ -16,6 +16,7 @@ func ConnectionParamDefsFromManifest(defs map[string]providermanifestv1.Provider
 		out[name] = core.ConnectionParamDef{
 			Required:    def.Required,
 			Description: def.Description,
+			Default:     def.Default,
 			From:        def.From,
 			Field:       def.Field,
 		}

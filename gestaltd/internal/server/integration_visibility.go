@@ -23,7 +23,10 @@ func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info inte
 	if principal.IsNonUserPrincipal(p) {
 		return false
 	}
-	return info.Connected || len(info.AuthTypes) > 0 || len(info.Connections) > 0
+	return info.CredentialState == credentialStateConnected ||
+		info.CredentialState == credentialStateConfigured ||
+		info.CredentialState == credentialStateNotRequired ||
+		len(info.Connections) > 0
 }
 
 func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider) bool {

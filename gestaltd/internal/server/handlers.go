@@ -60,41 +60,38 @@ type credentialFieldInfo struct {
 }
 
 type connectionDefInfo struct {
-	DisplayName      string                `json:"displayName,omitempty"`
-	Name             string                `json:"name"`
-	Mode             string                `json:"mode,omitempty"`
-	Connected        bool                  `json:"connected"`
-	Connectable      bool                  `json:"connectable"`
-	AuthTypes        []string              `json:"authTypes"`
-	CredentialFields []credentialFieldInfo `json:"credentialFields"`
-	Status           string                `json:"status"`
-	CredentialState  string                `json:"credentialState"`
-	HealthState      string                `json:"healthState"`
-	Actions          []string              `json:"actions"`
-	CredentialMode   string                `json:"credentialMode"`
-	OwnerKind        string                `json:"ownerKind"`
-	Disconnectable   bool                  `json:"disconnectable"`
-	Instances        []instanceInfo        `json:"instances"`
-	StatusCode       string                `json:"statusCode,omitempty"`
-	StatusReason     string                `json:"statusReason,omitempty"`
-}
-
-type integrationInfo struct {
-	Name             string                         `json:"name"`
 	DisplayName      string                         `json:"displayName,omitempty"`
-	Description      string                         `json:"description,omitempty"`
-	IconSVG          string                         `json:"iconSvg,omitempty"`
-	MountedPath      string                         `json:"mountedPath,omitempty"`
-	Connected        bool                           `json:"connected"`
-	Instances        []instanceInfo                 `json:"instances"`
+	Name             string                         `json:"name"`
+	Mode             string                         `json:"mode,omitempty"`
 	AuthTypes        []string                       `json:"authTypes"`
-	ConnectionParams map[string]connectionParamInfo `json:"connectionParams"`
-	Connections      []connectionDefInfo            `json:"connections"`
+	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
 	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
 	Status           string                         `json:"status"`
 	CredentialState  string                         `json:"credentialState"`
 	HealthState      string                         `json:"healthState"`
 	Actions          []string                       `json:"actions"`
+	CredentialMode   string                         `json:"credentialMode"`
+	OwnerKind        string                         `json:"ownerKind"`
+	Instances        []instanceInfo                 `json:"instances"`
+	StatusCode       string                         `json:"statusCode,omitempty"`
+	StatusReason     string                         `json:"statusReason,omitempty"`
+
+	connected      bool
+	connectable    bool
+	disconnectable bool
+}
+
+type integrationInfo struct {
+	Name            string              `json:"name"`
+	DisplayName     string              `json:"displayName,omitempty"`
+	Description     string              `json:"description,omitempty"`
+	IconSVG         string              `json:"iconSvg,omitempty"`
+	MountedPath     string              `json:"mountedPath,omitempty"`
+	Connections     []connectionDefInfo `json:"connections"`
+	Status          string              `json:"status"`
+	CredentialState string              `json:"credentialState"`
+	HealthState     string              `json:"healthState"`
+	Actions         []string            `json:"actions"`
 }
 
 type connectionParamInfo struct {
@@ -187,19 +184,14 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			surfaceProv = override
 		}
 		info := integrationInfo{
-			Name:             name,
-			DisplayName:      surfaceProv.DisplayName(),
-			Description:      surfaceProv.Description(),
-			Connected:        false,
-			Instances:        []instanceInfo{},
-			AuthTypes:        []string{},
-			ConnectionParams: map[string]connectionParamInfo{},
-			Connections:      []connectionDefInfo{},
-			CredentialFields: []credentialFieldInfo{},
-			Status:           connectionStatusUnknown,
-			CredentialState:  credentialStateUnknown,
-			HealthState:      healthStateUnknown,
-			Actions:          []string{},
+			Name:            name,
+			DisplayName:     surfaceProv.DisplayName(),
+			Description:     surfaceProv.Description(),
+			Connections:     []connectionDefInfo{},
+			Status:          connectionStatusUnknown,
+			CredentialState: credentialStateUnknown,
+			HealthState:     healthStateUnknown,
+			Actions:         []string{},
 		}
 		if cat := surfaceProv.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
@@ -208,9 +200,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
 		instances := connected[name]
-		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
-		s.populateIntegrationSettings(&info, prov, instances, p)
-		s.applyIntegrationConnectionStatus(&info, prov, instances, p)
+		authTypes := s.populateIntegrationSettings(&info, prov, instances, p)
+		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
 			continue
