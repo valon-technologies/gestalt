@@ -1,4 +1,4 @@
-package pluginvalidation
+package plugins
 
 import (
 	"context"
@@ -9,41 +9,32 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/openapi"
 )
 
 func ValidateEffectiveManifest(ctx context.Context, name, manifestPath string, manifest *providermanifestv1.Manifest) error {
-	return pluginservice.ValidateEffectiveCatalog(ctx, name, FromManifest(manifestPath, manifest))
+	return ValidateEffectiveCatalog(ctx, name, ValidationPluginFromManifest(manifestPath, manifest))
 }
 
-func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *config.Config) error {
-	return pluginservice.ValidateEffectiveCatalogsAndDependencies(ctx, FromConfig(cfg))
-}
-
-func ValidateDependencies(ctx context.Context, cfg *config.Config) error {
-	return pluginservice.ValidateDependencies(ctx, FromConfig(cfg))
-}
-
-func FromConfig(cfg *config.Config) *pluginservice.ValidationConfig {
+func ValidationConfigFromConfig(cfg *config.Config) *ValidationConfig {
 	if cfg == nil {
 		return nil
 	}
-	validation := &pluginservice.ValidationConfig{
-		Plugins: make(map[string]*pluginservice.ValidationPlugin, len(cfg.Plugins)),
+	validation := &ValidationConfig{
+		Plugins: make(map[string]*ValidationPlugin, len(cfg.Plugins)),
 	}
 	for name, entry := range cfg.Plugins {
-		validation.Plugins[name] = FromProviderEntry(entry)
+		validation.Plugins[name] = ValidationPluginFromProviderEntry(entry)
 	}
 	return validation
 }
 
-func FromProviderEntry(entry *config.ProviderEntry) *pluginservice.ValidationPlugin {
+func ValidationPluginFromProviderEntry(entry *config.ProviderEntry) *ValidationPlugin {
 	if entry == nil {
 		return nil
 	}
-	return &pluginservice.ValidationPlugin{
+	return &ValidationPlugin{
 		Manifest:            entry.ResolvedManifest,
 		ManifestPath:        entry.ResolvedManifestPath,
 		AllowedOperations:   entry.AllowedOperations,
@@ -54,34 +45,34 @@ func FromProviderEntry(entry *config.ProviderEntry) *pluginservice.ValidationPlu
 	}
 }
 
-func FromManifest(manifestPath string, manifest *providermanifestv1.Manifest) *pluginservice.ValidationPlugin {
-	return FromProviderEntry(&config.ProviderEntry{
+func ValidationPluginFromManifest(manifestPath string, manifest *providermanifestv1.Manifest) *ValidationPlugin {
+	return ValidationPluginFromProviderEntry(&config.ProviderEntry{
 		ResolvedManifestPath: manifestPath,
 		ResolvedManifest:     manifest,
 	})
 }
 
-func invocationDependencies(dependencies []config.PluginInvocationDependency) []pluginservice.InvocationDependency {
+func invocationDependencies(dependencies []config.PluginInvocationDependency) []InvocationDependency {
 	if len(dependencies) == 0 {
 		return nil
 	}
-	result := make([]pluginservice.InvocationDependency, 0, len(dependencies))
+	result := make([]InvocationDependency, 0, len(dependencies))
 	for _, dependency := range dependencies {
-		result = append(result, pluginservice.InvocationDependency{
+		result = append(result, InvocationDependency{
 			Plugin:    dependency.Plugin,
 			Operation: dependency.Operation,
-			Surface:   pluginservice.SpecSurface(dependency.Surface),
+			Surface:   SpecSurface(dependency.Surface),
 		})
 	}
 	return result
 }
 
-func surfaceURLOverrides(entry *config.ProviderEntry) map[pluginservice.SpecSurface]string {
+func surfaceURLOverrides(entry *config.ProviderEntry) map[SpecSurface]string {
 	if entry == nil {
 		return nil
 	}
-	overrides := make(map[pluginservice.SpecSurface]string)
-	for _, surface := range []pluginservice.SpecSurface{pluginservice.SpecSurfaceGraphQL, pluginservice.SpecSurfaceMCP} {
+	overrides := make(map[SpecSurface]string)
+	for _, surface := range []SpecSurface{SpecSurfaceGraphQL, SpecSurfaceMCP} {
 		if url := config.ProviderSurfaceURLOverride(entry, config.SpecSurface(surface)); url != "" {
 			overrides[surface] = url
 		}
@@ -92,7 +83,7 @@ func surfaceURLOverrides(entry *config.ProviderEntry) map[pluginservice.SpecSurf
 	return overrides
 }
 
-func staticCatalogReader(entry *config.ProviderEntry) pluginservice.StaticCatalogReader {
+func staticCatalogReader(entry *config.ProviderEntry) StaticCatalogReader {
 	if entry == nil || entry.ResolvedManifestPath == "" {
 		return nil
 	}
@@ -102,9 +93,9 @@ func staticCatalogReader(entry *config.ProviderEntry) pluginservice.StaticCatalo
 	}
 }
 
-func loadAPICatalog(ctx context.Context, name string, surface pluginservice.SpecSurface, specURL string, allowed map[string]*pluginservice.OperationOverride) (*catalog.Catalog, error) {
+func loadAPICatalog(ctx context.Context, name string, surface SpecSurface, specURL string, allowed map[string]*OperationOverride) (*catalog.Catalog, error) {
 	switch surface {
-	case pluginservice.SpecSurfaceOpenAPI:
+	case SpecSurfaceOpenAPI:
 		def, err := openapi.LoadDefinition(ctx, name, specURL, allowed)
 		if err != nil {
 			return nil, err
