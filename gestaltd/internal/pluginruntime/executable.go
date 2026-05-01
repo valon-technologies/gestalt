@@ -226,24 +226,6 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 	return nil
 }
 
-func (p *executableProvider) BindHostService(ctx context.Context, req BindHostServiceRequest) (*HostServiceBinding, error) {
-	resp, err := p.runtime.BindHostService(ctx, &proto.BindPluginRuntimeHostServiceRequest{
-		SessionId: req.SessionID,
-		EnvVar:    req.EnvVar,
-		Relay:     hostServiceRelayToProto(req.Relay),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("bind runtime host service: %w", err)
-	}
-	relay := hostServiceRelayFromProto(resp.GetRelay())
-	return &HostServiceBinding{
-		ID:        resp.GetId(),
-		SessionID: resp.GetSessionId(),
-		EnvVar:    resp.GetEnvVar(),
-		Relay:     relay,
-	}, nil
-}
-
 func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
 	resp, err := p.runtime.StartPlugin(ctx, &proto.StartHostedPluginRequest{
 		SessionId:     req.SessionID,
@@ -416,22 +398,4 @@ func cloneTimePtr(src *time.Time) *time.Time {
 	}
 	out := src.UTC()
 	return &out
-}
-
-func hostServiceRelayToProto(src HostServiceRelay) *proto.PluginRuntimeHostServiceRelay {
-	if src.DialTarget == "" {
-		return nil
-	}
-	return &proto.PluginRuntimeHostServiceRelay{
-		DialTarget: src.DialTarget,
-	}
-}
-
-func hostServiceRelayFromProto(src *proto.PluginRuntimeHostServiceRelay) HostServiceRelay {
-	if src == nil {
-		return HostServiceRelay{}
-	}
-	return HostServiceRelay{
-		DialTarget: src.GetDialTarget(),
-	}
 }

@@ -76,8 +76,7 @@ The runtime surface is intentionally small but lifecycle-oriented:
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
 | `ListSessions` | Return sessions currently known to the runtime backend. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
-| `BindHostService` | Bind a host-local socket into the runtime session. |
-| `StartPlugin` | Start the hosted plugin and return a host-reachable dial target. |
+| `StartPlugin` | Start the hosted plugin with the provided env and return a host-reachable dial target. |
 
 In addition to the runtime-specific RPCs, the provider still implements the
 normal provider lifecycle surface, including `Configure`.
@@ -144,15 +143,6 @@ the exported provider for the selected language.
         return &emptypb.Empty{}, nil
     }
 
-    func (p *Provider) BindHostService(context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
-        return &proto.PluginRuntimeHostServiceBinding{
-            Id:        "binding-1",
-            SessionId: req.GetSessionId(),
-            EnvVar:    req.GetEnvVar(),
-            Relay:     req.GetRelay(),
-        }, nil
-    }
-
     func (p *Provider) StartPlugin(context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
         return &proto.HostedPlugin{
             Id:         "plugin-1",
@@ -191,14 +181,6 @@ the exported provider for the selected language.
 
         def StopSession(self, request, context):
             return empty_pb2.Empty()
-
-        def BindHostService(self, request, context):
-            return pb.PluginRuntimeHostServiceBinding(
-                id="binding-1",
-                session_id=request.session_id,
-                env_var=request.env_var,
-                relay=request.relay,
-            )
 
         def StartPlugin(self, request, context):
             return pb.HostedPlugin(
@@ -277,15 +259,9 @@ the exported provider for the selected language.
 
         async fn bind_host_service(
             &self,
-            request: Request<proto::BindPluginRuntimeHostServiceRequest>,
+            _request: Request<proto::BindPluginRuntimeHostServiceRequest>,
         ) -> Result<Response<proto::PluginRuntimeHostServiceBinding>, Status> {
-            let req = request.into_inner();
-            Ok(Response::new(proto::PluginRuntimeHostServiceBinding {
-                id: "binding-1".into(),
-                session_id: req.session_id,
-                env_var: req.env_var,
-                relay: req.relay,
-            }))
+            Err(Status::unimplemented("BindHostService is a legacy RPC"))
         }
 
         async fn start_plugin(
@@ -337,15 +313,6 @@ the exported provider for the selected language.
 
       async stopSession() {},
 
-      bindHostService(request) {
-        return {
-          id: "binding-1",
-          sessionId: request.sessionId,
-          envVar: request.envVar,
-          ...(request.relay ? { relay: request.relay } : {}),
-        };
-      },
-
       startPlugin(request) {
         return {
           id: "plugin-1",
@@ -381,10 +348,9 @@ network controls at firewall or CIDR granularity, advertise `cidr`.
 Hosted runtime providers should run provider images rather than expect Gestalt
 to upload a provider bundle into the session. The `StartSession` request carries
 the selected image, template, metadata, and optional `imagePullAuth`
-configuration. `StartPlugin` then carries the manifest-derived `command` and
-`args` to execute inside the image. Execute those values exactly as provided by
-the host after applying any environment variables, host-service bindings, and
-egress policy in the request.
+configuration. `StartPlugin` then carries the manifest-derived `command`,
+`args`, environment variables, and egress policy to apply inside the image.
+Execute those values exactly as provided by the host.
 
 New providers should populate `support`. That grouped support shape is the
 runtime contract operators see in inspection.
@@ -393,12 +359,17 @@ runtime contract operators see in inspection.
 
 The critical design point is that `StartPlugin` is **not** the whole runtime
 API. Gestalt needs an explicit session lifecycle because it may need to create
-the session, wait until it is ready, bind host-local services into it, and only
-then start the plugin.
+the session, wait until it is ready, register host-local services for public
+relay access, and only then start the plugin.
 
-	That is why `BindHostService` exists separately from `StartPlugin`. A binding
-	is relay-backed: the provider receives a scoped dial target and the hosted
-	plugin talks back to `gestaltd` through the host-service relay.
+Current Gestalt releases pass host-service relay configuration directly in the
+`StartPlugin` env map. For each configured host service, the socket env var
+contains a public `tls://host:port` relay target and the corresponding
+`<ENV>_TOKEN` var contains the scoped relay token. Runtime providers should pass
+those env vars through to the plugin process unchanged.
+
+`BindHostService` remains in the proto surface for compatibility with older SDKs
+and runtime providers, but current `gestaltd` does not call it.
 
 ## Dial targets
 

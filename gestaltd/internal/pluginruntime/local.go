@@ -35,16 +35,8 @@ type localSession struct {
 	rootDir  string
 	state    SessionState
 	metadata map[string]string
-	bindings []localBinding
 	plugin   *localPlugin
 	logSeq   uint64
-}
-
-type localBinding struct {
-	id        string
-	envVar    string
-	envTarget string
-	relay     HostServiceRelay
 }
 
 type localPlugin struct {
@@ -204,40 +196,6 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 	return errors.Join(errs...)
 }
 
-func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRequest) (*HostServiceBinding, error) {
-	if p == nil {
-		return nil, fmt.Errorf("plugin runtime is not configured")
-	}
-	if req.EnvVar == "" {
-		return nil, fmt.Errorf("host service env var is required")
-	}
-
-	relay, envTarget, err := normalizeHostServiceBinding(req)
-	if err != nil {
-		return nil, err
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	session, err := p.sessionLocked(req.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	binding := localBinding{
-		id:        p.newID("binding"),
-		envVar:    req.EnvVar,
-		envTarget: envTarget,
-		relay:     relay,
-	}
-	session.bindings = append(session.bindings, binding)
-	return &HostServiceBinding{
-		ID:        binding.id,
-		SessionID: session.id,
-		EnvVar:    binding.envVar,
-		Relay:     binding.relay,
-	}, nil
-}
-
 func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
 	if p == nil {
 		return nil, fmt.Errorf("plugin runtime is not configured")
@@ -256,10 +214,6 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		p.mu.Unlock()
 		return nil, fmt.Errorf("plugin runtime session %q already has a running plugin", req.SessionID)
 	}
-	boundEnv := make(map[string]string, len(session.bindings))
-	for _, binding := range session.bindings {
-		boundEnv[binding.envVar] = binding.envTarget
-	}
 	session.state = SessionStateRunning
 	rootDir := session.rootDir
 	p.mu.Unlock()
@@ -267,9 +221,6 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 	env := cloneStringMap(req.Env)
 	if env == nil {
 		env = map[string]string{}
-	}
-	for key, value := range boundEnv {
-		env[key] = value
 	}
 
 	stdout := io.Writer(nil)
@@ -402,20 +353,4 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
-}
-
-func normalizeHostServiceBinding(req BindHostServiceRequest) (HostServiceRelay, string, error) {
-	if relay := req.Relay; relay.DialTarget != "" {
-		network, _, err := dialTarget(relay.DialTarget)
-		if err != nil {
-			return HostServiceRelay{}, "", fmt.Errorf("host service relay: %w", err)
-		}
-		switch network {
-		case "tcp", "tls":
-			return relay, relay.DialTarget, nil
-		default:
-			return HostServiceRelay{}, "", fmt.Errorf("host service relay network %q is not supported; expected tcp or tls", network)
-		}
-	}
-	return HostServiceRelay{}, "", fmt.Errorf("host service relay is required")
 }

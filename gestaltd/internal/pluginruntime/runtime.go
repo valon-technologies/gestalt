@@ -75,23 +75,6 @@ type StopSessionRequest struct {
 	SessionID string
 }
 
-type HostServiceRelay struct {
-	DialTarget string
-}
-
-type BindHostServiceRequest struct {
-	SessionID string
-	EnvVar    string
-	Relay     HostServiceRelay
-}
-
-type HostServiceBinding struct {
-	ID        string
-	SessionID string
-	EnvVar    string
-	Relay     HostServiceRelay
-}
-
 // StartPluginRequest describes the plugin process to launch inside a runtime
 // session. Implementations own allocation and injection of the plugin's
 // provider listener endpoint and must return a host-reachable dial target in
@@ -136,7 +119,6 @@ type Provider interface {
 	StartSession(ctx context.Context, req StartSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
 	StopSession(ctx context.Context, req StopSessionRequest) error
-	BindHostService(ctx context.Context, req BindHostServiceRequest) (*HostServiceBinding, error)
 	StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error)
 	Close() error
 }

@@ -207,8 +207,8 @@ type capturingPluginRuntime struct {
 
 	mu                  sync.Mutex
 	startRequests       []pluginruntime.StartSessionRequest
+	startPluginRequests []pluginruntime.StartPluginRequest
 	startTimes          []time.Time
-	bindRequests        []pluginruntime.BindHostServiceRequest
 	sessionLifecycles   map[string]*pluginruntime.SessionLifecycle
 	lifecycleForSession func(index int) *pluginruntime.SessionLifecycle
 	startErrForSession  func(index int) error
@@ -283,14 +283,18 @@ func (r *capturingPluginRuntime) StopSession(ctx context.Context, req pluginrunt
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
-	r.mu.Lock()
-	r.bindRequests = append(r.bindRequests, cloneBindHostServiceRequest(req))
-	r.mu.Unlock()
-	return r.provider.BindHostService(ctx, req)
-}
-
 func (r *capturingPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	r.mu.Lock()
+	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
+		SessionID:  req.SessionID,
+		PluginName: req.PluginName,
+		Command:    req.Command,
+		Args:       slices.Clone(req.Args),
+		Env:        cloneRuntimeMetadata(req.Env),
+		Egress:     cloneRuntimeEgressPolicy(req.Egress),
+		HostBinary: req.HostBinary,
+	})
+	r.mu.Unlock()
 	return r.provider.StartPlugin(ctx, req)
 }
 
@@ -329,12 +333,20 @@ func (r *capturingPluginRuntime) startSessionTimes() []time.Time {
 	return append([]time.Time(nil), r.startTimes...)
 }
 
-func (r *capturingPluginRuntime) bindHostServiceRequests() []pluginruntime.BindHostServiceRequest {
+func (r *capturingPluginRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]pluginruntime.BindHostServiceRequest, len(r.bindRequests))
-	for i, req := range r.bindRequests {
-		out[i] = cloneBindHostServiceRequest(req)
+	out := make([]pluginruntime.StartPluginRequest, len(r.startPluginRequests))
+	for i, req := range r.startPluginRequests {
+		out[i] = pluginruntime.StartPluginRequest{
+			SessionID:  req.SessionID,
+			PluginName: req.PluginName,
+			Command:    req.Command,
+			Args:       slices.Clone(req.Args),
+			Env:        cloneRuntimeMetadata(req.Env),
+			Egress:     cloneRuntimeEgressPolicy(req.Egress),
+			HostBinary: req.HostBinary,
+		}
 	}
 	return out
 }
@@ -369,13 +381,11 @@ func cloneTestTime(src *time.Time) *time.Time {
 }
 
 type capturingBundlePluginRuntime struct {
-	provider      *pluginruntime.LocalProvider
-	support       pluginruntime.Support
-	bindHostCalls atomic.Int32
-	fakeHosted    bool
+	provider   *pluginruntime.LocalProvider
+	support    pluginruntime.Support
+	fakeHosted bool
 
 	mu                  sync.Mutex
-	bindRequests        []pluginruntime.BindHostServiceRequest
 	startPluginRequests []pluginruntime.StartPluginRequest
 	sessionLifecycles   map[string]*pluginruntime.SessionLifecycle
 	fakePlugins         map[string]*fakeHostedPluginServer
@@ -435,14 +445,6 @@ func (r *capturingBundlePluginRuntime) StopSession(ctx context.Context, req plug
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *capturingBundlePluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
-	r.bindHostCalls.Add(1)
-	r.mu.Lock()
-	r.bindRequests = append(r.bindRequests, cloneBindHostServiceRequest(req))
-	r.mu.Unlock()
-	return r.provider.BindHostService(ctx, req)
-}
-
 func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	r.mu.Lock()
 	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
@@ -477,18 +479,6 @@ func (r *capturingBundlePluginRuntime) Close() error {
 
 func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	env := cloneRuntimeMetadata(req.Env)
-	r.mu.Lock()
-	for _, binding := range r.bindRequests {
-		if binding.SessionID != req.SessionID {
-			continue
-		}
-		if env == nil {
-			env = map[string]string{}
-		}
-		env[binding.EnvVar] = binding.Relay.DialTarget
-	}
-	r.mu.Unlock()
-
 	dir, err := pluginservice.NewPluginTempDir("gstp-fake-")
 	if err != nil {
 		return nil, fmt.Errorf("create fake hosted plugin dir: %w", err)
@@ -1317,16 +1307,6 @@ func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime
 	return out
 }
 
-func (r *capturingBundlePluginRuntime) bindHostServiceRequests() []pluginruntime.BindHostServiceRequest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]pluginruntime.BindHostServiceRequest, len(r.bindRequests))
-	for i, req := range r.bindRequests {
-		out[i] = cloneBindHostServiceRequest(req)
-	}
-	return out
-}
-
 func (r *capturingBundlePluginRuntime) setSessionLifecycle(sessionID string, lifecycle *pluginruntime.SessionLifecycle) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1381,32 +1361,13 @@ func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRe
 	}
 }
 
-func cloneBindHostServiceRequest(req pluginruntime.BindHostServiceRequest) pluginruntime.BindHostServiceRequest {
-	return pluginruntime.BindHostServiceRequest{
-		SessionID: req.SessionID,
-		EnvVar:    req.EnvVar,
-		Relay: pluginruntime.HostServiceRelay{
-			DialTarget: req.Relay.DialTarget,
-		},
-	}
-}
-
-func assertHostServiceRelayBindings(t *testing.T, requests []pluginruntime.BindHostServiceRequest, wantEnvVar string) {
+func assertStartPluginRelayEnv(t *testing.T, req pluginruntime.StartPluginRequest, wantEnvVar string) {
 	t.Helper()
-	if len(requests) == 0 {
-		t.Fatal("BindHostService requests = 0, want at least one relay binding")
+	if got := req.Env[wantEnvVar]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartPlugin env %s = %q, want tls:// public relay target", wantEnvVar, got)
 	}
-	foundWantEnv := false
-	for _, req := range requests {
-		if !strings.HasPrefix(req.Relay.DialTarget, "tls://") {
-			t.Fatalf("BindHostService(%s) Relay.DialTarget = %q, want tls:// public relay target", req.EnvVar, req.Relay.DialTarget)
-		}
-		if req.EnvVar == wantEnvVar {
-			foundWantEnv = true
-		}
-	}
-	if !foundWantEnv {
-		t.Fatalf("BindHostService env vars = %+v, want %q", requests, wantEnvVar)
+	if got := req.Env[wantEnvVar+"_TOKEN"]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing non-empty %s_TOKEN", wantEnvVar)
 	}
 }
 
@@ -1437,10 +1398,6 @@ func (r *slowStopPluginRuntime) StopSession(ctx context.Context, req pluginrunti
 	return ctx.Err()
 }
 
-func (r *slowStopPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
-	return r.inner.BindHostService(ctx, req)
-}
-
 func (r *slowStopPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	return r.inner.StartPlugin(ctx, req)
 }
@@ -1449,12 +1406,12 @@ func (r *slowStopPluginRuntime) Close() error {
 	return r.inner.Close()
 }
 
-type failingBindSlowStopPluginRuntime struct {
+type failingStartPluginSlowStopPluginRuntime struct {
 	slowStopPluginRuntime
 	err error
 }
 
-func (r *failingBindSlowStopPluginRuntime) BindHostService(context.Context, pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+func (r *failingStartPluginSlowStopPluginRuntime) StartPlugin(context.Context, pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	return nil, r.err
 }
 
@@ -1481,10 +1438,6 @@ func (r *staticCapabilityPluginRuntime) GetSession(ctx context.Context, req plug
 
 func (r *staticCapabilityPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
 	return r.inner.StopSession(ctx, req)
-}
-
-func (r *staticCapabilityPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
-	return r.inner.BindHostService(ctx, req)
 }
 
 func (r *staticCapabilityPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
@@ -5464,9 +5417,9 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *t
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &failingBindSlowStopPluginRuntime{
+	runtimeProvider := &failingStartPluginSlowStopPluginRuntime{
 		slowStopPluginRuntime: slowStopPluginRuntime{inner: pluginruntime.NewLocalProvider()},
-		err:                   fmt.Errorf("bind failed"),
+		err:                   fmt.Errorf("start failed"),
 	}
 	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
@@ -5493,8 +5446,8 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *t
 
 	select {
 	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "bind host service") {
-			t.Fatalf("buildProvidersStrict error = %v, want bind host service failure", err)
+		if err == nil || !strings.Contains(err.Error(), "start failed") {
+			t.Fatalf("buildProvidersStrict error = %v, want hosted plugin start failure", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("buildProvidersStrict hung waiting for hosted runtime shutdown")
@@ -5715,9 +5668,6 @@ func TestPluginRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	}
 	if !slices.Equal(req.Args, []string{"provider"}) {
 		t.Fatalf("StartPlugin Args = %#v, want configured args", req.Args)
-	}
-	if got := runtimeProvider.bindHostCalls.Load(); got != 0 {
-		t.Fatalf("BindHostService calls = %d, want 0", got)
 	}
 
 	if err := CloseProviders(providers); err != nil {
@@ -6008,24 +5958,12 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 		t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", s3service.SocketTokenEnv(""), got, found)
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 2 {
-		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
-	}
-	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-			t.Fatalf("BindHostService(%s) relay target = %q, want %q", req.EnvVar, got, "tls://gestalt.example.test:443")
-		}
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
 	for _, binding := range []string{"", "main"} {
-		if got := startRequests[0].Env[s3service.SocketTokenEnv(binding)]; got == "" {
-			t.Fatalf("StartPlugin env should include s3 relay token %s", s3service.SocketTokenEnv(binding))
-		}
+		assertStartPluginRelayEnv(t, startRequests[0], s3service.SocketEnv(binding))
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
@@ -6328,24 +6266,11 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 		t.Fatalf("plugin authorization token env %s = (%q, %v), want non-empty token", authorizationservice.SocketTokenEnv(), got, found)
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if bindRequests[0].EnvVar != authorizationservice.DefaultSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, authorizationservice.DefaultSocketEnv)
-	}
-	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[authorizationservice.SocketTokenEnv()]; got == "" {
-		t.Fatal("StartPlugin env should include the authorization relay token")
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], authorizationservice.DefaultSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -6446,21 +6371,11 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 		t.Fatal("plugin indexeddb socket token env should be set for the public relay")
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-		t.Fatalf("BindHostService relay target = %q, want %q", got, "tls://gestalt.example.test:443")
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[indexeddbservice.SocketTokenEnv("")]; got == "" {
-		t.Fatal("StartPlugin env should include the IndexedDB relay token")
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6583,12 +6498,8 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	if got := startRequests[0].Env[indexeddbservice.SocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the IndexedDB relay token")
 	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
+	if got := startRequests[0].Env[indexeddbservice.DefaultSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartPlugin env %s = %q, want tls relay target", indexeddbservice.DefaultSocketEnv, got)
 	}
 
 	expiredAt := time.Now().Add(-time.Minute)
@@ -6701,24 +6612,12 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 		}
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 2 {
-		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
-	}
-	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-			t.Fatalf("BindHostService(%s) relay target = %q, want %q", req.EnvVar, got, "tls://gestalt.example.test:443")
-		}
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
 	for _, binding := range []string{"session", "rate_limit"} {
-		if got := startRequests[0].Env[cacheservice.SocketTokenEnv(binding)]; got == "" {
-			t.Fatalf("StartPlugin env should include cache relay token %s", cacheservice.SocketTokenEnv(binding))
-		}
+		assertStartPluginRelayEnv(t, startRequests[0], cacheservice.SocketEnv(binding))
 	}
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
@@ -6839,18 +6738,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("")]; got == "" {
-		t.Fatal("StartPlugin env should include the cache relay token")
-	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 2 {
-		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
-	}
-	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-			t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", req.EnvVar, got)
-		}
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], cacheservice.DefaultSocketEnv)
 }
 
 func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -6981,21 +6869,8 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[s3service.SocketTokenEnv("")]; got == "" {
-		t.Fatal("StartPlugin env should include the default s3 relay token")
-	}
-	if got := startRequests[0].Env[s3service.SocketTokenEnv("main")]; got == "" {
-		t.Fatal("StartPlugin env should include the named s3 relay token")
-	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 2 {
-		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
-	}
-	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-			t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", req.EnvVar, got)
-		}
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], s3service.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], s3service.SocketEnv("main"))
 }
 
 func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -7171,21 +7046,9 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[plugininvokerservice.SocketTokenEnv()]; got == "" {
-		t.Fatal("StartPlugin env should include the plugin invoker relay token")
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], plugininvokerservice.DefaultSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
-	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if bindRequests[0].EnvVar != plugininvokerservice.DefaultSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, plugininvokerservice.DefaultSocketEnv)
-	}
-	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
 	}
 }
 
@@ -7271,24 +7134,11 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", workflowservice.ManagerSocketTokenEnv(), got, found)
 	}
 
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if bindRequests[0].EnvVar != workflowservice.DefaultManagerSocketEnv {
-		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, workflowservice.DefaultManagerSocketEnv)
-	}
-	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
-	}
-
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[workflowservice.ManagerSocketTokenEnv()]; got == "" {
-		t.Fatal("StartPlugin env should include the workflow manager relay token")
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultManagerSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -7467,20 +7317,12 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 	if got := startRequests[0].Env[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].SessionID {
 		t.Fatalf("StartPlugin %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].SessionID)
 	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	for _, req := range bindRequests {
-		if req.EnvVar != runtimehost.DefaultRuntimeLogHostSocketEnv {
-			continue
-		}
-		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-			t.Fatalf("runtime log host relay target = %q, want public relay target", got)
-		}
-		if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; got == "" {
-			t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
-		}
-		return
+	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv]; got != "tls://gestalt.example.test:443" {
+		t.Fatalf("runtime log host relay target = %q, want public relay target", got)
 	}
-	t.Fatalf("BindHostService requests missing %s: %#v", runtimehost.DefaultRuntimeLogHostSocketEnv, bindRequests)
+	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; got == "" {
+		t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
+	}
 }
 
 type runtimeRelayTestHandlerOption func(*runtimeRelayTestHandlerConfig)
@@ -7997,16 +7839,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[workflowservice.ManagerSocketTokenEnv()]; got == "" {
-		t.Fatal("StartPlugin env should include the workflow manager relay token")
-	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", bindRequests[0].EnvVar, got)
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultManagerSocketEnv)
 }
 
 func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -8142,16 +7975,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[authorizationservice.SocketTokenEnv()]; got == "" {
-		t.Fatal("StartPlugin env should include the authorization relay token")
-	}
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) != 1 {
-		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
-	}
-	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", bindRequests[0].EnvVar, got)
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], authorizationservice.DefaultSocketEnv)
 }
 
 func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -8375,20 +8199,8 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *tes
 	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	if got := startRequests[0].Env[cacheservice.SocketTokenEnv("session")]; got == "" {
-		t.Fatalf("StartPlugin cache token env = %q, want public relay token", got)
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], cacheservice.SocketEnv("session"))
 	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, pluginruntime.PolicyDeny)
-
-	bindRequests := runtimeProvider.bindHostServiceRequests()
-	if len(bindRequests) == 0 {
-		t.Fatal("BindHostService requests = 0, want at least one public relay binding")
-	}
-	for _, req := range bindRequests {
-		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
-			t.Fatalf("BindHostService(%s) relay target = %q, want public relay target", req.EnvVar, got)
-		}
-	}
 }
 
 func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -8691,7 +8503,11 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					t.Fatalf("inherited host indexeddb should expose logical store name directly: %v", err)
 				}
 				if runtimeProvider != nil {
-					assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), indexeddbservice.DefaultSocketEnv)
+					startRequests := runtimeProvider.startPluginRequestsCopy()
+					if len(startRequests) != 1 {
+						t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+					}
+					assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
 				}
 			})
 		}
@@ -8994,7 +8810,11 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
 			}
 			if runtimeProvider != nil {
-				assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), indexeddbservice.DefaultSocketEnv)
+				startRequests := runtimeProvider.startPluginRequestsCopy()
+				if len(startRequests) != 1 {
+					t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+				}
+				assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
 			}
 
 			_ = CloseProviders(providers)
