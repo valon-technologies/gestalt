@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/httpbinding"
 )
 
 type verifiedHTTPBindingSender struct {
