@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 )
 
 func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
