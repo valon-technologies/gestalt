@@ -131,7 +131,7 @@ func buildRuntimeLogProviderBinary(t *testing.T) string {
 
 	repoRoot := repoRootForPluginRuntimeTests(t)
 	moduleDir := t.TempDir()
-	goMod := "module runtimehostlogs\n\ngo 1.26\n\nrequire github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\nreplace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk/go")) + "\n"
+	goMod := "module runtimehostlogs\n\ngo 1.26\n\nrequire (\n\tgithub.com/valon-technologies/gestalt v0.0.0\n\tgithub.com/valon-technologies/gestalt/sdk/go v0.0.0\n)\n\nreplace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk/go")) + "\n\nreplace github.com/valon-technologies/gestalt => " + filepath.ToSlash(repoRoot) + "\n"
 	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
@@ -183,43 +183,38 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type runtimeProvider struct {
-	proto.UnimplementedPluginRuntimeProviderServer
-
 	mu       sync.Mutex
-	sessions map[string]*proto.PluginRuntimeSession
+	sessions map[string]gestalt.PluginRuntimeSession
 }
 
 func newRuntimeProvider() *runtimeProvider {
-	return &runtimeProvider{sessions: make(map[string]*proto.PluginRuntimeSession)}
+	return &runtimeProvider{sessions: make(map[string]gestalt.PluginRuntimeSession)}
 }
 
 func (p *runtimeProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *runtimeProvider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
-	return &proto.PluginRuntimeSupport{
+func (p *runtimeProvider) GetSupport(context.Context) (gestalt.PluginRuntimeSupport, error) {
+	return gestalt.PluginRuntimeSupport{
 		CanHostPlugins: true,
 	}, nil
 }
 
-func (p *runtimeProvider) StartSession(_ context.Context, req *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
-	sessionID := strings.TrimSpace(req.GetPluginName()) + "-session"
+func (p *runtimeProvider) StartSession(_ context.Context, req gestalt.StartPluginRuntimeSessionRequest) (gestalt.PluginRuntimeSession, error) {
+	sessionID := strings.TrimSpace(req.PluginName) + "-session"
 	if sessionID == "-session" {
 		sessionID = "runtime-session"
 	}
-	session := &proto.PluginRuntimeSession{
-		Id:       sessionID,
+	session := gestalt.PluginRuntimeSession{
+		ID:       sessionID,
 		State:    "ready",
-		Metadata: req.GetMetadata(),
+		Metadata: req.Metadata,
 	}
 	p.mu.Lock()
 	p.sessions[sessionID] = session
@@ -227,53 +222,60 @@ func (p *runtimeProvider) StartSession(_ context.Context, req *proto.StartPlugin
 	return session, nil
 }
 
-func (p *runtimeProvider) GetSession(_ context.Context, req *proto.GetPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
+func (p *runtimeProvider) GetSession(_ context.Context, sessionID string) (gestalt.PluginRuntimeSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	session, ok := p.sessions[strings.TrimSpace(req.GetSessionId())]
+	session, ok := p.sessions[strings.TrimSpace(sessionID)]
 	if !ok {
-		return nil, status.Error(codes.NotFound, "session not found")
+		return gestalt.PluginRuntimeSession{}, status.Error(codes.NotFound, "session not found")
 	}
 	return session, nil
 }
 
-func (p *runtimeProvider) StopSession(_ context.Context, req *proto.StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
+func (p *runtimeProvider) ListSessions(context.Context) ([]gestalt.PluginRuntimeSession, error) {
 	p.mu.Lock()
-	delete(p.sessions, strings.TrimSpace(req.GetSessionId()))
-	p.mu.Unlock()
-	return &emptypb.Empty{}, nil
+	defer p.mu.Unlock()
+	sessions := make([]gestalt.PluginRuntimeSession, 0, len(p.sessions))
+	for _, session := range p.sessions {
+		sessions = append(sessions, session)
+	}
+	return sessions, nil
 }
 
-func (p *runtimeProvider) StartPlugin(ctx context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
+func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error {
+	p.mu.Lock()
+	delete(p.sessions, strings.TrimSpace(sessionID))
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *runtimeProvider) StartPlugin(ctx context.Context, req gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
 	host, err := gestalt.RuntimeLogHost()
 	if err == nil {
 		defer func() { _ = host.Close() }()
 		now := time.Now().UTC()
-		_, _ = host.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-			SessionId: req.GetSessionId(),
-			Logs: []*proto.PluginRuntimeLogEntry{
-				{
-					Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-					Message:    "runtime boot",
-					ObservedAt: timestamppb.New(now),
-					SourceSeq:  1,
-				},
-				{
-					Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
-					Message:    "stdout line\n",
-					ObservedAt: timestamppb.New(now.Add(time.Second)),
-					SourceSeq:  2,
-				},
-				{
-					Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
-					Message:    "stderr line\n",
-					ObservedAt: timestamppb.New(now.Add(2 * time.Second)),
-					SourceSeq:  3,
-				},
+		_ = host.AppendLogs(ctx, req.SessionID, []gestalt.RuntimeLogEntry{
+			{
+				Stream:     gestalt.RuntimeLogStreamRuntime,
+				Message:    "runtime boot",
+				ObservedAt: now,
+				SourceSeq:  1,
+			},
+			{
+				Stream:     gestalt.RuntimeLogStreamStdout,
+				Message:    "stdout line\n",
+				ObservedAt: now.Add(time.Second),
+				SourceSeq:  2,
+			},
+			{
+				Stream:     gestalt.RuntimeLogStreamStderr,
+				Message:    "stderr line\n",
+				ObservedAt: now.Add(2 * time.Second),
+				SourceSeq:  3,
 			},
 		})
 	}
-	return nil, status.Error(codes.Internal, "runtime start failed")
+	return gestalt.HostedPlugin{}, status.Error(codes.Internal, "runtime start failed")
 }
 
 func main() {

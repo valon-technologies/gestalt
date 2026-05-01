@@ -17,8 +17,9 @@ providers, host-service clients, and provider-owned telemetry.
     def search(params: SearchInput):
         return {"query": params.query}
 
-Generated protobuf bindings remain available under :mod:`gestalt.gen`, but the
-authored reference documentation focuses on the handwritten SDK surface.
+Private protobuf stubs are used internally for transport. Provider code should
+use the authored SDK helpers exported here instead of importing generated
+modules.
 """
 
 from importlib import import_module
@@ -35,17 +36,147 @@ from ._api import (
     field,
 )
 
+_AGENT_PROTOCOL_EXPORTS = (
+    "AGENT_EXECUTION_STATUS_CANCELED",
+    "AGENT_EXECUTION_STATUS_FAILED",
+    "AGENT_EXECUTION_STATUS_PENDING",
+    "AGENT_EXECUTION_STATUS_RUNNING",
+    "AGENT_EXECUTION_STATUS_SUCCEEDED",
+    "AGENT_EXECUTION_STATUS_UNSPECIFIED",
+    "AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT",
+    "AGENT_INTERACTION_STATE_CANCELED",
+    "AGENT_INTERACTION_STATE_PENDING",
+    "AGENT_INTERACTION_STATE_RESOLVED",
+    "AGENT_INTERACTION_STATE_UNSPECIFIED",
+    "AGENT_INTERACTION_TYPE_APPROVAL",
+    "AGENT_INTERACTION_TYPE_CLARIFICATION",
+    "AGENT_INTERACTION_TYPE_INPUT",
+    "AGENT_INTERACTION_TYPE_UNSPECIFIED",
+    "AGENT_MESSAGE_PART_TYPE_IMAGE_REF",
+    "AGENT_MESSAGE_PART_TYPE_JSON",
+    "AGENT_MESSAGE_PART_TYPE_TEXT",
+    "AGENT_MESSAGE_PART_TYPE_TOOL_CALL",
+    "AGENT_MESSAGE_PART_TYPE_TOOL_RESULT",
+    "AGENT_MESSAGE_PART_TYPE_UNSPECIFIED",
+    "AGENT_SESSION_STATE_ACTIVE",
+    "AGENT_SESSION_STATE_ARCHIVED",
+    "AGENT_SESSION_STATE_UNSPECIFIED",
+    "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
+    "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
+    "AgentActor",
+    "AgentManagerCancelTurnRequest",
+    "AgentManagerCreateSessionRequest",
+    "AgentManagerCreateTurnRequest",
+    "AgentManagerGetSessionRequest",
+    "AgentManagerGetTurnRequest",
+    "AgentManagerListInteractionsRequest",
+    "AgentManagerListSessionsRequest",
+    "AgentManagerListTurnEventsRequest",
+    "AgentManagerListTurnsRequest",
+    "AgentManagerResolveInteractionRequest",
+    "AgentManagerUpdateSessionRequest",
+    "AgentInteraction",
+    "AgentMessage",
+    "AgentMessagePart",
+    "AgentProviderCapabilities",
+    "AgentSession",
+    "AgentSubjectContext",
+    "AgentToolRef",
+    "AgentTurn",
+    "AgentTurnEvent",
+    "CancelAgentProviderTurnRequest",
+    "CreateAgentProviderSessionRequest",
+    "CreateAgentProviderTurnRequest",
+    "ExecuteAgentToolRequest",
+    "ExecuteAgentToolResponse",
+    "GetAgentProviderCapabilitiesRequest",
+    "GetAgentProviderSessionRequest",
+    "GetAgentProviderTurnRequest",
+    "ListAgentProviderInteractionsResponse",
+    "ListAgentProviderSessionsRequest",
+    "ListAgentProviderSessionsResponse",
+    "ListAgentProviderTurnEventsRequest",
+    "ListAgentProviderTurnEventsResponse",
+    "ListAgentProviderTurnsRequest",
+    "ListAgentProviderTurnsResponse",
+    "ListAgentToolsRequest",
+    "ListAgentToolsResponse",
+    "ResolveAgentProviderInteractionRequest",
+    "UpdateAgentProviderSessionRequest",
+)
+
+_AUTHENTICATION_PROTOCOL_EXPORTS = (
+    "AuthenticatedUser",
+    "AuthSessionSettings",
+    "BeginLoginRequest",
+    "BeginLoginResponse",
+    "CompleteLoginRequest",
+    "ValidateExternalTokenRequest",
+)
+
+_AUTHORIZATION_PROTOCOL_EXPORTS = (
+    "AccessEvaluationRequest",
+    "ActionSearchRequest",
+    "AuthorizationAction",
+    "AuthorizationResource",
+    "AuthorizationSubject",
+    "ReadRelationshipsRequest",
+    "ResourceSearchRequest",
+    "SubjectSearchRequest",
+)
+
+_WORKFLOW_PROTOCOL_EXPORTS = (
+    "BoundWorkflowAgentTarget",
+    "BoundWorkflowEventTrigger",
+    "BoundWorkflowPluginTarget",
+    "BoundWorkflowRun",
+    "BoundWorkflowSchedule",
+    "BoundWorkflowTarget",
+    "InvokeWorkflowOperationRequest",
+    "ListWorkflowProviderEventTriggersResponse",
+    "ListWorkflowProviderRunsResponse",
+    "ListWorkflowProviderSchedulesResponse",
+    "WORKFLOW_RUN_STATUS_CANCELED",
+    "WORKFLOW_RUN_STATUS_FAILED",
+    "WORKFLOW_RUN_STATUS_PENDING",
+    "WORKFLOW_RUN_STATUS_RUNNING",
+    "WORKFLOW_RUN_STATUS_SUCCEEDED",
+    "WORKFLOW_RUN_STATUS_UNSPECIFIED",
+    "WorkflowActor",
+    "WorkflowManagerCreateEventTriggerRequest",
+    "WorkflowManagerCreateScheduleRequest",
+    "WorkflowManagerDeleteEventTriggerRequest",
+    "WorkflowManagerDeleteScheduleRequest",
+    "WorkflowManagerGetEventTriggerRequest",
+    "WorkflowManagerGetScheduleRequest",
+    "WorkflowManagerPauseEventTriggerRequest",
+    "WorkflowManagerPauseScheduleRequest",
+    "WorkflowManagerPublishEventRequest",
+    "WorkflowManagerResumeEventTriggerRequest",
+    "WorkflowManagerResumeScheduleRequest",
+    "WorkflowManagerSignalOrStartRunRequest",
+    "WorkflowManagerSignalRunRequest",
+    "WorkflowManagerStartRunRequest",
+    "WorkflowManagerUpdateEventTriggerRequest",
+    "WorkflowManagerUpdateScheduleRequest",
+    "WorkflowOutputBinding",
+    "WorkflowOutputDelivery",
+    "WorkflowOutputValueSource",
+    "WorkflowSignal",
+    "workflow_run_status_name",
+)
+
 _LAZY_EXPORTS = {
     "AgentHost": ("._agent", "AgentHost"),
     "AgentManager": ("._agent", "AgentManager"),
     "AgentProvider": ("._providers", "AgentProvider"),
     "AlreadyExistsError": ("._indexeddb", "AlreadyExistsError"),
-    "AuthenticatedUser": (".gen.v1.authentication_pb2", "AuthenticatedUser"),
+    "AuthenticatedUser": ("._authentication", "AuthenticatedUser"),
     "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
     "Authorization": ("._authorization", "Authorization"),
     "AuthorizationClient": ("._authorization", "AuthorizationClient"),
-    "BeginLoginRequest": (".gen.v1.authentication_pb2", "BeginLoginRequest"),
-    "BeginLoginResponse": (".gen.v1.authentication_pb2", "BeginLoginResponse"),
+    "BeginLoginRequest": ("._authentication", "BeginLoginRequest"),
+    "BeginLoginResponse": ("._authentication", "BeginLoginResponse"),
     "ByteRange": ("._s3", "ByteRange"),
     "Cache": ("._cache", "Cache"),
     "CacheEntry": ("._cache", "CacheEntry"),
@@ -68,7 +199,7 @@ _LAZY_EXPORTS = {
     "CatalogOperation": ("._catalog", "CatalogOperation"),
     "CatalogParameter": ("._catalog", "CatalogParameter"),
     "Closer": ("._providers", "Closer"),
-    "CompleteLoginRequest": (".gen.v1.authentication_pb2", "CompleteLoginRequest"),
+    "CompleteLoginRequest": ("._authentication", "CompleteLoginRequest"),
     "CopyOptions": ("._s3", "CopyOptions"),
     "ConnectedToken": ("._plugin", "ConnectedToken"),
     "Cursor": ("._indexeddb", "Cursor"),
@@ -161,6 +292,17 @@ _LAZY_EXPORTS = {
     "session_catalog": ("._plugin", "session_catalog"),
 }
 
+_LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
+_LAZY_EXPORTS.update(
+    {name: ("._authentication", name) for name in _AUTHENTICATION_PROTOCOL_EXPORTS}
+)
+_LAZY_EXPORTS.update(
+    {name: ("._authorization", name) for name in _AUTHORIZATION_PROTOCOL_EXPORTS}
+)
+_LAZY_EXPORTS.update(
+    {name: ("._workflow", name) for name in _WORKFLOW_PROTOCOL_EXPORTS}
+)
+
 _LAZY_MODULES = {
     "telemetry": ".telemetry",
 }
@@ -183,6 +325,10 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    *_AGENT_PROTOCOL_EXPORTS,
+    *_AUTHENTICATION_PROTOCOL_EXPORTS,
+    *_AUTHORIZATION_PROTOCOL_EXPORTS,
+    *_WORKFLOW_PROTOCOL_EXPORTS,
     "AgentHost",
     "AgentManager",
     "AgentProvider",

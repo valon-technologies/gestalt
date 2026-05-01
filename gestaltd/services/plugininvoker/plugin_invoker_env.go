@@ -1,6 +1,6 @@
 package plugininvoker
 
-import proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+import proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 
 const (
 	DefaultPluginInvokerSocketEnv = proto.EnvPluginInvokerSocket

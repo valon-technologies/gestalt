@@ -44,7 +44,7 @@ import {
   type UpsertWorkflowProviderScheduleRequest,
   type WorkflowEvent,
   WorkflowRunStatus,
-} from "../gen/v1/workflow_pb.ts";
+} from "./internal/gen/v1/workflow_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 

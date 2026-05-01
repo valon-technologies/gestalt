@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

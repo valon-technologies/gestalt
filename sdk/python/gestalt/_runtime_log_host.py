@@ -8,9 +8,9 @@ from typing import Any, cast
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
+from ._gen.v1 import pluginruntime_pb2 as _pb
+from ._gen.v1 import pluginruntime_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
-from .gen.v1 import pluginruntime_pb2 as _pb
-from .gen.v1 import pluginruntime_pb2_grpc as _pb_grpc
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc

@@ -7,7 +7,7 @@ import {
   CursorDirection as ProtoCursorDirection,
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
-} from "../gen/v1/datastore_pb";
+} from "./internal/gen/v1/datastore_pb";
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
 const INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN";

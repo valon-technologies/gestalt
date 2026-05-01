@@ -23,7 +23,7 @@ import {
   type AgentSession,
   type AgentTurn,
   type AgentTurnEvent,
-} from "../gen/v1/agent_pb.ts";
+} from "./internal/gen/v1/agent_pb.ts";
 import type { Request } from "./api.ts";
 
 /** Environment variable containing the agent-manager host-service target. */

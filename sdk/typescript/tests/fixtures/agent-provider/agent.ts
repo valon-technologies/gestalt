@@ -15,7 +15,7 @@ import {
   type CreateAgentProviderTurnRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
-} from "../../../gen/v1/agent_pb.ts";
+} from "../../../src/internal/gen/v1/agent_pb.ts";
 import {
   defineAgentProvider,
   type AgentTurnDisplayInit,

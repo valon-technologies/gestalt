@@ -21,7 +21,7 @@ import {
   ReadRelationshipsRequestSchema,
   ResourceSearchRequestSchema,
   SubjectSearchRequestSchema,
-} from "../gen/v1/authorization_pb.ts";
+} from "./internal/gen/v1/authorization_pb.ts";
 
 /**
  * Environment variable containing the Unix socket path or relay target for the

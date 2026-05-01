@@ -12,11 +12,16 @@ import (
 
 func SDKGoModulePath(t *testing.T) string {
 	t.Helper()
+	return filepath.Join(RepoRootPath(t), "sdk", "go")
+}
+
+func RepoRootPath(t *testing.T) string {
+	t.Helper()
 	root, ok := repoRoot()
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Join(root, "sdk", "go")
+	return root
 }
 
 func ExampleProviderPluginPath(t *testing.T) string {
@@ -83,6 +88,12 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 		string(goMod),
 		"replace github.com/valon-technologies/gestalt/sdk/go => ",
 		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
+	updated = rewriteModuleLine(
+		t,
+		updated,
+		"replace github.com/valon-technologies/gestalt => ",
+		"replace github.com/valon-technologies/gestalt => "+RepoRootPath(t),
 	)
 	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
 		t.Fatalf("write %s: %v", goModPath, err)
@@ -613,14 +624,12 @@ func GeneratedCachePackageSource() string {
 import (
 	"context"
 	"sync"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Provider struct {
-	proto.UnimplementedCacheServer
 	mu     sync.Mutex
 	values map[string][]byte
 }
@@ -639,80 +648,77 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) Get(_ context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {
+func (p *Provider) Get(_ context.Context, key string) ([]byte, bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	value, ok := p.values[req.GetKey()]
+	value, ok := p.values[key]
 	if !ok {
-		return &proto.CacheGetResponse{}, nil
+		return nil, false, nil
 	}
-	return &proto.CacheGetResponse{Found: true, Value: append([]byte(nil), value...)}, nil
+	return append([]byte(nil), value...), true, nil
 }
 
-func (p *Provider) GetMany(_ context.Context, req *proto.CacheGetManyRequest) (*proto.CacheGetManyResponse, error) {
+func (p *Provider) GetMany(_ context.Context, keys []string) (map[string][]byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	entries := make([]*proto.CacheResult, 0, len(req.GetKeys()))
-	for _, key := range req.GetKeys() {
-		entry := &proto.CacheResult{Key: key}
+	entries := make(map[string][]byte)
+	for _, key := range keys {
 		if value, ok := p.values[key]; ok {
-			entry.Found = true
-			entry.Value = append([]byte(nil), value...)
+			entries[key] = append([]byte(nil), value...)
 		}
-		entries = append(entries, entry)
 	}
-	return &proto.CacheGetManyResponse{Entries: entries}, nil
+	return entries, nil
 }
 
-func (p *Provider) Set(_ context.Context, req *proto.CacheSetRequest) (*emptypb.Empty, error) {
+func (p *Provider) Set(_ context.Context, key string, value []byte, _ gestalt.CacheSetOptions) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.values[req.GetKey()] = append([]byte(nil), req.GetValue()...)
-	return &emptypb.Empty{}, nil
+	p.values[key] = append([]byte(nil), value...)
+	return nil
 }
 
-func (p *Provider) SetMany(_ context.Context, req *proto.CacheSetManyRequest) (*emptypb.Empty, error) {
+func (p *Provider) SetMany(_ context.Context, entries []gestalt.CacheEntry, _ gestalt.CacheSetOptions) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for _, entry := range req.GetEntries() {
-		p.values[entry.GetKey()] = append([]byte(nil), entry.GetValue()...)
+	for _, entry := range entries {
+		p.values[entry.Key] = append([]byte(nil), entry.Value...)
 	}
-	return &emptypb.Empty{}, nil
+	return nil
 }
 
-func (p *Provider) Delete(_ context.Context, req *proto.CacheDeleteRequest) (*proto.CacheDeleteResponse, error) {
+func (p *Provider) Delete(_ context.Context, key string) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	_, ok := p.values[req.GetKey()]
-	delete(p.values, req.GetKey())
-	return &proto.CacheDeleteResponse{Deleted: ok}, nil
+	_, ok := p.values[key]
+	delete(p.values, key)
+	return ok, nil
 }
 
-func (p *Provider) DeleteMany(_ context.Context, req *proto.CacheDeleteManyRequest) (*proto.CacheDeleteManyResponse, error) {
+func (p *Provider) DeleteMany(_ context.Context, keys []string) (int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	var deleted int64
-	for _, key := range req.GetKeys() {
+	for _, key := range keys {
 		if _, ok := p.values[key]; ok {
 			delete(p.values, key)
 			deleted++
 		}
 	}
-	return &proto.CacheDeleteManyResponse{Deleted: deleted}, nil
+	return deleted, nil
 }
 
-func (p *Provider) Touch(_ context.Context, req *proto.CacheTouchRequest) (*proto.CacheTouchResponse, error) {
+func (p *Provider) Touch(_ context.Context, key string, _ time.Duration) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	_, ok := p.values[req.GetKey()]
-	return &proto.CacheTouchResponse{Touched: ok}, nil
+	_, ok := p.values[key]
+	return ok, nil
 }
 `
 }
@@ -724,11 +730,17 @@ func GeneratedProviderModuleSource(t *testing.T, module string) string {
 		t.Fatalf("ReadFile(example go.mod): %v", err)
 	}
 	source := rewriteModuleLine(t, string(data), "module ", "module "+module)
-	return rewriteModuleLine(
+	source = rewriteModuleLine(
 		t,
 		source,
 		"replace github.com/valon-technologies/gestalt/sdk/go => ",
 		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
+	return rewriteModuleLine(
+		t,
+		source,
+		"replace github.com/valon-technologies/gestalt => ",
+		"replace github.com/valon-technologies/gestalt => "+RepoRootPath(t),
 	)
 }
 

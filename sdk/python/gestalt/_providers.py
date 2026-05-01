@@ -1,9 +1,7 @@
 """Provider base classes for non-integration Gestalt runtimes.
 
-The generated request and response protobuf messages for authentication and
-catalog data remain available through the public :mod:`gestalt` package, but
-these helpers document the handwritten provider interfaces that wrap those
-messages.
+Handwritten helpers in :mod:`gestalt` construct protocol payloads for providers
+without requiring provider code to import generated protobuf modules.
 """
 
 from __future__ import annotations

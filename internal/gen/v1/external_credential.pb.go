@@ -549,8 +549,8 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x10UpsertCredential\x124.gestalt.provider.v1.UpsertExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12k\n" +
 	"\rGetCredential\x121.gestalt.provider.v1.GetExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12|\n" +
 	"\x0fListCredentials\x123.gestalt.provider.v1.ListExternalCredentialsRequest\x1a4.gestalt.provider.v1.ListExternalCredentialsResponse\x12`\n" +
-	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.EmptyB\xdb\x01\n" +
-	"\x17com.gestalt.provider.v1B\x17ExternalCredentialProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.EmptyB\xdd\x01\n" +
+	"\x17com.gestalt.provider.v1B\x17ExternalCredentialProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_external_credential_proto_rawDescOnce sync.Once

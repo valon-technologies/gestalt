@@ -68,7 +68,7 @@ import {
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
-} from "../gen/v1/agent_pb.ts";
+} from "./internal/gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 

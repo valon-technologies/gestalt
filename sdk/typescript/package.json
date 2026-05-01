@@ -12,6 +12,7 @@
     "./build": "./src/build.ts",
     "./runtime": "./src/runtime.ts",
     "./schema": "./src/schema.ts",
+    "./test/agent-contract": "./src/test-agent-contract.ts",
     "./telemetry": "./src/telemetry.ts",
     "./target": "./src/target.ts"
   },
@@ -21,7 +22,6 @@
   },
   "files": [
     "src",
-    "gen",
     "README.md",
     "tsconfig.json"
   ],

@@ -264,13 +264,11 @@ events.
   <Tabs.Tab>
     ```python
     import gestalt
-    from gestalt.gen.v1 import agent_pb2 as pb
-
 
     def actor_from_subject(subject):
         if subject is None:
             return None
-        return pb.AgentActor(
+        return gestalt.AgentActor(
             subject_id=subject.subject_id,
             subject_kind=subject.subject_kind,
             display_name=subject.display_name,
@@ -280,28 +278,28 @@ events.
 
     class ExampleAgent(gestalt.AgentProvider):
         def CreateSession(self, request, context):
-            return pb.AgentSession(
+            return gestalt.AgentSession(
                 id=request.session_id,
                 provider_name="example",
                 model=request.model,
                 client_ref=request.client_ref,
-                state=pb.AGENT_SESSION_STATE_ACTIVE,
+                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
                 created_by=request.created_by,
             )
 
         def GetSession(self, request, context):
-            return pb.AgentSession(
+            return gestalt.AgentSession(
                 id=request.session_id,
                 provider_name="example",
-                state=pb.AGENT_SESSION_STATE_ACTIVE,
+                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListSessions(self, request, context):
-            return pb.ListAgentProviderSessionsResponse()
+            return gestalt.ListAgentProviderSessionsResponse()
 
         def UpdateSession(self, request, context):
-            return pb.AgentSession(
+            return gestalt.AgentSession(
                 id=request.session_id,
                 provider_name="example",
                 client_ref=request.client_ref,
@@ -310,61 +308,61 @@ events.
             )
 
         def CreateTurn(self, request, context):
-            return pb.AgentTurn(
+            return gestalt.AgentTurn(
                 id=request.turn_id,
                 session_id=request.session_id,
                 provider_name="example",
                 model=request.model,
-                status=pb.AGENT_EXECUTION_STATUS_RUNNING,
+                status=gestalt.AGENT_EXECUTION_STATUS_RUNNING,
                 messages=request.messages,
                 created_by=request.created_by,
                 execution_ref=request.execution_ref,
             )
 
         def GetTurn(self, request, context):
-            return pb.AgentTurn(
+            return gestalt.AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
                 provider_name="example",
-                status=pb.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                status=gestalt.AGENT_EXECUTION_STATUS_SUCCEEDED,
                 output_text="done",
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListTurns(self, request, context):
-            return pb.ListAgentProviderTurnsResponse()
+            return gestalt.ListAgentProviderTurnsResponse()
 
         def CancelTurn(self, request, context):
-            return pb.AgentTurn(
+            return gestalt.AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
                 provider_name="example",
-                status=pb.AGENT_EXECUTION_STATUS_CANCELED,
+                status=gestalt.AGENT_EXECUTION_STATUS_CANCELED,
                 status_message="operator requested",
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListTurnEvents(self, request, context):
-            return pb.ListAgentProviderTurnEventsResponse()
+            return gestalt.ListAgentProviderTurnEventsResponse()
 
         def GetInteraction(self, request, context):
-            return pb.AgentInteraction(
+            return gestalt.AgentInteraction(
                 id=request.interaction_id,
-                state=pb.AGENT_INTERACTION_STATE_PENDING,
+                state=gestalt.AGENT_INTERACTION_STATE_PENDING,
             )
 
         def ListInteractions(self, request, context):
-            return pb.ListAgentProviderInteractionsResponse()
+            return gestalt.ListAgentProviderInteractionsResponse()
 
         def ResolveInteraction(self, request, context):
-            return pb.AgentInteraction(
+            return gestalt.AgentInteraction(
                 id=request.interaction_id,
-                state=pb.AGENT_INTERACTION_STATE_RESOLVED,
+                state=gestalt.AGENT_INTERACTION_STATE_RESOLVED,
                 resolution=request.resolution,
             )
 
         def GetCapabilities(self, request, context):
-            return pb.AgentProviderCapabilities(
+            return gestalt.AgentProviderCapabilities(
                 streaming_text=True,
                 tool_calls=True,
                 structured_output=True,

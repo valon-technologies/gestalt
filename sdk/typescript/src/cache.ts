@@ -3,7 +3,7 @@ import { connect } from "node:net";
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
-import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
+import { Cache as CacheService } from "./internal/gen/v1/cache_pb.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 

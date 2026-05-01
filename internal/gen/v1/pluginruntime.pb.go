@@ -1051,8 +1051,8 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"GetSession\x123.gestalt.provider.v1.GetPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12}\n" +
 	"\fListSessions\x125.gestalt.provider.v1.ListPluginRuntimeSessionsRequest\x1a6.gestalt.provider.v1.ListPluginRuntimeSessionsResponse\x12[\n" +
 	"\vStopSession\x124.gestalt.provider.v1.StopPluginRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12_\n" +
-	"\vStartPlugin\x12-.gestalt.provider.v1.StartHostedPluginRequest\x1a!.gestalt.provider.v1.HostedPluginB\xd6\x01\n" +
-	"\x17com.gestalt.provider.v1B\x12PluginruntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\vStartPlugin\x12-.gestalt.provider.v1.StartHostedPluginRequest\x1a!.gestalt.provider.v1.HostedPluginB\xd8\x01\n" +
+	"\x17com.gestalt.provider.v1B\x12PluginruntimeProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_pluginruntime_proto_rawDescOnce sync.Once

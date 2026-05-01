@@ -16,7 +16,7 @@ import {
   ResourceSchema,
   SubjectSchema,
   SubjectSearchResponseSchema,
-} from "../gen/v1/authorization_pb.ts";
+} from "../src/internal/gen/v1/authorization_pb.ts";
 import {
   Authorization,
   AuthorizationClient,

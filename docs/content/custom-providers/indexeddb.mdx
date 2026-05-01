@@ -52,7 +52,7 @@ spec:
 
 ## Provider interface
 
-You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#object-store-interface), which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
+You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers should use `gestalt.AuthoredIndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -60,65 +60,72 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
     package relationaldb
 
     import (
-    	"context"
-    	"database/sql"
-    	"fmt"
-    	"strings"
+      "context"
+      "database/sql"
+      "fmt"
+      "strings"
 
-    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-    	"google.golang.org/protobuf/types/known/emptypb"
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
     type RelationalDB struct {
-    	db *sql.DB
+      db *sql.DB
     }
 
     func New() *RelationalDB { return &RelationalDB{} }
 
     func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
-    	dsn, _ := config["dsn"].(string)
-    	if dsn == "" {
-    		return fmt.Errorf("relationaldb: dsn is required")
-    	}
-    	driver := "sqlite"
-    	connStr := dsn
-    	switch {
-    	case strings.HasPrefix(dsn, "postgres://"):
-    		driver, connStr = "pgx", dsn
-    	case strings.HasPrefix(dsn, "mysql://"):
-    		driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
-    	case strings.HasPrefix(dsn, "sqlserver://"):
-    		driver, connStr = "sqlserver", dsn
-    	case strings.HasPrefix(dsn, "sqlite://"):
-    		driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
-    	}
-    	var err error
-    	r.db, err = sql.Open(driver, connStr)
-    	return err
+      dsn, _ := config["dsn"].(string)
+      if dsn == "" {
+        return fmt.Errorf("relationaldb: dsn is required")
+      }
+      driver := "sqlite"
+      connStr := dsn
+      switch {
+      case strings.HasPrefix(dsn, "postgres://"):
+        driver, connStr = "pgx", dsn
+      case strings.HasPrefix(dsn, "mysql://"):
+        driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
+      case strings.HasPrefix(dsn, "sqlserver://"):
+        driver, connStr = "sqlserver", dsn
+      case strings.HasPrefix(dsn, "sqlite://"):
+        driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
+      }
+      var err error
+      r.db, err = sql.Open(driver, connStr)
+      return err
     }
 
     func (r *RelationalDB) HealthCheck(ctx context.Context) error {
-    	return r.db.PingContext(ctx)
+      return r.db.PingContext(ctx)
+    }
+
+    func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+      return nil
+    }
+
+    func (r *RelationalDB) DeleteObjectStore(ctx context.Context, name string) error {
+      return nil
     }
 
     // Get retrieves a single record by primary key.
-    func (r *RelationalDB) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-    	return nil, nil
+    func (r *RelationalDB) Get(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) (gestalt.Record, error) {
+      return gestalt.Record{}, nil
     }
 
     // Add inserts a new record. Fails if the key already exists.
-    func (r *RelationalDB) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-    	return nil, nil
+    func (r *RelationalDB) Add(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+      return nil
     }
 
     // Put inserts or replaces the record at the given key.
-    func (r *RelationalDB) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-    	return nil, nil
+    func (r *RelationalDB) Put(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+      return nil
     }
 
     // Delete removes a record by primary key.
-    func (r *RelationalDB) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
-    	return nil, nil
+    func (r *RelationalDB) Delete(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) error {
+      return nil
     }
 
     // See the W3C IndexedDB specification for the remaining methods:

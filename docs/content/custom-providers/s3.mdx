@@ -27,7 +27,8 @@ spec:
 
 ## Provider interface
 
-Implement the `S3` gRPC service:
+Implement the SDK's authored `S3Provider` surface. The SDK adapts this typed
+interface to the underlying gRPC service:
 
 | Method | Purpose |
 | --- | --- |
@@ -45,12 +46,12 @@ Implement the `S3` gRPC service:
     package s3provider
 
     import (
-    	"context"
+      "bytes"
+      "context"
+      "io"
+      "time"
 
-    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-    	"google.golang.org/grpc/codes"
-    	"google.golang.org/grpc/status"
-    	"google.golang.org/protobuf/types/known/emptypb"
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
     type Provider struct{}
@@ -58,100 +59,67 @@ Implement the `S3` gRPC service:
     func New() *Provider { return &Provider{} }
 
     func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
-    	_ = config
-    	return nil
+      _ = config
+      return nil
     }
 
-    func (p *Provider) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
-    	_ = ctx
-    	_ = req
-    	return nil, status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) HeadObject(ctx context.Context, ref gestalt.ObjectRef) (gestalt.ObjectMeta, error) {
+      _ = ctx
+      return gestalt.ObjectMeta{
+        Ref:          ref,
+        ETag:         "",
+        Size:         0,
+        ContentType:  "application/octet-stream",
+        LastModified: time.Now(),
+        Metadata:     map[string]string{},
+      }, nil
     }
 
-    func (p *Provider) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-    	_ = req
-    	_ = stream
-    	return status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) ReadObject(ctx context.Context, ref gestalt.ObjectRef, opts *gestalt.ReadOptions) (gestalt.ObjectMeta, io.ReadCloser, error) {
+      _ = opts
+      meta, err := p.HeadObject(ctx, ref)
+      if err != nil {
+        return gestalt.ObjectMeta{}, nil, err
+      }
+      return meta, io.NopCloser(bytes.NewReader(nil)), nil
     }
 
-    func (p *Provider) WriteObject(stream proto.S3_WriteObjectServer) error {
-    	_ = stream
-    	return status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) WriteObject(ctx context.Context, ref gestalt.ObjectRef, body io.Reader, opts *gestalt.WriteOptions) (gestalt.ObjectMeta, error) {
+      _ = body
+      _ = opts
+      return p.HeadObject(ctx, ref)
     }
 
-    func (p *Provider) DeleteObject(context.Context, *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
-    	return nil, status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) DeleteObject(context.Context, gestalt.ObjectRef) error {
+      return nil
     }
 
-    func (p *Provider) ListObjects(context.Context, *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
-    	return nil, status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) ListObjects(context.Context, gestalt.ListOptions) (gestalt.ListPage, error) {
+      return gestalt.ListPage{}, nil
     }
 
-    func (p *Provider) CopyObject(context.Context, *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
-    	return nil, status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) CopyObject(ctx context.Context, source gestalt.ObjectRef, destination gestalt.ObjectRef, opts *gestalt.CopyOptions) (gestalt.ObjectMeta, error) {
+      _ = source
+      _ = opts
+      return p.HeadObject(ctx, destination)
     }
 
-    func (p *Provider) PresignObject(context.Context, *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
-    	return nil, status.Error(codes.Unimplemented, "todo")
+    func (p *Provider) PresignObject(context.Context, gestalt.ObjectRef, *gestalt.PresignOptions) (gestalt.PresignResult, error) {
+      return gestalt.PresignResult{
+        URL:       "https://example.invalid/object",
+        Method:    gestalt.PresignMethodGet,
+        ExpiresAt: time.Now().Add(time.Minute),
+        Headers:   map[string]string{},
+      }, nil
     }
 
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```python
-    from collections.abc import Iterator
-
-    import gestalt
-    from gestalt.gen.v1 import s3_pb2
-
-    class MinIOS3(gestalt.S3Provider):
-        def configure(self, name: str, config: dict[str, object]) -> None:
-            self.name = name
-            self.endpoint = str(config["endpoint"])
-
-        def HeadObject(
-            self,
-            request: s3_pb2.HeadObjectRequest,
-            context,
-        ) -> s3_pb2.HeadObjectResponse:
-            raise NotImplementedError
-
-        def ReadObject(
-            self,
-            request: s3_pb2.ReadObjectRequest,
-            context,
-        ) -> Iterator[s3_pb2.ReadObjectChunk]:
-            raise NotImplementedError
-
-        def WriteObject(self, request_iterator, context) -> s3_pb2.WriteObjectResponse:
-            raise NotImplementedError
-
-        def DeleteObject(self, request: s3_pb2.DeleteObjectRequest, context):
-            raise NotImplementedError
-
-        def ListObjects(
-            self,
-            request: s3_pb2.ListObjectsRequest,
-            context,
-        ) -> s3_pb2.ListObjectsResponse:
-            raise NotImplementedError
-
-        def CopyObject(
-            self,
-            request: s3_pb2.CopyObjectRequest,
-            context,
-        ) -> s3_pb2.CopyObjectResponse:
-            raise NotImplementedError
-
-        def PresignObject(
-            self,
-            request: s3_pb2.PresignObjectRequest,
-            context,
-        ) -> s3_pb2.PresignObjectResponse:
-            raise NotImplementedError
-
-    provider = MinIOS3()
-    ```
+    The Python SDK exposes S3 client helpers for provider code that consumes
+    object storage. New custom S3 provider implementations should use the Go or
+    TypeScript authored provider surface until the Python server-side S3 adapter
+    is promoted to the same level.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
@@ -303,10 +271,8 @@ Implement the `S3` gRPC service:
   </Tabs.Tab>
 </Tabs>
 
-Python S3 providers implement the generated `HeadObject`, `ReadObject`,
-`WriteObject`, `DeleteObject`, `ListObjects`, `CopyObject`, and
-`PresignObject` methods from `gestalt.gen.v1.s3_pb2_grpc.S3Servicer`.
-`gestalt.S3Provider` adds the runtime lifecycle wiring and `serve()` helper.
+`gestalt.S3Provider` adds runtime lifecycle wiring and a `serve()` helper for
+languages that expose the server-side S3 provider surface.
 
 ## Plugin SDK
 
@@ -316,17 +282,17 @@ Each SDK exposes a client plus object-handle helpers:
 ```go
 s3, err := gestalt.S3()
 if err != nil {
-	return err
+  return err
 }
 defer s3.Close()
 
 obj := s3.Object("artifacts", "jobs/123/output.json")
 if _, err := obj.WriteJSON(ctx, map[string]any{"ok": true}, nil); err != nil {
-	return err
+  return err
 }
 body, err := obj.JSON(ctx, nil)
 if err != nil {
-	return err
+  return err
 }
 _ = body
 ```

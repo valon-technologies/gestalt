@@ -14,7 +14,7 @@ import {
   type AppendPluginRuntimeLogsResponse,
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
   PluginRuntimeLogStream,
-} from "../gen/v1/pluginruntime_pb.ts";
+} from "./internal/gen/v1/pluginruntime_pb.ts";
 
 /** Environment variable containing the runtime-log host-service target. */
 export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";

@@ -11,7 +11,7 @@ import {
   type AppendPluginRuntimeLogsRequest,
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
   PluginRuntimeLogStream,
-} from "../gen/v1/pluginruntime_pb.ts";
+} from "../src/internal/gen/v1/pluginruntime_pb.ts";
 import {
   ENV_RUNTIME_LOG_HOST_SOCKET,
   ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,

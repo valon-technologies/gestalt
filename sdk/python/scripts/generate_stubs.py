@@ -62,7 +62,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[3]
     proto_dir = repo_root / "sdk/proto"
     template_path = proto_dir / "buf.python.gen.yaml"
-    target_dir = repo_root / "sdk/python/gestalt/gen/v1"
+    target_dir = repo_root / "sdk/python/gestalt/_gen/v1"
 
     if shutil.which("buf") is None:
         print("buf is required to regenerate Python protobuf stubs", file=sys.stderr)
@@ -110,7 +110,7 @@ def main() -> int:
                 )
 
             # Buf's grpc Python plugin emits a top-level import, but these stubs
-            # are vendored under gestalt.gen.v1 and need package-relative imports.
+            # are vendored under gestalt._gen.v1 and need package-relative imports.
             pb2_grpc_source = pb2_grpc_source.replace(
                 expected_import,
                 f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",

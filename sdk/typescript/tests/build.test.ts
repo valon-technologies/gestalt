@@ -12,12 +12,12 @@ import {
   AgentProvider as AgentProviderService,
   CreateAgentProviderSessionRequestSchema,
   CreateAgentProviderTurnRequestSchema,
-} from "../gen/v1/agent_pb.ts";
+} from "../src/internal/gen/v1/agent_pb.ts";
 import {
   AuthenticationProvider as AuthenticationProviderService,
   BeginLoginRequestSchema,
-} from "../gen/v1/authentication_pb.ts";
-import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
+} from "../src/internal/gen/v1/authentication_pb.ts";
+import { Cache as CacheService } from "../src/internal/gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
   CredentialContextSchema,
@@ -27,21 +27,21 @@ import {
   RequestContextSchema,
   StartProviderRequestSchema,
   SubjectContextSchema,
-} from "../gen/v1/plugin_pb.ts";
+} from "../src/internal/gen/v1/plugin_pb.ts";
 import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
-} from "../gen/v1/secrets_pb.ts";
-import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
+} from "../src/internal/gen/v1/secrets_pb.ts";
+import { S3 as S3Service } from "../src/internal/gen/v1/s3_pb.ts";
 import {
   ConfigureProviderRequestSchema,
   ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
-} from "../gen/v1/runtime_pb.ts";
+} from "../src/internal/gen/v1/runtime_pb.ts";
 import {
   StartWorkflowProviderRunRequestSchema,
   WorkflowProvider as WorkflowProviderService,
-} from "../gen/v1/workflow_pb.ts";
+} from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   buildProviderBinary,
   bunTarget,

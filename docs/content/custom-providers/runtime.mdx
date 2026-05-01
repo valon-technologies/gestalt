@@ -81,9 +81,9 @@ The runtime surface is intentionally small but lifecycle-oriented:
 In addition to the runtime-specific RPCs, the provider still implements the
 normal provider lifecycle surface, including `Configure`.
 
-Go, Python, Rust, and TypeScript expose runtime-provider helpers. The examples
-below define provider exports for the source-provider flow, so they do not need
-a hand-written `main` function. Gestalt's build and local-source tooling wraps
+Go, Rust, and TypeScript expose runtime-provider helpers. The examples below
+define provider exports for the source-provider flow, so they do not need a
+hand-written `main` function. Gestalt's build and local-source tooling wraps
 the exported provider for the selected language.
 
 ## SDK examples
@@ -96,13 +96,10 @@ the exported provider for the selected language.
     import (
         "context"
 
-        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-        "google.golang.org/protobuf/types/known/emptypb"
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct {
-        proto.UnimplementedPluginRuntimeProviderServer
-    }
+    type Provider struct{}
 
     func New() *Provider { return &Provider{} }
 
@@ -110,89 +107,50 @@ the exported provider for the selected language.
         return nil
     }
 
-	    func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
-	        return &proto.PluginRuntimeSupport{
-	            CanHostPlugins: true,
-	            EgressMode:     proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-	        }, nil
-	    }
+    func (p *Provider) GetSupport(context.Context) (gestalt.PluginRuntimeSupport, error) {
+        return gestalt.PluginRuntimeSupport{
+            CanHostPlugins: true,
+            EgressMode:     gestalt.PluginRuntimeEgressModeHostname,
+        }, nil
+    }
 
-    func (p *Provider) StartSession(context.Context, *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
-        return &proto.PluginRuntimeSession{
-            Id:    "session-1",
+    func (p *Provider) StartSession(context.Context, gestalt.StartPluginRuntimeSessionRequest) (gestalt.PluginRuntimeSession, error) {
+        return gestalt.PluginRuntimeSession{
+            ID:    "session-1",
             State: "ready",
         }, nil
     }
 
-    func (p *Provider) GetSession(context.Context, *proto.GetPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
-        return &proto.PluginRuntimeSession{
-            Id:    "session-1",
+    func (p *Provider) GetSession(context.Context, string) (gestalt.PluginRuntimeSession, error) {
+        return gestalt.PluginRuntimeSession{
+            ID:    "session-1",
             State: "ready",
         }, nil
     }
 
-    func (p *Provider) ListSessions(context.Context, *proto.ListPluginRuntimeSessionsRequest) (*proto.ListPluginRuntimeSessionsResponse, error) {
-        return &proto.ListPluginRuntimeSessionsResponse{
-            Sessions: []*proto.PluginRuntimeSession{
-                {Id: "session-1", State: "ready"},
-            },
-        }, nil
+    func (p *Provider) ListSessions(context.Context) ([]gestalt.PluginRuntimeSession, error) {
+        return []gestalt.PluginRuntimeSession{{ID: "session-1", State: "ready"}}, nil
     }
 
-    func (p *Provider) StopSession(context.Context, *proto.StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
-        return &emptypb.Empty{}, nil
+    func (p *Provider) StopSession(context.Context, string) error {
+        return nil
     }
 
-    func (p *Provider) StartPlugin(context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
-        return &proto.HostedPlugin{
-            Id:         "plugin-1",
-            SessionId:  req.GetSessionId(),
-            PluginName: req.GetPluginName(),
+    func (p *Provider) StartPlugin(context.Context, req gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
+        return gestalt.HostedPlugin{
+            ID:         "plugin-1",
+            SessionID:  req.SessionID,
+            PluginName: req.PluginName,
             DialTarget: "unix:///tmp/example-runtime/plugin.sock",
         }, nil
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```python
-    from google.protobuf import empty_pb2
-
-    import gestalt
-    from gestalt.gen.v1 import pluginruntime_pb2 as pb
-
-
-    class ExampleRuntime(gestalt.PluginRuntimeProvider):
-	        def GetSupport(self, request, context):
-	            return pb.PluginRuntimeSupport(
-	                can_host_plugins=True,
-	                egress_mode=pb.PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-	            )
-
-        def StartSession(self, request, context):
-            return pb.PluginRuntimeSession(id="session-1", state="ready")
-
-        def GetSession(self, request, context):
-            return pb.PluginRuntimeSession(id=request.session_id, state="ready")
-
-        def ListSessions(self, request, context):
-            return pb.ListPluginRuntimeSessionsResponse(
-                sessions=[pb.PluginRuntimeSession(id="session-1", state="ready")]
-            )
-
-        def StopSession(self, request, context):
-            return empty_pb2.Empty()
-
-        def StartPlugin(self, request, context):
-            return pb.HostedPlugin(
-                id="plugin-1",
-                session_id=request.session_id,
-                plugin_name=request.plugin_name,
-                dial_target="unix:///tmp/example-runtime/plugin.sock",
-            )
-
-
-    provider = ExampleRuntime()
-    ```
+    The Python SDK exposes runtime-log host helpers for hosted runtimes. New
+    custom runtime-provider implementations should use the Go or TypeScript
+    authored provider surface until the Python server-side runtime adapter is
+    promoted to the same level.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust

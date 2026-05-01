@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -622,6 +622,32 @@ func objectRefToProto(ref ObjectRef) *proto.S3ObjectRef {
 	}
 }
 
+func objectRefFromProto(ref *proto.S3ObjectRef) ObjectRef {
+	if ref == nil {
+		return ObjectRef{}
+	}
+	return ObjectRef{
+		Bucket:    ref.GetBucket(),
+		Key:       ref.GetKey(),
+		VersionID: ref.GetVersionId(),
+	}
+}
+
+func objectMetaToProto(meta ObjectMeta) *proto.S3ObjectMeta {
+	out := &proto.S3ObjectMeta{
+		Ref:          objectRefToProto(meta.Ref),
+		Etag:         meta.ETag,
+		Size:         meta.Size,
+		ContentType:  meta.ContentType,
+		Metadata:     cloneStringMap(meta.Metadata),
+		StorageClass: meta.StorageClass,
+	}
+	if !meta.LastModified.IsZero() {
+		out.LastModified = timestamppb.New(meta.LastModified)
+	}
+	return out
+}
+
 func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
 	if meta == nil {
 		return ObjectMeta{}
@@ -665,6 +691,58 @@ func byteRangeToProto(r *ByteRange) *proto.ByteRange {
 	return out
 }
 
+func byteRangeFromProto(r *proto.ByteRange) *ByteRange {
+	if r == nil {
+		return nil
+	}
+	out := &ByteRange{}
+	if r.Start != nil {
+		start := r.GetStart()
+		out.Start = &start
+	}
+	if r.End != nil {
+		end := r.GetEnd()
+		out.End = &end
+	}
+	return out
+}
+
+func readOptionsFromProto(req *proto.ReadObjectRequest) *ReadOptions {
+	if req == nil {
+		return nil
+	}
+	opts := &ReadOptions{
+		Range:       byteRangeFromProto(req.GetRange()),
+		IfMatch:     req.GetIfMatch(),
+		IfNoneMatch: req.GetIfNoneMatch(),
+	}
+	if ts := req.GetIfModifiedSince(); ts != nil {
+		t := ts.AsTime()
+		opts.IfModifiedSince = &t
+	}
+	if ts := req.GetIfUnmodifiedSince(); ts != nil {
+		t := ts.AsTime()
+		opts.IfUnmodifiedSince = &t
+	}
+	return opts
+}
+
+func writeOptionsFromProto(open *proto.WriteObjectOpen) *WriteOptions {
+	if open == nil {
+		return nil
+	}
+	return &WriteOptions{
+		ContentType:        open.GetContentType(),
+		CacheControl:       open.GetCacheControl(),
+		ContentDisposition: open.GetContentDisposition(),
+		ContentEncoding:    open.GetContentEncoding(),
+		ContentLanguage:    open.GetContentLanguage(),
+		Metadata:           cloneStringMap(open.GetMetadata()),
+		IfMatch:            open.GetIfMatch(),
+		IfNoneMatch:        open.GetIfNoneMatch(),
+	}
+}
+
 func listPageFromProto(resp *proto.ListObjectsResponse) ListPage {
 	out := ListPage{
 		CommonPrefixes:        append([]string(nil), resp.GetCommonPrefixes()...),
@@ -676,6 +754,19 @@ func listPageFromProto(resp *proto.ListObjectsResponse) ListPage {
 		out.Objects = append(out.Objects, objectMetaFromProto(obj))
 	}
 	return out
+}
+
+func listPageToProto(page ListPage) *proto.ListObjectsResponse {
+	resp := &proto.ListObjectsResponse{
+		CommonPrefixes:        append([]string(nil), page.CommonPrefixes...),
+		NextContinuationToken: page.NextContinuationToken,
+		HasMore:               page.HasMore,
+		Objects:               make([]*proto.S3ObjectMeta, 0, len(page.Objects)),
+	}
+	for _, obj := range page.Objects {
+		resp.Objects = append(resp.Objects, objectMetaToProto(obj))
+	}
+	return resp
 }
 
 func presignMethodToProto(method PresignMethod) proto.PresignMethod {
@@ -693,6 +784,19 @@ func presignMethodToProto(method PresignMethod) proto.PresignMethod {
 	}
 }
 
+func presignOptionsFromProto(req *proto.PresignObjectRequest) *PresignOptions {
+	if req == nil {
+		return nil
+	}
+	return &PresignOptions{
+		Method:             presignMethodFromProto(req.GetMethod()),
+		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
+		ContentType:        req.GetContentType(),
+		ContentDisposition: req.GetContentDisposition(),
+		Headers:            cloneStringMap(req.GetHeaders()),
+	}
+}
+
 func presignMethodFromProto(method proto.PresignMethod) PresignMethod {
 	switch method {
 	case proto.PresignMethod_PRESIGN_METHOD_GET:
@@ -706,6 +810,18 @@ func presignMethodFromProto(method proto.PresignMethod) PresignMethod {
 	default:
 		return ""
 	}
+}
+
+func presignResultToProto(result PresignResult) *proto.PresignObjectResponse {
+	resp := &proto.PresignObjectResponse{
+		Url:     result.URL,
+		Method:  presignMethodToProto(result.Method),
+		Headers: cloneStringMap(result.Headers),
+	}
+	if !result.ExpiresAt.IsZero() {
+		resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
+	}
+	return resp
 }
 
 func presignResultFromProto(resp *proto.PresignObjectResponse, requested PresignMethod) PresignResult {

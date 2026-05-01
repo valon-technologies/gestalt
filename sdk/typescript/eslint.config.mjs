@@ -3,6 +3,9 @@ import tsdoc from "eslint-plugin-tsdoc";
 
 export default [
   {
+    ignores: ["src/internal/gen/**/*.ts"],
+  },
+  {
     files: ["src/**/*.ts", "docs/entrypoints/**/*.ts"],
     languageOptions: {
       parser: tsParser,

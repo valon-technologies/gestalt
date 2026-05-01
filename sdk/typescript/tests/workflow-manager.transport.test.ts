@@ -17,7 +17,7 @@ import {
   ManagedWorkflowEventTriggerSchema,
   WorkflowEventSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
-} from "../gen/v1/workflow_pb.ts";
+} from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   ENV_WORKFLOW_MANAGER_SOCKET,
   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,

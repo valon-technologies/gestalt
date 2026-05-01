@@ -5,9 +5,9 @@ from typing import Any
 
 import grpc
 
+from ._gen.v1 import agent_pb2 as _pb
+from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
-from .gen.v1 import agent_pb2 as _pb
-from .gen.v1 import agent_pb2_grpc as _pb_grpc
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
@@ -16,6 +16,278 @@ ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET"
 ENV_AGENT_HOST_SOCKET_TOKEN = f"{ENV_AGENT_HOST_SOCKET}_TOKEN"
 ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET"
 ENV_AGENT_MANAGER_SOCKET_TOKEN = f"{ENV_AGENT_MANAGER_SOCKET}_TOKEN"
+
+AGENT_EXECUTION_STATUS_UNSPECIFIED = pb.AGENT_EXECUTION_STATUS_UNSPECIFIED
+AGENT_EXECUTION_STATUS_PENDING = pb.AGENT_EXECUTION_STATUS_PENDING
+AGENT_EXECUTION_STATUS_RUNNING = pb.AGENT_EXECUTION_STATUS_RUNNING
+AGENT_EXECUTION_STATUS_SUCCEEDED = pb.AGENT_EXECUTION_STATUS_SUCCEEDED
+AGENT_EXECUTION_STATUS_FAILED = pb.AGENT_EXECUTION_STATUS_FAILED
+AGENT_EXECUTION_STATUS_CANCELED = pb.AGENT_EXECUTION_STATUS_CANCELED
+AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT = pb.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
+
+AGENT_INTERACTION_STATE_UNSPECIFIED = pb.AGENT_INTERACTION_STATE_UNSPECIFIED
+AGENT_INTERACTION_STATE_PENDING = pb.AGENT_INTERACTION_STATE_PENDING
+AGENT_INTERACTION_STATE_RESOLVED = pb.AGENT_INTERACTION_STATE_RESOLVED
+AGENT_INTERACTION_STATE_CANCELED = pb.AGENT_INTERACTION_STATE_CANCELED
+
+AGENT_INTERACTION_TYPE_UNSPECIFIED = pb.AGENT_INTERACTION_TYPE_UNSPECIFIED
+AGENT_INTERACTION_TYPE_INPUT = pb.AGENT_INTERACTION_TYPE_INPUT
+AGENT_INTERACTION_TYPE_APPROVAL = pb.AGENT_INTERACTION_TYPE_APPROVAL
+AGENT_INTERACTION_TYPE_CLARIFICATION = pb.AGENT_INTERACTION_TYPE_CLARIFICATION
+
+AGENT_MESSAGE_PART_TYPE_UNSPECIFIED = pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
+AGENT_MESSAGE_PART_TYPE_TEXT = pb.AGENT_MESSAGE_PART_TYPE_TEXT
+AGENT_MESSAGE_PART_TYPE_JSON = pb.AGENT_MESSAGE_PART_TYPE_JSON
+AGENT_MESSAGE_PART_TYPE_TOOL_CALL = pb.AGENT_MESSAGE_PART_TYPE_TOOL_CALL
+AGENT_MESSAGE_PART_TYPE_TOOL_RESULT = pb.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
+AGENT_MESSAGE_PART_TYPE_IMAGE_REF = pb.AGENT_MESSAGE_PART_TYPE_IMAGE_REF
+
+AGENT_SESSION_STATE_UNSPECIFIED = pb.AGENT_SESSION_STATE_UNSPECIFIED
+AGENT_SESSION_STATE_ACTIVE = pb.AGENT_SESSION_STATE_ACTIVE
+AGENT_SESSION_STATE_ARCHIVED = pb.AGENT_SESSION_STATE_ARCHIVED
+
+AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = pb.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+
+
+def AgentMessage(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent message protocol value."""
+
+    return pb.AgentMessage(*args, **kwargs)
+
+
+def AgentMessagePart(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent message part protocol value."""
+
+    return pb.AgentMessagePart(*args, **kwargs)
+
+
+def AgentActor(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent actor protocol value."""
+
+    return pb.AgentActor(*args, **kwargs)
+
+
+def AgentSubjectContext(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent subject context protocol value."""
+
+    return pb.AgentSubjectContext(*args, **kwargs)
+
+
+def AgentToolRef(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent tool reference protocol value."""
+
+    return pb.AgentToolRef(*args, **kwargs)
+
+
+def AgentProviderCapabilities(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider capabilities protocol value."""
+
+    return pb.AgentProviderCapabilities(*args, **kwargs)
+
+
+def AgentSession(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent session protocol value."""
+
+    return pb.AgentSession(*args, **kwargs)
+
+
+def AgentTurn(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent turn protocol value."""
+
+    return pb.AgentTurn(*args, **kwargs)
+
+
+def AgentTurnEvent(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent turn event protocol value."""
+
+    return pb.AgentTurnEvent(*args, **kwargs)
+
+
+def AgentInteraction(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent interaction protocol value."""
+
+    return pb.AgentInteraction(*args, **kwargs)
+
+
+def CreateAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider session request."""
+
+    return pb.CreateAgentProviderSessionRequest(*args, **kwargs)
+
+
+def GetAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider get-session request."""
+
+    return pb.GetAgentProviderSessionRequest(*args, **kwargs)
+
+
+def ListAgentProviderSessionsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-sessions request."""
+
+    return pb.ListAgentProviderSessionsRequest(*args, **kwargs)
+
+
+def ListAgentProviderSessionsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-sessions response."""
+
+    return pb.ListAgentProviderSessionsResponse(*args, **kwargs)
+
+
+def UpdateAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider update-session request."""
+
+    return pb.UpdateAgentProviderSessionRequest(*args, **kwargs)
+
+
+def CreateAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider turn request."""
+
+    return pb.CreateAgentProviderTurnRequest(*args, **kwargs)
+
+
+def GetAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider get-turn request."""
+
+    return pb.GetAgentProviderTurnRequest(*args, **kwargs)
+
+
+def ListAgentProviderTurnsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-turns request."""
+
+    return pb.ListAgentProviderTurnsRequest(*args, **kwargs)
+
+
+def ListAgentProviderTurnsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-turns response."""
+
+    return pb.ListAgentProviderTurnsResponse(*args, **kwargs)
+
+
+def CancelAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider cancel-turn request."""
+
+    return pb.CancelAgentProviderTurnRequest(*args, **kwargs)
+
+
+def ListAgentProviderTurnEventsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-turn-events request."""
+
+    return pb.ListAgentProviderTurnEventsRequest(*args, **kwargs)
+
+
+def ListAgentProviderTurnEventsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-turn-events response."""
+
+    return pb.ListAgentProviderTurnEventsResponse(*args, **kwargs)
+
+
+def ListAgentProviderInteractionsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-interactions response."""
+
+    return pb.ListAgentProviderInteractionsResponse(*args, **kwargs)
+
+
+def ResolveAgentProviderInteractionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider resolve-interaction request."""
+
+    return pb.ResolveAgentProviderInteractionRequest(*args, **kwargs)
+
+
+def GetAgentProviderCapabilitiesRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider capabilities request."""
+
+    return pb.GetAgentProviderCapabilitiesRequest(*args, **kwargs)
+
+
+def ExecuteAgentToolRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ExecuteTool request."""
+
+    return pb.ExecuteAgentToolRequest(*args, **kwargs)
+
+
+def ExecuteAgentToolResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ExecuteTool response."""
+
+    return pb.ExecuteAgentToolResponse(*args, **kwargs)
+
+
+def ListAgentToolsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ListTools request."""
+
+    return pb.ListAgentToolsRequest(*args, **kwargs)
+
+
+def ListAgentToolsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ListTools response."""
+
+    return pb.ListAgentToolsResponse(*args, **kwargs)
+
+
+def AgentManagerCreateSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager create-session request."""
+
+    return pb.AgentManagerCreateSessionRequest(*args, **kwargs)
+
+
+def AgentManagerGetSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager get-session request."""
+
+    return pb.AgentManagerGetSessionRequest(*args, **kwargs)
+
+
+def AgentManagerListSessionsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager list-sessions request."""
+
+    return pb.AgentManagerListSessionsRequest(*args, **kwargs)
+
+
+def AgentManagerUpdateSessionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager update-session request."""
+
+    return pb.AgentManagerUpdateSessionRequest(*args, **kwargs)
+
+
+def AgentManagerCreateTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager create-turn request."""
+
+    return pb.AgentManagerCreateTurnRequest(*args, **kwargs)
+
+
+def AgentManagerGetTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager get-turn request."""
+
+    return pb.AgentManagerGetTurnRequest(*args, **kwargs)
+
+
+def AgentManagerListTurnsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager list-turns request."""
+
+    return pb.AgentManagerListTurnsRequest(*args, **kwargs)
+
+
+def AgentManagerCancelTurnRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager cancel-turn request."""
+
+    return pb.AgentManagerCancelTurnRequest(*args, **kwargs)
+
+
+def AgentManagerListTurnEventsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager list-turn-events request."""
+
+    return pb.AgentManagerListTurnEventsRequest(*args, **kwargs)
+
+
+def AgentManagerListInteractionsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager list-interactions request."""
+
+    return pb.AgentManagerListInteractionsRequest(*args, **kwargs)
+
+
+def AgentManagerResolveInteractionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-manager resolve-interaction request."""
+
+    return pb.AgentManagerResolveInteractionRequest(*args, **kwargs)
 
 
 class AgentHost:

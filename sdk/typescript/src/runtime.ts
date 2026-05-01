@@ -16,7 +16,7 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
   AgentProvider as AgentProviderService,
-} from "../gen/v1/agent_pb.ts";
+} from "./internal/gen/v1/agent_pb.ts";
 import {
   AuthenticationProvider as AuthenticationProviderService,
   AuthSessionSettingsSchema,
@@ -24,7 +24,7 @@ import {
   BeginLoginResponseSchema,
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
-} from "../gen/v1/authentication_pb.ts";
+} from "./internal/gen/v1/authentication_pb.ts";
 import {
   Cache as CacheService,
   CacheDeleteManyResponseSchema,
@@ -33,12 +33,12 @@ import {
   CacheGetResponseSchema,
   CacheResultSchema,
   CacheTouchResponseSchema,
-} from "../gen/v1/cache_pb.ts";
+} from "./internal/gen/v1/cache_pb.ts";
 import {
   SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
-} from "../gen/v1/secrets_pb.ts";
+} from "./internal/gen/v1/secrets_pb.ts";
 import {
   CatalogOperationSchema as ProtoCatalogOperationSchema,
   CatalogParameterSchema as ProtoCatalogParameterSchema,
@@ -58,10 +58,10 @@ import {
   type ExecuteRequest,
   type GetSessionCatalogRequest,
   type StartProviderRequest,
-} from "../gen/v1/plugin_pb.ts";
+} from "./internal/gen/v1/plugin_pb.ts";
 import {
   PluginRuntimeProvider as PluginRuntimeProviderService,
-} from "../gen/v1/pluginruntime_pb.ts";
+} from "./internal/gen/v1/pluginruntime_pb.ts";
 import {
   ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
@@ -70,9 +70,9 @@ import {
   ProviderLifecycle,
   StartRuntimeProviderResponseSchema,
   type ConfigureProviderRequest,
-} from "../gen/v1/runtime_pb.ts";
-import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
-import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
+} from "./internal/gen/v1/runtime_pb.ts";
+import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
+import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import {
   AgentProvider,

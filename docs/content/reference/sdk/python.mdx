@@ -120,6 +120,6 @@ with telemetry.model_operation(
 
 - [Open the Python API reference](/api/python/index.html)
 
-Generated protobuf bindings under `gestalt.gen` remain importable for lower
-level protocol work, but they are intentionally not expanded as authored
-reference pages.
+Generated protobuf stubs are private runtime internals. Provider code should
+use the authored classes, clients, constants, and request builders exported from
+`gestalt`.

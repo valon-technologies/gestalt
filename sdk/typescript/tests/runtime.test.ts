@@ -26,12 +26,12 @@ import {
   ListAgentProviderTurnsRequestSchema,
   ResolveAgentProviderInteractionRequestSchema,
   UpdateAgentProviderSessionRequestSchema,
-} from "../gen/v1/agent_pb.ts";
+} from "../src/internal/gen/v1/agent_pb.ts";
 import {
   BeginLoginRequestSchema,
   CompleteLoginRequestSchema,
   ValidateExternalTokenRequestSchema,
-} from "../gen/v1/authentication_pb.ts";
+} from "../src/internal/gen/v1/authentication_pb.ts";
 import {
   CacheDeleteManyRequestSchema,
   CacheDeleteRequestSchema,
@@ -41,7 +41,7 @@ import {
   CacheSetManyRequestSchema,
   CacheSetRequestSchema,
   CacheTouchRequestSchema,
-} from "../gen/v1/cache_pb.ts";
+} from "../src/internal/gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
   CredentialContextSchema,
@@ -54,28 +54,28 @@ import {
   StartProviderRequestSchema,
   StringListSchema,
   SubjectContextSchema,
-} from "../gen/v1/plugin_pb.ts";
+} from "../src/internal/gen/v1/plugin_pb.ts";
 import {
   GetPluginRuntimeSessionRequestSchema,
   ListPluginRuntimeSessionsRequestSchema,
   StartHostedPluginRequestSchema,
   StartPluginRuntimeSessionRequestSchema,
   StopPluginRuntimeSessionRequestSchema,
-} from "../gen/v1/pluginruntime_pb.ts";
+} from "../src/internal/gen/v1/pluginruntime_pb.ts";
 import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
-} from "../gen/v1/secrets_pb.ts";
+} from "../src/internal/gen/v1/secrets_pb.ts";
 import {
   ConfigureProviderRequestSchema,
   ProviderKind as ProtoProviderKind,
   ProviderLifecycle,
-} from "../gen/v1/runtime_pb.ts";
+} from "../src/internal/gen/v1/runtime_pb.ts";
 import {
   PublishWorkflowProviderEventRequestSchema,
   StartWorkflowProviderRunRequestSchema,
   UpsertWorkflowProviderScheduleRequestSchema,
-} from "../gen/v1/workflow_pb.ts";
+} from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   createAgentProviderService,

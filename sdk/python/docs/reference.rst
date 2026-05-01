@@ -15,9 +15,8 @@ The supported import surface is the top-level :mod:`gestalt` package:
 
    from gestalt import Model, Plugin, Cache, IndexedDB, S3
 
-Generated protobuf bindings remain available through :mod:`gestalt.gen`, but
-the authored reference below focuses on the handwritten SDK API that provider
-authors use directly.
+Generated protobuf bindings are private runtime internals. Provider code should
+use the authored SDK helpers documented here instead.
 
 Core authoring types
 --------------------
@@ -219,12 +218,11 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-Auth protocol types
--------------------
+Auth protocol helpers
+---------------------
 
-These generated authentication message types are also re-exported from
-:mod:`gestalt` so provider code can type or construct lower-level protocol
-payloads without reaching into private modules.
+These helpers construct wire-compatible authentication protocol payloads without
+requiring provider code to import generated modules.
 
 .. autosummary::
    :nosignatures:
@@ -234,13 +232,13 @@ payloads without reaching into private modules.
    BeginLoginResponse
    CompleteLoginRequest
 
-.. autoclass:: AuthenticatedUser
+.. autofunction:: AuthenticatedUser
 
-.. autoclass:: BeginLoginRequest
+.. autofunction:: BeginLoginRequest
 
-.. autoclass:: BeginLoginResponse
+.. autofunction:: BeginLoginResponse
 
-.. autoclass:: CompleteLoginRequest
+.. autofunction:: CompleteLoginRequest
 
 Provider telemetry
 ------------------

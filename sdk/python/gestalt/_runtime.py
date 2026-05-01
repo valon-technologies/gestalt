@@ -105,21 +105,21 @@ def _ensure_grpc_runtime() -> None:
     from google.protobuf import empty_pb2 as _empty_pb2
     from google.protobuf import json_format as _json_format
 
-    from .gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
-    from .gen.v1 import authentication_pb2 as _authentication_pb2
-    from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
-    from .gen.v1 import cache_pb2 as _cache_pb2
-    from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
-    from .gen.v1 import plugin_pb2 as _plugin_pb2
-    from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
-    from .gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
-    from .gen.v1 import runtime_pb2 as _runtime_pb2
-    from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
-    from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
-    from .gen.v1 import secrets_pb2 as _secrets_pb2
-    from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
-    from .gen.v1 import workflow_pb2 as _workflow_pb2
-    from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
+    from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
+    from ._gen.v1 import authentication_pb2 as _authentication_pb2
+    from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+    from ._gen.v1 import cache_pb2 as _cache_pb2
+    from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
+    from ._gen.v1 import plugin_pb2 as _plugin_pb2
+    from ._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+    from ._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
+    from ._gen.v1 import runtime_pb2 as _runtime_pb2
+    from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+    from ._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+    from ._gen.v1 import secrets_pb2 as _secrets_pb2
+    from ._gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
+    from ._gen.v1 import workflow_pb2 as _workflow_pb2
+    from ._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
     grpc = _grpc
     json_format = _json_format

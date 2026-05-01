@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 
 	"google.golang.org/protobuf/types/known/structpb"

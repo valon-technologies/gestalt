@@ -38,7 +38,7 @@ else:
 
 plugin_pb2: Any = cast(Any, None)
 try:
-    from .gen.v1 import plugin_pb2 as _plugin_pb2_module
+    from ._gen.v1 import plugin_pb2 as _plugin_pb2_module
 except ModuleNotFoundError:
     pass
 else:
@@ -140,15 +140,12 @@ def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
         if operation.visible is not None:
             raw["visible"] = operation.visible
         return raw
-    op = cast(
-        Any,
-        CatalogOperation(
+    op = CatalogOperation(
         id=operation.id,
         method=operation.method,
         title=operation.title,
         description=operation.description,
         read_only=operation.read_only,
-        ),
     )
     op.parameters.extend(_catalog_parameters(operation.input_type))
     op.allowed_roles.extend(operation.allowed_roles)
@@ -195,12 +192,9 @@ def _catalog_parameters(input_type: Any) -> list[CatalogParameter]:
                 param["default"] = field_definition.default
             parameters.append(param)
             continue
-        param = cast(
-            Any,
-            CatalogParameter(
-                name=field_definition.name,
-                type=_catalog_type(annotation),
-            ),
+        param = CatalogParameter(
+            name=field_definition.name,
+            type=_catalog_type(annotation),
         )
 
         param.description = description
@@ -254,28 +248,22 @@ def _catalog_type(annotation: Any) -> str:
 def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
     if plugin_pb2 is None:
         return dict(data)
-    catalog = cast(
-        Any,
-        Catalog(
-            name=data.get("name", ""),
-            display_name=data.get("display_name", data.get("displayName", "")),
-            description=data.get("description", ""),
-            icon_svg=data.get("icon_svg", data.get("iconSvg", "")),
-        ),
+    catalog = Catalog(
+        name=data.get("name", ""),
+        display_name=data.get("display_name", data.get("displayName", "")),
+        description=data.get("description", ""),
+        icon_svg=data.get("icon_svg", data.get("iconSvg", "")),
     )
     for raw_op in data.get("operations", []):
-        op = cast(
-            Any,
-            CatalogOperation(
-                id=raw_op.get("id", ""),
-                method=raw_op.get("method", ""),
-                title=raw_op.get("title", ""),
-                description=raw_op.get("description", ""),
-                input_schema=raw_op.get("input_schema", raw_op.get("inputSchema", "")),
-                output_schema=raw_op.get("output_schema", raw_op.get("outputSchema", "")),
-                read_only=raw_op.get("read_only", raw_op.get("readOnly", False)),
-                transport=raw_op.get("transport", ""),
-            ),
+        op = CatalogOperation(
+            id=raw_op.get("id", ""),
+            method=raw_op.get("method", ""),
+            title=raw_op.get("title", ""),
+            description=raw_op.get("description", ""),
+            input_schema=raw_op.get("input_schema", raw_op.get("inputSchema", "")),
+            output_schema=raw_op.get("output_schema", raw_op.get("outputSchema", "")),
+            read_only=raw_op.get("read_only", raw_op.get("readOnly", False)),
+            transport=raw_op.get("transport", ""),
         )
         visible = raw_op.get("visible")
         if visible is not None:
@@ -302,14 +290,11 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
                 )
             )
         for raw_param in raw_op.get("parameters", []):
-            param = cast(
-                Any,
-                CatalogParameter(
-                    name=raw_param.get("name", ""),
-                    type=raw_param.get("type", ""),
-                    description=raw_param.get("description", ""),
-                    required=raw_param.get("required", False),
-                ),
+            param = CatalogParameter(
+                name=raw_param.get("name", ""),
+                type=raw_param.get("type", ""),
+                description=raw_param.get("description", ""),
+                required=raw_param.get("required", False),
             )
             op.parameters.append(param)
         op.tags.extend(raw_op.get("tags", []))

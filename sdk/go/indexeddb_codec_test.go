@@ -100,13 +100,13 @@ func TestTypedValueRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pbValue, err := TypedValueFromAny(tt.input)
+			pbValue, err := typedValueFromAny(tt.input)
 			if err != nil {
-				t.Fatalf("TypedValueFromAny() error = %v", err)
+				t.Fatalf("typedValueFromAny() error = %v", err)
 			}
-			got, err := AnyFromTypedValue(pbValue)
+			got, err := anyFromTypedValue(pbValue)
 			if err != nil {
-				t.Fatalf("AnyFromTypedValue() error = %v", err)
+				t.Fatalf("anyFromTypedValue() error = %v", err)
 			}
 			tt.check(t, got)
 		})
@@ -128,13 +128,13 @@ func TestRecordRoundTripPreservesTypes(t *testing.T) {
 		},
 	}
 
-	pbRecord, err := RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
-		t.Fatalf("RecordToProto() error = %v", err)
+		t.Fatalf("recordToProto() error = %v", err)
 	}
-	got, err := RecordFromProto(pbRecord)
+	got, err := recordFromProto(pbRecord)
 	if err != nil {
-		t.Fatalf("RecordFromProto() error = %v", err)
+		t.Fatalf("recordFromProto() error = %v", err)
 	}
 
 	if got["id"] != "conn_123" {
