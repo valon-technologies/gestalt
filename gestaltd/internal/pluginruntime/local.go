@@ -406,17 +406,15 @@ func cloneStringMap(values map[string]string) map[string]string {
 
 func normalizeHostServiceBinding(req BindHostServiceRequest) (HostServiceRelay, string, error) {
 	if relay := req.Relay; relay.DialTarget != "" {
-		network, address, err := dialTarget(relay.DialTarget)
+		network, _, err := dialTarget(relay.DialTarget)
 		if err != nil {
 			return HostServiceRelay{}, "", fmt.Errorf("host service relay: %w", err)
 		}
 		switch network {
-		case "unix":
-			return relay, address, nil
 		case "tcp", "tls":
 			return relay, relay.DialTarget, nil
 		default:
-			return HostServiceRelay{}, "", fmt.Errorf("host service relay network %q is not supported", network)
+			return HostServiceRelay{}, "", fmt.Errorf("host service relay network %q is not supported; expected tcp or tls", network)
 		}
 	}
 	return HostServiceRelay{}, "", fmt.Errorf("host service relay is required")
