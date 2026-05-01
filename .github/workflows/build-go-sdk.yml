@@ -45,7 +45,7 @@ jobs:
         run: |
           repo_root="$(git rev-parse --show-toplevel)"
           cd "$repo_root/sdk/proto"
-          "$(go env GOPATH)/bin/buf" generate
+          "$(go env GOPATH)/bin/buf" generate --template buf.go.gen.yaml
           cd "$repo_root"
           git diff --exit-code -- sdk/go/gen/v1/*.pb.go sdk/go/gen/v1/*_grpc.pb.go
 

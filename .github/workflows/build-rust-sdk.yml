@@ -41,6 +41,14 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      - name: Install Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: sdk/go/go.mod
+
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+
       - name: Cache cargo
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -50,12 +58,12 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             sdk/rust/target/
-          key: ${{ runner.os }}-cargo-rust-sdk-${{ hashFiles('sdk/rust/Cargo.toml', 'sdk/rust/Cargo.lock', 'sdk/rust/**/Cargo.toml', 'tools/rust-sdk-codegen/Cargo.toml', 'tools/rust-sdk-codegen/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-rust-sdk-${{ hashFiles('sdk/rust/Cargo.toml', 'sdk/rust/Cargo.lock', 'sdk/rust/**/Cargo.toml') }}
 
       - name: Verify checked-in generated bindings
         run: |
           ./scripts/generate_stubs.sh
-          git diff --exit-code -- src/generated/gestalt.provider.v1.rs
+          git diff --exit-code -- src/generated
 
       - name: Check formatting
         run: cargo fmt --check

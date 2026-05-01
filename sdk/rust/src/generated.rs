@@ -2,13 +2,23 @@
 #[allow(clippy::all)]
 #[allow(dead_code)]
 pub mod v1 {
-    include!("generated/gestalt.provider.v1.rs");
+    pub use super::gestalt::provider::v1::*;
+}
+
+#[allow(clippy::all)]
+#[allow(dead_code)]
+pub mod gestalt {
+    pub mod provider {
+        pub mod v1 {
+            include!("generated/gestalt/provider/v1/gestalt.provider.v1.rs");
+        }
+    }
 }
 
 #[allow(clippy::all)]
 #[allow(dead_code)]
 pub mod google {
     pub mod rpc {
-        include!("generated/google.rpc.rs");
+        include!("generated/google/rpc/google.rpc.rs");
     }
 }

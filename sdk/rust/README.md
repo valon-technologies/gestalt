@@ -60,7 +60,7 @@ Current scope:
 - standalone Cargo package published as `gestalt-sdk`
 - library crate name remains `gestalt` in Rust code
 - checked-in protobuf/gRPC bindings generated from `sdk/proto/v1/*.proto`
-- maintainer-only stub generation via vendored `protoc`
+- maintainer-only stub generation via Buf remote plugins
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
 - authentication-provider, cache-provider, secrets-provider, and workflow-provider traits that map to the shared executable runtime protocol
@@ -78,9 +78,9 @@ so crate consumers do not need a protobuf toolchain when building
 
 Maintainers regenerate them from the shared proto definitions in
 [`sdk/proto`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto)
-with a helper binary under
-[`tools/rust-sdk-codegen`](https://github.com/valon-technologies/gestalt/tree/main/tools/rust-sdk-codegen),
-which uses a vendored `protoc`.
+with the Buf template in
+[`sdk/proto/buf.rust.gen.yaml`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto/buf.rust.gen.yaml).
+Use the same Buf CLI version as CI (`v1.66.1`) for deterministic remote-plugin output.
 
 To regenerate the bindings:
 
