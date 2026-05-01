@@ -907,7 +907,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	allowedHosts := entry.EffectiveAllowedHosts()
 	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps, true)
+		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps)
 		if err != nil {
 			return nil, err
 		}
@@ -1175,7 +1175,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	phaseStarted = time.Now()
 	bindingTargets := hostServiceBindingDescriptorsFromConfigured(hostServices)
 	for _, hostService := range bindingTargets {
-		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps, true)
+		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps)
 		if err != nil {
 			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_relay", phaseStarted, err)
 			return nil, err
@@ -1634,7 +1634,7 @@ func hostServiceBindingDescriptorsFromConfigured(hostServices []runtimehost.Host
 	return out
 }
 
-func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, allowCoreRoutable bool) (map[string]string, string, error) {
+func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps) (map[string]string, string, error) {
 	var (
 		serviceKey   string
 		serviceLabel string
@@ -1688,7 +1688,6 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 		serviceKey,
 		serviceLabel,
 		methodPrefix,
-		allowCoreRoutable && isCoreRoutableHostedRuntimeHostService(hostService, serviceKey, methodPrefix),
 	)
 	if err != nil {
 		return nil, "", err
@@ -1791,26 +1790,6 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 	}, nil
 }
 
-func isCoreRoutableHostedRuntimeHostService(hostService hostServiceBindingDescriptor, serviceKey, methodPrefix string) bool {
-	methodPrefix = strings.TrimSpace(methodPrefix)
-	switch serviceKey {
-	case "workflow_manager":
-		return hostService.Name == "workflow_manager" &&
-			hostService.EnvVar == workflowservice.DefaultManagerSocketEnv &&
-			methodPrefix == "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/"
-	case "agent_manager":
-		return hostService.Name == "agent_manager" &&
-			hostService.EnvVar == agentservice.DefaultManagerSocketEnv &&
-			methodPrefix == "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/"
-	case "plugin_invoker":
-		return hostService.Name == "plugin_invoker" &&
-			hostService.EnvVar == plugininvokerservice.DefaultSocketEnv &&
-			methodPrefix == "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/"
-	default:
-		return false
-	}
-}
-
 func publicRuntimeRegistryHostServices(hostServices []runtimehost.HostService) []runtimehost.HostService {
 	if len(hostServices) == 0 {
 		return nil
@@ -1818,7 +1797,7 @@ func publicRuntimeRegistryHostServices(hostServices []runtimehost.HostService) [
 	return append([]runtimehost.HostService(nil), hostServices...)
 }
 
-func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string, coreRoutable bool) (string, map[string]string, string, bool, error) {
+func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService hostServiceBindingDescriptor, deps Deps, serviceKey, serviceLabel, methodPrefix string) (string, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return "", nil, "", false, nil
 	}
@@ -1836,7 +1815,6 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 		Service:      serviceKey,
 		EnvVar:       hostService.EnvVar,
 		MethodPrefix: methodPrefix,
-		CoreRoutable: coreRoutable,
 		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {

@@ -2,17 +2,11 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 )
 
@@ -25,10 +19,6 @@ type hostServiceHandlerKey struct {
 type hostServiceHandlerEntry struct {
 	handler  http.Handler
 	verifier runtimehost.PublicHostServiceSessionVerifier
-}
-
-type pluginRuntimeSessionVerifier interface {
-	VerifyPluginRuntimeSession(context.Context, string, string) error
 }
 
 func validatePublicHostServices(services []runtimehost.PublicHostService) error {
@@ -90,20 +80,6 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 	if s == nil {
 		return nil, nil
 	}
-	if target.CoreRoutable {
-		entry, ok, err := s.coreRoutableHostServiceHandlerEntry(ctx, target)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, nil
-		}
-		return entry.handler, nil
-	}
-	if coreRoutableHostServiceTarget(target) {
-		return nil, nil
-	}
-
 	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(target.PluginName),
 		service:    strings.TrimSpace(target.Service),
@@ -118,175 +94,6 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 		return nil, nil
 	}
 	return entry.handler, nil
-}
-
-func (s *Server) coreRoutableHostServiceHandlerEntry(ctx context.Context, target runtimehost.HostServiceRelayTarget) (hostServiceHandlerEntry, bool, error) {
-	if s == nil || !target.CoreRoutable || s.invocationTokens == nil {
-		return hostServiceHandlerEntry{}, false, nil
-	}
-	pluginName := strings.TrimSpace(target.PluginName)
-	if pluginName == "" {
-		return hostServiceHandlerEntry{}, false, nil
-	}
-	key, ok := coreRoutableHostServiceHandlerKey(pluginName, target)
-	if !ok {
-		return hostServiceHandlerEntry{}, false, nil
-	}
-	if err := s.verifyCoreRoutableHostServiceSession(ctx, target); err != nil {
-		return hostServiceHandlerEntry{}, false, err
-	}
-	s.hostServiceMu.Lock()
-	if s.coreHostServiceHandlers != nil {
-		if entry, ok := s.coreHostServiceHandlers[key]; ok {
-			s.hostServiceMu.Unlock()
-			return entry, true, nil
-		}
-	}
-	s.hostServiceMu.Unlock()
-
-	entry, ok := s.newCoreRoutableHostServiceHandlerEntry(ctx, pluginName, target)
-	if !ok {
-		return hostServiceHandlerEntry{}, false, nil
-	}
-	s.hostServiceMu.Lock()
-	if s.coreHostServiceHandlers == nil {
-		s.coreHostServiceHandlers = make(map[hostServiceHandlerKey]hostServiceHandlerEntry)
-	}
-	if existing, ok := s.coreHostServiceHandlers[key]; ok {
-		s.hostServiceMu.Unlock()
-		return existing, true, nil
-	}
-	s.coreHostServiceHandlers[key] = entry
-	s.hostServiceMu.Unlock()
-	return entry, true, nil
-}
-
-func (s *Server) verifyCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) error {
-	pluginName := strings.TrimSpace(target.PluginName)
-	verifier, ok := s.pluginRuntimes.(pluginRuntimeSessionVerifier)
-	if ok && verifier != nil {
-		if err := verifier.VerifyPluginRuntimeSession(ctx, pluginName, target.SessionID); !errors.Is(err, runtimehost.ErrProviderNotHostedRuntime) {
-			return err
-		}
-	}
-	if ok, err := s.verifyRegisteredCoreRoutableHostServiceSession(ctx, target); ok || err != nil {
-		return err
-	}
-	return fmt.Errorf("plugin runtime session verifier is not configured")
-}
-
-func (s *Server) verifyRegisteredCoreRoutableHostServiceSession(ctx context.Context, target runtimehost.HostServiceRelayTarget) (bool, error) {
-	if s == nil || s.publicHostServices == nil {
-		return false, nil
-	}
-	pluginName := strings.TrimSpace(target.PluginName)
-	serviceName := strings.TrimSpace(target.Service)
-	envVar := strings.TrimSpace(target.EnvVar)
-	sessionID := strings.TrimSpace(target.SessionID)
-	if pluginName == "" || serviceName == "" || envVar == "" {
-		return false, nil
-	}
-
-	var lastErr error
-	for _, service := range s.publicHostServices.Snapshot() {
-		key, ok := publicHostServiceHandlerKey(service)
-		if !ok || key.pluginName != pluginName || key.service != serviceName || key.envVar != envVar {
-			continue
-		}
-		if service.SessionVerifier == nil {
-			continue
-		}
-		if err := service.SessionVerifier.VerifyHostServiceSession(ctx, sessionID); err != nil {
-			lastErr = err
-			continue
-		}
-		return true, nil
-	}
-	if lastErr != nil {
-		return true, lastErr
-	}
-	return false, nil
-}
-
-func coreRoutableHostServiceTarget(target runtimehost.HostServiceRelayTarget) bool {
-	_, ok := coreRoutableHostServiceHandlerKey(strings.TrimSpace(target.PluginName), target)
-	return ok
-}
-
-func coreRoutableHostServiceHandlerKey(pluginName string, target runtimehost.HostServiceRelayTarget) (hostServiceHandlerKey, bool) {
-	methodPrefix := strings.TrimSpace(target.MethodPrefix)
-	switch {
-	case target.Service == "workflow_manager" &&
-		target.EnvVar == workflowservice.DefaultManagerSocketEnv &&
-		methodPrefix == "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/":
-	case target.Service == "agent_manager" &&
-		target.EnvVar == agentservice.DefaultManagerSocketEnv &&
-		methodPrefix == "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/":
-	case target.Service == "plugin_invoker" &&
-		target.EnvVar == plugininvokerservice.DefaultSocketEnv &&
-		methodPrefix == "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/":
-	default:
-		return hostServiceHandlerKey{}, false
-	}
-	return hostServiceHandlerKey{
-		pluginName: pluginName,
-		service:    strings.TrimSpace(target.Service),
-		envVar:     strings.TrimSpace(target.EnvVar),
-	}, true
-}
-
-func (s *Server) newCoreRoutableHostServiceHandlerEntry(ctx context.Context, pluginName string, target runtimehost.HostServiceRelayTarget) (hostServiceHandlerEntry, bool) {
-	methodPrefix := strings.TrimSpace(target.MethodPrefix)
-	switch {
-	case target.Service == "workflow_manager" &&
-		target.EnvVar == workflowservice.DefaultManagerSocketEnv &&
-		methodPrefix == "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/":
-		if s.workflowSchedules == nil {
-			return hostServiceHandlerEntry{}, false
-		}
-		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
-		return hostServiceHandlerEntry{
-			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer(pluginName, s.workflowSchedules, s.invocationTokens))
-			}),
-		}, true
-	case target.Service == "agent_manager" &&
-		target.EnvVar == agentservice.DefaultManagerSocketEnv &&
-		methodPrefix == "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/":
-		if s.agentRuns == nil {
-			return hostServiceHandlerEntry{}, false
-		}
-		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
-		return hostServiceHandlerEntry{
-			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterAgentManagerHostServer(srv, agentservice.NewManagerServer(pluginName, s.agentRuns, s.invocationTokens))
-			}),
-		}, true
-	case target.Service == "plugin_invoker" &&
-		target.EnvVar == plugininvokerservice.DefaultSocketEnv &&
-		methodPrefix == "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/":
-		if s.pluginInvoker == nil || s.pluginDefs == nil {
-			return hostServiceHandlerEntry{}, false
-		}
-		entry := s.pluginDefs[pluginName]
-		if entry == nil {
-			return hostServiceHandlerEntry{}, false
-		}
-		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
-		return hostServiceHandlerEntry{
-			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewPluginInvokerServer(pluginName, pluginInvocationDependencies(entry.Invokes), s.pluginInvoker, s.invocationTokens))
-			}),
-		}, true
-	default:
-		return hostServiceHandlerEntry{}, false
-	}
-}
-
-func newGRPCHostServiceHandler(register func(*grpc.Server)) http.Handler {
-	srv := grpc.NewServer()
-	register(srv)
-	return http.HandlerFunc(srv.ServeHTTP)
 }
 
 func (s *Server) hostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKey, sessionID string) (hostServiceHandlerEntry, bool, bool, error) {

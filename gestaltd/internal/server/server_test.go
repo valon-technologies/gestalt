@@ -78,7 +78,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func configPluginInvocationDependencies(deps []invocation.PluginInvocationDependency) []config.PluginInvocationDependency {
@@ -587,54 +586,49 @@ func (v *relayTestSessionVerifier) setActive(sessionID string, active bool) {
 	v.active[sessionID] = active
 }
 
-type relayTestRuntimeSessionVerifier struct {
-	mu     sync.Mutex
-	active map[string]bool
+type relayTestWorkflowManagerHostServer struct {
+	proto.UnimplementedWorkflowManagerHostServer
+	calls *atomic.Int64
 }
 
-func newRelayTestRuntimeSessionVerifier(providerName, sessionID string) *relayTestRuntimeSessionVerifier {
-	verifier := &relayTestRuntimeSessionVerifier{active: map[string]bool{}}
-	verifier.setActive(providerName, sessionID, true)
-	return verifier
-}
-
-func (v *relayTestRuntimeSessionVerifier) VerifyPluginRuntimeSession(_ context.Context, providerName, sessionID string) error {
-	key := strings.TrimSpace(providerName) + "\x00" + strings.TrimSpace(sessionID)
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	if v.active[key] {
-		return nil
+func (s relayTestWorkflowManagerHostServer) GetSchedule(_ context.Context, req *proto.WorkflowManagerGetScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+	if s.calls != nil {
+		s.calls.Add(1)
 	}
-	return fmt.Errorf("runtime session %q is not active", sessionID)
+	return &proto.ManagedWorkflowSchedule{
+		ProviderName: "registered",
+		Schedule: &proto.BoundWorkflowSchedule{
+			Id: req.GetScheduleId(),
+		},
+	}, nil
 }
 
-func (v *relayTestRuntimeSessionVerifier) setActive(providerName, sessionID string, active bool) {
-	key := strings.TrimSpace(providerName) + "\x00" + strings.TrimSpace(sessionID)
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.active[key] = active
+type relayTestAgentManagerHostServer struct {
+	proto.UnimplementedAgentManagerHostServer
+	calls *atomic.Int64
 }
 
-func (v *relayTestRuntimeSessionVerifier) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
-	return nil, nil
+func (s relayTestAgentManagerHostServer) GetSession(_ context.Context, req *proto.AgentManagerGetSessionRequest) (*proto.AgentSession, error) {
+	if s.calls != nil {
+		s.calls.Add(1)
+	}
+	return &proto.AgentSession{
+		Id:           req.GetSessionId(),
+		ProviderName: "registered",
+		Model:        "test-model",
+	}, nil
 }
 
-func (v *relayTestRuntimeSessionVerifier) ListPluginRuntimeSessionLogs(context.Context, string, string, int64, int) ([]runtimelogs.Record, error) {
-	return nil, nil
+type relayTestRuntimeLogHostServer struct {
+	proto.UnimplementedPluginRuntimeLogHostServer
+	calls *atomic.Int64
 }
 
-type nonHostedRuntimeSessionVerifier struct{}
-
-func (nonHostedRuntimeSessionVerifier) VerifyPluginRuntimeSession(context.Context, string, string) error {
-	return runtimehost.ErrProviderNotHostedRuntime
-}
-
-func (nonHostedRuntimeSessionVerifier) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
-	return nil, nil
-}
-
-func (nonHostedRuntimeSessionVerifier) ListPluginRuntimeSessionLogs(context.Context, string, string, int64, int) ([]runtimelogs.Record, error) {
-	return nil, nil
+func (s relayTestRuntimeLogHostServer) AppendLogs(_ context.Context, req *proto.AppendPluginRuntimeLogsRequest) (*proto.AppendPluginRuntimeLogsResponse, error) {
+	if s.calls != nil {
+		s.calls.Add(1)
+	}
+	return &proto.AppendPluginRuntimeLogsResponse{LastSeq: int64(len(req.GetLogs()))}, nil
 }
 
 func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
@@ -663,7 +657,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	ts.EnableHTTP2 = true
 	ts.StartTLS()
 	testutil.CloseOnCleanup(t, ts)
-	publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
+	registration := publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
 
 	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
 	if err != nil {
@@ -725,7 +719,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	}
 
 	sessionVerifier.setActive("session-1", true)
-	publicHostServices.Unregister("support", hostService)
+	registration.Unregister()
 	unregisteredCtx, unregisteredCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer unregisteredCancel()
 	unregisteredCtx = metadata.NewOutgoingContext(unregisteredCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
@@ -852,7 +846,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
 	}
-	publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
+	registration := publicHostServices.RegisterVerified("support", sessionVerifier, hostService)
 
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
@@ -889,7 +883,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 		t.Fatalf("Cache.Get via relay: %v", err)
 	}
 
-	publicHostServices.Unregister("support", hostService)
+	registration.Unregister()
 	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
@@ -902,347 +896,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	}
 }
 
-func TestHostServiceRelayCoreRoutableTokenDoesNotUseNonCoreRegistry(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("relay-test-secret-0123456789abcd")
-	cacheSrv := &relayTestCacheServer{}
-	const envVar = "GESTALT_TEST_CACHE_SOCKET"
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	hostService := runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterCacheServer(srv, cacheSrv)
-		},
-	}
-	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), hostService)
-
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.PublicHostServices = publicHostServices
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "session-1",
-		Service:      "cache",
-		EnvVar:       envVar,
-		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
-	_, err = proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "core-routable-cache"})
-	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("Cache.Get core-routable non-core code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
-	}
-	if got := cacheSrv.calls(); got != 0 {
-		t.Fatalf("backend calls = %d, want 0", got)
-	}
-}
-
-func TestHostServiceRelayCoreRoutablePluginInvokerIgnoresRegistry(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("relay-test-secret-0123456789abcd")
-	httpInvoker := &relayTestInvoker{}
-	pluginInvoker := &relayTestInvoker{}
-	registryInvoker := &relayTestInvoker{}
-	runtimeSessions := newRelayTestRuntimeSessionVerifier("support", "session-core")
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
-		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
-	}}
-	registryTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager registry: %v", err)
-	}
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-core"), runtimehost.HostService{
-		Name:   "plugin_invoker",
-		EnvVar: plugininvokerservice.DefaultSocketEnv,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("support", invokes, registryInvoker, registryTokens))
-		},
-	})
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.Invoker = httpInvoker
-		cfg.PluginInvoker = pluginInvoker
-		cfg.PluginRuntimes = runtimeSessions
-		cfg.PublicHostServices = publicHostServices
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configPluginInvocationDependencies(invokes)},
-		}
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "session-core",
-		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
-		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", plugininvokerservice.InvocationDependencyGrants(invokes))
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-	params, err := structpb.NewStruct(map[string]any{"channel_id": "C123", "thread_ts": "123.456"})
-	if err != nil {
-		t.Fatalf("NewStruct: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	resp, err := proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
-		InvocationToken: invocationToken,
-		Plugin:          "slack",
-		Operation:       "events.reply",
-		Instance:        "prod",
-		IdempotencyKey:  "tool-call-1",
-		Params:          params,
-	})
-	if err != nil {
-		t.Fatalf("PluginInvoker.Invoke via relay: %v", err)
-	}
-	if resp.GetStatus() != 202 || resp.GetBody() != "relayed" {
-		t.Fatalf("PluginInvoker.Invoke response = %+v, want status=202 body=relayed", resp)
-	}
-	call := pluginInvoker.snapshot()
-	if call.providerName != "slack" || call.operation != "events.reply" || call.instance != "prod" {
-		t.Fatalf("invocation target = %s.%s/%s, want slack.events.reply/prod", call.providerName, call.operation, call.instance)
-	}
-	if call.idempotencyKey != "tool-call-1" {
-		t.Fatalf("idempotency key = %q, want tool-call-1", call.idempotencyKey)
-	}
-	if call.params["channel_id"] != "C123" || call.params["thread_ts"] != "123.456" {
-		t.Fatalf("params = %#v, want Slack reply params", call.params)
-	}
-	if httpCall := httpInvoker.snapshot(); httpCall.providerName != "" {
-		t.Fatalf("http invoker was called for plugin relay: %+v", httpCall)
-	}
-	if registryCall := registryInvoker.snapshot(); registryCall.providerName != "" {
-		t.Fatalf("registry invoker was called for core-routable relay: %+v", registryCall)
-	}
-
-	runtimeSessions.setActive("support", "session-core", false)
-	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer staleCancel()
-	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(staleCtx, &proto.PluginInvokeRequest{
-		InvocationToken: invocationToken,
-		Plugin:          "slack",
-		Operation:       "events.reply",
-		Params:          params,
-	})
-	if grpcstatus.Code(err) != codes.Unauthenticated {
-		t.Fatalf("PluginInvoker.Invoke stale runtime session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
-	}
-	if call := pluginInvoker.snapshot(); call.calls != 1 {
-		t.Fatalf("plugin invoker calls = %d, want 1 after stale runtime session", call.calls)
-	}
-}
-
-func TestHostServiceRelayRejectsCoreRoutableWithoutRuntimeVerifier(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("relay-test-secret-0123456789abcd")
-	pluginInvoker := &relayTestInvoker{}
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
-		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
-	}}
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.PluginInvoker = pluginInvoker
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configPluginInvocationDependencies(invokes)},
-		}
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "session-no-verifier",
-		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
-		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", plugininvokerservice.InvocationDependencyGrants(invokes))
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
-		InvocationToken: invocationToken,
-		Plugin:          "slack",
-		Operation:       "events.reply",
-	})
-	if grpcstatus.Code(err) != codes.Unauthenticated {
-		t.Fatalf("PluginInvoker.Invoke without runtime verifier code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
-	}
-	if call := pluginInvoker.snapshot(); call.calls != 0 {
-		t.Fatalf("plugin invoker calls = %d, want 0 without runtime verifier", call.calls)
-	}
-}
-
-func TestHostServiceRelayCoreRoutableProviderDevUsesRegisteredSessionVerifier(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("relay-test-secret-0123456789abcd")
-	pluginInvoker := &relayTestInvoker{}
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
-		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
-	}}
-	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("provider-dev-session"), runtimehost.HostService{
-		Name:   "plugin_invoker",
-		EnvVar: plugininvokerservice.DefaultSocketEnv,
-		Register: func(*grpc.Server) {
-		},
-	})
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.Invoker = pluginInvoker
-		cfg.PluginInvoker = pluginInvoker
-		cfg.PluginRuntimes = nonHostedRuntimeSessionVerifier{}
-		cfg.PublicHostServices = publicHostServices
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configPluginInvocationDependencies(invokes)},
-		}
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "provider-dev-session",
-		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
-		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", plugininvokerservice.InvocationDependencyGrants(invokes))
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
-		InvocationToken: invocationToken,
-		Plugin:          "slack",
-		Operation:       "events.reply",
-		Instance:        "prod",
-		IdempotencyKey:  "provider-dev-call",
-	})
-	if err != nil {
-		t.Fatalf("PluginInvoker.Invoke via provider-dev core relay: %v", err)
-	}
-	if call := pluginInvoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" {
-		t.Fatalf("plugin invoker call = %+v, want slack events.reply", call)
-	}
-}
-
-func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t *testing.T) {
+func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
@@ -1257,7 +911,8 @@ func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t 
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("provider-dev-session"), runtimehost.HostService{
+	sessionVerifier := newRelayTestSessionVerifier("provider-dev-session")
+	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
@@ -1311,228 +966,185 @@ func TestHostServiceRelayRejectsRegisteredCoreServiceWithoutCoreRoutableToken(t 
 		Instance:        "prod",
 		IdempotencyKey:  "provider-dev-call",
 	})
-	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("PluginInvoker.Invoke registered non-core relay code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+	if err != nil {
+		t.Fatalf("PluginInvoker.Invoke via registered relay: %v", err)
 	}
-	if call := invoker.snapshot(); call.providerName != "" {
-		t.Fatalf("registered core handler was called for non-core relay: %+v", call)
+	if call := invoker.snapshot(); call.calls != 1 || call.providerName != "slack" || call.operation != "events.reply" || call.instance != "prod" {
+		t.Fatalf("plugin invoker call = %+v, want slack events.reply/prod", call)
+	}
+
+	sessionVerifier.setActive("provider-dev-session", false)
+	staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer staleCancel()
+	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+	_, err = proto.NewPluginInvokerClient(conn).Invoke(staleCtx, &proto.PluginInvokeRequest{
+		InvocationToken: invocationToken,
+		Plugin:          "slack",
+		Operation:       "events.reply",
+	})
+	if grpcstatus.Code(err) != codes.Unauthenticated {
+		t.Fatalf("PluginInvoker.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+	}
+	if call := invoker.snapshot(); call.calls != 1 {
+		t.Fatalf("plugin invoker calls = %d, want only the verified call", call.calls)
 	}
 }
 
-func TestHostServiceRelayServesCoreRoutableWorkflowManagerWithoutRegistry(t *testing.T) {
+func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 	t.Parallel()
 
-	secret := []byte("relay-test-secret-0123456789abcd")
-	workflowProvider := newRelayTestWorkflowProvider()
-	agentProvider := newMemoryAgentProvider()
-	runtimeSessions := newRelayTestRuntimeSessionVerifier("github", "session-workflow")
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "github",
-		Operation:      "bot.commentFinal",
-		CredentialMode: core.ConnectionModeNone,
-	}}
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		providers := registry.New()
-		if err := providers.Providers.Register("github", &coretesting.StubIntegration{
-			N:        "github",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: serverTestCatalogFromOperations("github", []core.Operation{{
-				Name:   "events.handle",
-				Method: http.MethodPost,
-			}, {
-				Name:   "bot.commentFinal",
-				Method: http.MethodPost,
-			}}),
-		}); err != nil {
-			t.Fatalf("register provider: %v", err)
-		}
-		cfg.Providers = &providers.Providers
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.PluginRuntimes = runtimeSessions
-		cfg.Workflow = &stubWorkflowControl{
-			defaultProviderName: "local",
-			provider:            workflowProvider,
-		}
-		cfg.Agent = &stubAgentControl{
-			defaultProviderName: "managed",
-			provider:            agentProvider,
-		}
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{Agent: cfg.Agent})
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"github": {Invokes: configPluginInvocationDependencies(invokes)},
-		}
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "github",
-		SessionID:    "session-workflow",
-		Service:      "workflow_manager",
-		EnvVar:       workflowservice.DefaultManagerSocketEnv,
-		MethodPrefix: "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "github",
-		Operations: []string{"events.handle"},
-	}, {
-		Plugin: "managed",
-	}})
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: permissions,
-		Scopes:           principal.PermissionPlugins(permissions),
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "github", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	resp, err := proto.NewWorkflowManagerHostClient(conn).SignalOrStartRun(ctx, &proto.WorkflowManagerSignalOrStartRunRequest{
-		ProviderName:    "local",
-		WorkflowKey:     "github:99:acme/widgets:pull_request:7",
-		IdempotencyKey:  "delivery-1",
-		InvocationToken: invocationToken,
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
-			Agent: &proto.BoundWorkflowAgentTarget{
-				ProviderName: "managed",
-				Prompt:       "Handle the webhook.",
-				OutputDelivery: &proto.WorkflowOutputDelivery{
-					Target: &proto.BoundWorkflowPluginTarget{
-						PluginName: "github",
-						Operation:  "bot.commentFinal",
-					},
-					CredentialMode: string(core.ConnectionModeNone),
-					InputBindings: []*proto.WorkflowOutputBinding{{
-						InputField: "body",
-						Value: &proto.WorkflowOutputValueSource{
-							Kind: &proto.WorkflowOutputValueSource_AgentOutput{AgentOutput: "text"},
-						},
+	cases := []struct {
+		name         string
+		service      string
+		envVar       string
+		methodPrefix string
+		register     func(*grpc.Server, *atomic.Int64)
+		call         func(*testing.T, context.Context, *grpc.ClientConn)
+	}{
+		{
+			name:         "workflow manager",
+			service:      "workflow_manager",
+			envVar:       workflowservice.DefaultManagerSocketEnv,
+			methodPrefix: "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/",
+			register: func(srv *grpc.Server, calls *atomic.Int64) {
+				proto.RegisterWorkflowManagerHostServer(srv, relayTestWorkflowManagerHostServer{calls: calls})
+			},
+			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
+				t.Helper()
+				resp, err := proto.NewWorkflowManagerHostClient(conn).GetSchedule(ctx, &proto.WorkflowManagerGetScheduleRequest{ScheduleId: "schedule-1"})
+				if err != nil {
+					t.Fatalf("WorkflowManager.GetSchedule via relay: %v", err)
+				}
+				if resp.GetProviderName() != "registered" || resp.GetSchedule().GetId() != "schedule-1" {
+					t.Fatalf("WorkflowManager.GetSchedule response = %+v, want registered schedule-1", resp)
+				}
+			},
+		},
+		{
+			name:         "agent manager",
+			service:      "agent_manager",
+			envVar:       agentservice.DefaultManagerSocketEnv,
+			methodPrefix: "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/",
+			register: func(srv *grpc.Server, calls *atomic.Int64) {
+				proto.RegisterAgentManagerHostServer(srv, relayTestAgentManagerHostServer{calls: calls})
+			},
+			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
+				t.Helper()
+				resp, err := proto.NewAgentManagerHostClient(conn).GetSession(ctx, &proto.AgentManagerGetSessionRequest{SessionId: "agent-session-1"})
+				if err != nil {
+					t.Fatalf("AgentManager.GetSession via relay: %v", err)
+				}
+				if resp.GetProviderName() != "registered" || resp.GetId() != "agent-session-1" {
+					t.Fatalf("AgentManager.GetSession response = %+v, want registered agent-session-1", resp)
+				}
+			},
+		},
+		{
+			name:         "runtime log host",
+			service:      "runtime_log_host",
+			envVar:       runtimehost.DefaultRuntimeLogHostSocketEnv,
+			methodPrefix: "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/",
+			register: func(srv *grpc.Server, calls *atomic.Int64) {
+				proto.RegisterPluginRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
+			},
+			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
+				t.Helper()
+				resp, err := proto.NewPluginRuntimeLogHostClient(conn).AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
+					SessionId: "runtime-session-1",
+					Logs: []*proto.PluginRuntimeLogEntry{{
+						Stream:    proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT,
+						Message:   "hello",
+						SourceSeq: 1,
 					}},
+				})
+				if err != nil {
+					t.Fatalf("PluginRuntimeLogHost.AppendLogs via relay: %v", err)
+				}
+				if resp.GetLastSeq() != 1 {
+					t.Fatalf("PluginRuntimeLogHost.AppendLogs last_seq = %d, want 1", resp.GetLastSeq())
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			secret := []byte("relay-test-secret-0123456789abcd")
+			var calls atomic.Int64
+			publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+			sessionVerifier := newRelayTestSessionVerifier("session-1")
+			publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
+				Name:   tc.service,
+				EnvVar: tc.envVar,
+				Register: func(srv *grpc.Server) {
+					tc.register(srv, &calls)
 				},
-			},
-		}},
-		Signal: &proto.WorkflowSignal{Name: "github.app.webhook", IdempotencyKey: "delivery-1"},
-	})
-	if err != nil {
-		t.Fatalf("WorkflowManager.SignalOrStartRun via relay: %v", err)
-	}
-	if resp.GetRun().GetId() != "workflow-run-1" || resp.GetWorkflowKey() != "github:99:acme/widgets:pull_request:7" {
-		t.Fatalf("SignalOrStartRun response = %+v, want relayed workflow run", resp)
-	}
-	if !resp.GetStartedRun() || resp.GetSignal().GetId() != "signal-1" {
-		t.Fatalf("SignalOrStartRun signal response = %+v, want started signal-1", resp)
-	}
-	call := workflowProvider.signalOrStartRequest()
-	if call.WorkflowKey != "github:99:acme/widgets:pull_request:7" {
-		t.Fatalf("workflow key = %q, want github:99:acme/widgets:pull_request:7", call.WorkflowKey)
-	}
-	if call.Target.Agent == nil || call.Target.Agent.ProviderName != "managed" {
-		t.Fatalf("workflow target = %#v, want managed agent target", call.Target)
-	}
-	if delivery := call.Target.Agent.OutputDelivery; delivery == nil || delivery.Target.PluginName != "github" || delivery.Target.Operation != "bot.commentFinal" || delivery.CredentialMode != core.ConnectionModeNone {
-		t.Fatalf("workflow output delivery = %#v, want github bot.commentFinal with credential mode none", delivery)
-	}
-}
+			})
 
-func TestHostServiceRelayServesCoreRoutableAgentManagerWithoutRegistry(t *testing.T) {
-	t.Parallel()
+			ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+				cfg.RouteProfile = server.RouteProfilePublic
+				cfg.StateSecret = secret
+				cfg.PublicHostServices = publicHostServices
+			}))
+			ts.EnableHTTP2 = true
+			ts.StartTLS()
+			testutil.CloseOnCleanup(t, ts)
 
-	secret := []byte("relay-test-secret-0123456789abcd")
-	agentProvider := newMemoryAgentProvider()
-	runtimeSessions := newRelayTestRuntimeSessionVerifier("support", "session-agent")
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.PluginRuntimes = runtimeSessions
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent: &stubAgentControl{
-				defaultProviderName: "managed",
-				provider:            agentProvider,
-			},
+			tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
+			if err != nil {
+				t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+			}
+			relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+				PluginName:   "support",
+				SessionID:    "session-1",
+				Service:      tc.service,
+				EnvVar:       tc.envVar,
+				MethodPrefix: tc.methodPrefix,
+				TTL:          time.Minute,
+			})
+			if err != nil {
+				t.Fatalf("MintToken: %v", err)
+			}
+
+			conn := newRelayGRPCConn(t, ts)
+			defer func() { _ = conn.Close() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+			tc.call(t, ctx, conn)
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("registered handler calls = %d, want 1", got)
+			}
+
+			sessionVerifier.setActive("session-1", false)
+			staleCtx, staleCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer staleCancel()
+			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
+			switch tc.service {
+			case "workflow_manager":
+				_, err = proto.NewWorkflowManagerHostClient(conn).GetSchedule(staleCtx, &proto.WorkflowManagerGetScheduleRequest{ScheduleId: "schedule-1"})
+			case "agent_manager":
+				_, err = proto.NewAgentManagerHostClient(conn).GetSession(staleCtx, &proto.AgentManagerGetSessionRequest{SessionId: "agent-session-1"})
+			case "runtime_log_host":
+				_, err = proto.NewPluginRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendPluginRuntimeLogsRequest{
+					SessionId: "runtime-session-1",
+					Logs:      []*proto.PluginRuntimeLogEntry{{Message: "stale"}},
+				})
+			}
+			if grpcstatus.Code(err) != codes.Unauthenticated {
+				t.Fatalf("stale %s relay code = %v, want %v (err=%v)", tc.service, grpcstatus.Code(err), codes.Unauthenticated, err)
+			}
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("registered handler calls after stale session = %d, want 1", got)
+			}
 		})
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "session-agent",
-		Service:      "agent_manager",
-		EnvVar:       agentservice.DefaultManagerSocketEnv,
-		MethodPrefix: "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-	invocationTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	resp, err := proto.NewAgentManagerHostClient(conn).CreateSession(ctx, &proto.AgentManagerCreateSessionRequest{
-		InvocationToken: invocationToken,
-		ProviderName:    "managed",
-		Model:           "gpt-test",
-		ClientRef:       "client-1",
-		IdempotencyKey:  "agent-session-1",
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession via relay: %v", err)
-	}
-	if resp.GetProviderName() != "managed" || resp.GetModel() != "gpt-test" || resp.GetClientRef() != "client-1" {
-		t.Fatalf("AgentManager.CreateSession response = %+v, want managed gpt-test client-1", resp)
-	}
-	if resp.GetId() == "" {
-		t.Fatalf("AgentManager.CreateSession id is empty: %+v", resp)
 	}
 }
 
-func TestHostServiceRelayDoesNotFallbackWithoutCoreRoutableToken(t *testing.T) {
+func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("relay-test-secret-0123456789abcd")
@@ -1577,63 +1189,10 @@ func TestHostServiceRelayDoesNotFallbackWithoutCoreRoutableToken(t *testing.T) {
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{})
 	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("PluginInvoker.Invoke non-core-routable code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
+		t.Fatalf("PluginInvoker.Invoke without registered service code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
 	}
 	if call := invoker.snapshot(); call.providerName != "" {
-		t.Fatalf("invoker was called for non-core-routable relay: %+v", call)
-	}
-}
-
-func TestHostServiceRelayRejectsCoreRoutableWithWrongCoreMethodPrefix(t *testing.T) {
-	t.Parallel()
-
-	secret := []byte("relay-test-secret-0123456789abcd")
-	invoker := &relayTestInvoker{}
-	invokes := []invocation.PluginInvocationDependency{{
-		Plugin:         "slack",
-		Operation:      "events.reply",
-		CredentialMode: core.ConnectionModeNone,
-	}}
-	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
-		cfg.RouteProfile = server.RouteProfilePublic
-		cfg.StateSecret = secret
-		cfg.Invoker = invoker
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: configPluginInvocationDependencies(invokes)},
-		}
-	}))
-	ts.EnableHTTP2 = true
-	ts.StartTLS()
-	testutil.CloseOnCleanup(t, ts)
-
-	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
-	}
-	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName:   "support",
-		SessionID:    "session-elsewhere",
-		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
-		MethodPrefix: "/",
-		CoreRoutable: true,
-		TTL:          time.Minute,
-	})
-	if err != nil {
-		t.Fatalf("MintToken: %v", err)
-	}
-
-	conn := newRelayGRPCConn(t, ts)
-	defer func() { _ = conn.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
-	_, err = proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{})
-	if grpcstatus.Code(err) != codes.Unavailable {
-		t.Fatalf("PluginInvoker.Invoke wrong-prefix code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unavailable, err)
-	}
-	if call := invoker.snapshot(); call.providerName != "" {
-		t.Fatalf("invoker was called for wrong-prefix core relay: %+v", call)
+		t.Fatalf("invoker was called without registered relay service: %+v", call)
 	}
 }
 

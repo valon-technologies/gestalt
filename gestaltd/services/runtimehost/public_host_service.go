@@ -9,6 +9,9 @@ import (
 
 // ErrProviderNotHostedRuntime means a public host-service callback did not
 // belong to a provider backed by a hosted runtime.
+//
+// Deprecated: public host-service relay callbacks now resolve exclusively
+// through registered PublicHostService entries and their session verifiers.
 var ErrProviderNotHostedRuntime = errors.New("provider does not use a hosted runtime")
 
 type PublicHostServiceSessionVerifier interface {
