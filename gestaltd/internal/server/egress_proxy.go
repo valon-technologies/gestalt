@@ -23,7 +23,7 @@ func (s *Server) egressProxyMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if s.routeProfile == RouteProfileManagement || s.egressProxyTokens == nil || !isEgressProxyRequest(r) {
+		if s.egressProxyTokens == nil || !isEgressProxyRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

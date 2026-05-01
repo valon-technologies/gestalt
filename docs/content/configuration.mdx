@@ -262,10 +262,14 @@ The built-in `local` runtime handles same-machine execution. Installable
 The current Modal backend requires `runtime.providers.<name>.config.app` and
 `plugins.<name>.execution.runtime.image`. Modal can satisfy plugins that need
 Gestalt-owned services or hostname-based egress when the host is configured for
-the public relay and proxy path. In practice that means `server.baseUrl` and
-`server.encryptionKey` must be set, and the runtime must report a compatible
-support profile. Without those prerequisites, Gestalt rejects Modal for plugins
-that require relay-backed host services or hostname-based egress.
+the public relay and proxy path. In practice that means `server.baseUrl` (or
+`server.runtime.relayBaseUrl`) and `server.encryptionKey` must be set, and the
+runtime must report a compatible support profile. Set
+`server.runtime.relayBaseUrl` when hosted runtimes should call back through a
+private listener, the management listener, or an internal reverse proxy instead
+of the browser/OAuth public origin. Without those prerequisites, Gestalt rejects
+Modal for plugins that require relay-backed host services or hostname-based
+egress.
 
 For the runtime-provider lifecycle and support model, see
 [Providers > Runtime](/providers/runtime).

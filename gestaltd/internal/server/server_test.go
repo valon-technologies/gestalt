@@ -732,6 +732,63 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	}
 }
 
+func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	cacheSrv := &relayTestCacheServer{}
+	const envVar = "GESTALT_TEST_CACHE_SOCKET"
+	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
+	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
+		Name:   "cache",
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv)
+		},
+	})
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.StateSecret = secret
+		cfg.PublicHostServices = publicHostServices
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		Service:      "cache",
+		EnvVar:       envVar,
+		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
+	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "management"})
+	if err != nil {
+		t.Fatalf("Cache.Get via management relay: %v", err)
+	}
+	if got := string(resp.GetValue()); got != "relay:management" {
+		t.Fatalf("Cache.Get value = %q, want relay:management", got)
+	}
+	if got := cacheSrv.calls(); got != 1 {
+		t.Fatalf("backend calls = %d, want 1", got)
+	}
+}
+
 func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *testing.T) {
 	t.Parallel()
 
@@ -1391,6 +1448,55 @@ func TestEgressProxyProxiesHTTPRequest(t *testing.T) {
 	}
 	if got := string(body); got != "proxied-ok" {
 		t.Fatalf("proxy body = %q, want %q", got, "proxied-ok")
+	}
+}
+
+func TestEgressProxyProxiesHTTPRequestOnManagementProfile(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/management" {
+			t.Fatalf("target path = %q, want /management", got)
+		}
+		_, _ = io.WriteString(w, "management-proxied-ok")
+	}))
+	testutil.CloseOnCleanup(t, target)
+
+	proxy := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.StateSecret = secret
+	}))
+	proxy.EnableHTTP2 = true
+	proxy.StartTLS()
+	testutil.CloseOnCleanup(t, proxy)
+
+	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		AllowedHosts: []string{"127.0.0.1", "localhost"},
+	})
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(proxyURL),
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
+		},
+	}
+	resp, err := client.Get(target.URL + "/management")
+	if err != nil {
+		t.Fatalf("GET via management egress proxy: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("proxy status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
+	}
+	if got := string(body); got != "management-proxied-ok" {
+		t.Fatalf("proxy body = %q, want %q", got, "management-proxied-ok")
 	}
 }
 

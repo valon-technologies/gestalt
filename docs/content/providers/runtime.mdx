@@ -82,10 +82,12 @@ and whether the runtime can preserve hostname-based `egress.allowedHosts`.
 
 Host-service access is derived by Gestalt from the current host deployment.
 `none` means host services are unavailable for that runtime, while `relay`
-means Gestalt can provide those services through the public relay path. Egress
-support is separate: a runtime must preserve Gestalt's hostname-based policy
-model before plugins with `egress.allowedHosts` or a default-deny egress policy
-can run there.
+means Gestalt can provide those services through the relay path exposed at
+`server.baseUrl`, or at `server.runtime.relayBaseUrl` when hosted runtimes need
+a private callback origin such as the management listener or an internal reverse
+proxy. Egress support is separate: a runtime must preserve Gestalt's
+hostname-based policy model before plugins with `egress.allowedHosts` or a
+default-deny egress policy can run there.
 
 The admin inspection API exposes both sides of that decision. `GET
 /admin/api/v1/runtime/providers` includes `profile.advertised`, which is what
@@ -97,8 +99,8 @@ considered.
 
 Plugins do not talk directly to host-local services over the public network.
 `gestaltd` starts those services on the host and gives the runtime relay-backed
-bindings. The hosted plugin talks back to `gestaltd` over a scoped public relay
-target, and `gestaltd` forwards the request to the real host-local service.
+bindings. The hosted plugin talks back to `gestaltd` over a scoped relay target,
+and `gestaltd` forwards the request to the real host-local service.
 
 That same split shows up in hostname-based egress. A runtime may preserve
 `egress.allowedHosts` internally, or it may preserve it by routing hosted
