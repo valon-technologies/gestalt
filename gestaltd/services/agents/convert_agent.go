@@ -104,28 +104,6 @@ func agentToolsToProto(tools []coreagent.Tool) ([]*proto.ResolvedAgentTool, erro
 	return out, nil
 }
 
-func agentToolCandidateToProto(candidate coreagent.ToolCandidate) *proto.AgentToolCandidate {
-	return &proto.AgentToolCandidate{
-		Ref:         agentToolRefToProto(candidate.Ref),
-		Id:          candidate.ID,
-		Name:        candidate.Name,
-		Description: candidate.Description,
-		Parameters:  append([]string(nil), candidate.Parameters...),
-		Score:       candidate.Score,
-	}
-}
-
-func agentToolCandidatesToProto(candidates []coreagent.ToolCandidate) []*proto.AgentToolCandidate {
-	if len(candidates) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolCandidate, 0, len(candidates))
-	for i := range candidates {
-		out = append(out, agentToolCandidateToProto(candidates[i]))
-	}
-	return out
-}
-
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
 	return &proto.ListedAgentTool{
 		Id:           tool.ToolID,

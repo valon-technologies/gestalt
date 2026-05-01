@@ -126,15 +126,6 @@ type ToolRef struct {
 	Description    string
 }
 
-type ToolCandidate struct {
-	Ref         ToolRef
-	ID          string
-	Name        string
-	Description string
-	Parameters  []string
-	Score       float64
-}
-
 type ResolveToolsRequest struct {
 	ToolRefs         []ToolRef
 	ToolSource       ToolSourceMode
@@ -144,9 +135,8 @@ type ResolveToolsRequest struct {
 type ToolSourceMode string
 
 const (
-	ToolSourceModeUnspecified  ToolSourceMode = ""
-	ToolSourceModeNativeSearch ToolSourceMode = "native_search"
-	ToolSourceModeMCPCatalog   ToolSourceMode = "mcp_catalog"
+	ToolSourceModeUnspecified ToolSourceMode = ""
+	ToolSourceModeMCPCatalog  ToolSourceMode = "mcp_catalog"
 )
 
 func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
@@ -355,25 +345,6 @@ type ExecuteToolResponse struct {
 	Body   string
 }
 
-type SearchToolsRequest struct {
-	ProviderName   string
-	SessionID      string
-	TurnID         string
-	Query          string
-	MaxResults     int
-	CandidateLimit int
-	LoadRefs       []ToolRef
-	ToolRefs       []ToolRef
-	ToolSource     ToolSourceMode
-	ToolGrant      string
-}
-
-type SearchToolsResponse struct {
-	Tools      []Tool
-	Candidates []ToolCandidate
-	HasMore    bool
-}
-
 type ListedTool struct {
 	ToolID           string
 	MCPName          string
@@ -500,7 +471,6 @@ type Provider interface {
 }
 
 type Host interface {
-	SearchTools(ctx context.Context, req SearchToolsRequest) (*SearchToolsResponse, error)
 	ListTools(ctx context.Context, req ListToolsRequest) (*ListToolsResponse, error)
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
 }

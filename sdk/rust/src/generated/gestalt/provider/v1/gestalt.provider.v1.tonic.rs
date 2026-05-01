@@ -2213,25 +2213,6 @@ pub mod agent_host_client {
             self
         }
         ///
-        pub async fn search_tools(
-            &mut self,
-            request: impl tonic::IntoRequest<super::SearchAgentToolsRequest>,
-        ) -> std::result::Result<tonic::Response<super::SearchAgentToolsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/SearchTools");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentHost",
-                "SearchTools",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
         pub async fn list_tools(
             &mut self,
             request: impl tonic::IntoRequest<super::ListAgentToolsRequest>,
@@ -2284,11 +2265,6 @@ pub mod agent_host_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentHostServer.
     #[async_trait]
     pub trait AgentHost: std::marker::Send + std::marker::Sync + 'static {
-        ///
-        async fn search_tools(
-            &self,
-            request: tonic::Request<super::SearchAgentToolsRequest>,
-        ) -> std::result::Result<tonic::Response<super::SearchAgentToolsResponse>, tonic::Status>;
         ///
         async fn list_tools(
             &self,
@@ -2374,47 +2350,6 @@ pub mod agent_host_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AgentHost/SearchTools" => {
-                    #[allow(non_camel_case_types)]
-                    struct SearchToolsSvc<T: AgentHost>(pub Arc<T>);
-                    impl<T: AgentHost> tonic::server::UnaryService<super::SearchAgentToolsRequest>
-                        for SearchToolsSvc<T>
-                    {
-                        type Response = super::SearchAgentToolsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::SearchAgentToolsRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentHost>::search_tools(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = SearchToolsSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/gestalt.provider.v1.AgentHost/ListTools" => {
                     #[allow(non_camel_case_types)]
                     struct ListToolsSvc<T: AgentHost>(pub Arc<T>);

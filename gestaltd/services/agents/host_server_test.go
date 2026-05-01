@@ -20,7 +20,7 @@ func TestHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
 	var captured coreagent.ExecuteToolRequest
-	server := NewHostServer("agent-provider", nil, nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		captured = req
 		return &coreagent.ExecuteToolResponse{Status: 207, Body: `{"ok":true}`}, nil
 	})
@@ -61,7 +61,7 @@ func TestHostServerExecuteToolPropagatesIdempotencyKey(t *testing.T) {
 func TestHostServerExecuteToolRequiresReplayKey(t *testing.T) {
 	t.Parallel()
 
-	server := NewHostServer("agent-provider", nil, nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		t.Fatal("executeTool should not be called")
 		return nil, nil
 	})
@@ -88,7 +88,7 @@ func TestHostServerExecuteToolRecordsGenAITelemetry(t *testing.T) {
 
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	server := NewHostServer("agent-provider", nil, nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	server := NewHostServer("agent-provider", nil, func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 		return &coreagent.ExecuteToolResponse{Status: 200, Body: `{"ok":true}`}, nil
 	})
 
@@ -118,7 +118,7 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 	t.Parallel()
 
 	var captured coreagent.ListToolsRequest
-	server := NewHostServer("agent-provider", nil, func(_ context.Context, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	server := NewHostServer("agent-provider", func(_ context.Context, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
 		captured = req
 		readOnly := true
 		return &coreagent.ListToolsResponse{

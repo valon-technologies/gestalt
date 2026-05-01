@@ -17,8 +17,6 @@ import {
   ListAgentToolsRequestSchema,
   ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
-  SearchAgentToolsRequestSchema,
-  SearchAgentToolsResponseSchema,
 } from "../gen/v1/agent_pb.ts";
 import {
   AgentHost,
@@ -197,18 +195,6 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
   const calls: Array<{ turnId: string; toolCallId: string; toolId: string; idempotencyKey: string }> = [];
-  const searches: Array<{
-    turnId: string;
-    query: string;
-    maxResults: number;
-    candidateLimit: number;
-    loadRefs: Array<{
-      plugin: string;
-      operation: string;
-      connection: string;
-      instance: string;
-    }>;
-  }> = [];
   const lists: Array<{
     turnId: string;
     pageSize: number;
@@ -235,45 +221,6 @@ test("AgentHost executes tools through the configured unix socket", async () => 
               arguments: input.arguments,
               toolId: input.toolId,
             }),
-          });
-        },
-        async searchTools(input) {
-          searches.push({
-            turnId: input.turnId,
-            query: input.query,
-            maxResults: input.maxResults,
-            candidateLimit: input.candidateLimit,
-            loadRefs: input.loadRefs.map((ref) => ({
-              plugin: ref.plugin,
-              operation: ref.operation,
-              connection: ref.connection,
-              instance: ref.instance,
-            })),
-          });
-          return create(SearchAgentToolsResponseSchema, {
-            tools: [
-              {
-                id: "slack.send_message",
-                name: "Send Slack message",
-                description: "Send a direct message",
-              },
-            ],
-            candidates: [
-              {
-                ref: {
-                  plugin: "slack",
-                  operation: "search_messages",
-                  connection: "workspace",
-                  instance: "primary",
-                },
-                id: "slack/search_messages/workspace/primary",
-                name: "Search Slack messages",
-                description: "Search messages",
-                parameters: ["query", "channel"],
-                score: 12.5,
-              },
-            ],
-            hasMore: true,
           });
         },
         async listTools(input) {
@@ -344,47 +291,6 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         toolCallId: "call-123",
         toolId: "lookup-status",
         idempotencyKey: "tool-call-key-123",
-      },
-    ]);
-
-    const searchResponse = await host.searchTools(
-      create(SearchAgentToolsRequestSchema, {
-        sessionId: "session-123",
-        turnId: "turn-123",
-        query: "send slack dm",
-        maxResults: 3,
-        candidateLimit: 12,
-        loadRefs: [
-          {
-            plugin: "slack",
-            operation: "search_messages",
-            connection: "workspace",
-            instance: "primary",
-          },
-        ],
-      }),
-    );
-
-    expect(searchResponse.tools).toHaveLength(1);
-    expect(searchResponse.tools[0]?.id).toBe("slack.send_message");
-    expect(searchResponse.tools[0]?.name).toBe("Send Slack message");
-    expect(searchResponse.candidates).toHaveLength(1);
-    expect(searchResponse.candidates[0]?.ref?.operation).toBe("search_messages");
-    expect(searchResponse.hasMore).toBe(true);
-    expect(searches).toEqual([
-      {
-        turnId: "turn-123",
-        query: "send slack dm",
-        maxResults: 3,
-        candidateLimit: 12,
-        loadRefs: [
-          {
-            plugin: "slack",
-            operation: "search_messages",
-            connection: "workspace",
-            instance: "primary",
-          },
-        ],
       },
     ]);
 

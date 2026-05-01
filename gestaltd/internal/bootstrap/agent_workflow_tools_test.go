@@ -340,10 +340,6 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 
 type workflowSystemToolResolver struct{}
 
-func (workflowSystemToolResolver) SearchTools(context.Context, *principal.Principal, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
-	return &coreagent.SearchToolsResponse{}, nil
-}
-
 func (workflowSystemToolResolver) ListTools(context.Context, *principal.Principal, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
 	return &coreagent.ListToolsResponse{}, nil
 }

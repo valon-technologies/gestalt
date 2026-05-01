@@ -548,21 +548,6 @@ pub struct AgentToolRef {
     #[prost(string, tag = "8")]
     pub system: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AgentToolCandidate {
-    #[prost(message, optional, tag = "1")]
-    pub r#ref: ::core::option::Option<AgentToolRef>,
-    #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub description: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "5")]
-    pub parameters: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(double, tag = "6")]
-    pub score: f64,
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {
     #[prost(bool, tag = "1")]
@@ -907,32 +892,6 @@ pub struct ExecuteAgentToolResponse {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SearchAgentToolsRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub query: ::prost::alloc::string::String,
-    #[prost(int32, tag = "4")]
-    pub max_results: i32,
-    #[prost(int32, tag = "5")]
-    pub candidate_limit: i32,
-    #[prost(message, repeated, tag = "6")]
-    pub load_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(string, tag = "7")]
-    pub tool_grant: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SearchAgentToolsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
-    #[prost(message, repeated, tag = "2")]
-    pub candidates: ::prost::alloc::vec::Vec<AgentToolCandidate>,
-    #[prost(bool, tag = "3")]
-    pub has_more: bool,
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListedAgentTool {
     #[prost(string, tag = "1")]
@@ -1165,7 +1124,6 @@ impl AgentMessagePartType {
 #[repr(i32)]
 pub enum AgentToolSourceMode {
     Unspecified = 0,
-    NativeSearch = 1,
     McpCatalog = 2,
 }
 impl AgentToolSourceMode {
@@ -1176,7 +1134,6 @@ impl AgentToolSourceMode {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
-            Self::NativeSearch => "AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH",
             Self::McpCatalog => "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
         }
     }
@@ -1184,7 +1141,6 @@ impl AgentToolSourceMode {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH" => Some(Self::NativeSearch),
             "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG" => Some(Self::McpCatalog),
             _ => None,
         }

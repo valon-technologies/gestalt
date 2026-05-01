@@ -321,46 +321,13 @@ impl AgentProviderGrpc for TestAgentProvider {
             resumable_turns: true,
             reasoning_summaries: false,
             bounded_list_hydration: true,
-            supported_tool_sources: vec![pb::AgentToolSourceMode::NativeSearch as i32],
+            supported_tool_sources: vec![pb::AgentToolSourceMode::McpCatalog as i32],
         }))
     }
 }
 
 #[tonic::async_trait]
 impl AgentHostRpc for TestAgentHostService {
-    async fn search_tools(
-        &self,
-        request: GrpcRequest<pb::SearchAgentToolsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::SearchAgentToolsResponse>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::SearchAgentToolsResponse {
-            tools: vec![pb::ResolvedAgentTool {
-                id: format!("{}:{}:lookup", request.session_id, request.turn_id),
-                name: "lookup".to_string(),
-                description: request.query,
-                parameters_schema: Some(helpers::struct_from_json(serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "query": { "type": "string" }
-                    }
-                }))),
-            }],
-            candidates: vec![pb::AgentToolCandidate {
-                r#ref: Some(pb::AgentToolRef {
-                    plugin: "search".to_string(),
-                    operation: "lookup_more".to_string(),
-                    ..Default::default()
-                }),
-                id: "search/lookup_more".to_string(),
-                name: "lookup_more".to_string(),
-                description: "Lookup more records".to_string(),
-                parameters: vec!["query".to_string()],
-                score: 2.5,
-            }],
-            has_more: true,
-        }))
-    }
-
     async fn list_tools(
         &self,
         request: GrpcRequest<pb::ListAgentToolsRequest>,
@@ -679,36 +646,6 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     helpers::wait_for_socket(&host_socket).await;
 
     let mut host = AgentHost::connect().await.expect("connect agent host");
-    let searched = host
-        .search_tools(pb::SearchAgentToolsRequest {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            query: "look up people".to_string(),
-            max_results: 3,
-            candidate_limit: 12,
-            load_refs: vec![pb::AgentToolRef {
-                plugin: "search".to_string(),
-                operation: "lookup_more".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        })
-        .await
-        .expect("search tools");
-    assert_eq!(searched.tools.len(), 1);
-    assert_eq!(searched.tools[0].id, "session-1:turn-1:lookup");
-    assert_eq!(searched.tools[0].name, "lookup");
-    assert!(searched.has_more);
-    assert_eq!(searched.candidates.len(), 1);
-    assert_eq!(
-        searched.candidates[0]
-            .r#ref
-            .as_ref()
-            .expect("candidate ref")
-            .operation,
-        "lookup_more"
-    );
-
     let listed = host
         .list_tools(pb::ListAgentToolsRequest {
             session_id: "session-1".to_string(),

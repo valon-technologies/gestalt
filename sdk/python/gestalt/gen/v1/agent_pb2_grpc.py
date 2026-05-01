@@ -622,11 +622,6 @@ class AgentHostStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.SearchTools = channel.unary_unary(
-                '/gestalt.provider.v1.AgentHost/SearchTools',
-                request_serializer=v1_dot_agent__pb2.SearchAgentToolsRequest.SerializeToString,
-                response_deserializer=v1_dot_agent__pb2.SearchAgentToolsResponse.FromString,
-                _registered_method=True)
         self.ListTools = channel.unary_unary(
                 '/gestalt.provider.v1.AgentHost/ListTools',
                 request_serializer=v1_dot_agent__pb2.ListAgentToolsRequest.SerializeToString,
@@ -641,12 +636,6 @@ class AgentHostStub(object):
 
 class AgentHostServicer(object):
     """Missing associated documentation comment in .proto file."""
-
-    def SearchTools(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
 
     def ListTools(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -663,11 +652,6 @@ class AgentHostServicer(object):
 
 def add_AgentHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'SearchTools': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchTools,
-                    request_deserializer=v1_dot_agent__pb2.SearchAgentToolsRequest.FromString,
-                    response_serializer=v1_dot_agent__pb2.SearchAgentToolsResponse.SerializeToString,
-            ),
             'ListTools': grpc.unary_unary_rpc_method_handler(
                     servicer.ListTools,
                     request_deserializer=v1_dot_agent__pb2.ListAgentToolsRequest.FromString,
@@ -688,33 +672,6 @@ def add_AgentHostServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class AgentHost(object):
     """Missing associated documentation comment in .proto file."""
-
-    @staticmethod
-    def SearchTools(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AgentHost/SearchTools',
-            v1_dot_agent__pb2.SearchAgentToolsRequest.SerializeToString,
-            v1_dot_agent__pb2.SearchAgentToolsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
 
     @staticmethod
     def ListTools(request,

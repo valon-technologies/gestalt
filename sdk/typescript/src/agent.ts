@@ -67,8 +67,6 @@ import {
   type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
-  type SearchAgentToolsRequest,
-  type SearchAgentToolsResponse,
   type UpdateAgentProviderSessionRequest,
 } from "../gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
@@ -110,8 +108,6 @@ export type {
   ListedAgentTool,
   ResolveAgentProviderInteractionRequest,
   ResolvedAgentTool,
-  SearchAgentToolsRequest,
-  SearchAgentToolsResponse,
   UpdateAgentProviderSessionRequest,
 };
 export {
@@ -440,12 +436,6 @@ export class AgentHost {
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse> {
     return await this.client.executeTool(request);
-  }
-
-  async searchTools(
-    request: SearchAgentToolsRequest,
-  ): Promise<SearchAgentToolsResponse> {
-    return await this.client.searchTools(request);
   }
 
   async listTools(

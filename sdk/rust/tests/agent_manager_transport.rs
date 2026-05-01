@@ -468,7 +468,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
                 }],
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::NativeSearch as i32,
+            tool_source: AgentToolSourceMode::McpCatalog as i32,
             ..Default::default()
         })
         .await
