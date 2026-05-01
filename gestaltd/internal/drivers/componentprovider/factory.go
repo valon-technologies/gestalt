@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 	"gopkg.in/yaml.v3"
 )
 

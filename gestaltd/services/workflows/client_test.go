@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 

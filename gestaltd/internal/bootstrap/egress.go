@@ -2,7 +2,7 @@ package bootstrap
 
 import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 // EgressDeps holds the server-wide egress configuration derived from the
