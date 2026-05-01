@@ -579,8 +579,6 @@ pub struct AgentProviderCapabilities {
     pub resumable_turns: bool,
     #[prost(bool, tag = "7")]
     pub reasoning_summaries: bool,
-    #[prost(bool, tag = "8")]
-    pub native_tool_search: bool,
     #[prost(bool, tag = "9")]
     pub bounded_list_hydration: bool,
     #[prost(enumeration = "AgentToolSourceMode", repeated, tag = "10")]

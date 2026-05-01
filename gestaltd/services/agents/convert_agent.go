@@ -468,7 +468,6 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		Interactions:         value.GetInteractions(),
 		ResumableTurns:       value.GetResumableTurns(),
 		ReasoningSummaries:   value.GetReasoningSummaries(),
-		NativeToolSearch:     value.GetNativeToolSearch(),
 		BoundedListHydration: value.GetBoundedListHydration(),
 		SupportedToolSources: agentToolSourceModesFromProto(value.GetSupportedToolSources()),
 	}

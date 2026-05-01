@@ -232,7 +232,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         return agent_pb2.AgentProviderCapabilities(
             streaming_text=True,
             tool_calls=True,
-            native_tool_search=True,
             parallel_tool_calls=False,
             structured_output=True,
             interactions=True,

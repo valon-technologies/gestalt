@@ -94,7 +94,7 @@ func TestMain(m *testing.M) {
 }
 
 func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.Cmd) {
-	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", binaryName)
+	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "testdata", "cmd", binaryName)
 	bin := filepath.Join(os.TempDir(), binaryName)
 	build := exec.Command("go", "build", "-o", bin, ".")
 	build.Dir = harnessDir
@@ -120,7 +120,7 @@ func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.
 }
 
 func buildAndStartTCPHarness(binaryName, expectToken string) (string, string, *exec.Cmd) {
-	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", binaryName)
+	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "testdata", "cmd", binaryName)
 	bin := filepath.Join(os.TempDir(), binaryName+"-tcp")
 	build := exec.Command("go", "build", "-o", bin, ".")
 	build.Dir = harnessDir
