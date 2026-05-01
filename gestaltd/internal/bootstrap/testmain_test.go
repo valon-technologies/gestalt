@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 )
 
 var (

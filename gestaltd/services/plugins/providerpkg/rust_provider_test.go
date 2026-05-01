@@ -465,7 +465,16 @@ func rustProviderFixturePath(t *testing.T) string {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "testutil", "testdata", "provider-rust"))
+	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
+		path := filepath.Join(dir, "gestaltd", "internal", "testutil", "testdata", "provider-rust")
+		if _, err := os.Stat(path); err == nil {
+			return filepath.Clean(path)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find provider-rust fixture from %s", file)
+		}
+	}
 }
 
 func shellSingleQuoted(value string) string {

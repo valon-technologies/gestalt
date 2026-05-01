@@ -20,10 +20,10 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/operator"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 )
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {

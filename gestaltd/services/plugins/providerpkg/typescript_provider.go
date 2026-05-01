@@ -9,7 +9,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -278,12 +277,8 @@ func localTypeScriptSDKPath() string {
 		}
 		return ""
 	}
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return ""
-	}
-	path := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "sdk", "typescript"))
-	if _, err := os.Stat(filepath.Join(path, "package.json")); err != nil {
+	path := localRepositorySubdir("sdk", "typescript")
+	if path == "" {
 		return ""
 	}
 	return path

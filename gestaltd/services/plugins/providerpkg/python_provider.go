@@ -171,12 +171,8 @@ func pythonBackendEnvMap() map[string]string {
 }
 
 func localPythonSDKPath() string {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return ""
-	}
-	path := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "sdk", "python"))
-	if _, err := os.Stat(filepath.Join(path, "pyproject.toml")); err != nil {
+	path := localRepositorySubdir("sdk", "python")
+	if path == "" {
 		return ""
 	}
 	return path

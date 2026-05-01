@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	providerpkg "github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	providerpkg "github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 )
 
 const testCatalogYAML = "name: provider\noperations:\n  - id: echo\n    method: POST\n"
