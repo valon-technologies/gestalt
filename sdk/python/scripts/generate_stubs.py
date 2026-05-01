@@ -1,6 +1,4 @@
-import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -61,25 +59,18 @@ if _version_not_supported:
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[3]
     proto_dir = repo_root / "sdk/proto"
-    template_path = proto_dir / "buf.python.gen.yaml"
+    buf_generate = proto_dir / "scripts/buf_generate.sh"
     target_dir = repo_root / "sdk/python/gestalt/gen/v1"
-
-    if shutil.which("buf") is None:
-        print("buf is required to regenerate Python protobuf stubs", file=sys.stderr)
-        return 1
 
     with tempfile.TemporaryDirectory(prefix="gestalt-python-stubs-") as work_dir:
         work_path = Path(work_dir)
         subprocess.run(
             [
-                "buf",
-                "generate",
-                "--template",
-                str(template_path),
+                str(buf_generate),
+                "python",
                 "--output",
                 str(work_path),
             ],
-            cwd=proto_dir,
             check=True,
         )
 

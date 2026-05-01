@@ -38,15 +38,10 @@ jobs:
           go-version-file: sdk/go/go.mod
           cache-dependency-path: sdk/go/go.sum
 
-      - name: Install Buf
-        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
-
       - name: Verify checked-in generated bindings
         run: |
           repo_root="$(git rev-parse --show-toplevel)"
-          cd "$repo_root/sdk/proto"
-          "$(go env GOPATH)/bin/buf" generate --template buf.go.gen.yaml
-          cd "$repo_root"
+          "$repo_root/sdk/proto/scripts/buf_generate.sh" go
           git diff --exit-code -- sdk/go/gen/v1/*.pb.go sdk/go/gen/v1/*_grpc.pb.go
 
       - name: Run Go SDK checks

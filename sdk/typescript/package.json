@@ -29,7 +29,7 @@
     "access": "public"
   },
   "scripts": {
-    "build:proto": "buf generate --template ../proto/buf.typescript.gen.yaml ../proto",
+    "build:proto": "../proto/scripts/buf_generate.sh typescript",
     "docs:lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"docs/entrypoints/**/*.ts\"",
     "docs:build": "typedoc --options typedoc.json --out docs/_build/html",
     "docs:build:deploy": "typedoc --options typedoc.json --out ../../docs/public/api/typescript",

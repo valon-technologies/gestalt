@@ -33,10 +33,10 @@ Regenerate them from the repo root with:
 uv run python sdk/python/scripts/generate_stubs.py
 ```
 
-The script uses pinned `buf` remote Python plugins so the generated stubs stay
+The script uses pinned `buf` remote Python plugins through the shared
+`sdk/proto/scripts/buf_generate.sh` driver so the generated stubs stay
 reproducible while `plugin_pb2.py` tracks the protobuf `6.33.1` runtime floor
 used by this SDK package and remains compatible with protobuf 7 runtimes.
-`buf` must be available on `PATH`.
 
 ## API Reference
 

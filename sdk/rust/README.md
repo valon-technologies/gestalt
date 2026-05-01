@@ -80,7 +80,8 @@ Maintainers regenerate them from the shared proto definitions in
 [`sdk/proto`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto)
 with the Buf template in
 [`sdk/proto/buf.rust.gen.yaml`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto/buf.rust.gen.yaml).
-Use the same Buf CLI version as CI (`v1.66.1`) for deterministic remote-plugin output.
+The script uses the shared `sdk/proto/scripts/buf_generate.sh` driver so local
+and CI regeneration use the same Buf CLI version.
 
 To regenerate the bindings:
 

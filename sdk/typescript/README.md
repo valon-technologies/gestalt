@@ -127,7 +127,7 @@ provider source into the result.
 From the repo root:
 
 ```sh
-buf generate --template sdk/proto/buf.typescript.gen.yaml sdk/proto
+sdk/proto/scripts/buf_generate.sh typescript
 ```
 
 ## Local checks

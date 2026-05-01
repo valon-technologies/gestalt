@@ -89,8 +89,6 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: sdk/go/go.mod
-      - name: Install Buf
-        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
