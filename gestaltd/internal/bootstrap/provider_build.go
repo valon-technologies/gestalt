@@ -720,7 +720,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 		if err != nil {
 			return nil, nil, err
 		}
-		prov, err := declarative.Build(def, resolved.Connection, buildOpts...)
+		prov, err := declarative.Build(def, declarativeConnectionDef(resolved.Connection), buildOpts...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -2921,8 +2921,9 @@ func buildOAuthHandlerFromDefinition(def *declarative.Definition, conn config.Co
 	}
 
 	defCopy := *def
-	declarative.ApplyConnectionAuth(&defCopy, effectiveConn)
-	upstream, err := declarative.BuildOAuthUpstream(&defCopy, effectiveConn, defCopy.BaseURL, nil)
+	serviceConn := declarativeConnectionDef(effectiveConn)
+	declarative.ApplyConnectionAuth(&defCopy, serviceConn)
+	upstream, err := declarative.BuildOAuthUpstream(&defCopy, serviceConn, defCopy.BaseURL, nil)
 	if err != nil {
 		return nil, err
 	}

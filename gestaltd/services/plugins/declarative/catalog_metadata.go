@@ -1,6 +1,7 @@
 package declarative
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -27,7 +28,7 @@ func CatalogFromDefinition(def *Definition) *catalog.Catalog {
 			Method:       strings.ToUpper(opDef.Method),
 			Path:         opDef.Path,
 			Description:  opDef.Description,
-			AllowedRoles: opDef.AllowedRoles,
+			AllowedRoles: slices.Clone(opDef.AllowedRoles),
 			Tags:         catalog.MergeTags(opDef.Tags),
 			Transport:    opDef.Transport,
 			Query:        opDef.Query,

@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
 	schema, err := introspect(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
@@ -31,7 +32,7 @@ func StaticDefinition(name, endpoint string) *declarative.Definition {
 	return def
 }
 
-func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
+func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
 	def := StaticDefinition(name, endpoint)
 	def.Operations = make(map[string]declarative.OperationDef)
 	addOperations(schema, def, schema.QueryType, false, allowedOps, selectionOverrides)
@@ -70,7 +71,7 @@ func SchemaFromResult(result *core.OperationResult) (*Schema, error) {
 	return SchemaFromBody([]byte(result.Body))
 }
 
-func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) {
+func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) {
 	if root == nil {
 		return
 	}
@@ -101,7 +102,7 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 			if override.Alias != "" {
 				opName = override.Alias
 			}
-			allowedRoles = override.AllowedRoles
+			allowedRoles = slices.Clone(override.AllowedRoles)
 			tags = catalog.MergeTags(override.Tags)
 		}
 

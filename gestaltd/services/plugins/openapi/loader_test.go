@@ -8,9 +8,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
 func serveJSON(t *testing.T, spec any) *httptest.Server {
@@ -82,8 +82,8 @@ func TestLoadDefinition(t *testing.T) {
 	srv := serveJSON(t, testSpec())
 	testutil.CloseOnCleanup(t, srv)
 
-	allowed := map[string]*config.OperationOverride{
-		"list_items": {Description: "List items with pagination", Tags: []string{"pagination"}},
+	allowed := map[string]*operationexposure.OperationOverride{
+		"list_items": {Description: "List items with pagination", AllowedRoles: []string{"reader"}, Tags: []string{"pagination"}},
 		"get_item":   nil,
 	}
 
@@ -117,6 +117,9 @@ func TestLoadDefinition(t *testing.T) {
 	}
 	if got, want := listOp.Tags, []string{"inventory", "pagination"}; !slices.Equal(got, want) {
 		t.Errorf("list_items tags = %#v, want %#v", got, want)
+	}
+	if got, want := listOp.AllowedRoles, []string{"reader"}; !slices.Equal(got, want) {
+		t.Errorf("list_items allowed roles = %#v, want %#v", got, want)
 	}
 	if len(listOp.Parameters) != 1 {
 		t.Fatalf("list_items params = %d, want 1", len(listOp.Parameters))
@@ -154,7 +157,7 @@ func TestLoadDefinitionFiltersOperations(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"op_a": nil, "op_c": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*operationexposure.OperationOverride{"op_a": nil, "op_c": nil})
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -347,7 +350,7 @@ func TestCollectScopesRespectsAllowedOps(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"read_op": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*operationexposure.OperationOverride{"read_op": nil})
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}

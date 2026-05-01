@@ -3,13 +3,14 @@ package declarative
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
@@ -35,7 +36,7 @@ func WithEgressCheck(fn func(string) error) BuildOption {
 
 // Build constructs a provider from a spec Definition and a ConnectionDef that
 // owns auth configuration.
-func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (core.Provider, error) {
+func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provider, error) {
 	var bo buildOptions
 	for _, opt := range opts {
 		opt(&bo)
@@ -176,7 +177,9 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 			base.ConnectionDefs[name] = core.ConnectionParamDef{
 				Required:    cpd.Required,
 				Description: cpd.Description,
+				Default:     cpd.Default,
 				From:        cpd.From,
+				Field:       cpd.Field,
 			}
 		}
 	} else if len(def.Connection) > 0 {
@@ -205,7 +208,7 @@ func ReadIconFile(path string) (string, error) {
 }
 
 // ApplyConnectionAuth merges connection auth overrides into the Definition.
-func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
+func ApplyConnectionAuth(def *Definition, conn ConnectionDef) {
 	o := conn.Auth
 	if o.Type == providermanifestv1.AuthTypeOAuth2 && def.Auth.Type != string(providermanifestv1.AuthTypeOAuth2) {
 		clearManualAuthMaterialization(def)
@@ -216,7 +219,7 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	setStr(&def.Auth.ClientAuth, o.ClientAuth)
 	setStr(&def.Auth.TokenExchange, o.TokenExchange)
 	if o.Scopes != nil {
-		def.Auth.Scopes = o.Scopes
+		def.Auth.Scopes = slices.Clone(o.Scopes)
 	}
 	setStr(&def.Auth.ScopeParam, o.ScopeParam)
 	setStr(&def.Auth.ScopeSeparator, o.ScopeSeparator)
@@ -226,23 +229,22 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 		def.Auth.PKCE = true
 	}
 	if o.AuthorizationParams != nil {
-		def.Auth.AuthorizationParams = o.AuthorizationParams
+		def.Auth.AuthorizationParams = maps.Clone(o.AuthorizationParams)
 	}
 	if o.TokenParams != nil {
-		def.Auth.TokenParams = o.TokenParams
+		def.Auth.TokenParams = maps.Clone(o.TokenParams)
 	}
 	if o.RefreshParams != nil {
-		def.Auth.RefreshParams = o.RefreshParams
+		def.Auth.RefreshParams = maps.Clone(o.RefreshParams)
 	}
 	if o.TokenMetadata != nil {
-		def.Auth.TokenMetadata = o.TokenMetadata
+		def.Auth.TokenMetadata = slices.Clone(o.TokenMetadata)
 	}
 	if len(o.Credentials) > 0 {
-		def.CredentialFields = make([]CredentialFieldDef, len(o.Credentials))
-		copy(def.CredentialFields, o.Credentials)
+		def.CredentialFields = slices.Clone(o.Credentials)
 	}
 	if o.AuthMapping != nil {
-		def.AuthMapping = config.CloneAuthMapping(o.AuthMapping)
+		def.AuthMapping = cloneAuthMapping(o.AuthMapping)
 	}
 }
 
@@ -260,7 +262,7 @@ func setStr(dst *string, val string) {
 	}
 }
 
-func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (AuthHandler, error) {
+func buildAuth(def *Definition, conn ConnectionDef, baseURL string, client *http.Client) (AuthHandler, error) {
 	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
 		return oauth.ManualAuthHandler{}, nil
 	}
@@ -277,19 +279,21 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 // token_params, refresh_params, scope_separator, accept_header, and response
 // hooks. Callers outside the provider build pipeline (e.g. the factory building
 // per-connection OAuth handlers) use this to get a standalone handler.
-func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (*oauth.UpstreamHandler, error) {
+func BuildOAuthUpstream(def *Definition, conn ConnectionDef, baseURL string, client *http.Client) (*oauth.UpstreamHandler, error) {
+	auth := cloneAuthDef(def.Auth)
+
 	var tokenExchange oauth.TokenExchangeFormat
-	switch def.Auth.TokenExchange {
+	switch auth.TokenExchange {
 	case "", "form":
 		tokenExchange = oauth.TokenExchangeForm
 	case "json":
 		tokenExchange = oauth.TokenExchangeJSON
 	default:
-		return nil, fmt.Errorf("unknown tokenExchange %q", def.Auth.TokenExchange)
+		return nil, fmt.Errorf("unknown tokenExchange %q", auth.TokenExchange)
 	}
 
-	authURL := resolveURL(baseURL, def.Auth.AuthorizationURL)
-	tokenURL := resolveURL(baseURL, def.Auth.TokenURL)
+	authURL := resolveURL(baseURL, auth.AuthorizationURL)
+	tokenURL := resolveURL(baseURL, auth.TokenURL)
 
 	oauthCfg := oauth.UpstreamConfig{
 		ClientID:            conn.Auth.ClientID,
@@ -297,19 +301,19 @@ func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL stri
 		AuthorizationURL:    authURL,
 		TokenURL:            tokenURL,
 		RedirectURL:         conn.Auth.RedirectURL,
-		PKCE:                def.Auth.PKCE,
-		DefaultScopes:       def.Auth.Scopes,
-		ScopeParam:          def.Auth.ScopeParam,
-		ScopeSeparator:      def.Auth.ScopeSeparator,
-		AuthorizationParams: def.Auth.AuthorizationParams,
-		TokenParams:         def.Auth.TokenParams,
-		RefreshParams:       def.Auth.RefreshParams,
+		PKCE:                auth.PKCE,
+		DefaultScopes:       auth.Scopes,
+		ScopeParam:          auth.ScopeParam,
+		ScopeSeparator:      auth.ScopeSeparator,
+		AuthorizationParams: auth.AuthorizationParams,
+		TokenParams:         auth.TokenParams,
+		RefreshParams:       auth.RefreshParams,
 		TokenExchange:       tokenExchange,
-		AcceptHeader:        def.Auth.AcceptHeader,
-		AccessTokenPath:     def.Auth.AccessTokenPath,
+		AcceptHeader:        auth.AcceptHeader,
+		AccessTokenPath:     auth.AccessTokenPath,
 	}
 
-	if def.Auth.ClientAuth == "header" {
+	if auth.ClientAuth == "header" {
 		oauthCfg.ClientAuthMethod = oauth.ClientAuthHeader
 	}
 
@@ -318,8 +322,8 @@ func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL stri
 		opts = append(opts, oauth.WithHTTPClient(client))
 	}
 
-	if def.Auth.ResponseCheck != nil {
-		rcd := def.Auth.ResponseCheck
+	if auth.ResponseCheck != nil {
+		rcd := auth.ResponseCheck
 		opts = append(opts, oauth.WithResponseHook(func(body []byte) error {
 			var data map[string]any
 			if err := json.Unmarshal(body, &data); err != nil {

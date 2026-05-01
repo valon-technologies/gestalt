@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
 func strPtr(s string) *string { return &s }
@@ -141,8 +141,8 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	srv := startIntrospectionServer(t, newTestSchema())
 	defer srv.Close()
 
-	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*config.OperationOverride{
-		"teams": {Description: "My custom description", Tags: []string{"workspace"}},
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
+		"teams": {Description: "My custom description", AllowedRoles: []string{"workspace-admin"}, Tags: []string{"workspace"}},
 	}, nil)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
@@ -158,6 +158,9 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	}
 	if got, want := teams.Tags, []string{"workspace"}; !slices.Equal(got, want) {
 		t.Errorf("teams.Tags: got %#v, want %#v", got, want)
+	}
+	if got, want := teams.AllowedRoles, []string{"workspace-admin"}; !slices.Equal(got, want) {
+		t.Errorf("teams.AllowedRoles: got %#v, want %#v", got, want)
 	}
 }
 

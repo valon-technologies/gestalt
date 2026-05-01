@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -34,8 +33,8 @@ func testDefinition(name string) *Definition {
 	}
 }
 
-func testCreds() config.ConnectionDef {
-	return config.ConnectionDef{Auth: config.ConnectionAuthDef{
+func testCreds() ConnectionDef {
+	return ConnectionDef{Auth: ConnectionAuthDef{
 		ClientID:     "test",
 		ClientSecret: "test",
 		RedirectURL:  "http://localhost/callback",
@@ -70,7 +69,7 @@ func TestBuildManualAuth(t *testing.T) {
 			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.ConnectionDef{})
+	intg, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -83,7 +82,7 @@ func TestBuildDoesNotMutateDefinition(t *testing.T) {
 	t.Parallel()
 
 	def := testDefinition("original")
-	_, err := Build(def, config.ConnectionDef{Auth: config.ConnectionAuthDef{
+	_, err := Build(def, ConnectionDef{Auth: ConnectionAuthDef{
 		ClientID: "test",
 		TokenURL: "https://override.example.com/token",
 	}})
@@ -119,7 +118,7 @@ func TestBuildBasicAuthStyle(t *testing.T) {
 			"list": {Description: "List", Method: http.MethodGet, Path: "/list"},
 		},
 	}
-	intg, err := Build(def, config.ConnectionDef{})
+	intg, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -159,7 +158,7 @@ func TestBuildExposesCatalog(t *testing.T) {
 		},
 	}
 
-	provider, err := Build(def, config.ConnectionDef{})
+	provider, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -245,7 +244,7 @@ func TestBuildExecuteRoutesQueryParamsUsingCatalogMetadata(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -304,7 +303,7 @@ func TestBuildAppliesIconFile(t *testing.T) {
 		t.Fatalf("ReadIconFile: %v", err)
 	}
 	def.IconSVG = iconSVG
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -334,7 +333,7 @@ func TestBuildIconFileMissing(t *testing.T) {
 	if _, err := ReadIconFile("/nonexistent/icon.svg"); err == nil {
 		t.Fatal("expected ReadIconFile to fail for missing icon")
 	}
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build should succeed with missing icon: %v", err)
 	}
@@ -365,7 +364,7 @@ func TestBuildAuthHeader(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -413,8 +412,8 @@ func TestBuildOAuthConnectionOverrideClearsOpenAPIManualAuth(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{
-		Auth: config.ConnectionAuthDef{
+	prov, err := Build(def, ConnectionDef{
+		Auth: ConnectionAuthDef{
 			Type:             providermanifestv1.AuthTypeOAuth2,
 			AuthorizationURL: "https://identity.example.com/oauth/authorize",
 			TokenURL:         "https://identity.example.com/oauth/token",
@@ -481,7 +480,7 @@ func TestBuildAuthMapping(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -534,7 +533,7 @@ func TestBuildAuthMappingMissingField(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -573,7 +572,7 @@ func TestBuildErrorMessagePath(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -610,7 +609,7 @@ func TestBuildErrorMessagePathSuccessPassthrough(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -649,7 +648,7 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 
 	def.AuthHeader = "X-Override-Key"
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -691,7 +690,7 @@ func TestBuildConnectionParams(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -730,7 +729,7 @@ func TestBuildConnectionParamsBaseURLInterpolation(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -770,7 +769,7 @@ func TestBuildResponseCheck_SuccessMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -813,7 +812,7 @@ func TestBuildResponseCheck_FailureMatch(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -851,7 +850,7 @@ func TestBuildResponseCheck_NonJSON200(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -888,7 +887,7 @@ func TestBuildResponseCheck_NonJSON500(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -915,7 +914,7 @@ func TestBuildResponseCheck_SuccessMatchOnly(t *testing.T) {
 		},
 	}
 
-	_, err := Build(def, config.ConnectionDef{})
+	_, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build should succeed with structured response check: %v", err)
 	}
@@ -949,7 +948,7 @@ func TestBuildResponseCheck_ErrorMessagePathOnly(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -980,7 +979,7 @@ func TestBuildCredentialFields(t *testing.T) {
 		},
 	}
 
-	prov, err := Build(def, config.ConnectionDef{})
+	prov, err := Build(def, ConnectionDef{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -1010,9 +1009,9 @@ func TestBuildCredentialFieldsFromConfig(t *testing.T) {
 		},
 	}
 
-	conn := config.ConnectionDef{
-		Auth: config.ConnectionAuthDef{
-			Credentials: []config.CredentialFieldDef{
+	conn := ConnectionDef{
+		Auth: ConnectionAuthDef{
+			Credentials: []CredentialFieldDef{
 				{Name: "token", Label: "Access Token"},
 			},
 		},
@@ -1054,18 +1053,18 @@ func TestBuildAuthMappingFromConfig(t *testing.T) {
 		},
 	}
 
-	conn := config.ConnectionDef{
-		Auth: config.ConnectionAuthDef{
-			AuthMapping: &config.AuthMappingDef{
-				Headers: map[string]config.AuthValueDef{
+	conn := ConnectionDef{
+		Auth: ConnectionAuthDef{
+			AuthMapping: &AuthMappingDef{
+				Headers: map[string]AuthValueDef{
 					"X-Api-Key": {
-						ValueFrom: &config.AuthValueFromDef{
-							CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
+						ValueFrom: &AuthValueFromDef{
+							CredentialFieldRef: &CredentialFieldRefDef{Name: "api_key"},
 						},
 					},
 					"X-App-Key": {
-						ValueFrom: &config.AuthValueFromDef{
-							CredentialFieldRef: &config.CredentialFieldRefDef{Name: "app_key"},
+						ValueFrom: &AuthValueFromDef{
+							CredentialFieldRef: &CredentialFieldRefDef{Name: "app_key"},
 						},
 					},
 				},
