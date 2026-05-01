@@ -11,7 +11,6 @@ import (
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,6 +36,6 @@ func (p *Provider) MeterProvider() metric.MeterProvider  { return p.mp }
 func (p *Provider) PrometheusHandler() http.Handler      { return nil }
 func (p *Provider) Shutdown(context.Context) error       { return nil }
 
-var Factory bootstrap.TelemetryFactory = func(yaml.Node) (core.TelemetryProvider, error) {
+func Factory(yaml.Node) (core.TelemetryProvider, error) {
 	return New(), nil
 }

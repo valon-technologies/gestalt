@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -17,8 +19,10 @@ import (
 	telemetrystdout "github.com/valon-technologies/gestalt/server/services/observability/drivers/stdout"
 	"github.com/valon-technologies/gestalt/server/services/operator"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	secretsenv "github.com/valon-technologies/gestalt/server/services/secrets/drivers/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/services/secrets/drivers/file"
+	"gopkg.in/yaml.v3"
 )
 
 type bootstrapEnv struct {
@@ -111,14 +115,36 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Source.Builtin)
 		}
 	}
-	factories.Auth = providerdrivers.AuthenticationFactory
-	factories.Authorization = providerdrivers.AuthorizationFactory
-	factories.ExternalCredentials = providerdrivers.ExternalCredentialsFactory
+	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+		defaultCallbackURL := ""
+		if deps.BaseURL != "" {
+			defaultCallbackURL = deps.BaseURL + config.AuthCallbackPath
+		}
+		return providerdrivers.AuthenticationFactory(node, providerdrivers.AuthenticationDeps{
+			DefaultCallbackURL: defaultCallbackURL,
+			SessionKey:         deps.EncryptionKey,
+		})
+	}
+	factories.Authorization = func(node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+		return providerdrivers.AuthorizationFactory(node, hostServices)
+	}
+	factories.ExternalCredentials = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		return providerdrivers.ExternalCredentialsFactory(ctx, name, node, hostServices)
+	}
 	factories.IndexedDB = providerdrivers.IndexedDBFactory
 	factories.Cache = providerdrivers.CacheFactory
 	factories.S3 = providerdrivers.S3Factory
-	factories.Workflow = providerdrivers.WorkflowFactory
-	factories.Agent = providerdrivers.AgentFactory
+	factories.Workflow = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		return providerdrivers.WorkflowFactory(ctx, name, node, hostServices, providerdrivers.WorkflowDeps{
+			EgressDefaultAction: deps.Egress.DefaultAction,
+		})
+	}
+	factories.Agent = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		return providerdrivers.AgentFactory(ctx, name, node, hostServices, providerdrivers.AgentDeps{
+			EgressDefaultAction: deps.Egress.DefaultAction,
+			Telemetry:           deps.Telemetry,
+		})
+	}
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory

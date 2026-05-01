@@ -27,7 +27,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/services/observability/drivers/metricspipeline"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/services/observability/drivers/stdout"
 	"github.com/valon-technologies/gestalt/server/services/observability/drivers/telemetryutil"
@@ -453,7 +452,7 @@ func decodeConfig(node yaml.Node, subject string) (yamlConfig, error) {
 	return cfg, nil
 }
 
-var Factory bootstrap.TelemetryFactory = func(node yaml.Node) (core.TelemetryProvider, error) {
+func Factory(node yaml.Node) (core.TelemetryProvider, error) {
 	cfg, err := decodeConfig(node, "otlp telemetry")
 	if err != nil {
 		return nil, err

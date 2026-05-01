@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authenticationservice "github.com/valon-technologies/gestalt/server/services/authentication"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
@@ -18,7 +16,7 @@ type yamlConfig struct {
 	CallbackURL                  string `yaml:"callbackUrl"`
 }
 
-var AuthenticationFactory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
+func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.AuthenticationProvider, error) {
 	var cfg yamlConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("authentication provider: parsing config: %w", err)
@@ -35,8 +33,8 @@ var AuthenticationFactory bootstrap.AuthFactory = func(node yaml.Node, deps boot
 	cfg.YAMLConfig = prepared.YAMLConfig
 
 	callbackURL := cfg.CallbackURL
-	if callbackURL == "" && deps.BaseURL != "" {
-		callbackURL = deps.BaseURL + config.AuthCallbackPath
+	if callbackURL == "" {
+		callbackURL = deps.DefaultCallbackURL
 	}
 	return authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     cfg.Command,
@@ -48,6 +46,6 @@ var AuthenticationFactory bootstrap.AuthFactory = func(node yaml.Node, deps boot
 		Cleanup:     prepared.Cleanup,
 		Name:        cfg.Name,
 		CallbackURL: callbackURL,
-		SessionKey:  deps.EncryptionKey,
+		SessionKey:  deps.SessionKey,
 	})
 }

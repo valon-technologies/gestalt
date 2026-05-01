@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
@@ -13,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var AgentFactory bootstrap.AgentFactory = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+func AgentFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AgentDeps) (coreagent.Provider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("agent provider: parsing config: %w", err)
@@ -34,7 +33,7 @@ var AgentFactory bootstrap.AgentFactory = func(ctx context.Context, name string,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		Egress:       cfg.EgressPolicy(deps.Egress.DefaultAction),
+		Egress:       cfg.EgressPolicy(deps.EgressDefaultAction),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,

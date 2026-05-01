@@ -137,6 +137,13 @@ func TestE2EValidateAcceptsV3TelemetryBuiltins(t *testing.T) {
 			name:   "noop",
 			source: "noop",
 		},
+		{
+			name:   "stdout",
+			source: "stdout",
+			telemetryBlock: `      config:
+        level: debug
+        format: json`,
+		},
 	}
 
 	for _, tc := range cases {
