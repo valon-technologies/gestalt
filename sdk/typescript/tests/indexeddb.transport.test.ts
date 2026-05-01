@@ -458,7 +458,7 @@ describe("IndexedDB transport", () => {
     const again = await cursor!.continue();
     expect(again).toBe(false);
 
-    expect(cursor!.delete()).rejects.toThrow(NotFoundError);
+    await expect(cursor!.delete()).rejects.toThrow(NotFoundError);
   });
 
   test("index cursor: filter by_status=active returns 3 records", async () => {
@@ -531,7 +531,7 @@ describe("IndexedDB transport", () => {
     await db.createObjectStore(store);
     const os = db.objectStore(store);
 
-    expect(os.get("nonexistent")).rejects.toThrow(NotFoundError);
+    await expect(os.get("nonexistent")).rejects.toThrow(NotFoundError);
   });
 
   test("error mapping: duplicate add throws AlreadyExistsError", async () => {
@@ -540,6 +540,6 @@ describe("IndexedDB transport", () => {
     const os = db.objectStore(store);
 
     await os.add({ id: "dup-1", data: "first" });
-    expect(os.add({ id: "dup-1", data: "second" })).rejects.toThrow(AlreadyExistsError);
+    await expect(os.add({ id: "dup-1", data: "second" })).rejects.toThrow(AlreadyExistsError);
   });
 });

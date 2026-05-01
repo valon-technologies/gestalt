@@ -1,3 +1,5 @@
+import { connect } from "node:net";
+
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
@@ -528,8 +530,16 @@ export class IndexedDB {
       throw new Error(`${envName} is not set`);
     }
     const token = process.env[indexedDBSocketTokenEnv(name)]?.trim() ?? "";
+    const transportOptions = indexedDBTransportOptions(target);
     const transport = createGrpcTransport({
-      ...indexedDBTransportOptions(target),
+      ...transportOptions,
+      ...(transportOptions.nodeOptions
+        ? {
+            nodeOptions: {
+              createConnection: () => connect(transportOptions.nodeOptions!.path),
+            },
+          }
+        : {}),
       interceptors: token ? [indexedDBRelayTokenInterceptor(token)] : [],
     });
     this.client = createClient(IndexedDBService, transport);

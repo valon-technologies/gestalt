@@ -129,6 +129,17 @@ export {
   type WorkflowManagerUpdateScheduleInput,
 } from "./workflow-manager.ts";
 export {
+  ENV_RUNTIME_LOG_HOST_SOCKET,
+  ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+  RuntimeLogHost,
+  type RuntimeLogAppendInput,
+  type RuntimeLogAppendLogsInput,
+  type RuntimeLogAppendResponseMessage,
+  type RuntimeLogStreamInput,
+  type RuntimeLogStreamName,
+  type RuntimeLogWriterOptions,
+} from "./runtime-log-host.ts";
+export {
   AuthenticationProvider,
   defineAuthenticationProvider,
   isAuthenticationProvider,
