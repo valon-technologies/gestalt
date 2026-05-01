@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"encoding/base64"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,6 +17,10 @@ const (
 	proxyAuthorizationHeader = "Proxy-Authorization"
 	egressProxyDialTimeout   = 10 * time.Second
 )
+
+type egressProxyRequestPolicy struct {
+	destination egress.DestinationPolicy
+}
 
 func (s *Server) egressProxyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,17 +39,30 @@ func (s *Server) egressProxyMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "invalid egress proxy token", http.StatusProxyAuthRequired)
 			return
 		}
-		host := proxyTargetHost(r)
-		if host == "" {
+		endpoint, err := proxyTargetEndpoint(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if endpoint.host == "" {
 			http.Error(w, "proxy target host is required", http.StatusBadRequest)
 			return
 		}
-		if err := egress.CheckHost(target.AllowedHosts, host, target.DefaultAction); err != nil {
+		if err := egress.CheckEndpoint(target.AllowedHosts, endpoint.hostport(), target.DefaultAction, endpoint.defaultPort); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		requestPolicy := egressProxyRequestPolicy{
+			destination: egress.DestinationPolicy{
+				AllowLoopback: proxyTargetAllowsExplicitLoopback(target.AllowedHosts, endpoint.host),
+			},
+		}
+		if err := egress.RejectUnsafeHostLiteral(endpoint.host, requestPolicy.destination); err != nil {
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
 
-		newEgressProxyHandler().ServeHTTP(w, r)
+		newEgressProxyHandler(requestPolicy).ServeHTTP(w, r)
 	})
 }
 
@@ -64,26 +83,54 @@ func isEgressProxyRequest(r *http.Request) bool {
 	return r.URL != nil && r.URL.IsAbs()
 }
 
-func proxyTargetHost(r *http.Request) string {
-	if r == nil {
-		return ""
+type proxyEndpoint struct {
+	host        string
+	port        string
+	defaultPort string
+}
+
+func (e proxyEndpoint) hostport() string {
+	if e.port == "" {
+		return e.host
 	}
-	var host string
+	return net.JoinHostPort(e.host, e.port)
+}
+
+func proxyTargetEndpoint(r *http.Request) (proxyEndpoint, error) {
+	if r == nil {
+		return proxyEndpoint{}, nil
+	}
+	var host, port, defaultPort string
 	switch {
 	case r.Method == http.MethodConnect:
-		host = strings.TrimSpace(r.Host)
+		host, port = splitProxyHostPort(strings.TrimSpace(r.Host))
+		defaultPort = "443"
 	case r.URL != nil && r.URL.Host != "":
 		host = strings.TrimSpace(r.URL.Hostname())
+		port = strings.TrimSpace(r.URL.Port())
+		defaultPort = defaultPortForScheme(r.URL.Scheme)
 	default:
-		host = strings.TrimSpace(r.Host)
+		host, port = splitProxyHostPort(strings.TrimSpace(r.Host))
+		defaultPort = "80"
 	}
 	if host == "" {
-		return ""
+		return proxyEndpoint{}, nil
 	}
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		return h
+	if port == "" {
+		resolvedHost, resolvedPort, err := egress.SplitHostPortDefault(host, defaultPort)
+		if err != nil {
+			return proxyEndpoint{}, err
+		}
+		host, port = resolvedHost, resolvedPort
 	}
-	return host
+	if _, _, err := egress.SplitHostPortDefault(net.JoinHostPort(host, port), defaultPort); err != nil {
+		return proxyEndpoint{}, err
+	}
+	return proxyEndpoint{
+		host:        strings.TrimSpace(host),
+		port:        port,
+		defaultPort: defaultPort,
+	}, nil
 }
 
 func extractProxyAuthorizationToken(header string) string {
@@ -108,18 +155,65 @@ func extractProxyAuthorizationToken(header string) string {
 	return ""
 }
 
-func newEgressProxyHandler() http.Handler {
+func splitProxyHostPort(hostport string) (string, string) {
+	if h, p, err := net.SplitHostPort(hostport); err == nil {
+		return h, p
+	}
+	return hostport, ""
+}
+
+func defaultPortForScheme(scheme string) string {
+	switch strings.ToLower(strings.TrimSpace(scheme)) {
+	case "https":
+		return "443"
+	default:
+		return "80"
+	}
+}
+
+func proxyTargetAllowsExplicitLoopback(allowedHosts []string, host string) bool {
+	if !egress.IsLocalhostName(host) {
+		return false
+	}
+	for _, allowed := range allowedHosts {
+		allowedHost, _, _, err := splitAllowedProxyHost(allowed)
+		if err == nil && egress.IsLocalhostName(allowedHost) {
+			return true
+		}
+	}
+	return false
+}
+
+func splitAllowedProxyHost(pattern string) (string, string, bool, error) {
+	u := &url.URL{Host: strings.TrimSpace(pattern)}
+	host := u.Hostname()
+	port := u.Port()
+	if host == "" {
+		host, port = splitProxyHostPort(pattern)
+	}
+	if port == "" {
+		return host, "", false, nil
+	}
+	if _, _, err := egress.SplitHostPortDefault(net.JoinHostPort(host, port), ""); err != nil {
+		return "", "", false, err
+	}
+	return host, port, true, nil
+}
+
+func newEgressProxyHandler(policy egressProxyRequestPolicy) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodConnect {
-			handleEgressProxyConnect(w, r)
+			handleEgressProxyConnect(w, r, policy)
 			return
 		}
-		handleEgressProxyHTTP(w, r)
+		handleEgressProxyHTTP(w, r, policy)
 	})
 }
 
-func handleEgressProxyHTTP(w http.ResponseWriter, r *http.Request) {
-	transport := &http.Transport{}
+func handleEgressProxyHTTP(w http.ResponseWriter, r *http.Request, policy egressProxyRequestPolicy) {
+	transport := egress.CloneDefaultTransport()
+	transport.Proxy = nil
+	transport.DialContext = egress.SafeDialContext(policy.destination)
 	defer transport.CloseIdleConnections()
 
 	out := r.Clone(r.Context())
@@ -148,7 +242,7 @@ func handleEgressProxyHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
-func handleEgressProxyConnect(w http.ResponseWriter, r *http.Request) {
+func handleEgressProxyConnect(w http.ResponseWriter, r *http.Request, policy egressProxyRequestPolicy) {
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
@@ -164,8 +258,15 @@ func handleEgressProxyConnect(w http.ResponseWriter, r *http.Request) {
 		targetAddr = net.JoinHostPort(targetAddr, "443")
 	}
 
+	ctx, cancel := context.WithTimeout(r.Context(), egressProxyDialTimeout)
+	defer cancel()
+	safeTargetAddr, err := egress.ResolveSafeTCPAddr(ctx, "tcp", targetAddr, policy.destination)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 	var dialer net.Dialer
-	targetConn, err := dialer.DialContext(r.Context(), "tcp", targetAddr)
+	targetConn, err := dialer.DialContext(ctx, "tcp", safeTargetAddr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

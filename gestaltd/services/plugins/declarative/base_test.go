@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -232,6 +233,79 @@ func TestBaseExecuteRESTEgressDenyBlocksRequest(t *testing.T) {
 	_, err := b.Execute(context.Background(), "op", nil, "tok")
 	if !errors.Is(err, egress.ErrEgressDenied) {
 		t.Fatalf("expected ErrEgressDenied, got %v", err)
+	}
+}
+
+func TestBaseExecuteRESTRedirectRechecksEgress(t *testing.T) {
+	t.Parallel()
+
+	var allowedHost string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://blocked.example.test/blocked", http.StatusFound)
+	}))
+	t.Cleanup(func() { origin.Close() })
+	originURL, err := url.Parse(origin.URL)
+	if err != nil {
+		t.Fatalf("parse origin URL: %v", err)
+	}
+	allowedHost = originURL.Host
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: origin.URL,
+		CheckEgress: func(host string) error {
+			if host == allowedHost {
+				return nil
+			}
+			return egress.ErrEgressDenied
+		},
+	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/start"))
+
+	_, err = b.Execute(context.Background(), "op", nil, "tok")
+	if !errors.Is(err, egress.ErrEgressDenied) {
+		t.Fatalf("expected redirect egress deny, got %v", err)
+	}
+}
+
+func TestBaseExecuteRESTRedirectRejectsUnsafeIPLiteral(t *testing.T) {
+	t.Parallel()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data", http.StatusFound)
+	}))
+	t.Cleanup(func() { origin.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: origin.URL,
+		CheckEgress: func(string) error {
+			return nil
+		},
+	}
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/start"))
+
+	_, err := b.Execute(context.Background(), "op", nil, "tok")
+	if !errors.Is(err, egress.ErrUnsafeDestination) {
+		t.Fatalf("expected unsafe redirect deny, got %v", err)
+	}
+}
+
+func TestBaseHTTPClientForEgressDisablesEnvironmentProxy(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+
+	b := &Base{
+		CheckEgress: func(string) error {
+			return nil
+		},
+	}
+	client := b.httpClientForEgress()
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T, want *http.Transport", client.Transport)
+	}
+	if transport.Proxy != nil {
+		t.Fatal("expected egress client to disable ambient proxy configuration")
 	}
 }
 

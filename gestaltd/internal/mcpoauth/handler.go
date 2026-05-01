@@ -18,6 +18,10 @@ type HandlerConfig struct {
 	MCPURL      string
 	Store       RegistrationStore // nil for non-SQL deployments
 	RedirectURL string
+	// AllowInsecureLocalDiscovery permits http:// loopback MCP OAuth discovery
+	// for local development and tests. Production discovery remains HTTPS-only
+	// and public-address-only by default.
+	AllowInsecureLocalDiscovery bool
 
 	// Static overrides: if set, skip DCR and use these directly.
 	ClientID     string
@@ -50,7 +54,11 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	md, err := Discover(ctx, h.cfg.MCPURL)
+	var discoverOpts []DiscoverOption
+	if h.cfg.AllowInsecureLocalDiscovery {
+		discoverOpts = append(discoverOpts, withInsecureLocalDiscovery())
+	}
+	md, err := Discover(ctx, h.cfg.MCPURL, discoverOpts...)
 	if err != nil {
 		if h.upstream != nil {
 			return h.upstream, nil
@@ -97,6 +105,7 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		authMethod = oauth.ClientAuthBody
 	}
 
+	oauthClient, _ := newHTTPClient(discoveryTimeout, h.discoveryPolicy())
 	upstream := oauth.NewUpstream(oauth.UpstreamConfig{
 		ClientID:         clientID,
 		ClientSecret:     clientSecret,
@@ -106,7 +115,7 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		ClientAuthMethod: authMethod,
 		PKCE:             md.SupportsPKCE(),
 		DefaultScopes:    md.ScopesSupported,
-	})
+	}, oauth.WithHTTPClient(oauthClient))
 
 	h.upstream = upstream
 	h.metadata = md
@@ -140,7 +149,7 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 		slog.Info("mcpoauth: re-registering (expired)", "auth_server", authServerURL)
 	}
 
-	reg, err := RegisterClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod())
+	reg, err := registerClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod(), h.discoveryPolicy())
 	if err != nil {
 		if existing != nil {
 			slog.Warn("mcpoauth: re-registration failed, using existing", "auth_server", authServerURL, "error", err)
@@ -165,6 +174,10 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 	}
 
 	return reg, nil
+}
+
+func (h *Handler) discoveryPolicy() discoveryPolicy {
+	return discoveryPolicy{allowInsecureLocal: h.cfg.AllowInsecureLocalDiscovery}
 }
 
 func (h *Handler) ClearRegistration() {

@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -15,6 +16,37 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+func TestValidatePlaintextTCPTargetRefusesNonLoopback(t *testing.T) {
+	t.Setenv(allowInsecureRemotePluginTCPEnv, "")
+
+	err := validatePlaintextTCPTarget("192.0.2.10:443")
+	if err == nil {
+		t.Fatal("expected non-loopback plaintext TCP target to be refused")
+	}
+	if want := allowInsecureRemotePluginTCPEnv; !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %v, want opt-in env %s", err, want)
+	}
+}
+
+func TestValidatePlaintextTCPTargetAllowsLoopback(t *testing.T) {
+	t.Parallel()
+
+	if err := validatePlaintextTCPTarget("127.0.0.1:50051"); err != nil {
+		t.Fatalf("validatePlaintextTCPTarget loopback: %v", err)
+	}
+	if err := validatePlaintextTCPTarget("[::1]:50051"); err != nil {
+		t.Fatalf("validatePlaintextTCPTarget IPv6 loopback: %v", err)
+	}
+}
+
+func TestValidatePlaintextTCPTargetAllowsExplicitDevOptIn(t *testing.T) {
+	t.Setenv(allowInsecureRemotePluginTCPEnv, "1")
+
+	if err := validatePlaintextTCPTarget("192.0.2.10:443"); err != nil {
+		t.Fatalf("validatePlaintextTCPTarget with opt-in: %v", err)
+	}
+}
 
 func TestDialHostedPluginRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T) {
 	t.Parallel()

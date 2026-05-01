@@ -2,9 +2,12 @@ package declarative
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -146,6 +149,59 @@ func (b *Base) httpClient() *http.Client {
 		return b.HTTPClient
 	}
 	return &http.Client{Timeout: 10 * time.Second}
+}
+
+func (b *Base) httpClientForEgress() *http.Client {
+	client := b.httpClient()
+	if b.CheckEgress == nil {
+		return client
+	}
+	cloned := *client
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if client.Transport != nil {
+		if parent, ok := client.Transport.(*http.Transport); ok {
+			transport = parent.Clone()
+		}
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, err := egress.SplitHostPortDefault(address, "")
+		if err != nil {
+			return nil, err
+		}
+		policy := egress.DestinationPolicy{
+			AllowLoopback: egress.IsLocalhostName(host),
+		}
+		return egress.SafeDialContext(policy)(ctx, network, address)
+	}
+	transport.Proxy = nil
+	cloned.Transport = transport
+	parentCheckRedirect := client.CheckRedirect
+	cloned.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req == nil || req.URL == nil {
+			return nil
+		}
+		if err := b.checkRedirectEgress(req.URL); err != nil {
+			return err
+		}
+		if parentCheckRedirect != nil {
+			return parentCheckRedirect(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &cloned
+}
+
+func (b *Base) checkRedirectEgress(u *url.URL) error {
+	if b.CheckEgress == nil || u == nil {
+		return nil
+	}
+	if err := egress.RejectUnsafeHostLiteral(u.Hostname(), egress.DestinationPolicy{}); err != nil {
+		return err
+	}
+	return b.CheckEgress(u.Host)
 }
 
 func (b *Base) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {

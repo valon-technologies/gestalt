@@ -1743,6 +1743,107 @@ func TestEgressProxyRejectsDisallowedHost(t *testing.T) {
 	}
 }
 
+func TestEgressProxyRejectsDisallowedConnectPort(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	proxy := httptest.NewTLSServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	testutil.CloseOnCleanup(t, proxy)
+
+	tokenManager, err := egressproxy.NewTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		AllowedHosts: []string{"api.github.com"},
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatalf("Parse proxy URL: %v", err)
+	}
+	conn, err := tls.Dial("tcp", proxyURL.Host, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12})
+	if err != nil {
+		t.Fatalf("Dial proxy: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("gestalt-egress-proxy:"+token))
+	targetAddr := "api.github.com:22"
+	request := fmt.Sprintf(
+		"CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+		targetAddr,
+		targetAddr,
+		authHeader,
+	)
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Fatalf("Write CONNECT request: %v", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodConnect})
+	if err != nil {
+		t.Fatalf("ReadResponse: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("proxy status = %d, want %d (body=%s)", resp.StatusCode, http.StatusForbidden, string(body))
+	}
+	if !strings.Contains(string(body), "egress denied") {
+		t.Fatalf("proxy body = %q, want egress denied", string(body))
+	}
+}
+
+func TestEgressProxyRejectsUnsafeIPLiteral(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	proxy := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	proxy.EnableHTTP2 = true
+	proxy.StartTLS()
+	testutil.CloseOnCleanup(t, proxy)
+
+	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		AllowedHosts: []string{"169.254.169.254"},
+	})
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(proxyURL),
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
+		},
+	}
+	resp, err := client.Get("http://169.254.169.254/latest/meta-data")
+	if err != nil {
+		t.Fatalf("GET unsafe IP via egress proxy: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("proxy status = %d, want %d (body=%s)", resp.StatusCode, http.StatusForbidden, string(body))
+	}
+	if !strings.Contains(string(body), "egress unsafe destination") {
+		t.Fatalf("proxy body = %q, want unsafe destination", string(body))
+	}
+}
+
 func TestEgressProxySupportsHTTPSConnect(t *testing.T) {
 	t.Parallel()
 

@@ -15,6 +15,8 @@ import (
 	"github.com/landlock-lsm/go-landlock/landlock"
 )
 
+const allowNetworkRestrictionUnavailableEnv = "GESTALTD_SANDBOX_ALLOW_NETWORK_RESTRICTION_UNAVAILABLE"
+
 func Wrap(policy *Policy, cmd *exec.Cmd) (*exec.Cmd, func(), error) {
 	hostBin := policy.HostBinary
 	if hostBin == "" {
@@ -39,7 +41,7 @@ func Wrap(policy *Policy, cmd *exec.Cmd) (*exec.Cmd, func(), error) {
 	args = append(args, remaining...)
 
 	wrapped := exec.Command(args[0], args[1:]...)
-	wrapped.Env = cmd.Env
+	wrapped.Env = sandboxWrapperEnv(cmd.Env)
 	wrapped.Dir = cmd.Dir
 	wrapped.Stdout = cmd.Stdout
 	wrapped.Stderr = cmd.Stderr
@@ -101,11 +103,17 @@ func RunSubcommand(args []string) error {
 
 	if proxyPort > 0 {
 		if err := landlock.V4.RestrictNet(landlock.ConnectTCP(uint16(proxyPort))); err != nil {
-			slog.Warn("sandbox: landlock network restriction unavailable", "error", err)
+			if !allowNetworkRestrictionUnavailable() {
+				return fmt.Errorf("landlock restrict network to proxy port %d: %w", proxyPort, err)
+			}
+			slog.Warn("sandbox: landlock network restriction unavailable",
+				"error", err,
+				"override_env", allowNetworkRestrictionUnavailableEnv,
+			)
 		}
 	}
 
-	return syscall.Exec(binary, remaining, os.Environ())
+	return syscall.Exec(binary, remaining, sandboxExecEnv())
 }
 
 func DefaultReadOnlyPaths() []string {
@@ -139,4 +147,37 @@ func (f *multiFlag) String() string { return strings.Join(*f, ",") }
 func (f *multiFlag) Set(v string) error {
 	*f = append(*f, v)
 	return nil
+}
+
+func allowNetworkRestrictionUnavailable() bool {
+	value := strings.TrimSpace(os.Getenv(allowNetworkRestrictionUnavailableEnv))
+	return value == "1" || strings.EqualFold(value, "true")
+}
+
+func sandboxWrapperEnv(pluginEnv []string) []string {
+	baseEnv := pluginEnv
+	if baseEnv == nil {
+		baseEnv = os.Environ()
+	}
+	env := filterEnvKey(baseEnv, allowNetworkRestrictionUnavailableEnv)
+	if allowNetworkRestrictionUnavailable() {
+		env = append(env, allowNetworkRestrictionUnavailableEnv+"="+os.Getenv(allowNetworkRestrictionUnavailableEnv))
+	}
+	return env
+}
+
+func sandboxExecEnv() []string {
+	return filterEnvKey(os.Environ(), allowNetworkRestrictionUnavailableEnv)
+}
+
+func filterEnvKey(env []string, key string) []string {
+	prefix := key + "="
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
 }

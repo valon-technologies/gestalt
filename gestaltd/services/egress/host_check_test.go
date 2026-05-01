@@ -64,6 +64,35 @@ func TestCheckHost_StripsPort(t *testing.T) {
 	}
 }
 
+func TestCheckEndpoint_DefaultPortAllowsHostnamePattern(t *testing.T) {
+	t.Parallel()
+	if err := CheckEndpoint([]string{"api.example.com"}, "api.example.com:443", PolicyAllow, "443"); err != nil {
+		t.Fatalf("expected default port allow, got %v", err)
+	}
+}
+
+func TestCheckEndpoint_DeniesNonDefaultPortWithoutExplicitAllow(t *testing.T) {
+	t.Parallel()
+	err := CheckEndpoint([]string{"api.example.com"}, "api.example.com:22", PolicyAllow, "443")
+	if !errors.Is(err, ErrEgressDenied) {
+		t.Fatalf("expected deny for non-default port, got %v", err)
+	}
+}
+
+func TestCheckEndpoint_AllowsExplicitPort(t *testing.T) {
+	t.Parallel()
+	if err := CheckEndpoint([]string{"api.example.com:8443"}, "api.example.com:8443", PolicyAllow, "443"); err != nil {
+		t.Fatalf("expected explicit port allow, got %v", err)
+	}
+}
+
+func TestCheckEndpoint_LocalhostPatternAllowsEphemeralLocalPort(t *testing.T) {
+	t.Parallel()
+	if err := CheckEndpoint([]string{"localhost"}, "localhost:49152", PolicyAllow, "80"); err != nil {
+		t.Fatalf("expected localhost dev port allow, got %v", err)
+	}
+}
+
 func TestCheckHost_EmptyDefaultActionIsAllow(t *testing.T) {
 	t.Parallel()
 	if err := CheckHost(nil, "anything.com", ""); err != nil {
