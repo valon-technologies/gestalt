@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
-	"github.com/valon-technologies/gestalt/server/internal/staticui"
 )
 
 func DirHandler(path string) (http.Handler, error) {
-	handler, err := staticui.Handler(staticui.Config{
+	handler, err := StaticHandler(StaticConfig{
 		FS:           os.DirFS(path),
 		DynamicIndex: true,
 	})

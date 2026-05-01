@@ -1,4 +1,4 @@
-package staticui
+package ui
 
 import (
 	"bytes"
@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-type Config struct {
+type StaticConfig struct {
 	FS           fs.FS
 	RenderIndex  func([]byte) []byte
 	DynamicIndex bool
 }
 
-func Handler(cfg Config) (http.Handler, error) {
+func StaticHandler(cfg StaticConfig) (http.Handler, error) {
 	if _, err := fs.Stat(cfg.FS, "index.html"); err != nil {
 		return nil, fmt.Errorf("asset root does not contain index.html: %w", err)
 	}
