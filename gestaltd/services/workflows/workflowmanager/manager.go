@@ -13,7 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -92,7 +91,7 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	PluginInvokes     map[string][]config.PluginInvocationDependency
+	PluginInvokes     map[string][]invocation.PluginInvocationDependency
 	Now               func() time.Time
 }
 
@@ -105,7 +104,7 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
-	pluginInvokes     map[string][]config.PluginInvocationDependency
+	pluginInvokes     map[string][]invocation.PluginInvocationDependency
 	now               func() time.Time
 }
 
@@ -186,10 +185,6 @@ func New(cfg Config) *Manager {
 	if now == nil {
 		now = time.Now
 	}
-	pluginInvokes := make(map[string][]config.PluginInvocationDependency, len(cfg.PluginInvokes))
-	for pluginName, deps := range cfg.PluginInvokes {
-		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
-	}
 	return &Manager{
 		providers:         cfg.Providers,
 		workflow:          cfg.Workflow,
@@ -199,7 +194,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:     pluginInvokes,
+		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		now:               now,
 	}
 }
@@ -983,12 +978,12 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	}
 
 	connection := strings.TrimSpace(target.Connection)
-	if connection != "" && !config.SafeConnectionValue(connection) {
+	if connection != "" && !core.SafeConnectionValue(connection) {
 		return coreworkflow.Target{}, fmt.Errorf("connection name contains invalid characters")
 	}
-	connection = config.ResolveConnectionAlias(connection)
+	connection = core.ResolveConnectionAlias(connection)
 	instance := strings.TrimSpace(target.Instance)
-	if instance != "" && !config.SafeInstanceValue(instance) {
+	if instance != "" && !core.SafeInstanceValue(instance) {
 		return coreworkflow.Target{}, fmt.Errorf("instance name contains invalid characters")
 	}
 

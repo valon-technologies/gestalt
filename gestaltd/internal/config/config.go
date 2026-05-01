@@ -42,14 +42,8 @@ const (
 	DefaultProviderInstance            = "default"
 )
 
-// PluginConnectionName is the implicit connection name used when storing
-// tokens for plugin-only integrations that do not declare YAML connections.
-const PluginConnectionName = "_plugin"
-
-// PluginConnectionAlias is the user-facing alias that maps to
-// PluginConnectionName. In hybrid integrations, mcp.connection can be set
-// to "plugin" to reuse the plugin's OAuth token.
-const PluginConnectionAlias = "plugin"
+const PluginConnectionName = core.PluginConnectionName
+const PluginConnectionAlias = core.PluginConnectionAlias
 const ConfigAPIVersion = "gestaltd.config/v4"
 
 type Config struct {
@@ -1518,10 +1512,7 @@ type ConnectionParamDef = providermanifestv1.ProviderConnectionParam
 // ResolveConnectionAlias maps the user-facing "plugin" alias to the
 // internal PluginConnectionName. All other names pass through unchanged.
 func ResolveConnectionAlias(name string) string {
-	if name == PluginConnectionAlias {
-		return PluginConnectionName
-	}
-	return name
+	return core.ResolveConnectionAlias(name)
 }
 
 func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {

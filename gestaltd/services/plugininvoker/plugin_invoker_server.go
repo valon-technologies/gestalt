@@ -9,7 +9,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -25,7 +24,7 @@ type PluginInvokerServer struct {
 	allowed    InvocationGrants
 }
 
-func NewPluginInvokerServer(pluginName string, deps []config.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *PluginInvokerServer {
+func NewPluginInvokerServer(pluginName string, deps []invocation.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *PluginInvokerServer {
 	return &PluginInvokerServer{
 		pluginName: pluginName,
 		invoker:    invoker,
@@ -34,7 +33,7 @@ func NewPluginInvokerServer(pluginName string, deps []config.PluginInvocationDep
 	}
 }
 
-func NewServer(pluginName string, deps []config.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) proto.PluginInvokerServer {
+func NewServer(pluginName string, deps []invocation.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) proto.PluginInvokerServer {
 	return NewPluginInvokerServer(pluginName, deps, invoker, tokens)
 }
 

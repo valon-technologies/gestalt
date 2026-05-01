@@ -7,7 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type InvocationGrant struct {
@@ -25,7 +25,7 @@ type invocationGrantClaims struct {
 	Surfaces       []string          `json:"surfaces,omitempty"`
 }
 
-func InvocationDependencyGrants(deps []config.PluginInvocationDependency) InvocationGrants {
+func InvocationDependencyGrants(deps []invocation.PluginInvocationDependency) InvocationGrants {
 	if len(deps) == 0 {
 		return nil
 	}
@@ -42,7 +42,7 @@ func InvocationDependencyGrants(deps []config.PluginInvocationDependency) Invoca
 			if grant.Operations == nil {
 				grant.Operations = make(map[string]core.ConnectionMode)
 			}
-			grant.Operations[operation] = core.ConnectionMode(dep.CredentialMode)
+			grant.Operations[operation] = dep.CredentialMode
 		}
 		if surface != "" {
 			if grant.Surfaces == nil {

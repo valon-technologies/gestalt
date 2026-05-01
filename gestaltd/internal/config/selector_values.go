@@ -1,16 +1,11 @@
 package config
 
-import "regexp"
-
-var (
-	safeConnectionValue = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-	safeInstanceValue   = regexp.MustCompile(`^[a-zA-Z0-9._ -]+$`)
-)
+import "github.com/valon-technologies/gestalt/server/core"
 
 func SafeConnectionValue(value string) bool {
-	return safeConnectionValue.MatchString(value)
+	return core.SafeConnectionValue(value)
 }
 
 func SafeInstanceValue(value string) bool {
-	return safeInstanceValue.MatchString(value)
+	return core.SafeInstanceValue(value)
 }

@@ -10,8 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/config"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -27,10 +25,10 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 		Workflow:     testWorkflowControl{provider: provider},
 		Agent:        testAgentControl{},
 		AgentManager: testAgentManager{},
-		PluginInvokes: map[string][]config.PluginInvocationDependency{
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
 			"github": {
 				{Plugin: "github", Operation: "bot.commitFiles"},
-				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: providermanifestv1.ConnectionModeNone},
+				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: core.ConnectionModeNone},
 				{Plugin: "github", Operation: "bot.openPullRequest"},
 			},
 		},
@@ -388,7 +386,7 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 		Workflow:     testWorkflowControl{provider: provider},
 		Agent:        testAgentControl{},
 		AgentManager: testAgentManager{},
-		PluginInvokes: map[string][]config.PluginInvocationDependency{
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
 			"github": {
 				{Plugin: "github", Surface: "graphql"},
 			},

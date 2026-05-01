@@ -1183,16 +1183,32 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	return extraAgents, nil
 }
 
-func agentPluginInvokes(cfg *config.Config) map[string][]config.PluginInvocationDependency {
+func agentPluginInvokes(cfg *config.Config) map[string][]invocation.PluginInvocationDependency {
 	if cfg == nil || len(cfg.Plugins) == 0 {
 		return nil
 	}
-	out := make(map[string][]config.PluginInvocationDependency, len(cfg.Plugins))
+	out := make(map[string][]invocation.PluginInvocationDependency, len(cfg.Plugins))
 	for pluginName, entry := range cfg.Plugins {
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = append([]config.PluginInvocationDependency(nil), entry.Invokes...)
+		out[pluginName] = pluginInvocationDependencies(entry.Invokes)
+	}
+	return out
+}
+
+func pluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
+	if len(deps) == 0 {
+		return nil
+	}
+	out := make([]invocation.PluginInvocationDependency, 0, len(deps))
+	for _, dep := range deps {
+		out = append(out, invocation.PluginInvocationDependency{
+			Plugin:         dep.Plugin,
+			Operation:      dep.Operation,
+			Surface:        dep.Surface,
+			CredentialMode: core.ConnectionMode(dep.CredentialMode),
+		})
 	}
 	return out
 }

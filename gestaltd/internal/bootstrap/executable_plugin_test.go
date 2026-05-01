@@ -3888,7 +3888,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		Agent:      agentRuntime,
 		ToolGrants: toolGrants,
 		Invoker:    broker,
-		PluginInvokes: map[string][]config.PluginInvocationDependency{
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
 			"echoext": {{
 				Plugin:    "roadmap",
 				Operation: "sync",
@@ -6890,7 +6890,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 		secret,
 		publicHostServices,
 		withRuntimeRelayCoreHostService("plugin_invoker", plugininvokerservice.DefaultSocketEnv, "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("caller", callerInvokes, bridge, pluginInvokerTokens))
+			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("caller", pluginInvocationDependencies(callerInvokes), bridge, pluginInvokerTokens))
 		}),
 	))
 	relaySrv.EnableHTTP2 = true

@@ -719,7 +719,7 @@ func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, co
 	}
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = runtimePluginConnectionName
+		connection = core.PluginConnectionName
 	}
 	info, ok := b.connectionRuntime(providerName, connection)
 	token := strings.TrimSpace(info.Token)

@@ -246,7 +246,7 @@ func (s *Server) newCoreRoutableHostServiceHandlerEntry(ctx context.Context, plu
 		slog.DebugContext(ctx, "serving core-routable host service relay", "plugin", pluginName, "service", target.Service)
 		return hostServiceHandlerEntry{
 			handler: newGRPCHostServiceHandler(func(srv *grpc.Server) {
-				proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewPluginInvokerServer(pluginName, entry.Invokes, s.pluginInvoker, s.invocationTokens))
+				proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewPluginInvokerServer(pluginName, pluginInvocationDependencies(entry.Invokes), s.pluginInvoker, s.invocationTokens))
 			}),
 		}, true
 	default:

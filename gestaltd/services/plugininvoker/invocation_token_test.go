@@ -7,7 +7,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -141,7 +140,7 @@ func TestPluginInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	server := NewPluginInvokerServer("caller", []config.PluginInvocationDependency{{
+	server := NewPluginInvokerServer("caller", []invocation.PluginInvocationDependency{{
 		Plugin:    "example",
 		Operation: "request_context",
 	}}, nil, manager)

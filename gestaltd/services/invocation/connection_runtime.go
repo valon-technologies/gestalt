@@ -6,8 +6,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
-const runtimePluginConnectionName = "_plugin"
-
 // ConnectionRuntimeInfo describes deployment-owned connection material that is
 // resolved after an operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
@@ -35,7 +33,7 @@ func (m ConnectionRuntimeMap) Resolve(provider, connection string) (ConnectionRu
 	}
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = runtimePluginConnectionName
+		connection = core.PluginConnectionName
 	}
 	info, ok := connections[connection]
 	return info, ok
