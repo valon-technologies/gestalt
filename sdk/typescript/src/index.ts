@@ -201,16 +201,13 @@ export {
 } from "./provider.ts";
 export {
   PluginRuntimeEgressMode,
-  PluginRuntimeHostServiceAccess,
   PluginRuntimeProvider,
   createPluginRuntimeProviderService,
   definePluginRuntimeProvider,
   isPluginRuntimeProvider,
-  type BindPluginRuntimeHostServiceRequest,
   type GetPluginRuntimeSessionRequest,
   type HostedPlugin,
   type ListPluginRuntimeSessionsRequest,
-  type PluginRuntimeHostServiceBinding,
   type PluginRuntimeProviderOptions,
   type PluginRuntimeSession,
   type PluginRuntimeSupport,

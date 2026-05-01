@@ -23,55 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type PluginRuntimeHostServiceAccess int32
-
-const (
-	PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED PluginRuntimeHostServiceAccess = 0
-	PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE        PluginRuntimeHostServiceAccess = 1
-	PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT      PluginRuntimeHostServiceAccess = 2
-)
-
-// Enum value maps for PluginRuntimeHostServiceAccess.
-var (
-	PluginRuntimeHostServiceAccess_name = map[int32]string{
-		0: "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED",
-		1: "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE",
-		2: "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT",
-	}
-	PluginRuntimeHostServiceAccess_value = map[string]int32{
-		"PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED": 0,
-		"PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE":        1,
-		"PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT":      2,
-	}
-)
-
-func (x PluginRuntimeHostServiceAccess) Enum() *PluginRuntimeHostServiceAccess {
-	p := new(PluginRuntimeHostServiceAccess)
-	*p = x
-	return p
-}
-
-func (x PluginRuntimeHostServiceAccess) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (PluginRuntimeHostServiceAccess) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_pluginruntime_proto_enumTypes[0].Descriptor()
-}
-
-func (PluginRuntimeHostServiceAccess) Type() protoreflect.EnumType {
-	return &file_v1_pluginruntime_proto_enumTypes[0]
-}
-
-func (x PluginRuntimeHostServiceAccess) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use PluginRuntimeHostServiceAccess.Descriptor instead.
-func (PluginRuntimeHostServiceAccess) EnumDescriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{0}
-}
-
 type PluginRuntimeEgressMode int32
 
 const (
@@ -108,11 +59,11 @@ func (x PluginRuntimeEgressMode) String() string {
 }
 
 func (PluginRuntimeEgressMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_pluginruntime_proto_enumTypes[1].Descriptor()
+	return file_v1_pluginruntime_proto_enumTypes[0].Descriptor()
 }
 
 func (PluginRuntimeEgressMode) Type() protoreflect.EnumType {
-	return &file_v1_pluginruntime_proto_enumTypes[1]
+	return &file_v1_pluginruntime_proto_enumTypes[0]
 }
 
 func (x PluginRuntimeEgressMode) Number() protoreflect.EnumNumber {
@@ -121,7 +72,7 @@ func (x PluginRuntimeEgressMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PluginRuntimeEgressMode.Descriptor instead.
 func (PluginRuntimeEgressMode) EnumDescriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{1}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{0}
 }
 
 type PluginRuntimeLogStream int32
@@ -160,11 +111,11 @@ func (x PluginRuntimeLogStream) String() string {
 }
 
 func (PluginRuntimeLogStream) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_pluginruntime_proto_enumTypes[2].Descriptor()
+	return file_v1_pluginruntime_proto_enumTypes[1].Descriptor()
 }
 
 func (PluginRuntimeLogStream) Type() protoreflect.EnumType {
-	return &file_v1_pluginruntime_proto_enumTypes[2]
+	return &file_v1_pluginruntime_proto_enumTypes[1]
 }
 
 func (x PluginRuntimeLogStream) Number() protoreflect.EnumNumber {
@@ -173,16 +124,15 @@ func (x PluginRuntimeLogStream) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PluginRuntimeLogStream.Descriptor instead.
 func (PluginRuntimeLogStream) EnumDescriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{2}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{1}
 }
 
 type PluginRuntimeSupport struct {
-	state             protoimpl.MessageState         `protogen:"open.v1"`
-	CanHostPlugins    bool                           `protobuf:"varint,1,opt,name=can_host_plugins,json=canHostPlugins,proto3" json:"can_host_plugins,omitempty"`
-	HostServiceAccess PluginRuntimeHostServiceAccess `protobuf:"varint,2,opt,name=host_service_access,json=hostServiceAccess,proto3,enum=gestalt.provider.v1.PluginRuntimeHostServiceAccess" json:"host_service_access,omitempty"`
-	EgressMode        PluginRuntimeEgressMode        `protobuf:"varint,3,opt,name=egress_mode,json=egressMode,proto3,enum=gestalt.provider.v1.PluginRuntimeEgressMode" json:"egress_mode,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	CanHostPlugins bool                    `protobuf:"varint,1,opt,name=can_host_plugins,json=canHostPlugins,proto3" json:"can_host_plugins,omitempty"`
+	EgressMode     PluginRuntimeEgressMode `protobuf:"varint,3,opt,name=egress_mode,json=egressMode,proto3,enum=gestalt.provider.v1.PluginRuntimeEgressMode" json:"egress_mode,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PluginRuntimeSupport) Reset() {
@@ -220,13 +170,6 @@ func (x *PluginRuntimeSupport) GetCanHostPlugins() bool {
 		return x.CanHostPlugins
 	}
 	return false
-}
-
-func (x *PluginRuntimeSupport) GetHostServiceAccess() PluginRuntimeHostServiceAccess {
-	if x != nil {
-		return x.HostServiceAccess
-	}
-	return PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED
 }
 
 func (x *PluginRuntimeSupport) GetEgressMode() PluginRuntimeEgressMode {
@@ -668,178 +611,6 @@ func (x *StopPluginRuntimeSessionRequest) GetSessionId() string {
 	return ""
 }
 
-type PluginRuntimeHostServiceRelay struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DialTarget    string                 `protobuf:"bytes,1,opt,name=dial_target,json=dialTarget,proto3" json:"dial_target,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PluginRuntimeHostServiceRelay) Reset() {
-	*x = PluginRuntimeHostServiceRelay{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PluginRuntimeHostServiceRelay) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PluginRuntimeHostServiceRelay) ProtoMessage() {}
-
-func (x *PluginRuntimeHostServiceRelay) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PluginRuntimeHostServiceRelay.ProtoReflect.Descriptor instead.
-func (*PluginRuntimeHostServiceRelay) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *PluginRuntimeHostServiceRelay) GetDialTarget() string {
-	if x != nil {
-		return x.DialTarget
-	}
-	return ""
-}
-
-type BindPluginRuntimeHostServiceRequest struct {
-	state         protoimpl.MessageState         `protogen:"open.v1"`
-	SessionId     string                         `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	EnvVar        string                         `protobuf:"bytes,2,opt,name=env_var,json=envVar,proto3" json:"env_var,omitempty"`
-	Relay         *PluginRuntimeHostServiceRelay `protobuf:"bytes,4,opt,name=relay,proto3" json:"relay,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BindPluginRuntimeHostServiceRequest) Reset() {
-	*x = BindPluginRuntimeHostServiceRequest{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BindPluginRuntimeHostServiceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BindPluginRuntimeHostServiceRequest) ProtoMessage() {}
-
-func (x *BindPluginRuntimeHostServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BindPluginRuntimeHostServiceRequest.ProtoReflect.Descriptor instead.
-func (*BindPluginRuntimeHostServiceRequest) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *BindPluginRuntimeHostServiceRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *BindPluginRuntimeHostServiceRequest) GetEnvVar() string {
-	if x != nil {
-		return x.EnvVar
-	}
-	return ""
-}
-
-func (x *BindPluginRuntimeHostServiceRequest) GetRelay() *PluginRuntimeHostServiceRelay {
-	if x != nil {
-		return x.Relay
-	}
-	return nil
-}
-
-type PluginRuntimeHostServiceBinding struct {
-	state         protoimpl.MessageState         `protogen:"open.v1"`
-	Id            string                         `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	SessionId     string                         `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	EnvVar        string                         `protobuf:"bytes,3,opt,name=env_var,json=envVar,proto3" json:"env_var,omitempty"`
-	Relay         *PluginRuntimeHostServiceRelay `protobuf:"bytes,5,opt,name=relay,proto3" json:"relay,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PluginRuntimeHostServiceBinding) Reset() {
-	*x = PluginRuntimeHostServiceBinding{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PluginRuntimeHostServiceBinding) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PluginRuntimeHostServiceBinding) ProtoMessage() {}
-
-func (x *PluginRuntimeHostServiceBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PluginRuntimeHostServiceBinding.ProtoReflect.Descriptor instead.
-func (*PluginRuntimeHostServiceBinding) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *PluginRuntimeHostServiceBinding) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *PluginRuntimeHostServiceBinding) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *PluginRuntimeHostServiceBinding) GetEnvVar() string {
-	if x != nil {
-		return x.EnvVar
-	}
-	return ""
-}
-
-func (x *PluginRuntimeHostServiceBinding) GetRelay() *PluginRuntimeHostServiceRelay {
-	if x != nil {
-		return x.Relay
-	}
-	return nil
-}
-
 // StartHostedPluginRequest describes the plugin process to launch inside a
 // runtime session. The runtime backend owns allocation and injection of the
 // plugin's listener endpoint and returns a host-reachable dial target in the
@@ -860,7 +631,7 @@ type StartHostedPluginRequest struct {
 
 func (x *StartHostedPluginRequest) Reset() {
 	*x = StartHostedPluginRequest{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[12]
+	mi := &file_v1_pluginruntime_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -872,7 +643,7 @@ func (x *StartHostedPluginRequest) String() string {
 func (*StartHostedPluginRequest) ProtoMessage() {}
 
 func (x *StartHostedPluginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[12]
+	mi := &file_v1_pluginruntime_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -885,7 +656,7 @@ func (x *StartHostedPluginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartHostedPluginRequest.ProtoReflect.Descriptor instead.
 func (*StartHostedPluginRequest) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{12}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StartHostedPluginRequest) GetSessionId() string {
@@ -956,7 +727,7 @@ type HostedPlugin struct {
 
 func (x *HostedPlugin) Reset() {
 	*x = HostedPlugin{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[13]
+	mi := &file_v1_pluginruntime_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -968,7 +739,7 @@ func (x *HostedPlugin) String() string {
 func (*HostedPlugin) ProtoMessage() {}
 
 func (x *HostedPlugin) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[13]
+	mi := &file_v1_pluginruntime_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -981,7 +752,7 @@ func (x *HostedPlugin) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostedPlugin.ProtoReflect.Descriptor instead.
 func (*HostedPlugin) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{13}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *HostedPlugin) GetId() string {
@@ -1024,7 +795,7 @@ type PluginRuntimeLogEntry struct {
 
 func (x *PluginRuntimeLogEntry) Reset() {
 	*x = PluginRuntimeLogEntry{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[14]
+	mi := &file_v1_pluginruntime_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1036,7 +807,7 @@ func (x *PluginRuntimeLogEntry) String() string {
 func (*PluginRuntimeLogEntry) ProtoMessage() {}
 
 func (x *PluginRuntimeLogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[14]
+	mi := &file_v1_pluginruntime_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1049,7 +820,7 @@ func (x *PluginRuntimeLogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginRuntimeLogEntry.ProtoReflect.Descriptor instead.
 func (*PluginRuntimeLogEntry) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{14}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PluginRuntimeLogEntry) GetStream() PluginRuntimeLogStream {
@@ -1090,7 +861,7 @@ type AppendPluginRuntimeLogsRequest struct {
 
 func (x *AppendPluginRuntimeLogsRequest) Reset() {
 	*x = AppendPluginRuntimeLogsRequest{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[15]
+	mi := &file_v1_pluginruntime_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +873,7 @@ func (x *AppendPluginRuntimeLogsRequest) String() string {
 func (*AppendPluginRuntimeLogsRequest) ProtoMessage() {}
 
 func (x *AppendPluginRuntimeLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[15]
+	mi := &file_v1_pluginruntime_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +886,7 @@ func (x *AppendPluginRuntimeLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendPluginRuntimeLogsRequest.ProtoReflect.Descriptor instead.
 func (*AppendPluginRuntimeLogsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{15}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AppendPluginRuntimeLogsRequest) GetSessionId() string {
@@ -1141,7 +912,7 @@ type AppendPluginRuntimeLogsResponse struct {
 
 func (x *AppendPluginRuntimeLogsResponse) Reset() {
 	*x = AppendPluginRuntimeLogsResponse{}
-	mi := &file_v1_pluginruntime_proto_msgTypes[16]
+	mi := &file_v1_pluginruntime_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1153,7 +924,7 @@ func (x *AppendPluginRuntimeLogsResponse) String() string {
 func (*AppendPluginRuntimeLogsResponse) ProtoMessage() {}
 
 func (x *AppendPluginRuntimeLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_pluginruntime_proto_msgTypes[16]
+	mi := &file_v1_pluginruntime_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1166,7 +937,7 @@ func (x *AppendPluginRuntimeLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendPluginRuntimeLogsResponse.ProtoReflect.Descriptor instead.
 func (*AppendPluginRuntimeLogsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{16}
+	return file_v1_pluginruntime_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AppendPluginRuntimeLogsResponse) GetLastSeq() int64 {
@@ -1180,12 +951,11 @@ var File_v1_pluginruntime_proto protoreflect.FileDescriptor
 
 const file_v1_pluginruntime_proto_rawDesc = "" +
 	"\n" +
-	"\x16v1/pluginruntime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x86\x02\n" +
+	"\x16v1/pluginruntime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x01\n" +
 	"\x14PluginRuntimeSupport\x12(\n" +
-	"\x10can_host_plugins\x18\x01 \x01(\bR\x0ecanHostPlugins\x12c\n" +
-	"\x13host_service_access\x18\x02 \x01(\x0e23.gestalt.provider.v1.PluginRuntimeHostServiceAccessR\x11hostServiceAccess\x12M\n" +
+	"\x10can_host_plugins\x18\x01 \x01(\bR\x0ecanHostPlugins\x12M\n" +
 	"\vegress_mode\x18\x03 \x01(\x0e2,.gestalt.provider.v1.PluginRuntimeEgressModeR\n" +
-	"egressModeJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xe8\x02\n" +
+	"egressModeJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x13host_service_access\"\xe8\x02\n" +
 	"\x14PluginRuntimeSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12S\n" +
@@ -1222,21 +992,7 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"\bsessions\x18\x01 \x03(\v2).gestalt.provider.v1.PluginRuntimeSessionR\bsessions\"@\n" +
 	"\x1fStopPluginRuntimeSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"@\n" +
-	"\x1dPluginRuntimeHostServiceRelay\x12\x1f\n" +
-	"\vdial_target\x18\x01 \x01(\tR\n" +
-	"dialTarget\"\xad\x01\n" +
-	"#BindPluginRuntimeHostServiceRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
-	"\aenv_var\x18\x02 \x01(\tR\x06envVar\x12H\n" +
-	"\x05relay\x18\x04 \x01(\v22.gestalt.provider.v1.PluginRuntimeHostServiceRelayR\x05relayJ\x04\b\x03\x10\x04\"\xb9\x01\n" +
-	"\x1fPluginRuntimeHostServiceBinding\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x17\n" +
-	"\aenv_var\x18\x03 \x01(\tR\x06envVar\x12H\n" +
-	"\x05relay\x18\x05 \x01(\v22.gestalt.provider.v1.PluginRuntimeHostServiceRelayR\x05relayJ\x04\b\x04\x10\x05\"\x83\x03\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\x83\x03\n" +
 	"\x18StartHostedPluginRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1f\n" +
@@ -1273,11 +1029,7 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12>\n" +
 	"\x04logs\x18\x02 \x03(\v2*.gestalt.provider.v1.PluginRuntimeLogEntryR\x04logs\"<\n" +
 	"\x1fAppendPluginRuntimeLogsResponse\x12\x19\n" +
-	"\blast_seq\x18\x01 \x01(\x03R\alastSeq*\xb0\x01\n" +
-	"\x1ePluginRuntimeHostServiceAccess\x122\n" +
-	".PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED\x10\x00\x12+\n" +
-	"'PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE\x10\x01\x12-\n" +
-	")PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT\x10\x02*\xb8\x01\n" +
+	"\blast_seq\x18\x01 \x01(\x03R\alastSeq*\xb8\x01\n" +
 	"\x17PluginRuntimeEgressMode\x12*\n" +
 	"&PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPLUGIN_RUNTIME_EGRESS_MODE_NONE\x10\x01\x12#\n" +
@@ -1290,7 +1042,7 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"!PLUGIN_RUNTIME_LOG_STREAM_RUNTIME\x10\x032\x8f\x01\n" +
 	"\x14PluginRuntimeLogHost\x12w\n" +
 	"\n" +
-	"AppendLogs\x123.gestalt.provider.v1.AppendPluginRuntimeLogsRequest\x1a4.gestalt.provider.v1.AppendPluginRuntimeLogsResponse2\x89\x06\n" +
+	"AppendLogs\x123.gestalt.provider.v1.AppendPluginRuntimeLogsRequest\x1a4.gestalt.provider.v1.AppendPluginRuntimeLogsResponse2\x85\x05\n" +
 	"\x15PluginRuntimeProvider\x12O\n" +
 	"\n" +
 	"GetSupport\x12\x16.google.protobuf.Empty\x1a).gestalt.provider.v1.PluginRuntimeSupport\x12p\n" +
@@ -1298,8 +1050,7 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"\n" +
 	"GetSession\x123.gestalt.provider.v1.GetPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12}\n" +
 	"\fListSessions\x125.gestalt.provider.v1.ListPluginRuntimeSessionsRequest\x1a6.gestalt.provider.v1.ListPluginRuntimeSessionsResponse\x12[\n" +
-	"\vStopSession\x124.gestalt.provider.v1.StopPluginRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12\x81\x01\n" +
-	"\x0fBindHostService\x128.gestalt.provider.v1.BindPluginRuntimeHostServiceRequest\x1a4.gestalt.provider.v1.PluginRuntimeHostServiceBinding\x12_\n" +
+	"\vStopSession\x124.gestalt.provider.v1.StopPluginRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12_\n" +
 	"\vStartPlugin\x12-.gestalt.provider.v1.StartHostedPluginRequest\x1a!.gestalt.provider.v1.HostedPluginB\xd6\x01\n" +
 	"\x17com.gestalt.provider.v1B\x12PluginruntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
@@ -1315,73 +1066,64 @@ func file_v1_pluginruntime_proto_rawDescGZIP() []byte {
 	return file_v1_pluginruntime_proto_rawDescData
 }
 
-var file_v1_pluginruntime_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_pluginruntime_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_v1_pluginruntime_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_v1_pluginruntime_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_v1_pluginruntime_proto_goTypes = []any{
-	(PluginRuntimeHostServiceAccess)(0),         // 0: gestalt.provider.v1.PluginRuntimeHostServiceAccess
-	(PluginRuntimeEgressMode)(0),                // 1: gestalt.provider.v1.PluginRuntimeEgressMode
-	(PluginRuntimeLogStream)(0),                 // 2: gestalt.provider.v1.PluginRuntimeLogStream
-	(*PluginRuntimeSupport)(nil),                // 3: gestalt.provider.v1.PluginRuntimeSupport
-	(*PluginRuntimeSession)(nil),                // 4: gestalt.provider.v1.PluginRuntimeSession
-	(*PluginRuntimeSessionLifecycle)(nil),       // 5: gestalt.provider.v1.PluginRuntimeSessionLifecycle
-	(*PluginRuntimeImagePullAuth)(nil),          // 6: gestalt.provider.v1.PluginRuntimeImagePullAuth
-	(*StartPluginRuntimeSessionRequest)(nil),    // 7: gestalt.provider.v1.StartPluginRuntimeSessionRequest
-	(*GetPluginRuntimeSessionRequest)(nil),      // 8: gestalt.provider.v1.GetPluginRuntimeSessionRequest
-	(*ListPluginRuntimeSessionsRequest)(nil),    // 9: gestalt.provider.v1.ListPluginRuntimeSessionsRequest
-	(*ListPluginRuntimeSessionsResponse)(nil),   // 10: gestalt.provider.v1.ListPluginRuntimeSessionsResponse
-	(*StopPluginRuntimeSessionRequest)(nil),     // 11: gestalt.provider.v1.StopPluginRuntimeSessionRequest
-	(*PluginRuntimeHostServiceRelay)(nil),       // 12: gestalt.provider.v1.PluginRuntimeHostServiceRelay
-	(*BindPluginRuntimeHostServiceRequest)(nil), // 13: gestalt.provider.v1.BindPluginRuntimeHostServiceRequest
-	(*PluginRuntimeHostServiceBinding)(nil),     // 14: gestalt.provider.v1.PluginRuntimeHostServiceBinding
-	(*StartHostedPluginRequest)(nil),            // 15: gestalt.provider.v1.StartHostedPluginRequest
-	(*HostedPlugin)(nil),                        // 16: gestalt.provider.v1.HostedPlugin
-	(*PluginRuntimeLogEntry)(nil),               // 17: gestalt.provider.v1.PluginRuntimeLogEntry
-	(*AppendPluginRuntimeLogsRequest)(nil),      // 18: gestalt.provider.v1.AppendPluginRuntimeLogsRequest
-	(*AppendPluginRuntimeLogsResponse)(nil),     // 19: gestalt.provider.v1.AppendPluginRuntimeLogsResponse
-	nil,                                         // 20: gestalt.provider.v1.PluginRuntimeSession.MetadataEntry
-	nil,                                         // 21: gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntry
-	nil,                                         // 22: gestalt.provider.v1.StartHostedPluginRequest.EnvEntry
-	(*timestamppb.Timestamp)(nil),               // 23: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                       // 24: google.protobuf.Empty
+	(PluginRuntimeEgressMode)(0),              // 0: gestalt.provider.v1.PluginRuntimeEgressMode
+	(PluginRuntimeLogStream)(0),               // 1: gestalt.provider.v1.PluginRuntimeLogStream
+	(*PluginRuntimeSupport)(nil),              // 2: gestalt.provider.v1.PluginRuntimeSupport
+	(*PluginRuntimeSession)(nil),              // 3: gestalt.provider.v1.PluginRuntimeSession
+	(*PluginRuntimeSessionLifecycle)(nil),     // 4: gestalt.provider.v1.PluginRuntimeSessionLifecycle
+	(*PluginRuntimeImagePullAuth)(nil),        // 5: gestalt.provider.v1.PluginRuntimeImagePullAuth
+	(*StartPluginRuntimeSessionRequest)(nil),  // 6: gestalt.provider.v1.StartPluginRuntimeSessionRequest
+	(*GetPluginRuntimeSessionRequest)(nil),    // 7: gestalt.provider.v1.GetPluginRuntimeSessionRequest
+	(*ListPluginRuntimeSessionsRequest)(nil),  // 8: gestalt.provider.v1.ListPluginRuntimeSessionsRequest
+	(*ListPluginRuntimeSessionsResponse)(nil), // 9: gestalt.provider.v1.ListPluginRuntimeSessionsResponse
+	(*StopPluginRuntimeSessionRequest)(nil),   // 10: gestalt.provider.v1.StopPluginRuntimeSessionRequest
+	(*StartHostedPluginRequest)(nil),          // 11: gestalt.provider.v1.StartHostedPluginRequest
+	(*HostedPlugin)(nil),                      // 12: gestalt.provider.v1.HostedPlugin
+	(*PluginRuntimeLogEntry)(nil),             // 13: gestalt.provider.v1.PluginRuntimeLogEntry
+	(*AppendPluginRuntimeLogsRequest)(nil),    // 14: gestalt.provider.v1.AppendPluginRuntimeLogsRequest
+	(*AppendPluginRuntimeLogsResponse)(nil),   // 15: gestalt.provider.v1.AppendPluginRuntimeLogsResponse
+	nil,                                       // 16: gestalt.provider.v1.PluginRuntimeSession.MetadataEntry
+	nil,                                       // 17: gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntry
+	nil,                                       // 18: gestalt.provider.v1.StartHostedPluginRequest.EnvEntry
+	(*timestamppb.Timestamp)(nil),             // 19: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                     // 20: google.protobuf.Empty
 }
 var file_v1_pluginruntime_proto_depIdxs = []int32{
-	0,  // 0: gestalt.provider.v1.PluginRuntimeSupport.host_service_access:type_name -> gestalt.provider.v1.PluginRuntimeHostServiceAccess
-	1,  // 1: gestalt.provider.v1.PluginRuntimeSupport.egress_mode:type_name -> gestalt.provider.v1.PluginRuntimeEgressMode
-	20, // 2: gestalt.provider.v1.PluginRuntimeSession.metadata:type_name -> gestalt.provider.v1.PluginRuntimeSession.MetadataEntry
-	5,  // 3: gestalt.provider.v1.PluginRuntimeSession.lifecycle:type_name -> gestalt.provider.v1.PluginRuntimeSessionLifecycle
-	23, // 4: gestalt.provider.v1.PluginRuntimeSessionLifecycle.started_at:type_name -> google.protobuf.Timestamp
-	23, // 5: gestalt.provider.v1.PluginRuntimeSessionLifecycle.recommended_drain_at:type_name -> google.protobuf.Timestamp
-	23, // 6: gestalt.provider.v1.PluginRuntimeSessionLifecycle.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 7: gestalt.provider.v1.StartPluginRuntimeSessionRequest.metadata:type_name -> gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntry
-	6,  // 8: gestalt.provider.v1.StartPluginRuntimeSessionRequest.image_pull_auth:type_name -> gestalt.provider.v1.PluginRuntimeImagePullAuth
-	4,  // 9: gestalt.provider.v1.ListPluginRuntimeSessionsResponse.sessions:type_name -> gestalt.provider.v1.PluginRuntimeSession
-	12, // 10: gestalt.provider.v1.BindPluginRuntimeHostServiceRequest.relay:type_name -> gestalt.provider.v1.PluginRuntimeHostServiceRelay
-	12, // 11: gestalt.provider.v1.PluginRuntimeHostServiceBinding.relay:type_name -> gestalt.provider.v1.PluginRuntimeHostServiceRelay
-	22, // 12: gestalt.provider.v1.StartHostedPluginRequest.env:type_name -> gestalt.provider.v1.StartHostedPluginRequest.EnvEntry
-	2,  // 13: gestalt.provider.v1.PluginRuntimeLogEntry.stream:type_name -> gestalt.provider.v1.PluginRuntimeLogStream
-	23, // 14: gestalt.provider.v1.PluginRuntimeLogEntry.observed_at:type_name -> google.protobuf.Timestamp
-	17, // 15: gestalt.provider.v1.AppendPluginRuntimeLogsRequest.logs:type_name -> gestalt.provider.v1.PluginRuntimeLogEntry
-	18, // 16: gestalt.provider.v1.PluginRuntimeLogHost.AppendLogs:input_type -> gestalt.provider.v1.AppendPluginRuntimeLogsRequest
-	24, // 17: gestalt.provider.v1.PluginRuntimeProvider.GetSupport:input_type -> google.protobuf.Empty
-	7,  // 18: gestalt.provider.v1.PluginRuntimeProvider.StartSession:input_type -> gestalt.provider.v1.StartPluginRuntimeSessionRequest
-	8,  // 19: gestalt.provider.v1.PluginRuntimeProvider.GetSession:input_type -> gestalt.provider.v1.GetPluginRuntimeSessionRequest
-	9,  // 20: gestalt.provider.v1.PluginRuntimeProvider.ListSessions:input_type -> gestalt.provider.v1.ListPluginRuntimeSessionsRequest
-	11, // 21: gestalt.provider.v1.PluginRuntimeProvider.StopSession:input_type -> gestalt.provider.v1.StopPluginRuntimeSessionRequest
-	13, // 22: gestalt.provider.v1.PluginRuntimeProvider.BindHostService:input_type -> gestalt.provider.v1.BindPluginRuntimeHostServiceRequest
-	15, // 23: gestalt.provider.v1.PluginRuntimeProvider.StartPlugin:input_type -> gestalt.provider.v1.StartHostedPluginRequest
-	19, // 24: gestalt.provider.v1.PluginRuntimeLogHost.AppendLogs:output_type -> gestalt.provider.v1.AppendPluginRuntimeLogsResponse
-	3,  // 25: gestalt.provider.v1.PluginRuntimeProvider.GetSupport:output_type -> gestalt.provider.v1.PluginRuntimeSupport
-	4,  // 26: gestalt.provider.v1.PluginRuntimeProvider.StartSession:output_type -> gestalt.provider.v1.PluginRuntimeSession
-	4,  // 27: gestalt.provider.v1.PluginRuntimeProvider.GetSession:output_type -> gestalt.provider.v1.PluginRuntimeSession
-	10, // 28: gestalt.provider.v1.PluginRuntimeProvider.ListSessions:output_type -> gestalt.provider.v1.ListPluginRuntimeSessionsResponse
-	24, // 29: gestalt.provider.v1.PluginRuntimeProvider.StopSession:output_type -> google.protobuf.Empty
-	14, // 30: gestalt.provider.v1.PluginRuntimeProvider.BindHostService:output_type -> gestalt.provider.v1.PluginRuntimeHostServiceBinding
-	16, // 31: gestalt.provider.v1.PluginRuntimeProvider.StartPlugin:output_type -> gestalt.provider.v1.HostedPlugin
-	24, // [24:32] is the sub-list for method output_type
-	16, // [16:24] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	0,  // 0: gestalt.provider.v1.PluginRuntimeSupport.egress_mode:type_name -> gestalt.provider.v1.PluginRuntimeEgressMode
+	16, // 1: gestalt.provider.v1.PluginRuntimeSession.metadata:type_name -> gestalt.provider.v1.PluginRuntimeSession.MetadataEntry
+	4,  // 2: gestalt.provider.v1.PluginRuntimeSession.lifecycle:type_name -> gestalt.provider.v1.PluginRuntimeSessionLifecycle
+	19, // 3: gestalt.provider.v1.PluginRuntimeSessionLifecycle.started_at:type_name -> google.protobuf.Timestamp
+	19, // 4: gestalt.provider.v1.PluginRuntimeSessionLifecycle.recommended_drain_at:type_name -> google.protobuf.Timestamp
+	19, // 5: gestalt.provider.v1.PluginRuntimeSessionLifecycle.expires_at:type_name -> google.protobuf.Timestamp
+	17, // 6: gestalt.provider.v1.StartPluginRuntimeSessionRequest.metadata:type_name -> gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntry
+	5,  // 7: gestalt.provider.v1.StartPluginRuntimeSessionRequest.image_pull_auth:type_name -> gestalt.provider.v1.PluginRuntimeImagePullAuth
+	3,  // 8: gestalt.provider.v1.ListPluginRuntimeSessionsResponse.sessions:type_name -> gestalt.provider.v1.PluginRuntimeSession
+	18, // 9: gestalt.provider.v1.StartHostedPluginRequest.env:type_name -> gestalt.provider.v1.StartHostedPluginRequest.EnvEntry
+	1,  // 10: gestalt.provider.v1.PluginRuntimeLogEntry.stream:type_name -> gestalt.provider.v1.PluginRuntimeLogStream
+	19, // 11: gestalt.provider.v1.PluginRuntimeLogEntry.observed_at:type_name -> google.protobuf.Timestamp
+	13, // 12: gestalt.provider.v1.AppendPluginRuntimeLogsRequest.logs:type_name -> gestalt.provider.v1.PluginRuntimeLogEntry
+	14, // 13: gestalt.provider.v1.PluginRuntimeLogHost.AppendLogs:input_type -> gestalt.provider.v1.AppendPluginRuntimeLogsRequest
+	20, // 14: gestalt.provider.v1.PluginRuntimeProvider.GetSupport:input_type -> google.protobuf.Empty
+	6,  // 15: gestalt.provider.v1.PluginRuntimeProvider.StartSession:input_type -> gestalt.provider.v1.StartPluginRuntimeSessionRequest
+	7,  // 16: gestalt.provider.v1.PluginRuntimeProvider.GetSession:input_type -> gestalt.provider.v1.GetPluginRuntimeSessionRequest
+	8,  // 17: gestalt.provider.v1.PluginRuntimeProvider.ListSessions:input_type -> gestalt.provider.v1.ListPluginRuntimeSessionsRequest
+	10, // 18: gestalt.provider.v1.PluginRuntimeProvider.StopSession:input_type -> gestalt.provider.v1.StopPluginRuntimeSessionRequest
+	11, // 19: gestalt.provider.v1.PluginRuntimeProvider.StartPlugin:input_type -> gestalt.provider.v1.StartHostedPluginRequest
+	15, // 20: gestalt.provider.v1.PluginRuntimeLogHost.AppendLogs:output_type -> gestalt.provider.v1.AppendPluginRuntimeLogsResponse
+	2,  // 21: gestalt.provider.v1.PluginRuntimeProvider.GetSupport:output_type -> gestalt.provider.v1.PluginRuntimeSupport
+	3,  // 22: gestalt.provider.v1.PluginRuntimeProvider.StartSession:output_type -> gestalt.provider.v1.PluginRuntimeSession
+	3,  // 23: gestalt.provider.v1.PluginRuntimeProvider.GetSession:output_type -> gestalt.provider.v1.PluginRuntimeSession
+	9,  // 24: gestalt.provider.v1.PluginRuntimeProvider.ListSessions:output_type -> gestalt.provider.v1.ListPluginRuntimeSessionsResponse
+	20, // 25: gestalt.provider.v1.PluginRuntimeProvider.StopSession:output_type -> google.protobuf.Empty
+	12, // 26: gestalt.provider.v1.PluginRuntimeProvider.StartPlugin:output_type -> gestalt.provider.v1.HostedPlugin
+	20, // [20:27] is the sub-list for method output_type
+	13, // [13:20] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_v1_pluginruntime_proto_init() }
@@ -1394,8 +1136,8 @@ func file_v1_pluginruntime_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_pluginruntime_proto_rawDesc), len(file_v1_pluginruntime_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   20,
+			NumEnums:      2,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

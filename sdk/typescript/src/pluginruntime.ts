@@ -10,16 +10,12 @@ import {
   HostedPluginSchema,
   ListPluginRuntimeSessionsResponseSchema,
   PluginRuntimeEgressMode,
-  PluginRuntimeHostServiceAccess,
-  PluginRuntimeHostServiceBindingSchema,
   PluginRuntimeProvider as PluginRuntimeProviderService,
   PluginRuntimeSessionSchema,
   PluginRuntimeSupportSchema,
-  type BindPluginRuntimeHostServiceRequest,
   type GetPluginRuntimeSessionRequest,
   type HostedPlugin,
   type ListPluginRuntimeSessionsRequest,
-  type PluginRuntimeHostServiceBinding,
   type PluginRuntimeSession,
   type PluginRuntimeSupport,
   type StartHostedPluginRequest,
@@ -30,18 +26,16 @@ import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
 export type {
-  BindPluginRuntimeHostServiceRequest,
   GetPluginRuntimeSessionRequest,
   HostedPlugin,
   ListPluginRuntimeSessionsRequest,
-  PluginRuntimeHostServiceBinding,
   PluginRuntimeSession,
   PluginRuntimeSupport,
   StartHostedPluginRequest,
   StartPluginRuntimeSessionRequest,
   StopPluginRuntimeSessionRequest,
 };
-export { PluginRuntimeEgressMode, PluginRuntimeHostServiceAccess };
+export { PluginRuntimeEgressMode };
 
 export interface PluginRuntimeProviderOptions extends RuntimeProviderOptions {
   getSupport: () => MaybePromise<MessageInitShape<typeof PluginRuntimeSupportSchema>>;
@@ -55,9 +49,6 @@ export interface PluginRuntimeProviderOptions extends RuntimeProviderOptions {
     request: ListPluginRuntimeSessionsRequest,
   ) => MaybePromise<MessageInitShape<typeof PluginRuntimeSessionSchema>[]>;
   stopSession: (request: StopPluginRuntimeSessionRequest) => MaybePromise<void>;
-  bindHostService: (
-    request: BindPluginRuntimeHostServiceRequest,
-  ) => MaybePromise<MessageInitShape<typeof PluginRuntimeHostServiceBindingSchema>>;
   startPlugin: (
     request: StartHostedPluginRequest,
   ) => MaybePromise<MessageInitShape<typeof HostedPluginSchema>>;
@@ -71,7 +62,6 @@ export class PluginRuntimeProvider extends RuntimeProvider {
   private readonly getSessionHandler: PluginRuntimeProviderOptions["getSession"];
   private readonly listSessionsHandler: PluginRuntimeProviderOptions["listSessions"];
   private readonly stopSessionHandler: PluginRuntimeProviderOptions["stopSession"];
-  private readonly bindHostServiceHandler: PluginRuntimeProviderOptions["bindHostService"];
   private readonly startPluginHandler: PluginRuntimeProviderOptions["startPlugin"];
 
   constructor(options: PluginRuntimeProviderOptions) {
@@ -81,7 +71,6 @@ export class PluginRuntimeProvider extends RuntimeProvider {
     this.getSessionHandler = options.getSession;
     this.listSessionsHandler = options.listSessions;
     this.stopSessionHandler = options.stopSession;
-    this.bindHostServiceHandler = options.bindHostService;
     this.startPluginHandler = options.startPlugin;
   }
 
@@ -109,12 +98,6 @@ export class PluginRuntimeProvider extends RuntimeProvider {
 
   async stopSession(request: StopPluginRuntimeSessionRequest): Promise<void> {
     await this.stopSessionHandler(request);
-  }
-
-  async bindHostService(
-    request: BindPluginRuntimeHostServiceRequest,
-  ): Promise<MessageInitShape<typeof PluginRuntimeHostServiceBindingSchema>> {
-    return await this.bindHostServiceHandler(request);
   }
 
   async startPlugin(
@@ -185,14 +168,6 @@ export function createPluginRuntimeProviderService(
         provider.stopSession(request),
       );
       return create(EmptySchema);
-    },
-    async bindHostService(request) {
-      return create(
-        PluginRuntimeHostServiceBindingSchema,
-        await invokePluginRuntimeProvider("bind host service", () =>
-          provider.bindHostService(request),
-        ),
-      );
     },
     async startPlugin(request) {
       return create(

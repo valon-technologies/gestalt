@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestExecutableProviderIgnoresLegacyDirectHostServiceAccess(t *testing.T) {
+func TestExecutableProviderReadsRuntimeSupport(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -208,7 +208,6 @@ func (p *runtimeProvider) Configure(context.Context, string, map[string]any) err
 func (p *runtimeProvider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
 	return &proto.PluginRuntimeSupport{
 		CanHostPlugins: true,
-		HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
 	}, nil
 }
 
