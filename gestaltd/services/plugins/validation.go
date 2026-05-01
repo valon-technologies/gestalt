@@ -1,4 +1,4 @@
-package plugininvocation
+package plugins
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
@@ -197,7 +196,7 @@ func resolveDeclarativeCatalog(name string, manifest *providermanifestv1.Manifes
 }
 
 func loadDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
-	prov, err := pluginservice.NewDeclarativeProvider(manifest, nil)
+	prov, err := NewDeclarativeProvider(manifest, nil)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
 	}
