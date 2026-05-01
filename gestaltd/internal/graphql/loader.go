@@ -10,10 +10,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
 	schema, err := introspect(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
@@ -21,19 +21,19 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	return DefinitionFromSchema(name, endpoint, schema, allowedOps, selectionOverrides)
 }
 
-func StaticDefinition(name, endpoint string) *provider.Definition {
-	def := &provider.Definition{
+func StaticDefinition(name, endpoint string) *declarative.Definition {
+	def := &declarative.Definition{
 		Provider:   name,
 		BaseURL:    strings.TrimRight(endpoint, "/"),
-		Operations: map[string]provider.OperationDef{},
+		Operations: map[string]declarative.OperationDef{},
 	}
 
 	return def
 }
 
-func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*provider.Definition, error) {
+func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
 	def := StaticDefinition(name, endpoint)
-	def.Operations = make(map[string]provider.OperationDef)
+	def.Operations = make(map[string]declarative.OperationDef)
 	addOperations(schema, def, schema.QueryType, false, allowedOps, selectionOverrides)
 	addOperations(schema, def, schema.MutationType, true, allowedOps, selectionOverrides)
 
@@ -70,7 +70,7 @@ func SchemaFromResult(result *core.OperationResult) (*Schema, error) {
 	return SchemaFromBody([]byte(result.Body))
 }
 
-func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) {
+func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) {
 	if root == nil {
 		return
 	}
@@ -107,8 +107,8 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 
 		query := generateQuery(schema, field, isMutation, selectionOverrides[field.Name])
 
-		opDef := provider.OperationDef{
-			Description:  provider.TruncateDescription(desc),
+		opDef := declarative.OperationDef{
+			Description:  declarative.TruncateDescription(desc),
 			AllowedRoles: allowedRoles,
 			Tags:         tags,
 			Transport:    "graphql",
@@ -121,13 +121,13 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 	}
 }
 
-func argsToParams(schema *Schema, args []InputValue) []provider.ParameterDef {
+func argsToParams(schema *Schema, args []InputValue) []declarative.ParameterDef {
 	if len(args) == 0 {
 		return nil
 	}
-	params := make([]provider.ParameterDef, 0, len(args))
+	params := make([]declarative.ParameterDef, 0, len(args))
 	for _, arg := range args {
-		params = append(params, provider.ParameterDef{
+		params = append(params, declarative.ParameterDef{
 			Name:        arg.Name,
 			Type:        graphqlParamType(schema, arg.Type),
 			Description: arg.Description,

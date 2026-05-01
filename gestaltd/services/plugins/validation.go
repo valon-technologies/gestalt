@@ -10,9 +10,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 )
 
@@ -288,14 +288,14 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.Pr
 			continue
 		}
 		var (
-			def *provider.Definition
+			def *declarative.Definition
 			err error
 		)
 		def, err = openapi.LoadDefinition(ctx, name, url, allowed)
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)
 		}
-		merged, err = mergeCatalogs(name, merged, provider.CatalogFromDefinition(def))
+		merged, err = mergeCatalogs(name, merged, declarative.CatalogFromDefinition(def))
 		if err != nil {
 			return nil, err
 		}

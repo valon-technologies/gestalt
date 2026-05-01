@@ -15,7 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
@@ -78,9 +78,9 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	base, err := provider.Build(graphql.StaticDefinition("linear", srv.URL), config.ConnectionDef{})
+	base, err := declarative.Build(graphql.StaticDefinition("linear", srv.URL), config.ConnectionDef{})
 	if err != nil {
-		t.Fatalf("provider.Build: %v", err)
+		t.Fatalf("declarative.Build: %v", err)
 	}
 
 	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{

@@ -1,4 +1,4 @@
-package provider
+package declarative
 
 import "strings"
 

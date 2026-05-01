@@ -4,12 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
-
-type AuthMappingDef = providermanifestv1.AuthMapping
-type AuthValueDef = providermanifestv1.AuthValue
 
 // MappedCredentialParser maps a structured credential JSON token into request
 // auth material according to an authMapping definition.

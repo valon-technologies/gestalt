@@ -32,7 +32,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -46,6 +45,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
@@ -482,19 +482,19 @@ type specProviderConfig struct {
 	allowedOperations    map[string]*config.OperationOverride
 	allowedHosts         []string
 	baseURL              string
-	providerBuildOptions func(config.ConnectionDef) []provider.BuildOption
+	providerBuildOptions func(config.ConnectionDef) []declarative.BuildOption
 	applyResponseMapping bool
 }
 
 type specAuthFallback struct {
-	definitions map[string]*provider.Definition
+	definitions map[string]*declarative.Definition
 }
 
 func newSpecAuthFallback() *specAuthFallback {
-	return &specAuthFallback{definitions: make(map[string]*provider.Definition)}
+	return &specAuthFallback{definitions: make(map[string]*declarative.Definition)}
 }
 
-func (f *specAuthFallback) add(connectionName string, def *provider.Definition) {
+func (f *specAuthFallback) add(connectionName string, def *declarative.Definition) {
 	if f == nil || def == nil {
 		return
 	}
@@ -508,7 +508,7 @@ func (f *specAuthFallback) add(connectionName string, def *provider.Definition) 
 	f.definitions[resolvedName] = def
 }
 
-func (f *specAuthFallback) definitionFor(connectionName string) *provider.Definition {
+func (f *specAuthFallback) definitionFor(connectionName string) *declarative.Definition {
 	if f == nil {
 		return nil
 	}
@@ -537,7 +537,7 @@ func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *
 type builtSpecSurface struct {
 	provider   core.Provider
 	resolved   config.ResolvedSpecSurface
-	definition *provider.Definition
+	definition *declarative.Definition
 }
 
 func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
@@ -570,7 +570,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 		allowedHosts:         entry.EffectiveAllowedHosts(),
 		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
 		applyResponseMapping: true,
-		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
+		providerBuildOptions: func(conn config.ConnectionDef) []declarative.BuildOption {
 			return mcpOAuthBuildOpts(conn, mcpURL, deps)
 		},
 	}
@@ -679,7 +679,7 @@ func closeBuiltSpecSurfaces(surfaces []builtSpecSurface) {
 	}
 }
 
-func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
+func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*declarative.Definition, error) {
 	def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
 	if err != nil {
 		return nil, fmt.Errorf("load %s definition: %w", resolved.Surface, err)
@@ -707,9 +707,9 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved conf
 	return def, nil
 }
 
-func buildConfiguredSpecProvider(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *provider.Definition, error) {
-	var buildOpts []provider.BuildOption
-	buildOpts = append(buildOpts, provider.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)))
+func buildConfiguredSpecProvider(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *declarative.Definition, error) {
+	var buildOpts []declarative.BuildOption
+	buildOpts = append(buildOpts, declarative.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)))
 	if cfg.providerBuildOptions != nil {
 		buildOpts = append(buildOpts, cfg.providerBuildOptions(resolved.Connection)...)
 	}
@@ -720,7 +720,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 		if err != nil {
 			return nil, nil, err
 		}
-		prov, err := provider.Build(def, resolved.Connection, buildOpts...)
+		prov, err := declarative.Build(def, resolved.Connection, buildOpts...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -757,7 +757,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 	}
 }
 
-func loadSpecDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*provider.Definition, error) {
+func loadSpecDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*declarative.Definition, error) {
 	switch resolved.Surface {
 	case config.SpecSurfaceOpenAPI:
 		return openapi.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
@@ -2584,7 +2584,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 	description := meta.descriptionOr(manifest.Description)
 	iconSVG := meta.iconSVG
 	if iconPath := entry.ResolvedIconFile; iconPath != "" {
-		svg, err := provider.ReadIconFile(iconPath)
+		svg, err := declarative.ReadIconFile(iconPath)
 		if err != nil {
 			slog.Warn("could not read manifest icon_file", "path", iconPath, "error", err)
 		} else if iconSVG == "" {
@@ -2646,12 +2646,12 @@ func staticAuthTypes(authType providermanifestv1.AuthType) []string {
 	}
 }
 
-func mcpOAuthBuildOpts(conn config.ConnectionDef, mcpURL string, deps Deps) []provider.BuildOption {
+func mcpOAuthBuildOpts(conn config.ConnectionDef, mcpURL string, deps Deps) []declarative.BuildOption {
 	if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth || mcpURL == "" {
 		return nil
 	}
-	return []provider.BuildOption{
-		provider.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps)),
+	return []declarative.BuildOption{
+		declarative.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps)),
 	}
 }
 
@@ -2662,7 +2662,7 @@ func manifestHeaders(manifestPlugin *providermanifestv1.Spec) map[string]string 
 	return maps.Clone(manifestPlugin.Headers)
 }
 
-func applyProviderHeaders(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) {
+func applyProviderHeaders(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) {
 	if def == nil {
 		return
 	}
@@ -2673,7 +2673,7 @@ func applyProviderHeaders(def *provider.Definition, manifestPlugin *providermani
 	def.Headers = headers
 }
 
-func applyManagedParameters(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) error {
+func applyManagedParameters(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) error {
 	if def == nil || manifestPlugin == nil || len(manifestPlugin.ManagedParameters) == 0 {
 		return nil
 	}
@@ -2716,7 +2716,7 @@ func applyManagedParameters(def *provider.Definition, manifestPlugin *providerma
 	return nil
 }
 
-func isManagedOperationParameter(param provider.ParameterDef, managed []providermanifestv1.ManagedParameter) bool {
+func isManagedOperationParameter(param declarative.ParameterDef, managed []providermanifestv1.ManagedParameter) bool {
 	location := strings.ToLower(strings.TrimSpace(param.Location))
 	if location == "" {
 		return false
@@ -2736,15 +2736,15 @@ func isManagedOperationParameter(param provider.ParameterDef, managed []provider
 	return false
 }
 
-func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) {
+func applyProviderResponseMapping(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) {
 	if def == nil || manifestPlugin == nil || manifestPlugin.ResponseMapping == nil {
 		return
 	}
-	rm := &provider.ResponseMappingDef{
+	rm := &declarative.ResponseMappingDef{
 		DataPath: manifestPlugin.ResponseMapping.DataPath,
 	}
 	if manifestPlugin.ResponseMapping.Pagination != nil {
-		rm.Pagination = &provider.PaginationMappingDef{
+		rm.Pagination = &declarative.PaginationMappingDef{
 			HasMore: cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.HasMore),
 			Cursor:  cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.Cursor),
 		}
@@ -2752,7 +2752,7 @@ func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *prov
 	def.ResponseMapping = rm
 }
 
-func applyProviderPagination(def *provider.Definition, manifestPlugin *providermanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
+func applyProviderPagination(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
 	if def == nil || manifestPlugin == nil {
 		return
 	}
@@ -2772,7 +2772,7 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *providerm
 		if !ok {
 			continue
 		}
-		op.Pagination = &provider.PaginationDef{
+		op.Pagination = &declarative.PaginationDef{
 			Style:        string(pgn.Style),
 			CursorParam:  pgn.CursorParam,
 			Cursor:       cloneManifestValueSelectorDef(pgn.Cursor),
@@ -2830,11 +2830,11 @@ func cloneManifestValueSelector(in *providermanifestv1.ManifestValueSelector) *p
 	}
 }
 
-func cloneManifestValueSelectorDef(in *providermanifestv1.ManifestValueSelector) *provider.ValueSelectorDef {
+func cloneManifestValueSelectorDef(in *providermanifestv1.ManifestValueSelector) *declarative.ValueSelectorDef {
 	if in == nil {
 		return nil
 	}
-	return &provider.ValueSelectorDef{
+	return &declarative.ValueSelectorDef{
 		Source: in.Source,
 		Path:   in.Path,
 	}
@@ -2901,7 +2901,7 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 	return WrapUpstreamHandler(oauth.NewUpstream(oauthCfg)), nil
 }
 
-func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.ConnectionDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
+func buildOAuthHandlerFromDefinition(def *declarative.Definition, conn config.ConnectionDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
 	if def == nil || def.Auth.Type != "oauth2" {
 		return nil, nil
 	}
@@ -2921,8 +2921,8 @@ func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.Conne
 	}
 
 	defCopy := *def
-	provider.ApplyConnectionAuth(&defCopy, effectiveConn)
-	upstream, err := provider.BuildOAuthUpstream(&defCopy, effectiveConn, defCopy.BaseURL, nil)
+	declarative.ApplyConnectionAuth(&defCopy, effectiveConn)
+	upstream, err := declarative.BuildOAuthUpstream(&defCopy, effectiveConn, defCopy.BaseURL, nil)
 	if err != nil {
 		return nil, err
 	}

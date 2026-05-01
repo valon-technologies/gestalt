@@ -9,7 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 type graphQLSessionCatalogProvider struct {
@@ -120,7 +120,7 @@ func (p *graphQLSessionCatalogProvider) CatalogForRequest(ctx context.Context, t
 	if err != nil {
 		return nil, err
 	}
-	cat := provider.CatalogFromDefinition(def)
+	cat := declarative.CatalogFromDefinition(def)
 	inheritCatalogMetadata(cat, p.Provider)
 	return cat, nil
 }

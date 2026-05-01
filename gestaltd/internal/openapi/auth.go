@@ -6,7 +6,7 @@ import (
 
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 	secInQuery  = "query"
 )
 
-func extractAuth(model *v3high.Document, def *provider.Definition) {
+func extractAuth(model *v3high.Document, def *declarative.Definition) {
 	if model.Components == nil || model.Components.SecuritySchemes == nil {
 		return
 	}
@@ -32,7 +32,7 @@ func extractAuth(model *v3high.Document, def *provider.Definition) {
 	}
 }
 
-func extractSecurityRequirementsAuth(model *v3high.Document, def *provider.Definition) bool {
+func extractSecurityRequirementsAuth(model *v3high.Document, def *declarative.Definition) bool {
 	if len(model.Security) == 0 || model.Components == nil || model.Components.SecuritySchemes == nil {
 		return false
 	}
@@ -79,7 +79,7 @@ func namedSecuritySchemes(req *base.SecurityRequirement, securitySchemes map[str
 	return named
 }
 
-func applyNamedSecuritySchemesAuth(def *provider.Definition, schemes []namedSecurityScheme) bool {
+func applyNamedSecuritySchemesAuth(def *declarative.Definition, schemes []namedSecurityScheme) bool {
 	if len(schemes) == 0 {
 		return false
 	}
@@ -95,22 +95,22 @@ func applyNamedSecuritySchemesAuth(def *provider.Definition, schemes []namedSecu
 	return applySecuritySchemeAuth(def, schemes[0].name, schemes[0].scheme)
 }
 
-func applyAPIKeySecurityAuth(def *provider.Definition, schemes []namedSecurityScheme) bool {
+func applyAPIKeySecurityAuth(def *declarative.Definition, schemes []namedSecurityScheme) bool {
 	if len(schemes) == 0 {
 		return false
 	}
 
-	authMapping := &provider.AuthMappingDef{Headers: make(map[string]provider.AuthValueDef, len(schemes))}
-	credentialFields := make([]provider.CredentialFieldDef, 0, len(schemes))
+	authMapping := &declarative.AuthMappingDef{Headers: make(map[string]declarative.AuthValueDef, len(schemes))}
+	credentialFields := make([]declarative.CredentialFieldDef, 0, len(schemes))
 	for _, named := range schemes {
 		if named.scheme == nil || named.scheme.Type != secTypeAPIKey || named.scheme.In != secInHeader {
 			return false
 		}
 		field := credentialFieldForSecurityScheme(named.name, named.scheme)
 		credentialFields = append(credentialFields, field)
-		authMapping.Headers[named.scheme.Name] = provider.AuthValueDef{
-			ValueFrom: &provider.AuthValueFromDef{
-				CredentialFieldRef: &provider.CredentialFieldRefDef{Name: field.Name},
+		authMapping.Headers[named.scheme.Name] = declarative.AuthValueDef{
+			ValueFrom: &declarative.AuthValueFromDef{
+				CredentialFieldRef: &declarative.CredentialFieldRefDef{Name: field.Name},
 			},
 		}
 	}
@@ -128,7 +128,7 @@ func applyAPIKeySecurityAuth(def *provider.Definition, schemes []namedSecuritySc
 	return true
 }
 
-func applySecuritySchemeAuth(def *provider.Definition, schemeName string, ss *v3high.SecurityScheme) bool {
+func applySecuritySchemeAuth(def *declarative.Definition, schemeName string, ss *v3high.SecurityScheme) bool {
 	if ss == nil {
 		return false
 	}
@@ -158,12 +158,12 @@ func applySecuritySchemeAuth(def *provider.Definition, schemeName string, ss *v3
 			def.Auth.Type = "manual"
 			def.AuthStyle = "raw"
 			def.AuthHeader = ss.Name
-			def.CredentialFields = []provider.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
+			def.CredentialFields = []declarative.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
 			return true
 		case secInQuery:
 			def.Auth.Type = "manual"
 			def.AuthStyle = "raw"
-			def.CredentialFields = []provider.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
+			def.CredentialFields = []declarative.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
 			return true
 		default:
 			return false
@@ -179,18 +179,18 @@ func applySecuritySchemeAuth(def *provider.Definition, schemeName string, ss *v3
 		default:
 			return false
 		}
-		def.CredentialFields = []provider.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
+		def.CredentialFields = []declarative.CredentialFieldDef{credentialFieldForSecurityScheme(schemeName, ss)}
 		return true
 	}
 
 	return false
 }
 
-func credentialFieldForSecurityScheme(schemeName string, ss *v3high.SecurityScheme) provider.CredentialFieldDef {
-	return provider.CredentialFieldDef{
+func credentialFieldForSecurityScheme(schemeName string, ss *v3high.SecurityScheme) declarative.CredentialFieldDef {
+	return declarative.CredentialFieldDef{
 		Name:        normalizeSecuritySchemeFieldName(schemeName),
 		Label:       humanizeCredentialFieldLabel(schemeName),
-		Description: provider.TruncateDescription(ss.Description),
+		Description: declarative.TruncateDescription(ss.Description),
 	}
 }
 

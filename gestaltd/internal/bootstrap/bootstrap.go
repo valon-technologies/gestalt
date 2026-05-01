@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -35,6 +34,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -119,7 +119,7 @@ func resolveProviderMetadata(entry *config.ProviderEntry) providerMetadata {
 		return meta
 	}
 
-	svg, err := provider.ReadIconFile(entry.IconFile)
+	svg, err := declarative.ReadIconFile(entry.IconFile)
 	if err != nil {
 		slog.Warn("could not read icon_file", "path", entry.IconFile, "error", err)
 		return meta

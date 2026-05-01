@@ -17,14 +17,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/toolschema"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 const maxSpecSize = 100 << 20 // 100 MB
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
-func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride) (*declarative.Definition, error) {
 	body, err := fetch(ctx, specURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
@@ -40,11 +40,11 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 		return nil, fmt.Errorf("could not build model for %s", specURL)
 	}
 
-	def := &provider.Definition{Provider: name}
+	def := &declarative.Definition{Provider: name}
 
 	if info := model.Model.Info; info != nil {
 		def.DisplayName = info.Title
-		def.Description = provider.TruncateDescription(info.Description)
+		def.Description = declarative.TruncateDescription(info.Description)
 	}
 
 	if len(model.Model.Servers) > 0 {
@@ -151,8 +151,8 @@ func collectOperationScopes(model *v3high.Document, allowedOps map[string]*confi
 	return result
 }
 
-func extractOperations(model *v3high.Document, def *provider.Definition, allowedOps map[string]*config.OperationOverride) {
-	def.Operations = make(map[string]provider.OperationDef)
+func extractOperations(model *v3high.Document, def *declarative.Definition, allowedOps map[string]*config.OperationOverride) {
+	def.Operations = make(map[string]declarative.OperationDef)
 
 	if model.Paths == nil || model.Paths.PathItems == nil {
 		return
@@ -192,7 +192,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			}
 
 			var (
-				params       []provider.ParameterDef
+				params       []declarative.ParameterDef
 				paramNames   = toolschema.NewNameAllocator()
 				seenRawNames = make(map[string]struct{})
 			)
@@ -231,7 +231,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 							pType = propSchema.Type[0]
 						}
 						mapping := paramNames.Allocate(rawName)
-						params = append(params, provider.ParameterDef{
+						params = append(params, declarative.ParameterDef{
 							Name:        mapping.Name,
 							WireName:    mapping.WireName,
 							Type:        pType,
@@ -244,7 +244,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				}
 			}
 
-			def.Operations[opID] = provider.OperationDef{
+			def.Operations[opID] = declarative.OperationDef{
 				Description:  desc,
 				Method:       strings.ToUpper(method),
 				Path:         path,
@@ -256,7 +256,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 	}
 }
 
-func definitionParamFromOpenAPI(p *v3high.Parameter, names *toolschema.NameAllocator) provider.ParameterDef {
+func definitionParamFromOpenAPI(p *v3high.Parameter, names *toolschema.NameAllocator) declarative.ParameterDef {
 	paramType := "string"
 	if p.Schema != nil && p.Schema.Schema() != nil {
 		if types := p.Schema.Schema().Type; len(types) > 0 {
@@ -264,7 +264,7 @@ func definitionParamFromOpenAPI(p *v3high.Parameter, names *toolschema.NameAlloc
 		}
 	}
 	mapping := names.Allocate(p.Name)
-	return provider.ParameterDef{
+	return declarative.ParameterDef{
 		Name:        mapping.Name,
 		WireName:    mapping.WireName,
 		Type:        paramType,

@@ -1,4 +1,4 @@
-package integration_test
+package declarative_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 // stubWithOps extends StubIntegration with concrete operations.

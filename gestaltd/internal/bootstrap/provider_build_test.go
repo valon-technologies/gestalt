@@ -4,15 +4,15 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 	t.Parallel()
 
-	def := &provider.Definition{
-		Operations: map[string]provider.OperationDef{
+	def := &declarative.Definition{
+		Operations: map[string]declarative.OperationDef{
 			"listNotes": {
 				Method: "GET",
 				Path:   "/v1/notes",

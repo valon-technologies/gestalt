@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 func serveJSON(t *testing.T, spec any) *httptest.Server {
@@ -572,7 +572,7 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 		t.Error("expected 'value' body property to be included")
 	}
 
-	byName := make(map[string]provider.ParameterDef, len(op.Parameters))
+	byName := make(map[string]declarative.ParameterDef, len(op.Parameters))
 	for _, p := range op.Parameters {
 		byName[p.Name] = p
 	}
@@ -638,7 +638,7 @@ func TestLoadDefinitionNormalizesModelUnsafeParamNames(t *testing.T) {
 	}
 
 	op := def.Operations["create_item"]
-	byName := make(map[string]provider.ParameterDef, len(op.Parameters))
+	byName := make(map[string]declarative.ParameterDef, len(op.Parameters))
 	for _, p := range op.Parameters {
 		byName[p.Name] = p
 	}

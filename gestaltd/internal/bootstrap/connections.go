@@ -6,9 +6,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 )
 
 type ConnectionMaps struct {
@@ -170,7 +170,7 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 		mcpURL = resolved.URL
 	}
 
-	specAuthForConnection := func(connectionName string) *provider.Definition {
+	specAuthForConnection := func(connectionName string) *declarative.Definition {
 		return authFallback.definitionFor(connectionName)
 	}
 
@@ -198,7 +198,7 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 	return handlers, nil
 }
 
-func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *provider.Definition, deps Deps) (OAuthHandler, error) {
+func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *declarative.Definition, deps Deps) (OAuthHandler, error) {
 	switch conn.Auth.Type {
 	case "", providermanifestv1.AuthTypeOAuth2:
 		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
