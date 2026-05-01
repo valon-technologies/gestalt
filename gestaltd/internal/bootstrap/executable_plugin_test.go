@@ -7190,8 +7190,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	runtimeProvider := &staticCapabilityPluginRuntime{
 		inner: pluginruntime.NewLocalProvider(),
 		support: pluginruntime.Support{
-			CanHostPlugins:    true,
-			HostServiceAccess: pluginruntime.HostServiceAccessDirect,
+			CanHostPlugins: true,
 		},
 	}
 	factories := NewFactoryRegistry()
@@ -7301,7 +7300,6 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -8198,7 +8196,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	}
 }
 
-func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenRuntimeAdvertisesDirectHostServiceSupport(t *testing.T) {
+func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -8210,7 +8208,6 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenRuntimeAdvertisesDi
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
@@ -8401,8 +8398,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 	runtimeProvider := &staticCapabilityPluginRuntime{
 		inner: pluginruntime.NewLocalProvider(),
 		support: pluginruntime.Support{
-			CanHostPlugins:    true,
-			HostServiceAccess: pluginruntime.HostServiceAccessDirect,
+			CanHostPlugins: true,
 		},
 	}
 	factories := NewFactoryRegistry()

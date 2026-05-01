@@ -314,19 +314,11 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 	if src == nil {
 		return Support{}
 	}
+	// host_service_access is a legacy runtime-advertised capability. gestaltd
+	// now derives host-service access from its own public relay configuration.
 	return Support{
-		CanHostPlugins:    src.GetCanHostPlugins(),
-		HostServiceAccess: hostServiceAccessFromProto(src.GetHostServiceAccess()),
-		EgressMode:        egressModeFromProto(src.GetEgressMode()),
-	}
-}
-
-func hostServiceAccessFromProto(src proto.PluginRuntimeHostServiceAccess) HostServiceAccess {
-	switch src {
-	case proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT:
-		return HostServiceAccessDirect
-	default:
-		return HostServiceAccessNone
+		CanHostPlugins: src.GetCanHostPlugins(),
+		EgressMode:     egressModeFromProto(src.GetEgressMode()),
 	}
 }
 
