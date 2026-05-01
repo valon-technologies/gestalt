@@ -8,8 +8,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

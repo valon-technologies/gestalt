@@ -11,7 +11,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
 type workflowEventPublishRequest struct {

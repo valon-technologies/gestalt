@@ -18,11 +18,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentgrant"
-	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 )
 
 func newServerTestAgentToolGrants(t testing.TB) *agentgrant.Manager {
