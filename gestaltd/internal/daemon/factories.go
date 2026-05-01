@@ -11,14 +11,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
-	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/operator"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	secretsenv "github.com/valon-technologies/gestalt/server/services/secrets/drivers/env"
+	secretsfile "github.com/valon-technologies/gestalt/server/services/secrets/drivers/file"
 )
 
 type bootstrapEnv struct {
