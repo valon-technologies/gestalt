@@ -158,10 +158,18 @@ func TestConnectionAuthMetrics(t *testing.T) {
 	startOAuth := func(code string) int {
 		t.Helper()
 
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		noRedirect := &http.Client{
+			Jar:           jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 		body := bytes.NewBufferString(`{"integration":"` + providerName + `"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, oauthServer.URL+"/api/v1/auth/start-oauth", body)
 		startReq.Header.Set("Content-Type", "application/json")
-		startResp, err := http.DefaultClient.Do(startReq)
+		startResp, err := noRedirect.Do(startReq)
 		if err != nil {
 			t.Fatalf("start oauth request: %v", err)
 		}
@@ -176,9 +184,6 @@ func TestConnectionAuthMetrics(t *testing.T) {
 			t.Fatalf("decode start oauth response: %v", err)
 		}
 
-		noRedirect := &http.Client{
-			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		}
 		req, _ := http.NewRequest(http.MethodGet, oauthServer.URL+"/api/v1/auth/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(startResult["state"]), nil)
 		resp, err := noRedirect.Do(req)
 		if err != nil {

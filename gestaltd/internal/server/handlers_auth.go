@@ -80,6 +80,16 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.start", auditAllowed, auditErr)
 	}()
 
+	if err := s.validateLoginInitiation(r); err != nil {
+		auditErr = err
+		status := http.StatusForbidden
+		if errors.Is(err, errUnsupportedLoginContentType) {
+			status = http.StatusUnsupportedMediaType
+		}
+		writeError(w, status, err.Error())
+		return
+	}
+
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		auditErr = errors.New("invalid JSON body")
@@ -87,15 +97,17 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := req.State
+	mode := loginModeBrowser
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
 		state = fmt.Sprintf("%s%d:%s", cliStatePrefix, req.CallbackPort, req.State)
+		mode = loginModeCLI
 	}
 	if auth.noAuth || auth.provider == nil {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
-	loginURL, err := s.beginLogin(w, r, auth, state, "")
+	loginURL, err := s.beginLogin(w, r, auth, state, "", mode)
 	if err != nil {
 		auditErr = err
 		status := http.StatusInternalServerError
@@ -128,6 +140,11 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := s.validateLoginInitiation(r, s.allowedLoginInitiationOrigins(nextPath)...); err != nil {
+		auditErr = err
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
 	auth, err = s.loginAuthRuntimeForNextPath(nextPath)
 	if err != nil {
 		auditErr = err
@@ -140,7 +157,7 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loginURL, err := s.beginLogin(w, r, auth, browserLoginStateForNextPath(nextPath), nextPath)
+	loginURL, err := s.beginLogin(w, r, auth, browserLoginStateForNextPath(nextPath), nextPath, loginModeBrowser)
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -152,7 +169,7 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
-func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRuntime, state, nextPath string) (string, error) {
+func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRuntime, state, nextPath, mode string) (string, error) {
 	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, state)
 	if err != nil {
 		return "", errors.New("failed to generate login URL")
@@ -166,6 +183,7 @@ func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRun
 			State:     state,
 			Provider:  auth.providerRef,
 			NextPath:  nextPath,
+			Mode:      normalizeLoginMode(mode, state),
 			ExpiresAt: s.now().Add(loginStateTTL).Unix(),
 		})
 		if encErr != nil {
@@ -189,6 +207,19 @@ func (s *Server) allowedLoginRedirectBaseURLs() []string {
 		return nil
 	}
 	return []string{strings.TrimRight(s.managementBaseURL, "/") + "/admin"}
+}
+
+func (s *Server) allowedLoginInitiationOrigins(nextPath string) []requestOrigin {
+	parsed, err := url.Parse(strings.TrimSpace(nextPath))
+	if err != nil || !parsed.IsAbs() || parsed.Scheme == "" || parsed.Host == "" {
+		return nil
+	}
+	for _, base := range s.allowedLoginRedirectBaseURLs() {
+		if absoluteLoginRedirectAllowed(nextPath, base) {
+			return []requestOrigin{{Scheme: parsed.Scheme, Host: parsed.Host}}
+		}
+	}
+	return nil
 }
 
 func resolveLoginRedirectPath(raw string, allowedBaseURLs []string) (string, error) {
@@ -402,6 +433,12 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "login state validation failed")
 		return
 	}
+	if !loginCallbackModeMatches(loginState.Mode, r.URL.Query().Get("cli")) {
+		auditErr = errors.New("login mode validation failed")
+		slog.ErrorContext(r.Context(), "login mode validation failed", "expected", loginState.Mode)
+		writeError(w, http.StatusForbidden, "login mode validation failed")
+		return
+	}
 
 	auth, err = s.authRuntimeForProvider(loginState.Provider)
 	if err != nil {
@@ -445,7 +482,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		s.clearLoginStateCookie(w)
 	}
 
-	if r.URL.Query().Get("cli") == "1" {
+	if loginState.Mode == loginModeCLI {
 		dbUser, dbErr := s.users.FindOrCreateUser(r.Context(), identity.Email)
 		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
 			auditErr = errors.New("failed to resolve user")
@@ -453,7 +490,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		auditSubjectID = principal.UserSubjectID(dbUser.ID)
-		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
+		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", false)
 		if issueErr != nil {
 			auditErr = errors.New("failed to issue CLI API token")
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
@@ -510,6 +547,7 @@ func (s *Server) loginStateForCallback(r *http.Request) (*loginState, error) {
 		return &loginState{
 			State:    r.URL.Query().Get("state"),
 			Provider: "server",
+			Mode:     loginModeBrowser,
 		}, nil
 	}
 	cookie, err := r.Cookie(loginStateCookieName)
@@ -523,7 +561,16 @@ func (s *Server) loginStateForCallback(r *http.Request) (*loginState, error) {
 	if strings.TrimSpace(state.Provider) == "" {
 		state.Provider = "server"
 	}
+	state.Mode = normalizeLoginMode(state.Mode, state.State)
 	return state, nil
+}
+
+func loginCallbackModeMatches(expectedMode, cliQuery string) bool {
+	requestedMode := loginModeBrowser
+	if cliQuery == "1" {
+		requestedMode = loginModeCLI
+	}
+	return normalizeLoginMode(expectedMode, "") == requestedMode
 }
 
 func loginStatesMatch(expectedState, originalState string) bool {

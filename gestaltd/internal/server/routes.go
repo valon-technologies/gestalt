@@ -162,6 +162,7 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 	r.Post(mcpTokenEndpointPath, s.mcpOAuthToken)
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
+		r.Use(s.cookieCSRFMiddleware)
 		r.Handle(mcpPath, s.mcpHandler)
 	})
 }
