@@ -6,9 +6,9 @@ Implementation details of how Gestalt protects credentials. For operator guidanc
 
 `server.encryptionKey` is converted to a 32-byte AES key at startup.
 
-If the key is a 64-character hex string, it's hex-decoded directly into 32 bytes. No derivation, no extra cost. Generate one with `openssl rand -hex 32`.
+Use `raw-hex:` followed by 64 hex characters to hex-decode a direct 32-byte key. No derivation, no extra cost. Generate one with `openssl rand -hex 32`. For compatibility, an unprefixed 64-character hex string is still treated as a raw key.
 
-If the key is anything else (a passphrase, `dev-only-change-me`), Gestalt runs it through Argon2id (3 iterations, 64 MiB, 4 threads). This adds a few hundred milliseconds to startup. A weak passphrase is still a weak passphrase; Argon2id makes brute-forcing harder, not impossible.
+Use `argon2id:` before passphrases, especially passphrases that could be mistaken for hex. Non-hex unprefixed strings also go through Argon2id (3 iterations, 64 MiB, 4 threads). This adds a few hundred milliseconds to startup. A weak passphrase is still a weak passphrase; Argon2id makes brute-forcing harder, not impossible.
 
 The Argon2id path uses a fixed salt (`gestalt-derivekey-v1`), so two deployments with the same passphrase derive the same key. Use a unique random hex key in production.
 

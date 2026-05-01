@@ -16,7 +16,7 @@ Next, Gestalt initializes the secret managers from `providers.secrets`. The secr
 
 Once the secret managers are ready, Gestalt resolves every structured secret ref across the rest of the config: server settings, auth, indexeddb, telemetry, audit, cache, and all plugin configs. Every ref names its provider explicitly, and each `providers.secrets.<name>.config` block is skipped to avoid a circular dependency.
 
-With secrets resolved, `server.encryptionKey` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
+With secrets resolved, `server.encryptionKey` gets converted into a 32-byte AES key. Use `raw-hex:` for a direct 32-byte hex key and `argon2id:` for passphrases; legacy unprefixed 64-character hex keys are still decoded directly. This derived key protects all stored tokens.
 
 From there, the authentication and datastore providers are spawned as child processes over gRPC, schema migrations run, plugins start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
 

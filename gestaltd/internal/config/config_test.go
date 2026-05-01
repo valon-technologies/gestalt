@@ -214,7 +214,7 @@ plugins:
           env: REQUEST_SIGNING_SECRET
         signatureHeader: X-Request-Signature
         signaturePrefix: v0=
-        payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+        payloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}"
         timestampHeader: X-Request-Timestamp
         maxAgeSeconds: 300
     http:
@@ -253,7 +253,7 @@ plugins:
 	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
 		t.Fatalf("SecuritySchemes[signed].SignatureHeader = %q, want %q", got, want)
 	}
-	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}"; got != want {
+	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}"; got != want {
 		t.Fatalf("SecuritySchemes[signed].PayloadTemplate = %q, want %q", got, want)
 	}
 	if got, want := scheme.TimestampHeader, "X-Request-Timestamp"; got != want {
@@ -299,7 +299,7 @@ func TestProviderEntryEffectiveHTTPSecuritySchemes_MergesHMACFields(t *testing.T
 			"signed": {
 				SignatureHeader: "X-Request-Signature",
 				SignaturePrefix: "v0=",
-				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}",
 				TimestampHeader: "X-Request-Timestamp",
 				MaxAgeSeconds:   300,
 				Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
@@ -319,7 +319,7 @@ func TestProviderEntryEffectiveHTTPSecuritySchemes_MergesHMACFields(t *testing.T
 	if got, want := scheme.SignaturePrefix, "v0="; got != want {
 		t.Fatalf("SignaturePrefix = %q, want %q", got, want)
 	}
-	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}"; got != want {
+	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}"; got != want {
 		t.Fatalf("PayloadTemplate = %q, want %q", got, want)
 	}
 	if got, want := scheme.TimestampHeader, "X-Request-Timestamp"; got != want {

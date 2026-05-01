@@ -20,7 +20,7 @@ func newMemoryHTTPBindingReplayStore() httpBindingReplayStore {
 
 func (s *memoryHTTPBindingReplayStore) MarkIfNew(key string, ttl time.Duration) bool {
 	if s == nil || key == "" {
-		return true
+		return false
 	}
 	if ttl <= 0 {
 		ttl = 24 * time.Hour

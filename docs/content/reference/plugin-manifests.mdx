@@ -268,9 +268,9 @@ routes that are intentionally unsigned.
 | `description` | string | Optional human-readable description. |
 | `signatureHeader` | string | Header carrying the transmitted HMAC digest for `type: hmac`. |
 | `signaturePrefix` | string | Optional static prefix prepended to the computed digest before comparison. |
-| `payloadTemplate` | string | Template used to build the signed payload for `type: hmac`. Supports `{raw_body}` and `{header:Header-Name}` placeholders. |
-| `timestampHeader` | string | Optional header carrying a Unix-seconds timestamp for freshness and replay checks. |
-| `maxAgeSeconds` | integer | Maximum accepted request age, in seconds, when `timestampHeader` is configured. |
+| `payloadTemplate` | string | Template used to build the signed payload for `type: hmac`. Supports `{raw_body}`, `{request_target}`, and `{header:Header-Name}` placeholders. |
+| `timestampHeader` | string | Required header carrying a Unix-seconds timestamp for freshness and replay checks. |
+| `maxAgeSeconds` | integer | Required maximum accepted request age, in seconds. |
 | `name` | string | Header or query parameter name for `apiKey`. |
 | `in` | string | `header` or `query` for `type: apiKey`. |
 | `scheme` | string | `basic` or `bearer` for `type: http`. |
@@ -279,7 +279,10 @@ routes that are intentionally unsigned.
 Every scheme requires `type`. `hmac`, `apiKey`, and `http` schemes also require
 `secret`. HMAC schemes compare the computed digest against `signatureHeader`,
 optionally prefixed by `signaturePrefix`; `payloadTemplate` supports
-`{raw_body}` and `{header:Header-Name}` placeholders.
+`{raw_body}`, `{request_target}` (path plus query), and
+`{header:Header-Name}` placeholders. Include `{request_target}` when query
+parameters are accepted, and include `{header:Content-Type}` when body parsing
+can vary by content type.
 
 #### `spec.http.<name>`
 
@@ -304,7 +307,7 @@ spec:
         env: REQUEST_SIGNING_SECRET
       signatureHeader: X-Request-Signature
       signaturePrefix: v0=
-      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{header:Content-Type}:{raw_body}"
       timestampHeader: X-Request-Timestamp
       maxAgeSeconds: 300
   http:

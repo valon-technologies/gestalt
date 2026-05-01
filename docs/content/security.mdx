@@ -15,7 +15,7 @@ Gestalt sits between callers and upstream APIs. It authenticates users, stores e
 
 All plugin tokens are encrypted before storage using AES-256-GCM.
 
-The `server.encryptionKey` is the root deployment secret. If the key is a 64-character hex string, it is decoded directly as a 32-byte AES key. Otherwise, Argon2id derives a 32-byte key from the string (3 iterations, 64 MiB, 4 threads).
+The `server.encryptionKey` is the root deployment secret. Use `raw-hex:` followed by 64 hex characters for a direct 32-byte AES key, or `argon2id:` before a passphrase to force Argon2id derivation. For compatibility, an unprefixed 64-character hex string is still decoded directly; other strings use Argon2id (3 iterations, 64 MiB, 4 threads).
 
 Every encryption operation generates a fresh 12-byte nonce using `crypto/rand`. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
 
@@ -109,7 +109,7 @@ enforcement.
 
 | Setting | Impact |
 | --- | --- |
-| `server.encryptionKey` | Root deployment secret. If compromised, all stored tokens can be decrypted. Use a strong random string or 64-character hex key. Must be the same across all instances in a cluster. |
+| `server.encryptionKey` | Root deployment secret. If compromised, all stored tokens can be decrypted. Use `raw-hex:` with a random 32-byte hex key, or `argon2id:` with a strong passphrase. Must be the same across all instances in a cluster. |
 | `providers.authentication` | Omitting `providers.authentication` disables all authentication. Do not use in production. |
 | `server.baseUrl` | Must match the public URL exactly. OAuth callbacks are derived from it. |
 | TLS termination | Gestalt does not terminate TLS. Deploy behind a reverse proxy that handles TLS. |

@@ -367,10 +367,13 @@ func TestWriteProviderDevUIAssetReplacesExistingHeaders(t *testing.T) {
 	}
 }
 
-func TestMaxBodyMiddlewareAllowsLargeProviderDevCallCompletions(t *testing.T) {
+func TestMaxBodyMiddlewareRequiresValidatedLargeBodyUpgrade(t *testing.T) {
 	t.Parallel()
 
 	handler := maxBodyMiddleware(defaultMaxBodyBytes)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Validated-Dispatcher") == "yes" {
+			allowRequestBodyBytes(r, providerDevCallMaxBodyBytes)
+		}
 		if _, err := io.ReadAll(r.Body); err != nil {
 			writeError(w, http.StatusRequestEntityTooLarge, err.Error())
 			return
@@ -382,8 +385,16 @@ func TestMaxBodyMiddlewareAllowsLargeProviderDevCallCompletions(t *testing.T) {
 	providerDevAttachmentReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1", bytes.NewReader(largeBody))
 	providerDevAttachmentRec := httptest.NewRecorder()
 	handler.ServeHTTP(providerDevAttachmentRec, providerDevAttachmentReq)
-	if providerDevAttachmentRec.Code != http.StatusNoContent {
-		t.Fatalf("provider dev attachment completion status = %d, want %d", providerDevAttachmentRec.Code, http.StatusNoContent)
+	if providerDevAttachmentRec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("pre-auth provider dev completion status = %d, want %d", providerDevAttachmentRec.Code, http.StatusRequestEntityTooLarge)
+	}
+
+	validatedProviderDevAttachmentReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1", bytes.NewReader(largeBody))
+	validatedProviderDevAttachmentReq.Header.Set("X-Validated-Dispatcher", "yes")
+	validatedProviderDevAttachmentRec := httptest.NewRecorder()
+	handler.ServeHTTP(validatedProviderDevAttachmentRec, validatedProviderDevAttachmentReq)
+	if validatedProviderDevAttachmentRec.Code != http.StatusNoContent {
+		t.Fatalf("validated provider dev attachment completion status = %d, want %d", validatedProviderDevAttachmentRec.Code, http.StatusNoContent)
 	}
 
 	extraPathReq := httptest.NewRequest(http.MethodPost, "/api/v1/provider-dev/attachments/attach-1/calls/call-1/extra", bytes.NewReader(largeBody))

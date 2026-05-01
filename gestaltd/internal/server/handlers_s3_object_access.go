@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -50,10 +51,11 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 
 	switch target.Method {
 	case s3store.PresignMethodGet:
-		s.handleS3ObjectAccessGet(w, r, client, ref)
+		s.handleS3ObjectAccessGet(w, r, client, target, ref)
 	case s3store.PresignMethodHead:
-		s.handleS3ObjectAccessHead(w, r, client, ref)
+		s.handleS3ObjectAccessHead(w, r, client, target, ref)
 	case s3store.PresignMethodPut:
+		allowRequestBodyBytes(r, s3ObjectAccessMaxBodyBytes)
 		s.handleS3ObjectAccessPut(w, r, client, target, ref)
 	case s3store.PresignMethodDelete:
 		s.handleS3ObjectAccessDelete(w, r, client, ref)
@@ -62,7 +64,7 @@ func (s *Server) handleS3ObjectAccess(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3store.Client, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request, client s3store.Client, target s3.ObjectAccessTarget, ref s3store.ObjectRef) {
 	readReq, partial, err := s3ObjectAccessReadRequest(r, client, ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
@@ -74,7 +76,7 @@ func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	defer func() { _ = result.Body.Close() }()
-	writeS3ObjectAccessMetaHeaders(w, result.Meta)
+	writeS3ObjectAccessMetaHeaders(w, result.Meta, target)
 	if partial.CoversFullRepresentation(result.Meta.Size) {
 		partial = s3HTTPRange{}
 	}
@@ -89,13 +91,13 @@ func (s *Server) handleS3ObjectAccessGet(w http.ResponseWriter, r *http.Request,
 	_, _ = io.Copy(w, result.Body)
 }
 
-func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3store.Client, ref s3store.ObjectRef) {
+func (s *Server) handleS3ObjectAccessHead(w http.ResponseWriter, r *http.Request, client s3store.Client, target s3.ObjectAccessTarget, ref s3store.ObjectRef) {
 	meta, err := client.HeadObject(r.Context(), ref)
 	if err != nil {
 		writeS3ObjectAccessError(w, err)
 		return
 	}
-	writeS3ObjectAccessMetaHeaders(w, meta)
+	writeS3ObjectAccessMetaHeaders(w, meta, target)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -308,7 +310,9 @@ func parseS3ObjectAccessHTTPRange(value string) (*s3store.ByteRange, s3HTTPRange
 	return out, httpRange, nil
 }
 
-func writeS3ObjectAccessMetaHeaders(w http.ResponseWriter, meta s3store.ObjectMeta) {
+const s3ObjectAccessContentSecurityPolicy = "default-src 'none'; sandbox; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+func writeS3ObjectAccessMetaHeaders(w http.ResponseWriter, meta s3store.ObjectMeta, target s3.ObjectAccessTarget) {
 	if meta.ETag != "" {
 		w.Header().Set("ETag", meta.ETag)
 	}
@@ -322,6 +326,74 @@ func writeS3ObjectAccessMetaHeaders(w http.ResponseWriter, meta s3store.ObjectMe
 	}
 	if !meta.LastModified.IsZero() {
 		w.Header().Set("Last-Modified", meta.LastModified.UTC().Format(http.TimeFormat))
+	}
+	w.Header().Set("Content-Disposition", s3ObjectAccessResponseContentDisposition(target, meta))
+	w.Header().Set("Content-Security-Policy", s3ObjectAccessContentSecurityPolicy)
+}
+
+func s3ObjectAccessResponseContentDisposition(target s3.ObjectAccessTarget, meta s3store.ObjectMeta) string {
+	raw := strings.TrimSpace(target.ContentDisposition)
+	if raw == "" {
+		return "attachment"
+	}
+	disposition, params, err := mime.ParseMediaType(raw)
+	if err != nil {
+		return "attachment"
+	}
+	switch strings.ToLower(disposition) {
+	case "attachment":
+		formatted := mime.FormatMediaType("attachment", params)
+		if formatted == "" {
+			return "attachment"
+		}
+		return formatted
+	case "inline":
+		if !s3ObjectAccessAllowsInline(target.ContentType, meta.ContentType) {
+			return "attachment"
+		}
+		formatted := mime.FormatMediaType("inline", params)
+		if formatted == "" {
+			return "inline"
+		}
+		return formatted
+	default:
+		return "attachment"
+	}
+}
+
+func s3ObjectAccessAllowsInline(targetContentType, metaContentType string) bool {
+	targetMediaType, ok := s3ObjectAccessMediaType(targetContentType)
+	if !ok || !safeS3ObjectAccessInlineMediaType(targetMediaType) {
+		return false
+	}
+	metaMediaType, ok := s3ObjectAccessMediaType(metaContentType)
+	if !ok {
+		return false
+	}
+	return metaMediaType == targetMediaType
+}
+
+func s3ObjectAccessMediaType(value string) (string, bool) {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(value))
+	if err != nil || mediaType == "" {
+		return "", false
+	}
+	return strings.ToLower(mediaType), true
+}
+
+func safeS3ObjectAccessInlineMediaType(mediaType string) bool {
+	switch mediaType {
+	case "text/plain",
+		"image/avif",
+		"image/bmp",
+		"image/gif",
+		"image/jpeg",
+		"image/png",
+		"image/tiff",
+		"image/webp":
+		return true
+	default:
+		return strings.HasPrefix(mediaType, "audio/") || strings.HasPrefix(mediaType, "video/")
 	}
 }
 

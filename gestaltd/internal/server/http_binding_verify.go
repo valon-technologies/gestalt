@@ -99,7 +99,7 @@ func (s *Server) verifyHTTPBindingHMACRequest(r *http.Request, binding MountedHT
 			return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "stale request timestamp", nil)
 		}
 	}
-	payload, err := httpbinding.RenderPayloadTemplate(binding.Security.PayloadTemplate, r.Header, rawBody)
+	payload, err := httpbinding.RenderPayloadTemplate(binding.Security.PayloadTemplate, r, rawBody)
 	if err != nil {
 		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "invalid http binding payload template", err)
 	}
@@ -109,10 +109,20 @@ func (s *Server) verifyHTTPBindingHMACRequest(r *http.Request, binding MountedHT
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) != 1 {
 		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid request signature", nil)
 	}
-	if binding.Ack != nil && strings.TrimSpace(binding.Security.TimestampHeader) != "" && binding.Security.MaxAgeSeconds > 0 {
+	if r.URL != nil && r.URL.RawQuery != "" && !httpbinding.PayloadTemplateReferencesRequestTarget(binding.Security.PayloadTemplate) {
+		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "request query must be covered by request signature", nil)
+	}
+	if strings.TrimSpace(binding.Security.TimestampHeader) != "" && binding.Security.MaxAgeSeconds > 0 {
+		if s == nil || s.httpBindingReplayStore == nil {
+			return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "http binding replay protection is not configured", nil)
+		}
 		replayKey := binding.PluginName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
 		if !s.httpBindingReplayStore.MarkIfNew(replayKey, time.Duration(binding.Security.MaxAgeSeconds)*time.Second) {
-			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate signed delivery", nil)
+			status := http.StatusUnauthorized
+			if binding.Ack != nil {
+				status = http.StatusOK
+			}
+			return nil, newHTTPBindingRequestError(status, "duplicate signed delivery", nil)
 		}
 	}
 	return &verifiedHTTPBindingSender{

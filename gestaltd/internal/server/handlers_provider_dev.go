@@ -310,6 +310,7 @@ func (s *Server) completeProviderDevCallByDispatcher(w http.ResponseWriter, r *h
 		writeProviderDevError(w, err)
 		return
 	}
+	allowRequestBodyBytes(r, providerDevCallMaxBodyBytes)
 	var req providerdev.CompleteCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid provider dev call response")

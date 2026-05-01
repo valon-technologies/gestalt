@@ -3,16 +3,15 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/s3"
 )
 
 type contextKey string
@@ -20,6 +19,7 @@ type contextKey string
 const (
 	userContextKey   contextKey = "user"
 	userIDContextKey contextKey = "userID"
+	bodyLimitKey     contextKey = "bodyLimit"
 
 	anonymousEmail = "anonymous@gestalt"
 )
@@ -65,36 +65,75 @@ const (
 func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, maxBodyLimitForRequest(r, limit))
+			if r.Body == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			limiter := &requestBodyLimiter{body: r.Body, limit: limit}
+			r.Body = limiter
+			ctx := context.WithValue(r.Context(), bodyLimitKey, limiter)
+			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func maxBodyLimitForRequest(r *http.Request, defaultLimit int64) int64 {
-	if isProviderDevCompleteCallRequest(r) {
-		return providerDevCallMaxBodyBytes
-	}
-	if isS3ObjectAccessRequest(r) {
-		return s3ObjectAccessMaxBodyBytes
-	}
-	return defaultLimit
+type requestBodyLimiter struct {
+	body  io.ReadCloser
+	limit int64
+	read  int64
 }
 
-func isProviderDevCompleteCallRequest(r *http.Request) bool {
-	if r == nil || r.Method != http.MethodPost || r.URL == nil {
-		return false
+func (l *requestBodyLimiter) Read(p []byte) (int, error) {
+	if l == nil || l.body == nil {
+		return 0, io.EOF
 	}
-	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathAttachments+"/")
-	if !ok {
-		return false
+	limit := l.limit
+	if limit < 0 {
+		return l.body.Read(p)
 	}
-	sessionID, callID, ok := strings.Cut(rest, "/calls/")
-	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")
+	if l.read > limit {
+		return 0, &http.MaxBytesError{Limit: limit}
+	}
+	remaining := limit - l.read
+	if int64(len(p)) > remaining {
+		maxRead := remaining + 1
+		if maxRead < 1 {
+			maxRead = 1
+		}
+		if maxRead < int64(len(p)) {
+			p = p[:maxRead]
+		}
+	}
+	n, err := l.body.Read(p)
+	if int64(n) <= remaining {
+		l.read += int64(n)
+		return n, err
+	}
+	l.read += int64(n)
+	return int(remaining), &http.MaxBytesError{Limit: limit}
 }
 
-func isS3ObjectAccessRequest(r *http.Request) bool {
-	return r != nil && r.URL != nil && strings.HasPrefix(r.URL.Path, s3.ObjectAccessPathPrefix)
+func (l *requestBodyLimiter) Close() error {
+	if l == nil || l.body == nil {
+		return nil
+	}
+	return l.body.Close()
+}
+
+func (l *requestBodyLimiter) allow(limit int64) {
+	if l == nil || limit <= l.limit {
+		return
+	}
+	l.limit = limit
+}
+
+func allowRequestBodyBytes(r *http.Request, limit int64) {
+	if r == nil {
+		return
+	}
+	limiter, _ := r.Context().Value(bodyLimitKey).(*requestBodyLimiter)
+	limiter.allow(limit)
 }
 
 // contentSecurityPolicy is the CSP applied to all responses. script-src and

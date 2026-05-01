@@ -218,6 +218,9 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 		}
 		binding.RequestBody.Content = normalizedContent
 	}
+	if err := httpbinding.ValidateHTTPBindingHMACCoverage(path, binding, schemes[binding.Security]); err != nil {
+		return err
+	}
 	if binding.Ack != nil {
 		if binding.Ack.Status == 0 {
 			binding.Ack.Status = http.StatusOK

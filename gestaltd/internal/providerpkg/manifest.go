@@ -508,6 +508,9 @@ func validateHTTPBinding(path string, binding *providermanifestv1.HTTPBinding, s
 		}
 		binding.RequestBody.Content = normalizedContent
 	}
+	if err := httpbinding.ValidateHTTPBindingHMACCoverage(path, binding, schemes[binding.Security]); err != nil {
+		return err
+	}
 	if binding.Ack != nil {
 		if binding.Ack.Status == 0 {
 			binding.Ack.Status = 200
