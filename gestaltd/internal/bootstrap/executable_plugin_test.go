@@ -3840,11 +3840,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
-	relaySrv.EnableHTTP2 = true
-	relaySrv.StartTLS()
-	testutil.CloseOnCleanup(t, relaySrv)
-
 	bin := buildEchoPluginBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echoext",
@@ -3901,6 +3896,21 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 			}},
 		},
 	})
+	agentManagerTokens, err := agentservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(agent manager): %v", err)
+	}
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(
+		t,
+		secret,
+		publicHostServices,
+		withRuntimeRelayCoreHostService("agent_manager", agentservice.DefaultManagerSocketEnv, "/"+proto.AgentManagerHost_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+			proto.RegisterAgentManagerHostServer(srv, agentservice.NewManagerServer("echoext", manager, agentManagerTokens))
+		}),
+	))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
@@ -3951,6 +3961,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	defer func() { _ = CloseProviders(providers) }()
+	assertPublicHostServicesExclude(t, publicHostServices, "agent_manager", agentservice.DefaultManagerSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -6834,10 +6845,6 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
-	relaySrv.EnableHTTP2 = true
-	relaySrv.StartTLS()
-	testutil.CloseOnCleanup(t, relaySrv)
 
 	callerBin := buildEchoPluginBinary(t)
 	callerRoot := writeStaticCatalog(t, &catalog.Catalog{
@@ -6872,6 +6879,25 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	}
 
 	bridge := newLazyInvoker()
+	callerInvokes := []config.PluginInvocationDependency{
+		{Plugin: "example", Operation: "request_context"},
+	}
+	pluginInvokerTokens, err := plugininvokerservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(plugin invoker): %v", err)
+	}
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(
+		t,
+		secret,
+		publicHostServices,
+		withRuntimeRelayCoreHostService("plugin_invoker", plugininvokerservice.DefaultSocketEnv, "/"+proto.PluginInvoker_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("caller", callerInvokes, bridge, pluginInvokerTokens))
+		}),
+	))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
@@ -6888,9 +6914,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 				ResolvedManifest:     callerManifest,
 				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
 				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "example", Operation: "request_context"},
-				},
+				Invokes:              callerInvokes,
 			},
 			"example": {
 				Command:              exampleBin,
@@ -6919,6 +6943,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
+	assertPublicHostServicesExclude(t, publicHostServices, "plugin_invoker", plugininvokerservice.DefaultSocketEnv)
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -7298,12 +7323,62 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 	t.Fatalf("BindHostService requests missing %s: %#v", runtimehost.DefaultRuntimeLogHostSocketEnv, bindRequests)
 }
 
-func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *runtimehost.PublicHostServiceRegistry) http.Handler {
+type runtimeRelayTestHandlerOption func(*runtimeRelayTestHandlerConfig)
+
+type runtimeRelayTestHandlerConfig struct {
+	coreHandlers map[runtimeRelayTestCoreHandlerKey]http.Handler
+}
+
+type runtimeRelayTestCoreHandlerKey struct {
+	service      string
+	envVar       string
+	methodPrefix string
+}
+
+func withRuntimeRelayCoreHostService(service, envVar, methodPrefix string, register func(*grpc.Server)) runtimeRelayTestHandlerOption {
+	return func(cfg *runtimeRelayTestHandlerConfig) {
+		if cfg.coreHandlers == nil {
+			cfg.coreHandlers = make(map[runtimeRelayTestCoreHandlerKey]http.Handler)
+		}
+		srv := grpc.NewServer()
+		register(srv)
+		cfg.coreHandlers[runtimeRelayTestCoreHandlerKey{
+			service:      strings.TrimSpace(service),
+			envVar:       strings.TrimSpace(envVar),
+			methodPrefix: strings.TrimSpace(methodPrefix),
+		}] = http.HandlerFunc(srv.ServeHTTP)
+	}
+}
+
+func assertPublicHostServicesExclude(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName, envVar string) {
+	t.Helper()
+
+	if registry == nil {
+		return
+	}
+	for _, service := range registry.Services() {
+		if strings.TrimSpace(service.Service.Name) != strings.TrimSpace(serviceName) {
+			continue
+		}
+		if strings.TrimSpace(service.Service.EnvVar) != strings.TrimSpace(envVar) {
+			continue
+		}
+		t.Fatalf("public host services = %#v, want no %s/%s registry entry", registry.Services(), serviceName, envVar)
+	}
+}
+
+func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServices *runtimehost.PublicHostServiceRegistry, opts ...runtimeRelayTestHandlerOption) http.Handler {
 	t.Helper()
 
 	tokenManager, err := runtimehost.NewHostServiceRelayTokenManager(stateSecret)
 	if err != nil {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	var cfg runtimeRelayTestHandlerConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimSpace(r.Header.Get(runtimehost.HostServiceRelayTokenHeader))
@@ -7316,10 +7391,19 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
-		handler, err := runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target)
-		if err != nil {
-			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
-			return
+		var handler http.Handler
+		if target.CoreRoutable {
+			handler = cfg.coreHandlers[runtimeRelayTestCoreHandlerKey{
+				service:      strings.TrimSpace(target.Service),
+				envVar:       strings.TrimSpace(target.EnvVar),
+				methodPrefix: strings.TrimSpace(target.MethodPrefix),
+			}]
+		} else {
+			handler, err = runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target)
+			if err != nil {
+				writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
+				return
+			}
 		}
 		if handler == nil {
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
@@ -7564,10 +7648,6 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
-	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
-	relaySrv.EnableHTTP2 = true
-	relaySrv.StartTLS()
-	testutil.CloseOnCleanup(t, relaySrv)
 
 	bin := buildEchoPluginBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
@@ -7607,6 +7687,22 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	}
 
 	manager := newStubWorkflowManager()
+	workflowManagerTokens, err := workflowservice.NewInvocationTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager(workflow manager): %v", err)
+	}
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(
+		t,
+		secret,
+		publicHostServices,
+		withRuntimeRelayCoreHostService("workflow_manager", workflowservice.DefaultManagerSocketEnv, "/"+proto.WorkflowManagerHost_ServiceDesc.ServiceName+"/", func(srv *grpc.Server) {
+			proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer("echoext", manager, workflowManagerTokens))
+		}),
+	))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
@@ -7620,6 +7716,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
+	assertPublicHostServicesExclude(t, publicHostServices, "workflow_manager", workflowservice.DefaultManagerSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
