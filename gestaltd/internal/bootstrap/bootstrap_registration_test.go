@@ -6,7 +6,7 @@ import (
 
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
+	"github.com/valon-technologies/gestalt/server/services/plugins/mcpoauth"
 )
 
 type registrationAwareDB struct {

@@ -9,11 +9,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/composite"
-	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/plugins/composite"
 	coreintegration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
