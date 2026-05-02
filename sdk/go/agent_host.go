@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 )
 
 // EnvAgentHostSocket names the environment variable containing the agent-host

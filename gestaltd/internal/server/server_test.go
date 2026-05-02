@@ -32,8 +32,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	gestaltsdk "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -1375,7 +1375,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
-	recordValue, err := gestaltsdk.RecordToProto(gestaltsdk.Record{"id": "task-1", "value": "ship-it"})
+	recordValue, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "task-1", "value": "ship-it"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
@@ -1392,7 +1392,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	record, err := gestaltsdk.RecordFromProto(resp.GetRecord())
+	record, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
 	if err != nil {
 		t.Fatalf("RecordFromProto: %v", err)
 	}

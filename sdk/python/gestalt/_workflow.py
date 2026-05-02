@@ -5,9 +5,9 @@ from typing import Any
 
 import grpc
 
+from ._gen.v1 import workflow_pb2 as _pb
+from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
-from .gen.v1 import workflow_pb2 as _pb
-from .gen.v1 import workflow_pb2_grpc as _pb_grpc
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
@@ -16,6 +16,210 @@ ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET"
 ENV_WORKFLOW_HOST_SOCKET_TOKEN = f"{ENV_WORKFLOW_HOST_SOCKET}_TOKEN"
 ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET"
 ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = f"{ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN"
+
+WORKFLOW_RUN_STATUS_UNSPECIFIED = pb.WORKFLOW_RUN_STATUS_UNSPECIFIED
+WORKFLOW_RUN_STATUS_PENDING = pb.WORKFLOW_RUN_STATUS_PENDING
+WORKFLOW_RUN_STATUS_RUNNING = pb.WORKFLOW_RUN_STATUS_RUNNING
+WORKFLOW_RUN_STATUS_SUCCEEDED = pb.WORKFLOW_RUN_STATUS_SUCCEEDED
+WORKFLOW_RUN_STATUS_FAILED = pb.WORKFLOW_RUN_STATUS_FAILED
+WORKFLOW_RUN_STATUS_CANCELED = pb.WORKFLOW_RUN_STATUS_CANCELED
+
+
+def BoundWorkflowTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create a bound workflow target protocol value."""
+
+    return pb.BoundWorkflowTarget(*args, **kwargs)
+
+
+def BoundWorkflowPluginTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create a bound plugin workflow target protocol value."""
+
+    return pb.BoundWorkflowPluginTarget(*args, **kwargs)
+
+
+def BoundWorkflowAgentTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create a bound agent workflow target protocol value."""
+
+    return pb.BoundWorkflowAgentTarget(*args, **kwargs)
+
+
+def WorkflowOutputDelivery(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow output delivery protocol value."""
+
+    return pb.WorkflowOutputDelivery(*args, **kwargs)
+
+
+def WorkflowOutputBinding(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow output binding protocol value."""
+
+    return pb.WorkflowOutputBinding(*args, **kwargs)
+
+
+def WorkflowOutputValueSource(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow output value source protocol value."""
+
+    return pb.WorkflowOutputValueSource(*args, **kwargs)
+
+
+def WorkflowActor(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow actor protocol value."""
+
+    return pb.WorkflowActor(*args, **kwargs)
+
+
+def WorkflowSignal(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow signal protocol value."""
+
+    return pb.WorkflowSignal(*args, **kwargs)
+
+
+def BoundWorkflowRun(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider run protocol value."""
+
+    return pb.BoundWorkflowRun(*args, **kwargs)
+
+
+def BoundWorkflowSchedule(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider schedule protocol value."""
+
+    return pb.BoundWorkflowSchedule(*args, **kwargs)
+
+
+def BoundWorkflowEventTrigger(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider event trigger protocol value."""
+
+    return pb.BoundWorkflowEventTrigger(*args, **kwargs)
+
+
+def ListWorkflowProviderRunsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-runs response."""
+
+    return pb.ListWorkflowProviderRunsResponse(*args, **kwargs)
+
+
+def ListWorkflowProviderSchedulesResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-schedules response."""
+
+    return pb.ListWorkflowProviderSchedulesResponse(*args, **kwargs)
+
+
+def ListWorkflowProviderEventTriggersResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-event-triggers response."""
+
+    return pb.ListWorkflowProviderEventTriggersResponse(*args, **kwargs)
+
+
+def WorkflowManagerStartRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager start-run request."""
+
+    return pb.WorkflowManagerStartRunRequest(*args, **kwargs)
+
+
+def WorkflowManagerSignalRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager signal-run request."""
+
+    return pb.WorkflowManagerSignalRunRequest(*args, **kwargs)
+
+
+def WorkflowManagerSignalOrStartRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager signal-or-start-run request."""
+
+    return pb.WorkflowManagerSignalOrStartRunRequest(*args, **kwargs)
+
+
+def WorkflowManagerCreateScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager create-schedule request."""
+
+    return pb.WorkflowManagerCreateScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerGetScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager get-schedule request."""
+
+    return pb.WorkflowManagerGetScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerUpdateScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager update-schedule request."""
+
+    return pb.WorkflowManagerUpdateScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerDeleteScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager delete-schedule request."""
+
+    return pb.WorkflowManagerDeleteScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerPauseScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager pause-schedule request."""
+
+    return pb.WorkflowManagerPauseScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerResumeScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager resume-schedule request."""
+
+    return pb.WorkflowManagerResumeScheduleRequest(*args, **kwargs)
+
+
+def WorkflowManagerCreateEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager create-event-trigger request."""
+
+    return pb.WorkflowManagerCreateEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerGetEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager get-event-trigger request."""
+
+    return pb.WorkflowManagerGetEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerUpdateEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager update-event-trigger request."""
+
+    return pb.WorkflowManagerUpdateEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerDeleteEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager delete-event-trigger request."""
+
+    return pb.WorkflowManagerDeleteEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerPauseEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager pause-event-trigger request."""
+
+    return pb.WorkflowManagerPauseEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerResumeEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager resume-event-trigger request."""
+
+    return pb.WorkflowManagerResumeEventTriggerRequest(*args, **kwargs)
+
+
+def WorkflowManagerPublishEventRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager publish-event request."""
+
+    return pb.WorkflowManagerPublishEventRequest(*args, **kwargs)
+
+
+def InvokeWorkflowOperationRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow host InvokeOperation request."""
+
+    return pb.InvokeWorkflowOperationRequest(*args, **kwargs)
+
+
+def workflow_run_status_name(status: int) -> str:
+    """Return the protocol enum name for a workflow run status value."""
+
+    if not status:
+        return ""
+    try:
+        return pb.WorkflowRunStatus.Name(status)
+    except ValueError:
+        return str(status)
 
 
 class WorkflowHost:

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -155,7 +155,7 @@ func (o *remoteObjectStore) Get(ctx context.Context, id string) (coreindexeddb.R
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	record, err := gestalt.RecordFromProto(resp.GetRecord())
+	record, err := recordFromProto(resp.GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -175,7 +175,7 @@ func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, erro
 func (o *remoteObjectStore) Add(ctx context.Context, record coreindexeddb.Record) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	pbRecord, err := gestalt.RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -186,7 +186,7 @@ func (o *remoteObjectStore) Add(ctx context.Context, record coreindexeddb.Record
 func (o *remoteObjectStore) Put(ctx context.Context, record coreindexeddb.Record) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	pbRecord, err := gestalt.RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -219,7 +219,7 @@ func (o *remoteObjectStore) GetAll(ctx context.Context, r *coreindexeddb.KeyRang
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	records, err := gestalt.RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromProto(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -301,7 +301,7 @@ func (idx *remoteIndex) Get(ctx context.Context, values ...any) (coreindexeddb.R
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	record, err := gestalt.RecordFromProto(resp.GetRecord())
+	record, err := recordFromProto(resp.GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -341,7 +341,7 @@ func (idx *remoteIndex) GetAll(ctx context.Context, r *coreindexeddb.KeyRange, v
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	records, err := gestalt.RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromProto(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -566,7 +566,7 @@ func (s *remoteTransactionObjectStore) Get(_ context.Context, id string) (corein
 	if err != nil {
 		return nil, err
 	}
-	record, err := gestalt.RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := recordFromProto(resp.GetRecord().GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -582,7 +582,7 @@ func (s *remoteTransactionObjectStore) GetKey(_ context.Context, id string) (str
 }
 
 func (s *remoteTransactionObjectStore) Add(_ context.Context, record coreindexeddb.Record) error {
-	pbRecord, err := gestalt.RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -591,7 +591,7 @@ func (s *remoteTransactionObjectStore) Add(_ context.Context, record coreindexed
 }
 
 func (s *remoteTransactionObjectStore) Put(_ context.Context, record coreindexeddb.Record) error {
-	pbRecord, err := gestalt.RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -618,7 +618,7 @@ func (s *remoteTransactionObjectStore) GetAll(_ context.Context, r *coreindexedd
 	if err != nil {
 		return nil, err
 	}
-	records, err := gestalt.RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromProto(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -680,7 +680,7 @@ func (idx *remoteTransactionIndex) Get(_ context.Context, values ...any) (corein
 	if err != nil {
 		return nil, err
 	}
-	record, err := gestalt.RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := recordFromProto(resp.GetRecord().GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -708,7 +708,7 @@ func (idx *remoteTransactionIndex) GetAll(_ context.Context, r *coreindexeddb.Ke
 	if err != nil {
 		return nil, err
 	}
-	records, err := gestalt.RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromProto(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -766,7 +766,7 @@ func (idx *remoteTransactionIndex) query(r *coreindexeddb.KeyRange, values []any
 // --- Helpers ---
 
 func toProtoValues(values []any) ([]*proto.TypedValue, error) {
-	return gestalt.TypedValuesFromAny(values)
+	return typedValuesFromAny(values)
 }
 
 func transactionModeToProto(mode coreindexeddb.TransactionMode) proto.TransactionMode {
@@ -803,14 +803,14 @@ func keyRangeToProto(r *coreindexeddb.KeyRange) (*proto.KeyRange, error) {
 		UpperOpen: r.UpperOpen,
 	}
 	if r.Lower != nil {
-		v, err := gestalt.TypedValueFromAny(r.Lower)
+		v, err := typedValueFromAny(r.Lower)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range lower: %w", err)
 		}
 		kr.Lower = v
 	}
 	if r.Upper != nil {
-		v, err := gestalt.TypedValueFromAny(r.Upper)
+		v, err := typedValueFromAny(r.Upper)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range upper: %w", err)
 		}
@@ -995,7 +995,7 @@ func (c *remoteCursor) Continue() bool {
 }
 
 func (c *remoteCursor) ContinueToKey(key any) bool {
-	kvs, err := gestalt.CursorKeyToProto(key, c.indexCursor)
+	kvs, err := cursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
 		return false
@@ -1019,7 +1019,7 @@ func (c *remoteCursor) Key() any {
 	if c.entry == nil || len(c.entry.Key) == 0 {
 		return nil
 	}
-	parts, err := gestalt.KeyValuesToAny(c.entry.Key)
+	parts, err := keyValuesToAny(c.entry.Key)
 	if err != nil {
 		c.err = err
 		return nil
@@ -1044,7 +1044,7 @@ func (c *remoteCursor) Value() (coreindexeddb.Record, error) {
 	if c.entry == nil || c.entry.Record == nil {
 		return nil, coreindexeddb.ErrNotFound
 	}
-	return gestalt.RecordFromProto(c.entry.Record)
+	return recordFromProto(c.entry.Record)
 }
 
 func (c *remoteCursor) Delete() error {
@@ -1089,7 +1089,7 @@ func (c *remoteCursor) Update(value coreindexeddb.Record) error {
 	if c.done {
 		return coreindexeddb.ErrNotFound
 	}
-	pbRec, err := gestalt.RecordToProto(value)
+	pbRec, err := recordToProto(value)
 	if err != nil {
 		return fmt.Errorf("marshal update record: %w", err)
 	}
@@ -1138,6 +1138,50 @@ func (c *remoteCursor) Close() error {
 	})
 	c.cleanup()
 	return nil
+}
+
+func typedValueFromAny(v any) (*proto.TypedValue, error) {
+	return indexeddbcodec.TypedValueFromAny(v)
+}
+
+func anyFromTypedValue(v *proto.TypedValue) (any, error) {
+	return indexeddbcodec.AnyFromTypedValue(v)
+}
+
+func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
+	return indexeddbcodec.TypedValuesFromAny(values)
+}
+
+func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
+	return indexeddbcodec.AnyFromTypedValues(values)
+}
+
+func recordToProto(record coreindexeddb.Record) (*proto.Record, error) {
+	return indexeddbcodec.RecordToProto(record)
+}
+
+func recordsToProto(records []coreindexeddb.Record) ([]*proto.Record, error) {
+	return indexeddbcodec.RecordsToProto(records)
+}
+
+func recordFromProto(record *proto.Record) (coreindexeddb.Record, error) {
+	return indexeddbcodec.RecordFromProto(record)
+}
+
+func recordsFromProto(records []*proto.Record) ([]coreindexeddb.Record, error) {
+	return indexeddbcodec.RecordsFromProto(records)
+}
+
+func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
+	return indexeddbcodec.KeyValuesToAny(kvs)
+}
+
+func anyToKeyValue(v any) (*proto.KeyValue, error) {
+	return indexeddbcodec.AnyToKeyValue(v)
+}
+
+func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
+	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
 }
 
 var _ coreindexeddb.IndexedDB = (*remoteIndexedDB)(nil)

@@ -2,7 +2,7 @@ import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
-import { PluginInvoker as PluginInvokerService } from "../gen/v1/plugin_pb.ts";
+import { PluginInvoker as PluginInvokerService } from "./internal/gen/v1/plugin_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 
 /** Environment variable containing the plugin-invoker host-service target. */

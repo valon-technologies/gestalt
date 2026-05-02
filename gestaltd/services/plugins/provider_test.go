@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"

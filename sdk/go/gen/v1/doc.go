@@ -1,7 +1,6 @@
-// Package proto contains the generated Gestalt provider protocol bindings used
-// by the Go SDK.
+// Package proto preserves the historical generated protobuf import path.
 //
-// The source of truth lives under `sdk/proto/v1`. Regenerate this package with
-// `buf generate --template buf.go.gen.yaml` from `sdk/proto` after changing
-// those schema files.
+// New provider code should prefer the authored gestalt SDK APIs where they are
+// available. These names alias the SDK's internal transport types for existing
+// providers that still need the low-level protocol surface.
 package proto

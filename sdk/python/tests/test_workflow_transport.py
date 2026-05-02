@@ -18,8 +18,8 @@ from gestalt import (
     WorkflowHost,
     WorkflowManager,
 )
-from gestalt.gen.v1 import workflow_pb2 as _workflow_pb2
-from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
+from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
+from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc

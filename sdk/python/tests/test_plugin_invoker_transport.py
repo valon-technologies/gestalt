@@ -17,8 +17,8 @@ from gestalt import (
     PluginInvoker,
     Request,
 )
-from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
-from gestalt.gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
+from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc

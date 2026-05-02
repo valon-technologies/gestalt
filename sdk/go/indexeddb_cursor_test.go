@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 )
 
 func TestCursor_ContinueToKeyRejectsUnsupportedKey(t *testing.T) {
@@ -24,9 +24,9 @@ func TestCursor_ContinueToKeyRejectsUnsupportedKey(t *testing.T) {
 }
 
 func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
-	kv, err := AnyToKeyValue("active")
+	kv, err := anyToKeyValue("active")
 	if err != nil {
-		t.Fatalf("AnyToKeyValue: %v", err)
+		t.Fatalf("anyToKeyValue: %v", err)
 	}
 
 	cursor := &Cursor{
@@ -65,13 +65,13 @@ func TestCursor_ValueRejectsNilRecord(t *testing.T) {
 func TestCursorKeyCodec_RoundTripArrayValuedIndexComponent(t *testing.T) {
 	key := []any{[]any{"x", "y"}}
 
-	kvs, err := CursorKeyToProto(key, true)
+	kvs, err := cursorKeyToProto(key, true)
 	if err != nil {
-		t.Fatalf("CursorKeyToProto: %v", err)
+		t.Fatalf("cursorKeyToProto: %v", err)
 	}
-	got, err := KeyValuesToAny(kvs)
+	got, err := keyValuesToAny(kvs)
 	if err != nil {
-		t.Fatalf("KeyValuesToAny: %v", err)
+		t.Fatalf("keyValuesToAny: %v", err)
 	}
 	if !reflect.DeepEqual(got, key) {
 		t.Fatalf("round trip = %#v, want %#v", got, key)
@@ -81,13 +81,13 @@ func TestCursorKeyCodec_RoundTripArrayValuedIndexComponent(t *testing.T) {
 func TestCursorKeyCodec_AcceptsTypedSliceCompositeKeys(t *testing.T) {
 	key := []string{"a", "b"}
 
-	kvs, err := CursorKeyToProto(key, true)
+	kvs, err := cursorKeyToProto(key, true)
 	if err != nil {
-		t.Fatalf("CursorKeyToProto: %v", err)
+		t.Fatalf("cursorKeyToProto: %v", err)
 	}
-	got, err := KeyValuesToAny(kvs)
+	got, err := keyValuesToAny(kvs)
 	if err != nil {
-		t.Fatalf("KeyValuesToAny: %v", err)
+		t.Fatalf("keyValuesToAny: %v", err)
 	}
 	want := []any{"a", "b"}
 	if !reflect.DeepEqual(got, want) {
@@ -98,13 +98,13 @@ func TestCursorKeyCodec_AcceptsTypedSliceCompositeKeys(t *testing.T) {
 func TestCursorKeyCodec_RoundTripTypedArrayValuedIndexComponent(t *testing.T) {
 	key := []any{[]string{"x", "y"}}
 
-	kvs, err := CursorKeyToProto(key, true)
+	kvs, err := cursorKeyToProto(key, true)
 	if err != nil {
-		t.Fatalf("CursorKeyToProto: %v", err)
+		t.Fatalf("cursorKeyToProto: %v", err)
 	}
-	got, err := KeyValuesToAny(kvs)
+	got, err := keyValuesToAny(kvs)
 	if err != nil {
-		t.Fatalf("KeyValuesToAny: %v", err)
+		t.Fatalf("keyValuesToAny: %v", err)
 	}
 	want := []any{[]any{"x", "y"}}
 	if !reflect.DeepEqual(got, want) {

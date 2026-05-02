@@ -456,8 +456,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +
 	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.HealthCheckResponse\x12Z\n" +
-	"\rStartProvider\x12\x16.google.protobuf.Empty\x1a1.gestalt.provider.v1.StartRuntimeProviderResponseB\xd0\x01\n" +
-	"\x17com.gestalt.provider.v1B\fRuntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\rStartProvider\x12\x16.google.protobuf.Empty\x1a1.gestalt.provider.v1.StartRuntimeProviderResponseB\xd2\x01\n" +
+	"\x17com.gestalt.provider.v1B\fRuntimeProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_runtime_proto_rawDescOnce sync.Once

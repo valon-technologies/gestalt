@@ -26,7 +26,7 @@ import {
   type S3ObjectMeta as ProtoS3ObjectMeta,
   type S3ObjectRef as ProtoS3ObjectRef,
   WriteObjectResponseSchema,
-} from "../gen/v1/s3_pb.ts";
+} from "./internal/gen/v1/s3_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 

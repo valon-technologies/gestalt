@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -3915,7 +3915,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("CreateObjectStore(runs): %v", err)
 		}
-		record, err := gestalt.RecordToProto(gestalt.Record{"id": "run-1", "status": "running"})
+		record, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "run-1", "status": "running"})
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
@@ -3932,7 +3932,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get(runs): %v", err)
 		}
-		got, err := gestalt.RecordFromProto(resp.GetRecord())
+		got, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
 		if err != nil {
 			t.Fatalf("RecordFromProto: %v", err)
 		}
@@ -4212,7 +4212,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("CreateObjectStore(workflow_runs): %v", err)
 		}
-		record, err := gestalt.RecordToProto(gestalt.Record{"id": "run-1", "status": "pending"})
+		record, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "run-1", "status": "pending"})
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
@@ -4229,7 +4229,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get(workflow_runs): %v", err)
 		}
-		got, err := gestalt.RecordFromProto(resp.GetRecord())
+		got, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
 		if err != nil {
 			t.Fatalf("RecordFromProto: %v", err)
 		}

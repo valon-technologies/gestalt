@@ -6,7 +6,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
 
 message Subject {
   string type = 1;

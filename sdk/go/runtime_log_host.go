@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -30,6 +30,23 @@ type RuntimeLogHostClient struct {
 }
 
 var sharedRuntimeLogHostTransport sharedManagerTransport[proto.PluginRuntimeLogHostClient]
+
+// RuntimeLogStream identifies the stream that produced a runtime log entry.
+type RuntimeLogStream string
+
+const (
+	RuntimeLogStreamRuntime RuntimeLogStream = "runtime"
+	RuntimeLogStreamStdout  RuntimeLogStream = "stdout"
+	RuntimeLogStreamStderr  RuntimeLogStream = "stderr"
+)
+
+// RuntimeLogEntry is one log entry appended by a hosted runtime.
+type RuntimeLogEntry struct {
+	Stream     RuntimeLogStream
+	Message    string
+	ObservedAt time.Time
+	SourceSeq  int64
+}
 
 // RuntimeLogHost returns a shared client for the runtime-log host service.
 func RuntimeLogHost() (*RuntimeLogHostClient, error) {
@@ -54,9 +71,13 @@ func (c *RuntimeLogHostClient) Close() error {
 	return nil
 }
 
-// AppendLogs appends logs using a raw protocol request.
-func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, req *proto.AppendPluginRuntimeLogsRequest) (*proto.AppendPluginRuntimeLogsResponse, error) {
-	return c.client.AppendLogs(ctx, req)
+// AppendLogs appends runtime logs for one hosted runtime session.
+func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, sessionID string, logs []RuntimeLogEntry) error {
+	_, err := c.client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
+		SessionId: strings.TrimSpace(sessionID),
+		Logs:      runtimeLogEntriesToProto(logs),
+	})
+	return err
 }
 
 // RuntimeLogAppendOption configures a single Append call.
@@ -64,7 +85,7 @@ type RuntimeLogAppendOption func(*runtimeLogAppendOptions)
 
 type runtimeLogAppendOptions struct {
 	sessionID string
-	stream    proto.PluginRuntimeLogStream
+	stream    RuntimeLogStream
 	observed  *timestamppb.Timestamp
 	sourceSeq *int64
 }
@@ -87,7 +108,7 @@ func WithRuntimeLogSessionID(sessionID string) RuntimeLogAppendOption {
 }
 
 // WithRuntimeLogStream overrides the log stream used by Append.
-func WithRuntimeLogStream(stream proto.PluginRuntimeLogStream) RuntimeLogAppendOption {
+func WithRuntimeLogStream(stream RuntimeLogStream) RuntimeLogAppendOption {
 	return func(opts *runtimeLogAppendOptions) {
 		opts.stream = stream
 	}
@@ -108,9 +129,9 @@ func WithRuntimeLogSourceSeq(sourceSeq int64) RuntimeLogAppendOption {
 }
 
 // Append records one runtime log entry for the current hosted runtime session.
-func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts ...RuntimeLogAppendOption) (*proto.AppendPluginRuntimeLogsResponse, error) {
+func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts ...RuntimeLogAppendOption) error {
 	cfg := runtimeLogAppendOptions{
-		stream: proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+		stream: RuntimeLogStreamRuntime,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -120,7 +141,7 @@ func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts 
 	if cfg.sessionID == "" {
 		sessionID, err := RuntimeSessionID()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		cfg.sessionID = sessionID
 	}
@@ -134,15 +155,12 @@ func (c *RuntimeLogHostClient) Append(ctx context.Context, message string, opts 
 	} else {
 		sourceSeq = c.sourceSeq.Add(1)
 	}
-	return c.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: cfg.sessionID,
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:     cfg.stream,
-			Message:    message,
-			ObservedAt: cfg.observed,
-			SourceSeq:  sourceSeq,
-		}},
-	})
+	return c.AppendLogs(ctx, cfg.sessionID, []RuntimeLogEntry{{
+		Stream:     cfg.stream,
+		Message:    message,
+		ObservedAt: cfg.observed.AsTime(),
+		SourceSeq:  sourceSeq,
+	}})
 }
 
 func (c *RuntimeLogHostClient) advanceSourceSeq(sourceSeq int64) {
@@ -151,5 +169,32 @@ func (c *RuntimeLogHostClient) advanceSourceSeq(sourceSeq int64) {
 		if current >= sourceSeq || c.sourceSeq.CompareAndSwap(current, sourceSeq) {
 			return
 		}
+	}
+}
+
+func runtimeLogEntriesToProto(logs []RuntimeLogEntry) []*proto.PluginRuntimeLogEntry {
+	out := make([]*proto.PluginRuntimeLogEntry, 0, len(logs))
+	for _, log := range logs {
+		entry := &proto.PluginRuntimeLogEntry{
+			Stream:    runtimeLogStreamToProto(log.Stream),
+			Message:   log.Message,
+			SourceSeq: log.SourceSeq,
+		}
+		if !log.ObservedAt.IsZero() {
+			entry.ObservedAt = timestamppb.New(log.ObservedAt)
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func runtimeLogStreamToProto(stream RuntimeLogStream) proto.PluginRuntimeLogStream {
+	switch stream {
+	case RuntimeLogStreamStdout:
+		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT
+	case RuntimeLogStreamStderr:
+		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR
+	default:
+		return proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME
 	}
 }

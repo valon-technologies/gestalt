@@ -70,6 +70,7 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 	root := filepath.Clean(filepath.Join(exampleDir, "..", "..", "..", "..", ".."))
 	replaced := strings.Replace(string(goMod), "module github.com/valon-technologies/gestalt/testdata/provider-go", "module github.com/valon-technologies/gestalt/testdata/provider-go-externalcredentials", 1)
 	replaced = strings.Replace(replaced, "replace github.com/valon-technologies/gestalt/sdk/go => ../../../../../sdk/go", "replace github.com/valon-technologies/gestalt/sdk/go => "+filepath.Join(root, "sdk", "go"), 1)
+	replaced = strings.Replace(replaced, "replace github.com/valon-technologies/gestalt => ../../../../..", "replace github.com/valon-technologies/gestalt => "+root, 1)
 	if err := os.WriteFile(filepath.Join(fixtureDir, "go.mod"), []byte(replaced), 0o644); err != nil {
 		return "", err
 	}

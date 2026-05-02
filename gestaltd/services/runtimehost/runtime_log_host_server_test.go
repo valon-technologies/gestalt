@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
@@ -63,28 +62,22 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	}
 
 	observedAt := time.Date(2026, time.April, 23, 12, 34, 56, 0, time.UTC)
-	resp, err := client.AppendLogs(context.Background(), &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "session-1",
-		Logs: []*proto.PluginRuntimeLogEntry{
-			{
-				Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-				Message:    "runtime boot",
-				ObservedAt: timestamppb.New(observedAt),
-				SourceSeq:  7,
-			},
-			{
-				Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
-				Message:    "stderr line\n",
-				ObservedAt: timestamppb.New(observedAt.Add(time.Second)),
-				SourceSeq:  8,
-			},
+	err = client.AppendLogs(context.Background(), "session-1", []gestalt.RuntimeLogEntry{
+		{
+			Stream:     gestalt.RuntimeLogStreamRuntime,
+			Message:    "runtime boot",
+			ObservedAt: observedAt,
+			SourceSeq:  7,
+		},
+		{
+			Stream:     gestalt.RuntimeLogStreamStderr,
+			Message:    "stderr line\n",
+			ObservedAt: observedAt.Add(time.Second),
+			SourceSeq:  8,
 		},
 	})
 	if err != nil {
 		t.Fatalf("AppendLogs: %v", err)
-	}
-	if resp.GetLastSeq() != 2 {
-		t.Fatalf("AppendLogs last_seq = %d, want 2", resp.GetLastSeq())
 	}
 
 	mu.Lock()
@@ -152,14 +145,11 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 		t.Fatalf("RuntimeLogHost: %v", err)
 	}
 
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "session-1",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:    proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
-			Message:   "after stop\n",
-			SourceSeq: 2,
-		}},
-	})
+	err = client.AppendLogs(ctx, "session-1", []gestalt.RuntimeLogEntry{{
+		Stream:    gestalt.RuntimeLogStreamStderr,
+		Message:   "after stop\n",
+		SourceSeq: 2,
+	}})
 	if err != nil {
 		t.Fatalf("AppendLogs(after stop): %v", err)
 	}
@@ -181,13 +171,10 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	}); err != nil {
 		t.Fatalf("RegisterSession(second): %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "session-1",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-			Message: "fresh session",
-		}},
-	})
+	err = client.AppendLogs(ctx, "session-1", []gestalt.RuntimeLogEntry{{
+		Stream:  gestalt.RuntimeLogStreamRuntime,
+		Message: "fresh session",
+	}})
 	if err != nil {
 		t.Fatalf("AppendLogs(fresh session): %v", err)
 	}
@@ -229,13 +216,10 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RuntimeLogHost: %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "never-registered",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-			Message: "should fail",
-		}},
-	})
+	err = client.AppendLogs(ctx, "never-registered", []gestalt.RuntimeLogEntry{{
+		Stream:  gestalt.RuntimeLogStreamRuntime,
+		Message: "should fail",
+	}})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("AppendLogs(unknown) code = %v, want %v: %v", status.Code(err), codes.NotFound, err)
 	}
@@ -291,23 +275,17 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 	if err != nil {
 		t.Fatalf("RuntimeLogHost: %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "stopping-session",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-			Message: "late shutdown log",
-		}},
-	})
+	err = client.AppendLogs(ctx, "stopping-session", []gestalt.RuntimeLogEntry{{
+		Stream:  gestalt.RuntimeLogStreamRuntime,
+		Message: "late shutdown log",
+	}})
 	if err != nil {
 		t.Fatalf("AppendLogs(stopping session): %v", err)
 	}
-	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{
-		SessionId: "quiet-live-session",
-		Logs: []*proto.PluginRuntimeLogEntry{{
-			Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
-			Message: "quiet live should have been evicted first",
-		}},
-	})
+	err = client.AppendLogs(ctx, "quiet-live-session", []gestalt.RuntimeLogEntry{{
+		Stream:  gestalt.RuntimeLogStreamRuntime,
+		Message: "quiet live should have been evicted first",
+	}})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("AppendLogs(quiet live) code = %v, want %v: %v", status.Code(err), codes.NotFound, err)
 	}

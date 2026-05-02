@@ -437,8 +437,8 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\x12b\n" +
 	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n" +
 	"\x15ValidateExternalToken\x121.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12V\n" +
-	"\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB\xd7\x01\n" +
-	"\x17com.gestalt.provider.v1B\x13AuthenticationProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB\xd9\x01\n" +
+	"\x17com.gestalt.provider.v1B\x13AuthenticationProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_authentication_proto_rawDescOnce sync.Once

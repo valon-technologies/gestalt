@@ -40,14 +40,14 @@ from gestalt import (
     _bootstrap,
     _runtime,
 )
-from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
-from gestalt.gen.v1 import cache_pb2 as _cache_pb2
-from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
-from gestalt.gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
-from gestalt.gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
-from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
-from gestalt.gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
-from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
+from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
+from gestalt._gen.v1 import cache_pb2 as _cache_pb2
+from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
+from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+from gestalt._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
+from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
+from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2

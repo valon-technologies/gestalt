@@ -4913,8 +4913,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x12DeleteEventTrigger\x12=.gestalt.provider.v1.WorkflowManagerDeleteEventTriggerRequest\x1a\x16.google.protobuf.Empty\x12\x83\x01\n" +
 	"\x11PauseEventTrigger\x12<.gestalt.provider.v1.WorkflowManagerPauseEventTriggerRequest\x1a0.gestalt.provider.v1.ManagedWorkflowEventTrigger\x12\x85\x01\n" +
 	"\x12ResumeEventTrigger\x12=.gestalt.provider.v1.WorkflowManagerResumeEventTriggerRequest\x1a0.gestalt.provider.v1.ManagedWorkflowEventTrigger\x12k\n" +
-	"\fPublishEvent\x127.gestalt.provider.v1.WorkflowManagerPublishEventRequest\x1a\".gestalt.provider.v1.WorkflowEventB\xd1\x01\n" +
-	"\x17com.gestalt.provider.v1B\rWorkflowProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\fPublishEvent\x127.gestalt.provider.v1.WorkflowManagerPublishEventRequest\x1a\".gestalt.provider.v1.WorkflowEventB\xd3\x01\n" +
+	"\x17com.gestalt.provider.v1B\rWorkflowProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_workflow_proto_rawDescOnce sync.Once

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"google.golang.org/grpc"
 )
 

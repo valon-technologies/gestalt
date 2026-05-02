@@ -178,34 +178,31 @@ signal sequence numbers exactly as stored.
             pass
 
         def StartRun(self, request, context):
-            return gestalt.pb.BoundWorkflowRun(
+            return gestalt.BoundWorkflowRun(
                 id=f"{request.target.plugin.plugin_name}:run-1",
-                status=gestalt.pb.WORKFLOW_RUN_STATUS_PENDING,
+                status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
                 target=request.target,
             )
 
         def GetRun(self, request, context):
-            return gestalt.pb.BoundWorkflowRun(id=request.run_id)
+            return gestalt.BoundWorkflowRun(id=request.run_id)
 
         def ListRuns(self, request, context):
-            return gestalt.pb.ListWorkflowProviderRunsResponse(runs=[])
+            return gestalt.ListWorkflowProviderRunsResponse(runs=[])
 
         def CancelRun(self, request, context):
-            return gestalt.pb.BoundWorkflowRun(
+            return gestalt.BoundWorkflowRun(
                 id=request.run_id,
-                status=gestalt.pb.WORKFLOW_RUN_STATUS_CANCELED,
+                status=gestalt.WORKFLOW_RUN_STATUS_CANCELED,
             )
 
         def UpsertSchedule(self, request, context):
-            return gestalt.pb.BoundWorkflowSchedule(
+            return gestalt.BoundWorkflowSchedule(
                 id=request.schedule_id,
                 cron=request.cron,
                 target=request.target,
                 paused=request.paused,
             )
-
-        def PublishEvent(self, request, context):
-            return gestalt.pb.google_dot_protobuf_dot_empty__pb2.Empty()
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -430,9 +427,9 @@ invoke target plugin operations.
     ```python
     with gestalt.WorkflowHost() as host:
         resp = host.invoke_operation(
-            gestalt.pb.InvokeWorkflowOperationRequest(
-                target=gestalt.pb.BoundWorkflowTarget(
-                    plugin=gestalt.pb.BoundWorkflowPluginTarget(
+            gestalt.InvokeWorkflowOperationRequest(
+                target=gestalt.BoundWorkflowTarget(
+                    plugin=gestalt.BoundWorkflowPluginTarget(
                         plugin_name="roadmap",
                         operation="sync_items",
                     ),

@@ -4579,9 +4579,9 @@ const file_v1_agent_proto_rawDesc = "" +
 	"CancelTurn\x122.gestalt.provider.v1.AgentManagerCancelTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\x12\x81\x01\n" +
 	"\x0eListTurnEvents\x126.gestalt.provider.v1.AgentManagerListTurnEventsRequest\x1a7.gestalt.provider.v1.AgentManagerListTurnEventsResponse\x12\x87\x01\n" +
 	"\x10ListInteractions\x128.gestalt.provider.v1.AgentManagerListInteractionsRequest\x1a9.gestalt.provider.v1.AgentManagerListInteractionsResponse\x12w\n" +
-	"\x12ResolveInteraction\x12:.gestalt.provider.v1.AgentManagerResolveInteractionRequest\x1a%.gestalt.provider.v1.AgentInteractionB\xce\x01\n" +
+	"\x12ResolveInteraction\x12:.gestalt.provider.v1.AgentManagerResolveInteractionRequest\x1a%.gestalt.provider.v1.AgentInteractionB\xd0\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
-	"AgentProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"AgentProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_agent_proto_rawDescOnce sync.Once

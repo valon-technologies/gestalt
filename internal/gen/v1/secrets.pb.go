@@ -121,8 +121,8 @@ const file_v1_secrets_proto_rawDesc = "" +
 	"\x11GetSecretResponse\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value2m\n" +
 	"\x0fSecretsProvider\x12Z\n" +
-	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseB\xd0\x01\n" +
-	"\x17com.gestalt.provider.v1B\fSecretsProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseB\xd2\x01\n" +
+	"\x17com.gestalt.provider.v1B\fSecretsProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_secrets_proto_rawDescOnce sync.Once

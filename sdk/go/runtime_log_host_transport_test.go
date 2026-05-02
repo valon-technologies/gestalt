@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 )
 
@@ -66,18 +66,15 @@ func TestRuntimeLogHostAppendUsesRuntimeSessionEnv(t *testing.T) {
 		t.Fatalf("RuntimeLogHost: %v", err)
 	}
 	observedAt := time.Date(2026, time.April, 30, 12, 0, 0, 0, time.UTC)
-	resp, err := client.Append(
+	err = client.Append(
 		context.Background(),
 		"runtime boot\n",
-		gestalt.WithRuntimeLogStream(proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR),
+		gestalt.WithRuntimeLogStream(gestalt.RuntimeLogStreamStderr),
 		gestalt.WithRuntimeLogObservedAt(observedAt),
 		gestalt.WithRuntimeLogSourceSeq(7),
 	)
 	if err != nil {
 		t.Fatalf("Append: %v", err)
-	}
-	if resp.GetLastSeq() != 7 {
-		t.Fatalf("Append last_seq = %d, want 7", resp.GetLastSeq())
 	}
 
 	requests := logs.requestsCopy()

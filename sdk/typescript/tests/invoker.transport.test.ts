@@ -13,7 +13,7 @@ import {
   ExchangeInvocationTokenResponseSchema,
   OperationResultSchema,
   PluginInvoker as PluginInvokerService,
-} from "../gen/v1/plugin_pb.ts";
+} from "../src/internal/gen/v1/plugin_pb.ts";
 import {
   ENV_PLUGIN_INVOKER_SOCKET,
   ENV_PLUGIN_INVOKER_SOCKET_TOKEN,

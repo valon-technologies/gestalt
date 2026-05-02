@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -20,7 +20,7 @@ func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	db := &coretesting.StubIndexedDB{}
 	srv := NewServer(db, "roadmap", ServerOptions{})
 	ctx := context.Background()
-	record, err := gestalt.RecordToProto(map[string]any{"id": "snap-1"})
+	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "snap-1"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	if _, err := srv.(*indexedDBServer).Put(ctx, &proto.RecordRequest{
 		Store: "snapshots",
 		Record: func() *proto.Record {
-			rec, err := gestalt.RecordToProto(map[string]any{"id": "snap-1", "type": "daily"})
+			rec, err := indexeddbcodec.RecordToProto(map[string]any{"id": "snap-1", "type": "daily"})
 			if err != nil {
 				t.Fatalf("RecordToProto with type: %v", err)
 			}
@@ -63,7 +63,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	value, err := gestalt.TypedValueFromAny("daily")
+	value, err := indexeddbcodec.TypedValueFromAny("daily")
 	if err != nil {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}
@@ -121,11 +121,11 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	srv := NewServer(db, "roadmap", ServerOptions{
 		AllowedStores: []string{"tasks"},
 	})
-	record, err := gestalt.RecordToProto(map[string]any{"id": "evt-1"})
+	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "evt-1"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
-	indexValue, err := gestalt.TypedValueFromAny("daily")
+	indexValue, err := indexeddbcodec.TypedValueFromAny("daily")
 	if err != nil {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -387,7 +387,7 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	record, err := RecordFromProto(resp.GetRecord())
+	record, err := recordFromProto(resp.GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -405,7 +405,7 @@ func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, erro
 
 // Add inserts a new record and fails if its primary key already exists.
 func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
-	pbRecord, err := RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -415,7 +415,7 @@ func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 
 // Put upserts a record by primary key.
 func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
-	pbRecord, err := RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -445,7 +445,7 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	records, err := RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromProto(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -526,7 +526,7 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	record, err := RecordFromProto(resp.GetRecord())
+	record, err := recordFromProto(resp.GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -564,7 +564,7 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	records, err := RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromProto(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -794,7 +794,7 @@ func (s *TransactionObjectStore) Get(ctx context.Context, id string) (Record, er
 	if err != nil {
 		return nil, err
 	}
-	record, err := RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := recordFromProto(resp.GetRecord().GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -812,7 +812,7 @@ func (s *TransactionObjectStore) GetKey(ctx context.Context, id string) (string,
 
 func (s *TransactionObjectStore) Add(ctx context.Context, record Record) error {
 	_ = ctx
-	pbRecord, err := RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -822,7 +822,7 @@ func (s *TransactionObjectStore) Add(ctx context.Context, record Record) error {
 
 func (s *TransactionObjectStore) Put(ctx context.Context, record Record) error {
 	_ = ctx
-	pbRecord, err := RecordToProto(record)
+	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -852,7 +852,7 @@ func (s *TransactionObjectStore) GetAll(ctx context.Context, r *KeyRange) ([]Rec
 	if err != nil {
 		return nil, err
 	}
-	records, err := RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromProto(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -919,7 +919,7 @@ func (idx *TransactionIndex) Get(ctx context.Context, values ...any) (Record, er
 	if err != nil {
 		return nil, err
 	}
-	record, err := RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := recordFromProto(resp.GetRecord().GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -949,7 +949,7 @@ func (idx *TransactionIndex) GetAll(ctx context.Context, r *KeyRange, values ...
 	if err != nil {
 		return nil, err
 	}
-	records, err := RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromProto(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
@@ -1028,7 +1028,7 @@ func (c *Cursor) Continue() bool {
 // ContinueToKey advances the cursor to the supplied key, or exhausts it if the
 // key does not exist.
 func (c *Cursor) ContinueToKey(key any) bool {
-	kvs, err := CursorKeyToProto(key, c.indexCursor)
+	kvs, err := cursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
 		return false
@@ -1050,7 +1050,7 @@ func (c *Cursor) Key() any {
 	if c.entry == nil || len(c.entry.GetKey()) == 0 {
 		return nil
 	}
-	parts, err := KeyValuesToAny(c.entry.GetKey())
+	parts, err := keyValuesToAny(c.entry.GetKey())
 	if err != nil {
 		c.err = err
 		return nil
@@ -1077,7 +1077,7 @@ func (c *Cursor) Value() (Record, error) {
 	if c.entry == nil || c.entry.GetRecord() == nil {
 		return nil, ErrNotFound
 	}
-	return RecordFromProto(c.entry.GetRecord())
+	return recordFromProto(c.entry.GetRecord())
 }
 
 // Delete removes the current row and keeps the cursor open.
@@ -1127,7 +1127,7 @@ func (c *Cursor) Update(value Record) error {
 	if c.done {
 		return ErrNotFound
 	}
-	pbRecord, err := RecordToProto(value)
+	pbRecord, err := recordToProto(value)
 	if err != nil {
 		return fmt.Errorf("indexeddb: marshal cursor update: %w", err)
 	}
@@ -1267,7 +1267,7 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index 
 	if err != nil {
 		return nil, err
 	}
-	vals, err := TypedValuesFromAny(values)
+	vals, err := typedValuesFromAny(values)
 	if err != nil {
 		return nil, err
 	}
@@ -1324,14 +1324,14 @@ func krToProto(r *KeyRange) (*proto.KeyRange, error) {
 	}
 	kr := &proto.KeyRange{LowerOpen: r.LowerOpen, UpperOpen: r.UpperOpen}
 	if r.Lower != nil {
-		v, err := TypedValueFromAny(r.Lower)
+		v, err := typedValueFromAny(r.Lower)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range lower: %w", err)
 		}
 		kr.Lower = v
 	}
 	if r.Upper != nil {
-		v, err := TypedValueFromAny(r.Upper)
+		v, err := typedValueFromAny(r.Upper)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range upper: %w", err)
 		}
@@ -1341,7 +1341,7 @@ func krToProto(r *KeyRange) (*proto.KeyRange, error) {
 }
 
 func anyToProtoValues(values []any) ([]*proto.TypedValue, error) {
-	return TypedValuesFromAny(values)
+	return typedValuesFromAny(values)
 }
 
 func transactionModeToProto(mode TransactionMode) proto.TransactionMode {

@@ -14,13 +14,13 @@ from urllib import parse as _urlparse
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
+from ._gen.v1 import s3_pb2 as _pb
+from ._gen.v1 import s3_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
 )
-from .gen.v1 import s3_pb2 as _pb
-from .gen.v1 import s3_pb2_grpc as _pb_grpc
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc

@@ -2426,8 +2426,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\rPluginInvoker\x12\x84\x01\n" +
 	"\x17ExchangeInvocationToken\x123.gestalt.provider.v1.ExchangeInvocationTokenRequest\x1a4.gestalt.provider.v1.ExchangeInvocationTokenResponse\x12X\n" +
 	"\x06Invoke\x12(.gestalt.provider.v1.PluginInvokeRequest\x1a$.gestalt.provider.v1.OperationResult\x12f\n" +
-	"\rInvokeGraphQL\x12/.gestalt.provider.v1.PluginInvokeGraphQLRequest\x1a$.gestalt.provider.v1.OperationResultB\xcf\x01\n" +
-	"\x17com.gestalt.provider.v1B\vPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\rInvokeGraphQL\x12/.gestalt.provider.v1.PluginInvokeGraphQLRequest\x1a$.gestalt.provider.v1.OperationResultB\xd1\x01\n" +
+	"\x17com.gestalt.provider.v1B\vPluginProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_plugin_proto_rawDescOnce sync.Once

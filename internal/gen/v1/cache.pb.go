@@ -767,9 +767,9 @@ const file_v1_cache_proto_rawDesc = "" +
 	"\x06Delete\x12'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\x12g\n" +
 	"\n" +
 	"DeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\x12X\n" +
-	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponseB\xce\x01\n" +
+	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponseB\xd0\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
-	"CacheProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"CacheProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_cache_proto_rawDescOnce sync.Once

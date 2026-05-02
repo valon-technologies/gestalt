@@ -4,7 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
 
 // AuthenticatedUser is the normalized user identity returned by an authentication
 // provider after a login or token-validation flow.

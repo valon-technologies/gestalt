@@ -13,13 +13,13 @@ import grpc as _grpc
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
+from ._gen.v1 import datastore_pb2 as _pb
+from ._gen.v1 import datastore_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
 )
-from .gen.v1 import datastore_pb2 as _pb
-from .gen.v1 import datastore_pb2_grpc as _pb_grpc
 
 grpc: Any = cast(Any, _grpc)
 pb: Any = cast(Any, _pb)

@@ -17,7 +17,7 @@ import {
   ListAgentToolsRequestSchema,
   ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
-} from "../gen/v1/agent_pb.ts";
+} from "../src/internal/gen/v1/agent_pb.ts";
 import {
   AgentHost,
   createAgentProviderService,

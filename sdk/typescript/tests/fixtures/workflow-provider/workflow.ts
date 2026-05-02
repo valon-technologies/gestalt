@@ -17,7 +17,7 @@ import {
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
   WorkflowRunStatus,
-} from "../../../gen/v1/workflow_pb.ts";
+} from "../../../src/internal/gen/v1/workflow_pb.ts";
 import {
   defineWorkflowProvider,
   type PublishWorkflowProviderEventRequest,

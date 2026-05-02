@@ -1830,8 +1830,8 @@ const file_v1_authorization_proto_rawDesc = "" +
 	"\n" +
 	"ListModels\x12&.gestalt.provider.v1.ListModelsRequest\x1a'.gestalt.provider.v1.ListModelsResponse\x12`\n" +
 	"\n" +
-	"WriteModel\x12&.gestalt.provider.v1.WriteModelRequest\x1a*.gestalt.provider.v1.AuthorizationModelRefB\xd6\x01\n" +
-	"\x17com.gestalt.provider.v1B\x12AuthorizationProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"WriteModel\x12&.gestalt.provider.v1.WriteModelRequest\x1a*.gestalt.provider.v1.AuthorizationModelRefB\xd8\x01\n" +
+	"\x17com.gestalt.provider.v1B\x12AuthorizationProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_authorization_proto_rawDescOnce sync.Once

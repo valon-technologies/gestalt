@@ -11,13 +11,13 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
+from ._gen.v1 import authorization_pb2 as _authorization_pb2
+from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 from ._grpc_transport import (
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
 )
-from .gen.v1 import authorization_pb2 as _authorization_pb2
-from .gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 
 empty_pb2: Any = _empty_pb2
 authorization_pb2: Any = _authorization_pb2
@@ -33,6 +33,54 @@ _shared_authorization_transport: dict[str, Any] = {
     "client": None,
 }
 _shared_authorization_lock = threading.Lock()
+
+
+def AuthorizationSubject(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization subject protocol value."""
+
+    return authorization_pb2.Subject(*args, **kwargs)
+
+
+def AuthorizationResource(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization resource protocol value."""
+
+    return authorization_pb2.Resource(*args, **kwargs)
+
+
+def AuthorizationAction(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization action protocol value."""
+
+    return authorization_pb2.Action(*args, **kwargs)
+
+
+def AccessEvaluationRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization access-evaluation request."""
+
+    return authorization_pb2.AccessEvaluationRequest(*args, **kwargs)
+
+
+def ResourceSearchRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization resource-search request."""
+
+    return authorization_pb2.ResourceSearchRequest(*args, **kwargs)
+
+
+def SubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization subject-search request."""
+
+    return authorization_pb2.SubjectSearchRequest(*args, **kwargs)
+
+
+def ActionSearchRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization action-search request."""
+
+    return authorization_pb2.ActionSearchRequest(*args, **kwargs)
+
+
+def ReadRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-read request."""
+
+    return authorization_pb2.ReadRelationshipsRequest(*args, **kwargs)
 
 
 class AuthorizationClient:

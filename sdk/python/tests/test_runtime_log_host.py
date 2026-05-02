@@ -19,8 +19,8 @@ from gestalt import (
     RuntimeLogHandler,
     RuntimeLogHost,
 )
-from gestalt.gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
-from gestalt.gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
+from gestalt._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
+from gestalt._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
 
 pluginruntime_pb2: Any = _pluginruntime_pb2
 pluginruntime_pb2_grpc: Any = _pluginruntime_pb2_grpc

@@ -23,7 +23,7 @@ import {
   AgentSessionState,
   AgentTurnEventSchema,
   AgentTurnSchema,
-} from "../gen/v1/agent_pb.ts";
+} from "../src/internal/gen/v1/agent_pb.ts";
 import {
   AgentManager,
   ENV_AGENT_MANAGER_SOCKET,

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"

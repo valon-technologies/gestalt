@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
@@ -102,7 +101,7 @@ func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordToProto(rec)
+	return recordResponseFromRecord(rec)
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {
@@ -118,7 +117,7 @@ func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequ
 }
 
 func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	record, err := gestalt.RecordFromProto(req.GetRecord())
+	record, err := recordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
@@ -133,7 +132,7 @@ func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*e
 }
 
 func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	record, err := gestalt.RecordFromProto(req.GetRecord())
+	record, err := recordFromProto(req.GetRecord())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
@@ -182,7 +181,7 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordsToProto(recs)
+	return recordsResponseFromRecords(recs)
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
@@ -249,7 +248,7 @@ func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryReq
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordToProto(rec)
+	return recordResponseFromRecord(rec)
 }
 
 func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeyResponse, error) {
@@ -285,7 +284,7 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordsToProto(recs)
+	return recordsResponseFromRecords(recs)
 }
 
 func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeysResponse, error) {
@@ -481,7 +480,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx co
 		if err != nil {
 			return nil, err
 		}
-		pbRec, err := recordToProto(rec)
+		pbRec, err := recordResponseFromRecord(rec)
 		if err != nil {
 			return nil, err
 		}
@@ -497,7 +496,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx co
 		}
 		resp.Result = &proto.TransactionOperationResponse_Key{Key: &proto.KeyResponse{Key: key}}
 	case *proto.TransactionOperation_Add:
-		record, err := gestalt.RecordFromProto(body.Add.GetRecord())
+		record, err := recordFromProto(body.Add.GetRecord())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 		}
@@ -510,7 +509,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx co
 		}
 		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
 	case *proto.TransactionOperation_Put:
-		record, err := gestalt.RecordFromProto(body.Put.GetRecord())
+		record, err := recordFromProto(body.Put.GetRecord())
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 		}
@@ -553,7 +552,7 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx co
 		if err != nil {
 			return nil, err
 		}
-		pbRecs, err := recordsToProto(recs)
+		pbRecs, err := recordsResponseFromRecords(recs)
 		if err != nil {
 			return nil, err
 		}
@@ -670,7 +669,7 @@ func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx cor
 	if err != nil {
 		return nil, err
 	}
-	return recordToProto(rec)
+	return recordResponseFromRecord(rec)
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (string, error) {
@@ -690,7 +689,7 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 	if err != nil {
 		return nil, err
 	}
-	return recordsToProto(recs)
+	return recordsResponseFromRecords(recs)
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {
@@ -855,7 +854,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 			if len(target) == 0 {
 				return status.Error(codes.InvalidArgument, "continue key is required")
 			}
-			parts, kErr := gestalt.KeyValuesToAny(target)
+			parts, kErr := keyValuesToAny(target)
 			if kErr != nil {
 				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
 			}
@@ -915,7 +914,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 			}
 
 		case *proto.CursorCommand_Update:
-			rec, rErr := gestalt.RecordFromProto(v.Update)
+			rec, rErr := recordFromProto(v.Update)
 			if rErr != nil {
 				return status.Errorf(codes.InvalidArgument, "unmarshal update record: %v", rErr)
 			}
@@ -946,7 +945,7 @@ func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEnt
 		if parts, ok := key.([]any); ok {
 			kvs := make([]*proto.KeyValue, len(parts))
 			for i, p := range parts {
-				kv, err := gestalt.AnyToKeyValue(p)
+				kv, err := anyToKeyValue(p)
 				if err != nil {
 					return nil, fmt.Errorf("marshal cursor key[%d]: %w", i, err)
 				}
@@ -954,7 +953,7 @@ func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEnt
 			}
 			entry.Key = kvs
 		} else {
-			kv, err := gestalt.AnyToKeyValue(key)
+			kv, err := anyToKeyValue(key)
 			if err != nil {
 				return nil, fmt.Errorf("marshal cursor key: %w", err)
 			}
@@ -966,7 +965,7 @@ func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEnt
 		if err != nil {
 			return nil, fmt.Errorf("cursor value: %w", err)
 		}
-		pbRec, err := gestalt.RecordToProto(rec)
+		pbRec, err := recordToProto(rec)
 		if err != nil {
 			return nil, fmt.Errorf("marshal cursor record: %w", err)
 		}
@@ -975,16 +974,16 @@ func cursorEntryToProto(c coreindexeddb.Cursor, keysOnly bool) (*proto.CursorEnt
 	return entry, nil
 }
 
-func recordToProto(rec coreindexeddb.Record) (*proto.RecordResponse, error) {
-	pbRecord, err := gestalt.RecordToProto(rec)
+func recordResponseFromRecord(rec coreindexeddb.Record) (*proto.RecordResponse, error) {
+	pbRecord, err := recordToProto(rec)
 	if err != nil {
 		return nil, fmt.Errorf("marshal record: %w", err)
 	}
 	return &proto.RecordResponse{Record: pbRecord}, nil
 }
 
-func recordsToProto(recs []coreindexeddb.Record) (*proto.RecordsResponse, error) {
-	pbRecords, err := gestalt.RecordsToProto(recs)
+func recordsResponseFromRecords(recs []coreindexeddb.Record) (*proto.RecordsResponse, error) {
+	pbRecords, err := recordsToProto(recs)
 	if err != nil {
 		return nil, err
 	}
@@ -1022,14 +1021,14 @@ func protoToKeyRange(kr *proto.KeyRange) (*coreindexeddb.KeyRange, error) {
 		UpperOpen: kr.GetUpperOpen(),
 	}
 	if kr.GetLower() != nil {
-		value, err := gestalt.AnyFromTypedValue(kr.GetLower())
+		value, err := anyFromTypedValue(kr.GetLower())
 		if err != nil {
 			return nil, fmt.Errorf("key range lower: %w", err)
 		}
 		r.Lower = value
 	}
 	if kr.GetUpper() != nil {
-		value, err := gestalt.AnyFromTypedValue(kr.GetUpper())
+		value, err := anyFromTypedValue(kr.GetUpper())
 		if err != nil {
 			return nil, fmt.Errorf("key range upper: %w", err)
 		}
@@ -1039,7 +1038,7 @@ func protoToKeyRange(kr *proto.KeyRange) (*coreindexeddb.KeyRange, error) {
 }
 
 func protoValuesToAny(vals []*proto.TypedValue) ([]any, error) {
-	return gestalt.AnyFromTypedValues(vals)
+	return anyFromTypedValues(vals)
 }
 
 func indexeddbToGRPCErr(err error) error {

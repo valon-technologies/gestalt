@@ -24,7 +24,7 @@ import {
   type ManagedWorkflowSchedule,
   type ManagedWorkflowEventTrigger,
   type WorkflowEvent,
-} from "../gen/v1/workflow_pb.ts";
+} from "./internal/gen/v1/workflow_pb.ts";
 import type { Request } from "./api.ts";
 
 /** Environment variable containing the workflow-manager host-service target. */

@@ -62,9 +62,10 @@ The top-level `gestalt` package exposes the supported authoring API:
   `AgentManager`, and `PluginInvoker` for calling sibling host services.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
-Generated protobuf bindings remain available under `gestalt.gen`, but provider
-authors should prefer the handwritten SDK surface unless they need a low-level
-protocol message directly.
+The SDK also exposes authored protocol helpers for agent, workflow,
+authorization, and authentication request payloads. The generated protobuf
+stubs are private runtime internals and are not part of the provider authoring
+API.
 
 ## Regenerating protobuf stubs
 
@@ -94,7 +95,7 @@ uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
 ```
 
 The generated docs intentionally focus on the handwritten SDK surface. The
-checked-in protobuf stubs under `gestalt/gen` remain importable, but they are
+checked-in protobuf stubs live under the private `gestalt/_gen` package and are
 not expanded as authored reference pages.
 
 ## Publishing
@@ -125,12 +126,12 @@ in CI:
 ```sh
 uv sync --group dev
 uv run ruff check .
-uv run ty check --exclude 'gestalt/gen/**' gestalt scripts tests
+uv run ty check --exclude 'gestalt/_gen/**' gestalt scripts tests
 uv run vulture --config pyproject.toml
 uv run python -m unittest discover -s tests
 uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
 ```
 
-The generated protobuf stubs under `gestalt/gen` are excluded from the static
+The generated protobuf stubs under `gestalt/_gen` are excluded from the static
 analysis tools because they are vendored output rather than hand-maintained SDK
 code.
