@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -100,6 +101,7 @@ type agentTurnCreateRequest struct {
 	Metadata        map[string]any        `json:"metadata,omitempty"`
 	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
 	IdempotencyKey  string                `json:"idempotencyKey,omitempty"`
+	toolRefsSet     bool
 }
 
 type agentTurnCancelRequest struct {
@@ -362,8 +364,12 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	var req agentTurnCreateRequest
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		if err := decodeAgentTurnCreateRequest(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
 			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if req.toolRefsSet && req.ToolRefs == nil {
+			writeError(w, http.StatusBadRequest, "toolRefs cannot be null")
 			return
 		}
 	}
@@ -385,7 +391,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		Model:           strings.TrimSpace(req.Model),
 		SessionID:       strings.TrimSpace(sessionID),
 		Messages:        agentMessagesFromRequest(req.Messages),
-		ToolRefs:        agentToolRefsFromRequest(req.ToolRefs),
+		ToolRefs:        agentToolRefsForCreateTurn(req),
 		ToolSource:      toolSource,
 		ResponseSchema:  maps.Clone(req.ResponseSchema),
 		Metadata:        maps.Clone(req.Metadata),
@@ -396,6 +402,29 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, agentTurnInfoFromCore(turn))
+}
+
+func decodeAgentTurnCreateRequest(r io.Reader, req *agentTurnCreateRequest) error {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return io.EOF
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return err
+	}
+	rawToolRefs, hasToolRefs := fields["toolRefs"]
+	if err := json.Unmarshal(body, req); err != nil {
+		return err
+	}
+	req.toolRefsSet = hasToolRefs
+	if hasToolRefs && bytes.Equal(bytes.TrimSpace(rawToolRefs), []byte("null")) {
+		req.ToolRefs = nil
+	}
+	return nil
 }
 
 func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
@@ -811,6 +840,13 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	return out
 }
 
+func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []coreagent.ToolRef {
+	if !req.toolRefsSet {
+		return []coreagent.ToolRef{{Plugin: "*"}}
+	}
+	return agentToolRefsFromRequest(req.ToolRefs)
+}
+
 func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 	if len(refs) == 0 {
 		return nil
@@ -837,6 +873,10 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 		ref := refs[idx]
 		system := strings.TrimSpace(ref.System)
 		plugin := strings.TrimSpace(ref.Plugin)
+		operation := strings.TrimSpace(ref.Operation)
+		connection := strings.TrimSpace(ref.Connection)
+		instance := strings.TrimSpace(ref.Instance)
+		credentialMode := strings.TrimSpace(ref.CredentialMode)
 		if system == "" && plugin == "" {
 			return fmt.Errorf("toolRefs[%d].plugin or system is required", idx)
 		}
@@ -847,14 +887,24 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 			if system != coreagent.SystemToolWorkflow {
 				return fmt.Errorf("toolRefs[%d].system %q is not supported", idx, system)
 			}
-			if strings.TrimSpace(ref.Operation) == "" {
+			if operation == "" {
 				return fmt.Errorf("toolRefs[%d].operation is required for system tool refs", idx)
 			}
-			if strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" {
-				return fmt.Errorf("toolRefs[%d] system refs cannot include connection or instance", idx)
+			if operation == "*" {
+				return fmt.Errorf("toolRefs[%d].operation wildcard is not supported", idx)
+			}
+			if connection != "" || instance != "" || credentialMode != "" || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "" {
+				return fmt.Errorf("toolRefs[%d] system refs cannot include connection, instance, credentialMode, title, or description", idx)
+			}
+		} else {
+			if operation == "*" || connection == "*" || instance == "*" {
+				return fmt.Errorf("toolRefs[%d] wildcard fields are not supported", idx)
+			}
+			if plugin == "*" && (operation != "" || connection != "" || instance != "" || credentialMode != "" || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "") {
+				return fmt.Errorf("toolRefs[%d] global ref cannot include operation, connection, instance, credentialMode, title, or description", idx)
 			}
 		}
-		switch strings.ToLower(strings.TrimSpace(ref.CredentialMode)) {
+		switch strings.ToLower(credentialMode) {
 		case "":
 		default:
 			return fmt.Errorf("toolRefs[%d].credentialMode is not supported on public agent requests", idx)

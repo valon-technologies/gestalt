@@ -1176,7 +1176,7 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 	var firstUnavailableErr error
 	for i := range candidates {
 		candidate := candidates[i]
-		tool, err := m.resolveTool(ctx, p, candidate.ref)
+		listed, err := m.listedAgentPluginCandidateTool(candidate)
 		if err != nil {
 			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
 				continue
@@ -1189,12 +1189,12 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 			}
 			return nil, err
 		}
-		key := agentToolTargetKeyFromTarget(tool.Target)
+		key := agentToolTargetKeyFromTarget(listed.Target)
 		if _, ok := seen[key]; ok {
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, listedAgentPluginTool(tool, candidate))
+		out = append(out, listed)
 	}
 	if len(out) == 0 && len(refs) > 0 && firstUnavailableErr != nil {
 		return nil, firstUnavailableErr
@@ -1744,10 +1744,10 @@ func (s agentToolSearchScope) providerNames() []string {
 }
 
 func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.ToolRef {
-	if s.all {
-		return []coreagent.ToolRef{{Plugin: pluginName}}
-	}
 	refs := []coreagent.ToolRef{}
+	if s.all {
+		refs = append(refs, coreagent.ToolRef{Plugin: pluginName})
+	}
 	if ops := s.exactOps[pluginName]; len(ops) > 0 {
 		operations := make([]string, 0, len(ops))
 		for operation := range ops {
@@ -2074,23 +2074,45 @@ func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
 	}, nil
 }
 
-func listedAgentPluginTool(tool coreagent.Tool, candidate agentToolSearchCandidate) coreagent.ListedTool {
+func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandidate) (coreagent.ListedTool, error) {
 	ref := candidate.ref
-	ref.Connection = tool.Target.Connection
-	ref.Instance = tool.Target.Instance
-	ref.CredentialMode = tool.Target.CredentialMode
+	target := coreagent.ToolTarget{
+		Plugin:         strings.TrimSpace(ref.Plugin),
+		Operation:      strings.TrimSpace(ref.Operation),
+		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		Instance:       strings.TrimSpace(ref.Instance),
+		CredentialMode: ref.CredentialMode,
+	}
+	toolID, err := m.mintAgentToolID(target)
+	if err != nil {
+		return coreagent.ListedTool{}, err
+	}
+	name := strings.TrimSpace(ref.Title)
+	if name == "" {
+		name = strings.TrimSpace(candidate.operation.Title)
+	}
+	if name == "" {
+		name = target.Plugin + "." + candidate.operation.ID
+	}
+	description := strings.TrimSpace(ref.Description)
+	if description == "" {
+		description = strings.TrimSpace(candidate.operation.Description)
+	}
+	ref.Connection = target.Connection
+	ref.Instance = target.Instance
+	ref.CredentialMode = target.CredentialMode
 	return coreagent.ListedTool{
-		ToolID:           tool.ID,
-		MCPName:          agentToolMCPName(tool.Target),
-		Title:            tool.Name,
-		Description:      tool.Description,
+		ToolID:           toolID,
+		MCPName:          agentToolMCPName(target),
+		Title:            name,
+		Description:      description,
 		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(candidate.operation),
 		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),
 		Ref:              ref,
-		Target:           tool.Target,
-		Hidden:           tool.Hidden,
-	}
+		Target:           target,
+		Hidden:           !catalog.OperationVisibleByDefault(candidate.operation),
+	}, nil
 }
 
 func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.CapabilityAnnotations {
@@ -2286,8 +2308,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			if ref.Operation == "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, idx)
 			}
-			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, or credential mode", invocation.ErrInvalidInvocation, idx)
+			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.Title != "" || ref.Description != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, title, or description", invocation.ErrInvalidInvocation, idx)
 			}
 			out = append(out, ref)
 			continue

@@ -564,6 +564,9 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
 			return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
+		if tools[i].Hidden && !agentToolHiddenExplicitlyGranted(target, tools[i].ToolID, refs, nil) {
+			return fmt.Errorf("%w: listed hidden agent tool %q was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		}
 	}
 	return nil
 }

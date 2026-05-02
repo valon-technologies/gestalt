@@ -907,6 +907,15 @@ func (p *callbackSessionCatalogIntegration) CatalogForRequest(context.Context, s
 	return p.sessionCatalog, nil
 }
 
+type unavailableSessionCatalogIntegration struct {
+	coretesting.StubIntegration
+	err error
+}
+
+func (p *unavailableSessionCatalogIntegration) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return nil, p.err
+}
+
 func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callbackAgentProvider, error) {
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
@@ -2906,6 +2915,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 
 	factories := validFactories()
 	hidden := false
+	destructive := true
 	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
 		N:        "docs",
 		ConnMode: core.ConnectionModeNone,
@@ -2917,8 +2927,9 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 				{ID: "alpha_search", Method: http.MethodGet, Title: "Docs alpha search", Description: "Search docs alpha", ReadOnly: true},
 				{ID: "beta_list", Method: http.MethodGet, Title: "Docs beta list", Description: "List docs beta", ReadOnly: true},
 				{ID: "delta_export", Method: http.MethodGet, Title: "Docs delta export", Description: "Export docs delta", ReadOnly: true},
+				{ID: "epsilon_delete", Method: http.MethodDelete, Title: "Docs epsilon delete", Description: "Delete docs epsilon", Annotations: catalog.OperationAnnotations{DestructiveHint: &destructive}},
 				{ID: "gamma_get", Method: http.MethodGet, Title: "Docs gamma get", Description: "Get docs gamma", ReadOnly: true},
-				{ID: "hidden_admin", Method: http.MethodPost, Title: "Hidden docs admin", Description: "Hidden admin operation", Visible: &hidden},
+				{ID: "aardvark_admin", Method: http.MethodPost, Title: "Hidden docs admin", Description: "Hidden admin operation", Visible: &hidden},
 			},
 		},
 		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
@@ -2957,7 +2968,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
 		Plugin:     "docs",
-		Operations: []string{"alpha_search", "beta_list", "delta_export", "gamma_get", "hidden_admin"},
+		Operations: []string{"aardvark_admin", "alpha_search", "beta_list", "delta_export", "epsilon_delete", "gamma_get"},
 	}, {
 		Plugin: "managed",
 	}})
@@ -2984,12 +2995,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		IdempotencyKey: "candidate-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "search docs"}},
-		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "docs", Operation: "alpha_search"},
-			{Plugin: "docs", Operation: "beta_list"},
-			{Plugin: "docs", Operation: "delta_export"},
-			{Plugin: "docs", Operation: "gamma_get"},
-		},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "docs"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
@@ -3006,8 +3012,8 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		t.Fatalf("list response count = %d, want 1", len(listResponses))
 	}
 	listResp := listResponses[0]
-	if len(listResp.GetTools()) != 4 {
-		t.Fatalf("listed tools = %#v, want four visible docs tools", listResp.GetTools())
+	if len(listResp.GetTools()) != 5 {
+		t.Fatalf("listed tools = %#v, want five visible docs tools", listResp.GetTools())
 	}
 	if len(toolBodies) != 1 {
 		t.Fatalf("tool callback bodies = %#v, want one listed tool execution", toolBodies)
@@ -3020,21 +3026,28 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		t.Fatalf("tool callback body = %#v, want docs provider", loadedBody)
 	}
 	loadedOperation := loadedBody["operation"]
-	if loadedOperation == "" || loadedOperation == "hidden_admin" {
+	if loadedOperation == "" || loadedOperation == "aardvark_admin" {
 		t.Fatalf("loaded operation = %q, want visible docs operation", loadedOperation)
 	}
 	var betaOperation string
+	var destructiveOperation string
 	for _, tool := range listResp.GetTools() {
 		ref := tool.GetRef()
-		if ref.GetOperation() == "hidden_admin" {
+		if ref.GetOperation() == "aardvark_admin" {
 			t.Fatalf("listed hidden tool = %#v, want only visible tools for broad catalog", tool)
 		}
 		if ref.GetOperation() == "beta_list" {
 			betaOperation = ref.GetOperation()
 		}
+		if ref.GetOperation() == "epsilon_delete" {
+			destructiveOperation = ref.GetOperation()
+		}
 	}
 	if betaOperation == "" {
 		t.Fatalf("listed tools = %#v, want beta_list", listResp.GetTools())
+	}
+	if destructiveOperation == "" {
+		t.Fatalf("listed tools = %#v, want visible destructive epsilon_delete", listResp.GetTools())
 	}
 	exact, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
 		SessionID:      session.ID,
@@ -3056,9 +3069,42 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], fmt.Sprintf(`"operation":"%s"`, betaOperation)) {
 		t.Fatalf("tool callback bodies after exact ref = %#v, want %s", toolBodies, betaOperation)
 	}
+
+	mixed, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "candidate-mixed-global-exact-hidden-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "load hidden docs"}},
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "*"},
+			{Plugin: "docs", Operation: "aardvark_admin"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(mixed global exact hidden ref): %v", err)
+	}
+	if mixed == nil {
+		t.Fatal("AgentManager.CreateTurn(mixed global exact hidden ref) returned nil turn")
+	}
+	provider.mu.Lock()
+	listResponses = append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
+	provider.mu.Unlock()
+	if len(listResponses) != 3 {
+		t.Fatalf("list response count after mixed global exact hidden ref = %d, want 3", len(listResponses))
+	}
+	hiddenListed := false
+	for _, tool := range listResponses[2].GetTools() {
+		if tool.GetRef().GetPlugin() == "docs" && tool.GetRef().GetOperation() == "aardvark_admin" {
+			hiddenListed = true
+			break
+		}
+	}
+	if !hiddenListed {
+		t.Fatalf("mixed global exact hidden listed tools = %#v, want aardvark_admin", listResponses[2].GetTools())
+	}
 }
 
-func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
+func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -3096,6 +3142,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 		},
 	})
 
+	var provider *callbackAgentProvider
 	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		started, err := runtimehost.StartHostServices(hostServices)
 		if err != nil {
@@ -3106,6 +3153,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 			_ = started.Close()
 			return nil, err
 		}
+		provider = value
 		return value, nil
 	}
 
@@ -3129,6 +3177,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 		SubjectID:        "user:user-123",
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
+		Source:           principal.SourceAPIToken,
 		TokenPermissions: slackOnly,
 		Scopes:           principal.PermissionPlugins(slackOnly),
 	}
@@ -3150,11 +3199,158 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreRejected(t *testing.T) {
 		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
 		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "mcp catalog") {
-		t.Fatalf("AgentManager.CreateTurn wildcard error = %v, want mcp catalog validation error", err)
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn wildcard scoped turn: %v", err)
 	}
-	if turn != nil {
-		t.Fatalf("AgentManager.CreateTurn returned turn %#v, want nil on wildcard rejection", turn)
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn wildcard scoped turn returned nil")
+	}
+	provider.mu.Lock()
+	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(listResponses) != 1 {
+		t.Fatalf("list response count = %d, want 1", len(listResponses))
+	}
+	if len(listResponses[0].GetTools()) != 0 {
+		t.Fatalf("listed tools = %#v, want none outside principal permissions", listResponses[0].GetTools())
+	}
+	if len(toolBodies) != 0 {
+		t.Fatalf("tool callback bodies = %#v, want no execution outside principal permissions", toolBodies)
+	}
+}
+
+func TestBootstrapGlobalCatalogToolRefsSkipUnavailableProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = append(factories.Builtins,
+		&coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "linear",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "issues",
+					Method:      http.MethodGet,
+					Description: "All issues visible to the authenticated user.",
+					ReadOnly:    true,
+				}},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"provider":  "linear",
+					"operation": operation,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		&unavailableSessionCatalogIntegration{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "ashby",
+					Operations: []catalog.CatalogOperation{{
+						ID:          "candidates",
+						Method:      http.MethodGet,
+						Description: "All candidates visible to the authenticated user.",
+						ReadOnly:    true,
+					}},
+				},
+			},
+			err: invocation.ErrNoCredential,
+		},
+	)
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "linear",
+		Operations: []string{"issues"},
+	}, {
+		Plugin:     "ashby",
+		Operations: []string{"candidates"},
+	}, {
+		Plugin: "managed",
+	}})
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
+
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-http-global-search",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		CallerPluginName: "slack",
+		SessionID:        session.ID,
+		IdempotencyKey:   "http-global-linear-search",
+		Model:            "gpt-test",
+		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:         []coreagent.ToolRef{{Plugin: "*"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn global scoped turn: %v", err)
+	}
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn global scoped turn returned nil")
+	}
+
+	provider.mu.Lock()
+	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(listResponses) != 1 {
+		t.Fatalf("list response count = %d, want 1", len(listResponses))
+	}
+	tools := listResponses[0].GetTools()
+	if len(tools) != 1 || tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
+		t.Fatalf("listed tools = %#v, want only connected linear issues", tools)
+	}
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
+		t.Fatalf("tool callback bodies = %#v, want executed linear issues", toolBodies)
 	}
 }
 
