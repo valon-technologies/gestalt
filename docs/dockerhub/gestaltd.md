@@ -13,10 +13,10 @@
 - Default command:
 
   ```sh
-  /gestaltd serve --config /etc/gestalt/config.yaml --artifacts-dir /data
+  /gestaltd serve --config /etc/gestaltd/config.yaml --artifacts-dir /data
   ```
 
-- Default config path: `/etc/gestalt/config.yaml`
+- Default config path: `/etc/gestaltd/config.yaml`
 - Default writable data and artifacts dir: `/data`
 - This image is not zero-config. Mount or bake a config file before starting it.
 
@@ -48,7 +48,7 @@ export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
 docker run --rm \
   -p 8080:8080 \
   -e GESTALT_ENCRYPTION_KEY="${GESTALT_ENCRYPTION_KEY}" \
-  -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
+  -v "$(pwd)/gestalt.yaml:/etc/gestaltd/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
@@ -85,7 +85,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config.yaml:/etc/gestalt/config.yaml:ro
+      - ./config.yaml:/etc/gestaltd/config.yaml:ro
       - gestalt-data:/data
     environment:
       GESTALT_ENCRYPTION_KEY: "${GESTALT_ENCRYPTION_KEY}"
