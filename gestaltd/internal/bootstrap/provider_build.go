@@ -2253,7 +2253,7 @@ func (unavailableWorkflowManager) SignalOrStartRun(context.Context, *principal.P
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
+func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, string, coreworkflow.Event) (coreworkflow.Event, error) {
 	return coreworkflow.Event{}, fmt.Errorf("workflow manager is not available")
 }
 

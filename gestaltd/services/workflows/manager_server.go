@@ -438,7 +438,7 @@ func (s *ManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowMan
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
-	published, err := s.manager.PublishEvent(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), event)
+	published, err := s.manager.PublishEvent(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), req.GetProviderName(), event)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}

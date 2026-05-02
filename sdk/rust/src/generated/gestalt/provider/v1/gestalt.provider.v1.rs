@@ -3270,6 +3270,8 @@ pub struct WorkflowManagerPublishEventRequest {
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerStartRunRequest {

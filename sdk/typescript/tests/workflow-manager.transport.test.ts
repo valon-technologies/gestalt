@@ -46,6 +46,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     scheduleId?: string;
     triggerId?: string;
     eventType?: string;
+    providerName?: string;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -222,6 +223,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           calls.push({
             method: "publish-event",
             invocationToken: input.invocationToken,
+            providerName: input.providerName,
             ...(input.event?.type ? { eventType: input.event.type } : {}),
           });
           return create(WorkflowEventSchema, {
@@ -311,6 +313,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     });
     await fromRequest.deleteTrigger({ triggerId: "trg-1" });
     const publishedEvent = await fromRequest.publishEvent({
+      providerName: "secondary",
       event: {
         type: "roadmap.item.updated",
         source: "roadmap",
@@ -394,6 +397,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       {
         method: "publish-event",
         invocationToken: "invocation-token-456",
+        providerName: "secondary",
         eventType: "roadmap.item.updated",
       },
     ]);

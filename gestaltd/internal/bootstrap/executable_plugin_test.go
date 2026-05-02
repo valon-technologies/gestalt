@@ -1449,15 +1449,16 @@ func (r *staticCapabilityPluginRuntime) Close() error {
 }
 
 type stubWorkflowManager struct {
-	mu              sync.Mutex
-	subjects        []string
-	nextScheduleID  int
-	nextTriggerID   int
-	schedules       map[string]*workflowmanager.ManagedSchedule
-	triggers        map[string]*workflowmanager.ManagedEventTrigger
-	publishedEvents []coreworkflow.Event
-	scheduleKeys    []string
-	triggerKeys     []string
+	mu                     sync.Mutex
+	subjects               []string
+	nextScheduleID         int
+	nextTriggerID          int
+	schedules              map[string]*workflowmanager.ManagedSchedule
+	triggers               map[string]*workflowmanager.ManagedEventTrigger
+	publishedEvents        []coreworkflow.Event
+	publishedProviderNames []string
+	scheduleKeys           []string
+	triggerKeys            []string
 }
 
 func newStubWorkflowManager() *stubWorkflowManager {
@@ -1693,7 +1694,7 @@ func (m *stubWorkflowManager) SignalOrStartRun(context.Context, *principal.Princ
 	return nil, core.ErrNotFound
 }
 
-func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, providerName string, event coreworkflow.Event) (coreworkflow.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
@@ -1701,6 +1702,7 @@ func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Princ
 		event.ID = fmt.Sprintf("evt-%d", len(m.publishedEvents)+1)
 	}
 	m.publishedEvents = append(m.publishedEvents, cloneWorkflowEvent(event))
+	m.publishedProviderNames = append(m.publishedProviderNames, providerName)
 	return cloneWorkflowEvent(event), nil
 }
 
@@ -4426,9 +4428,10 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 
 	publishEventResult, err := prov.Execute(ctx, "publish_workflow_event", map[string]any{
-		"type":    "roadmap.item.updated",
-		"source":  "roadmap",
-		"subject": "item-123",
+		"provider_name": "advanced",
+		"type":          "roadmap.item.updated",
+		"source":        "roadmap",
+		"subject":       "item-123",
 		"data": map[string]any{
 			"id":    "item-123",
 			"title": "Ship parity",
@@ -4456,6 +4459,9 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 	if publishedEvent.Data["title"] != "Ship parity" || publishedEvent.Extensions["tenant"] != "acme" {
 		t.Fatalf("unexpected published event data: %+v", publishedEvent)
+	}
+	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
+		t.Fatalf("published provider names = %v, want [advanced]", manager.publishedProviderNames)
 	}
 
 	if got := manager.Subjects(); len(got) != 13 || slices.Contains(got, "") || !slices.Equal(got, []string{
