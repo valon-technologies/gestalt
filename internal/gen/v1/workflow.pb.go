@@ -4224,6 +4224,7 @@ type WorkflowManagerPublishEventRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Event           *WorkflowEvent         `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	ProviderName    string                 `protobuf:"bytes,4,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -4268,6 +4269,13 @@ func (x *WorkflowManagerPublishEventRequest) GetEvent() *WorkflowEvent {
 func (x *WorkflowManagerPublishEventRequest) GetInvocationToken() string {
 	if x != nil {
 		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *WorkflowManagerPublishEventRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
 	}
 	return ""
 }
@@ -4844,10 +4852,11 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"(WorkflowManagerResumeEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x9f\x01\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xc4\x01\n" +
 	"\"WorkflowManagerPublishEventRequest\x128\n" +
 	"\x05event\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowEventR\x05event\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x94\x02\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12#\n" +
+	"\rprovider_name\x18\x04 \x01(\tR\fproviderNameJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x94\x02\n" +
 	"\x1eWorkflowManagerStartRunRequest\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
 	"\x06target\x18\x03 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12'\n" +

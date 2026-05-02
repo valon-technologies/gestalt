@@ -371,6 +371,15 @@ that means `type` is required, while `source` and `subject` remain optional
 exact-match fields. This is also the main handoff mechanism for multi-step
 workflows.
 
+The public HTTP route and CLI publish to every configured workflow provider.
+Plugin code can be more specific when it already knows where triggers are
+stored. The workflow-manager SDK accepts a provider selection field on
+`PublishEvent` (`providerName` in TypeScript, `provider_name` in Python and
+Rust, `ProviderName` in Go); setting it publishes only to that workflow
+provider. This selection names the workflow backend, not the plugin that owns
+matching triggers. Trigger ownership and target invocation are still controlled
+by the configured trigger.
+
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
@@ -403,6 +412,54 @@ workflows.
     ```
   </Tabs.Tab>
 </Tabs>
+
+For a provider that receives external callbacks, the usual shape is to publish
+an integration-neutral workflow event from the provider and let a configured
+trigger route it to deployer-owned code:
+
+```ts
+const workflowManager = new WorkflowManager(request);
+
+await workflowManager.publishEvent({
+  providerName: "local",
+  event: {
+    type: "slack.event.received",
+    source: "slack",
+    subject: "route:knowledge-ingest",
+    datacontenttype: "application/json",
+    data: {
+      event: slackEvent,
+      authorization: slackAuthorization,
+    },
+  },
+});
+```
+
+```yaml
+workflows:
+  eventTriggers:
+    slack_knowledge_ingest:
+      provider: local
+      match:
+        type: slack.event.received
+        source: slack
+        subject: route:knowledge-ingest
+      target:
+        plugin:
+          name: knowledge
+          operation: ingestSlackEvent
+          input:
+            sourceId: slack-public
+      permissions:
+        - plugin: knowledge
+          operations:
+            - tokens.create
+```
+
+The target operation reads the published event from the workflow trigger
+context, for example `request.workflow.trigger.event` in TypeScript. Keeping the
+callback provider generic and routing through workflow events lets each deployer
+own the ingestion operation in whatever SDK language their plugin uses.
 
 ## Composing larger workflows
 

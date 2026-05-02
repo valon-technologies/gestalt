@@ -79,7 +79,7 @@ type Service interface {
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
 	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
 	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
-	PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error)
+	PublishEvent(ctx context.Context, p *principal.Principal, providerName string, event coreworkflow.Event) (coreworkflow.Event, error)
 }
 
 type Config struct {
@@ -422,7 +422,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	return m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
 }
 
-func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, providerSelection string, event coreworkflow.Event) (coreworkflow.Event, error) {
 	p = principal.Canonicalized(p)
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return coreworkflow.Event{}, ErrWorkflowSubjectRequired
@@ -436,6 +436,20 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, even
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
 	publishedBy := workflowActorFromPrincipal(p)
+
+	if strings.TrimSpace(providerSelection) != "" {
+		_, provider, err := m.resolveProviderSelection(providerSelection)
+		if err != nil {
+			return coreworkflow.Event{}, err
+		}
+		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+			Event:       event,
+			PublishedBy: publishedBy,
+		}); err != nil {
+			return coreworkflow.Event{}, err
+		}
+		return event, nil
+	}
 
 	providerNames := m.workflow.ProviderNames()
 	for _, providerName := range providerNames {

@@ -463,6 +463,7 @@ message WorkflowManagerPublishEventRequest {
   reserved "request_handle";
   WorkflowEvent event = 2;
   string invocation_token = 3;
+  string provider_name = 4;
 }
 
 message WorkflowManagerStartRunRequest {

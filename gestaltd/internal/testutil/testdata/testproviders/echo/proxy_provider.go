@@ -106,6 +106,7 @@ type updateWorkflowTriggerInput struct {
 
 type publishWorkflowEventInput struct {
 	ID              string         `json:"id,omitempty"`
+	ProviderName    string         `json:"provider_name,omitempty"`
 	Source          string         `json:"source,omitempty"`
 	SpecVersion     string         `json:"spec_version,omitempty"`
 	Type            string         `json:"type"`
@@ -610,7 +611,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
 		result, err := client.PublishEvent(ctx, &proto.WorkflowManagerPublishEventRequest{
-			Event: event,
+			Event:        event,
+			ProviderName: input.ProviderName,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
