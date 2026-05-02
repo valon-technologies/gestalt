@@ -210,6 +210,13 @@ func (i *instrumentedIndex) Delete(ctx context.Context, values ...any) (int64, e
 	return n, err
 }
 
+func (i *instrumentedIndex) DeleteRange(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	startedAt := time.Now()
+	n, err := i.inner.DeleteRange(ctx, r, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.DeleteRange", err)
+	return n, err
+}
+
 func (i *instrumentedIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
 	startedAt := time.Now()
 	c, err := i.inner.OpenCursor(ctx, r, dir, values...)

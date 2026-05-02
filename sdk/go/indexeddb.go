@@ -611,12 +611,21 @@ func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (
 
 // Delete removes all rows that match values.
 func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error) {
+	return idx.DeleteRange(ctx, nil, values...)
+}
+
+// DeleteRange removes all rows that match values and r.
+func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return 0, err
 	}
+	kr, err := krToProto(r)
+	if err != nil {
+		return 0, err
+	}
 	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals,
+		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcErr(err)
@@ -983,8 +992,13 @@ func (idx *TransactionIndex) Count(ctx context.Context, r *KeyRange, values ...a
 }
 
 func (idx *TransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	return idx.DeleteRange(ctx, nil, values...)
+}
+
+// DeleteRange removes all transaction-scoped rows that match values and r.
+func (idx *TransactionIndex) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	_ = ctx
-	req, err := idx.query(nil, values)
+	req, err := idx.query(r, values)
 	if err != nil {
 		return 0, err
 	}

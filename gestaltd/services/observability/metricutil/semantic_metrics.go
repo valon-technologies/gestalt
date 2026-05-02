@@ -167,6 +167,8 @@ func normalizeIndexedDBOperationName(operation string) string {
 		return "index_count"
 	case "Index.Delete":
 		return "index_delete"
+	case "Index.DeleteRange":
+		return "index_delete_range"
 	case "Index.OpenCursor":
 		return "index_open_cursor"
 	case "Index.OpenKeyCursor":

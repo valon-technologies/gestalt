@@ -178,6 +178,10 @@ func (missingIndex) Delete(context.Context, ...any) (int64, error) {
 	return 0, indexeddb.ErrNotFound
 }
 
+func (missingIndex) DeleteRange(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
+	return 0, indexeddb.ErrNotFound
+}
+
 func (missingIndex) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
 	return nil, indexeddb.ErrNotFound
 }
@@ -269,5 +273,9 @@ func (i missingTransactionIndex) Count(ctx context.Context, _ *indexeddb.KeyRang
 }
 
 func (i missingTransactionIndex) Delete(ctx context.Context, _ ...any) (int64, error) {
+	return 0, i.fail(ctx)
+}
+
+func (i missingTransactionIndex) DeleteRange(ctx context.Context, _ *indexeddb.KeyRange, _ ...any) (int64, error) {
 	return 0, i.fail(ctx)
 }
