@@ -206,3 +206,32 @@ jobs:
 
       - name: Validate Kubernetes schemas (preparation)
         run: kubeconform -strict -summary /tmp/rendered-preparation.yaml
+
+  docker-build:
+    name: Docker Image Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build static image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --file gestaltd/Dockerfile \
+            --target static \
+            --build-arg GESTALT_VERSION=ci \
+            --tag gestaltd:ci-static \
+            .
+
+      - name: Build Alpine image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --file gestaltd/Dockerfile \
+            --target alpine \
+            --build-arg GESTALT_VERSION=ci \
+            --tag gestaltd:ci-alpine \
+            .
