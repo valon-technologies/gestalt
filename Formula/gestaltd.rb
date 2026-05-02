@@ -3,30 +3,30 @@
 class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.7"
+  version "0.0.1-alpha.8"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.7/gestaltd-macos-arm64.tar.gz"
-      sha256 "51d3de69514c953c90807b5ea049e631d025c3d97857ea97781ca9d6a163d0d6"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.8/gestaltd-macos-arm64.tar.gz"
+      sha256 "d290ea8a12fb6d139ea47885fe53cebb1c6d3037fa576a296fcea6c53fa82cca"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.7/gestaltd-macos-x86_64.tar.gz"
-      sha256 "96394dfbd73a64f35271d1cc7b5bacff78200a0dc5dc844eb9ca77bbdf6fb702"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.8/gestaltd-macos-x86_64.tar.gz"
+      sha256 "b5efe1bb3b20508bf21b830a47f7dda0c00fc74d41ecde9bfb572a9b8dc128ea"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.7/gestaltd-linux-arm64.tar.gz"
-      sha256 "85db31545ea5b031461b7f0630b41754b07680a6999660df6d89d7c98a7ab91c"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.8/gestaltd-linux-arm64.tar.gz"
+      sha256 "245e3d6024d1ad1bb205671b62581a3df37235d7ab7fab9f99d5eb4c51240cf3"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.7/gestaltd-linux-x86_64.tar.gz"
-      sha256 "0ae87185770cd0d9abaa9ff9ce48a7d502a4f2f9ba8d24e57e9b0bcb76505e6c"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.8/gestaltd-linux-x86_64.tar.gz"
+      sha256 "8207b71eb3ea32bb3783c7bc171368910e48d56cca02d23f82cba7b03dac14f9"
     end
   end
 
