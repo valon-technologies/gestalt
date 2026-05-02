@@ -1,8 +1,9 @@
 export default {
+  agent: "Agent",
   authentication: "Authentication",
   authorization: "Authorization",
-  agent: "Agent",
   cache: "Cache",
+  "external-credentials": "External Credentials",
   indexeddb: "IndexedDB",
   plugins: "Plugin",
   runtime: "Runtime",

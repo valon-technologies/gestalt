@@ -1,38 +1,106 @@
 # Authorization
 
 Authorization providers back dynamic subject authorization state. They are
-separate from platform login: `providers.authentication.<name>` decides how users sign in
-to Gestalt, while `providers.authorization.<name>` stores authorization
+separate from platform login: `providers.authentication.<name>` decides how users
+sign in to Gestalt, while `providers.authorization.<name>` stores authorization
 relationships and answers authorization queries for Gestalt itself.
 
 This relationship-oriented authorization model is inspired by
 [Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/),
-Google's global authorization system.
+Google's global authorization system. Gestalt's implementation follows Zanzibar's
+core ideas---subjects, resources, relations, and relationship tuples---while
+adapting them to a smaller deployment model that does not require its own NewSQL
+cluster.
 
-## How authorization providers work
+## Core concepts
 
-Static shared policies still live under top-level `authorization.policies`.
-When `server.providers.authorization` selects a provider, Gestalt writes its
-authorization model plus dynamic subject plugin and built-in admin relationships
-into that provider and uses it for runtime subject authorization checks.
+Before reading how Gestalt applies authorization, it helps to know the Zanzibar
+concepts it uses.
 
-Dynamic human plugin/admin grants and the built-in authorization control-plane
-APIs require an authorization provider. If you omit `providers.authorization`,
-Gestalt still evaluates static policy members from config, but there is no
-provider-backed relationship storage or dynamic subject-grant control plane.
+### Subjects
+
+A subject is the entity an authorization check is for. In Gestalt, subjects are
+canonical identifiers like `user:<id>`, `service_account:<id>`, or a system
+subject like `system:platform-config`. When a request arrives, Gestalt resolves
+the caller to a subject, then performs every subsequent check in terms of that
+subject.
+
+### Resources
+
+A resource is the thing a subject is asking to access. In Gestalt, the most
+common resources are:
+
+- A **plugin**, such as `plugin_static:github`
+- A **policy**, such as `policy_static:admin`
+- An **external identity**, such as `external_identity:google-123`
+- A **managed subject**, such as `managed_subject:deploy-bot`
+
+### Relations
+
+A relation is the named edge between a subject and a resource. The relation
+`triage` on a plugin means "this subject can triage issues on this plugin."
+The relation `admin` on a policy means "this subject is an admin in this policy."
+
+### Relationship tuples
+
+A relationship tuple is the concrete instance of a relation:
+
+```
+<subject> <relation> <resource>
+```
+
+For example:
+
+```
+user:alice viewer plugin_static:github
+user:bob editor plugin_static:github
+```
+
+These tuples are stored in the configured authorization provider. The provider
+treats them as the source of truth for every dynamic access decision.
+
+### Actions
+
+Relations describe membership. Actions describe what the membership grants.
+A provider's authorization model defines which actions a role implies, then
+maps those actions back to relations. When Gestalt asks "may user:alice read
+this operation?" the provider checks whether alice has any relation on the
+resource that includes the `read` action.
+
+## Static and dynamic authorization
+
+Gestalt has two ways to express who may do what.
+
+### Static authorization
+
+Static authorization lives in config under `authorization.policies`.
+It is loaded at startup, immutable at runtime, and takes precedence over
+dynamic grants. Static membership is useful for:
+
+- Initial admin access when no provider is configured
+- Infrastructure-as-code role assignments
+- Break-glass access that does not depend on a running provider
+
+### Dynamic authorization
+
+Dynamic authorization lives in the configured authorization provider.
+Administrators can add or remove grants through the built-in admin
+authorization API without restarting the server. Dynamic authorization is
+useful for:
+
+- User self-service role requests
+- Time-bound access grants
+- Role changes that must propagate without a deployment
+
+When both static and dynamic grants exist for the same subject and resource,
+static grants win. If a static policy grants alice `admin` on the admin
+policy, the provider is not consulted for alice's admin role.
 
 ## Product authorization semantics
 
 At the product level, authorization is about subjects and runtime surfaces.
-Gestalt resolves each request to a canonical subject such as `user:<id>`,
-`service_account:<id>`, or a system subject, then asks whether that subject may access
-the thing they are trying to use. Static memberships under
-`authorization.policies` are always available. When you configure an
-authorization provider, Gestalt adds dynamic relationship storage on top so
-those decisions can change without editing YAML.
-
-This is separate from authentication. Authentication answers who the caller is.
-Authorization answers what that caller may do once their subject is known.
+Gestalt resolves each request to a canonical subject, then asks whether that
+subject may access the thing they are trying to use.
 
 There are four related layers involved in most runtime decisions:
 
@@ -49,34 +117,99 @@ token does not include the target operation scope. Likewise, an execution can
 have the correct operation scope and still fail if the selected connection has
 no usable credential for the credential subject.
 
-### Plugin invocation
+## Plugin invocation
 
 Plugin authorization happens at request time. Gestalt checks whether the
 calling subject may access the plugin or operation before it invokes the
-target. The subject's upstream connection is also scoped to that same subject,
-so access is both identity-aware and credential-aware.
+target.
 
 The broker is the common runtime gate for HTTP, MCP, workflow, agent-tool, and
-nested plugin invocations. For a plugin operation call, it resolves the target
-plugin and operation, verifies that the principal can call them, applies any
-bound authorization provider or policy for the canonical subject, resolves the
-operation connection and credential, and invokes the provider with only the
-token needed for that invocation.
+nested plugin invocations. For a plugin operation call, it:
+
+1. Resolves the target plugin and operation
+2. Verifies the principal can call them at the operation-scope layer
+3. Applies any bound authorization provider or policy for the canonical subject
+4. Resolves the operation connection and credential
+5. Invokes the provider with only the token needed for that invocation
+
+### Nested plugin calls and invocation tokens
 
 Executable plugins can call other plugins through the host-provided plugin
-invoker. This is intentionally a propagation and attenuation primitive, not an
-authority-expansion primitive. `plugins.<caller>.invokes` defines the allowed
-call graph, while the propagated principal or workflow execution ref defines
-what this specific execution may do. Invocation tokens can be exchanged only
-for subsets of their parent grants, so plugins can narrow delegated authority
-but cannot add new target plugins or operations.
+invoker. This is a propagation and attenuation primitive, not an
+authority-expansion primitive.
 
-### Workflow execution
+`plugins.<caller>.invokes` defines the allowed call graph. The caller declares
+which plugins, operations, or surfaces it may invoke:
+
+```yaml
+plugins:
+  indexer:
+    source: ./plugins/indexer/manifest.yaml
+    invokes:
+      - plugin: source
+        operations:
+          - messages.list
+          - messages.get
+      - plugin: github
+        surface: graphql
+```
+
+At runtime, the caller receives an invocation token that encodes its declared
+grants. When the caller asks to invoke another plugin, the host verifies the
+requested grant is a subset of the parent's declared `invokes`. If the caller
+requests no specific grant, it inherits the full parent grant. If it requests
+a narrower grant, the host intersects the two.
+
+This means plugins can narrow delegated authority but cannot add new target
+plugins or operations. A plugin with `invokes: [source.messages.list]` can
+exchange its token for a token that only has `source.messages.list`, but it
+cannot exchange its token for a token that also has `github.issues.create`.
+
+#### Invocation token lifecycle
+
+Invocation tokens are signed JWTs with the following guarantees:
+
+- **Issuer**: `gestaltd`, audience: `gestalt-provider-host`
+- **Caller binding**: the token is bound to the plugin that minted it
+- **Delegation expiry**: a separate delegation expiry limits how long a token
+can be exchanged, even if the token itself has not expired
+- **Depth tracking**: the call chain depth is tracked to prevent unbounded
+recursion
+- **Principal propagation**: the original subject, permissions, and credential
+context are forwarded so the nested call runs with the same identity
+
+A root invocation token lives for 15 minutes. A child token can be exchanged
+for up to 10 minutes, with a maximum delegation window of 15 minutes from the
+root. If a parent token's delegation window has passed, no child exchange
+succeeds.
+
+#### Credential modes in nested calls
+
+By default, nested plugin calls use the same connection mode as the parent.
+You can declare a different mode per `invokes` entry:
+
+```yaml
+plugins:
+  reporter:
+    source: ./plugins/reporter/manifest.yaml
+    invokes:
+      - plugin: slack
+        credentialMode: platform
+```
+
+This causes the nested call to use a platform-scoped credential instead of the
+calling user's credential. Platform-scoped credentials are useful when the
+caller is a batch job or an integration that should act on behalf of the
+deployment, not on behalf of a user.
+
+## Workflow execution
 
 Workflow authorization happens twice. Gestalt checks access when a user creates
-a schedule, then checks again when that schedule or trigger fires later. User
-owned workflows keep the creating subject plus a permission ceiling for delayed
-execution. Config-managed workflows use the system config subject instead.
+a schedule, then checks again when that schedule or trigger fires later.
+
+User-owned workflows keep the creating subject plus a permission ceiling for
+delayed execution. Config-managed workflows use the system config subject
+instead.
 
 Config-managed workflows include the direct target operation automatically. If
 the target performs nested plugin calls, declare those additional operation
@@ -110,12 +243,80 @@ Config-owned direct targets, agent tools, and output-delivery targets must
 resolve to non-user credentials. Mixed plugins are still supported when the
 target explicitly selects a platform-backed connection.
 
-### UI routes
+## UI routes
 
 Mounted UI bundles can bind an `authorizationPolicy`, and their manifests can
 declare route-level `allowedRoles`. Gestalt resolves the caller's subject,
 derives their role for the bound policy, and checks that role before serving
 the matched route. The built-in admin UI uses the same model.
+
+## Authorization provider architecture
+
+When `server.providers.authorization` selects a provider, Gestalt writes its
+authorization model plus dynamic subject plugin and built-in admin relationships
+into that provider and uses it for runtime subject authorization checks.
+
+### Decision plane
+
+The authorization provider answers access queries through these methods:
+
+| Method | Purpose |
+| --- | --- |
+| `Evaluate` | Check a single subject-action-resource tuple |
+| `EvaluateMany` | Check many tuples in one batch |
+| `SearchResources` | List resources a subject can access |
+| `SearchSubjects` | List subjects that can access a resource |
+| `SearchActions` | List actions a subject can perform on a resource |
+| `GetMetadata` | Return provider capabilities and active model |
+
+Gestalt uses `EvaluateMany` heavily. When it resolves a provider role for a
+principal, it batches all possible role checks into one call. This is
+important for latency: a principal with five possible roles on a resource
+causes one `EvaluateMany` call, not five sequential `Evaluate` calls.
+
+### Relationship control plane
+
+| Method | Purpose |
+| --- | --- |
+| `ReadRelationships` | Query stored relationship tuples |
+| `WriteRelationships` | Atomically write and delete tuples |
+
+Gestalt uses `WriteRelationships` to sync its managed model and state into the
+provider. It computes the desired set of relationship tuples from config and
+current grants, diffs that against the existing set, and issues writes and
+deletes to converge. This runs on startup and then polls every 5 seconds.
+
+### Model lifecycle
+
+| Method | Purpose |
+| --- | --- |
+| `GetActiveModel` | Return the current authorization model |
+| `ListModels` | Return all stored models |
+| `WriteModel` | Store a new authorization model |
+
+Gestalt builds an authorization model from the configured policies and roles.
+The model declares resource types, their relations, and the actions each
+relation implies. When policies change, Gestalt writes a new model and
+then migrates the relationships.
+
+### Managed resource types
+
+Gestalt's provider-backed authorizer manages these resource types in the
+provider:
+
+| Resource type | What it represents |
+| --- | --- |
+| `policy_static` | Static policy definitions from config |
+| `plugin_static` | Static plugin grants from config |
+| `plugin_dynamic` | Dynamic plugin grants from the admin API |
+| `admin_policy_static` | Static admin policy definitions |
+| `admin_dynamic` | Dynamic admin grants from the admin API |
+| `external_identity` | External identity assumption mappings |
+| `managed_subject` | Service accounts and managed subjects |
+
+Every managed resource type follows the same pattern: a resource instance
+has relations, and relations have subject types. Actions are computed from
+relations. This is the core Zanzibar model.
 
 ## First-party authorization providers
 
@@ -172,5 +373,7 @@ For the full server and provider config structure, read
 reference, continue to [Config File](/reference/config-file). If you want to
 see how these semantics apply to concrete surfaces, read
 [Plugin](/providers/plugins), [Workflow](/providers/workflow), and
-[UI](/providers/ui). For provider implementation details, see
+[UI](/providers/ui). For the relationship between authorization and
+credentials, read [External Credentials](/providers/external-credentials).
+For provider implementation details, see
 [Custom Authorization Providers](/custom-providers/authorization).
