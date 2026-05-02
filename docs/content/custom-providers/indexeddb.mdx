@@ -52,7 +52,7 @@ spec:
 
 ## Provider interface
 
-You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers should use `gestalt.AuthoredIndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
+You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers should implement `gestalt.IndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>

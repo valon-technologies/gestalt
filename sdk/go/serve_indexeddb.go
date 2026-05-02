@@ -19,20 +19,13 @@ import (
 func ServeIndexedDBProvider(ctx context.Context, datastore IndexedDBProvider) error {
 	return serveProvider(withProviderCloser(ctx, datastore), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindIndexedDB, datastore))
-		if authored, ok := datastore.(AuthoredIndexedDBProvider); ok {
-			proto.RegisterIndexedDBServer(srv, indexedDBProviderServer{provider: authored})
-			return
-		}
-		if legacy, ok := datastore.(proto.IndexedDBServer); ok {
-			proto.RegisterIndexedDBServer(srv, legacy)
-			return
-		}
+		proto.RegisterIndexedDBServer(srv, indexedDBProviderServer{provider: datastore})
 	})
 }
 
 type indexedDBProviderServer struct {
 	proto.UnimplementedIndexedDBServer
-	provider AuthoredIndexedDBProvider
+	provider IndexedDBProvider
 }
 
 func (s indexedDBProviderServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
