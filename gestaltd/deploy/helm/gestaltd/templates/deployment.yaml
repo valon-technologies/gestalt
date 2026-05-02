@@ -54,19 +54,19 @@ spec:
           args:
             - lock
             - --config
-            - /etc/gestalt-config/config.yaml
+            - /etc/gestaltd-config/config.yaml
             - --lockfile
-            - /etc/gestalt-state/gestalt.lock.json
+            - /etc/gestaltd-state/gestalt.lock.json
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/gestalt-config
+              mountPath: /etc/gestaltd-config
               readOnly: true
             - name: gestaltd-state
-              mountPath: /etc/gestalt-state
+              mountPath: /etc/gestaltd-state
             - name: tmp
               mountPath: /tmp
         - name: sync-state
@@ -85,21 +85,21 @@ spec:
             - sync
             - --locked
             - --config
-            - /etc/gestalt-config/config.yaml
+            - /etc/gestaltd-config/config.yaml
             - --lockfile
-            - /etc/gestalt-state/gestalt.lock.json
+            - /etc/gestaltd-state/gestalt.lock.json
             - --artifacts-dir
-            - /etc/gestalt-state/artifacts
+            - /etc/gestaltd-state/artifacts
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/gestalt-config
+              mountPath: /etc/gestaltd-config
               readOnly: true
             - name: gestaltd-state
-              mountPath: /etc/gestalt-state
+              mountPath: /etc/gestaltd-state
             - name: tmp
               mountPath: /tmp
       {{- end }}
@@ -123,13 +123,13 @@ spec:
             {{- end }}
             - --config
             {{- if .Values.preparation.enabled }}
-            - /etc/gestalt-config/config.yaml
+            - /etc/gestaltd-config/config.yaml
             - --lockfile
-            - /etc/gestalt-state/gestalt.lock.json
+            - /etc/gestaltd-state/gestalt.lock.json
             - --artifacts-dir
-            - /etc/gestalt-state/artifacts
+            - /etc/gestaltd-state/artifacts
             {{- else }}
-            - /etc/gestalt/config.yaml
+            - /etc/gestaltd/config.yaml
             {{- end }}
           ports:
             - name: http
@@ -159,14 +159,14 @@ spec:
           volumeMounts:
             {{- if .Values.preparation.enabled }}
             - name: config
-              mountPath: /etc/gestalt-config
+              mountPath: /etc/gestaltd-config
               readOnly: true
             - name: gestaltd-state
-              mountPath: /etc/gestalt-state
+              mountPath: /etc/gestaltd-state
               readOnly: true
             {{- else }}
             - name: config
-              mountPath: /etc/gestalt/config.yaml
+              mountPath: /etc/gestaltd/config.yaml
               subPath: config.yaml
               readOnly: true
             {{- end }}
