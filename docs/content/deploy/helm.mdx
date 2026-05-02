@@ -1,12 +1,12 @@
 # Helm
 
-Gestalt publishes a Helm chart for deploying `gestaltd` to Kubernetes.
+`gestaltd` publishes a Helm chart for deploying the daemon to Kubernetes.
 
 ## Install The Chart
 
 ```sh
-helm upgrade --install gestalt \
-  oci://ghcr.io/valon-technologies/gestalt/charts/gestalt \
+helm upgrade --install gestaltd \
+  oci://ghcr.io/valon-technologies/charts/gestaltd \
   --namespace gestalt \
   --set image.tag=<version> \
   -f values.yaml
@@ -63,12 +63,12 @@ extraEnv:
   - name: GESTALT_ENCRYPTION_KEY
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: encryption-key
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: database-url
 
 preparation:
@@ -78,8 +78,8 @@ preparation:
 Apply that with:
 
 ```sh
-helm upgrade --install gestalt \
-  oci://ghcr.io/valon-technologies/gestalt/charts/gestalt \
+helm upgrade --install gestaltd \
+  oci://ghcr.io/valon-technologies/charts/gestaltd \
   --namespace gestalt \
   --set image.tag=<version> \
   -f values-production.yaml
@@ -143,26 +143,26 @@ extraEnv:
   - name: GESTALT_ENCRYPTION_KEY
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: encryption-key
   - name: OIDC_ISSUER_URL
     value: "https://login.example.com"
   - name: OIDC_CLIENT_ID
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: oidc-client-id
   - name: OIDC_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: oidc-client-secret
   - name: OIDC_REDIRECT_URL
     value: "https://gestalt.example.com/api/v1/auth/login/callback"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
-        name: gestalt-secrets
+        name: gestaltd-secrets
         key: database-url
 
 preparation:
@@ -170,7 +170,7 @@ preparation:
 ```
 
 This configuration keeps the public UI and API on port `8080` while exposing
-`/admin` and `/metrics` only through the internal `gestalt-management` Service
+`/admin` and `/metrics` only through the internal `gestaltd-management` Service
 on port `9090`. If operators need browser access to `/admin`, place an
 internal-only ingress, VPN, or identity-aware proxy in front of that management
 Service rather than exposing it on the public ingress.

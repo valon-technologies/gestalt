@@ -117,18 +117,18 @@ extraEnv: []
 # - name: GESTALT_ENCRYPTION_KEY
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: encryption-key
 # --- Google provider ---
 # - name: GOOGLE_CLIENT_ID
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: google-client-id
 # - name: GOOGLE_CLIENT_SECRET
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: google-client-secret
 # --- OIDC provider ---
 # - name: OIDC_ISSUER_URL
@@ -136,17 +136,17 @@ extraEnv: []
 # - name: OIDC_CLIENT_ID
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: oidc-client-id
 # - name: OIDC_CLIENT_SECRET
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: oidc-client-secret
 # - name: OIDC_SESSION_SECRET
 #   valueFrom:
 #     secretKeyRef:
-#       name: gestalt-secrets
+#       name: gestaltd-secrets
 #       key: oidc-session-secret
 
 preparation:

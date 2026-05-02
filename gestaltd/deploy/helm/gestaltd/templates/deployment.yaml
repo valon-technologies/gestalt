@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "gestalt.fullname" . }}
+  name: {{ include "gestaltd.fullname" . }}
   labels:
-    {{- include "gestalt.labels" . | nindent 4 }}
+    {{- include "gestaltd.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
 spec:
   {{- $public := .Values.config.server.public | default dict }}
@@ -15,21 +15,21 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "gestalt.selectorLabels" . | nindent 6 }}
+      {{- include "gestaltd.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: api
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
-        {{- include "gestalt.selectorLabels" . | nindent 8 }}
+        {{- include "gestaltd.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: api
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "gestalt.serviceAccountName" . }}
+      serviceAccountName: {{ include "gestaltd.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -62,7 +62,7 @@ spec:
             - name: config
               mountPath: /etc/gestalt-config
               readOnly: true
-            - name: gestalt-state
+            - name: gestaltd-state
               mountPath: /etc/gestalt
             - name: tmp
               mountPath: /tmp
@@ -114,7 +114,7 @@ spec:
           {{- end }}
           volumeMounts:
             {{- if .Values.preparation.enabled }}
-            - name: gestalt-state
+            - name: gestaltd-state
               mountPath: /etc/gestalt
               readOnly: true
             {{- else }}
@@ -130,18 +130,18 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ include "gestalt.fullname" . }}-config
+            name: {{ include "gestaltd.fullname" . }}-config
         - name: data
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "gestalt.fullname" . }}-data
+            claimName: {{ include "gestaltd.fullname" . }}-data
           {{- else }}
           emptyDir: {}
           {{- end }}
         - name: tmp
           emptyDir: {}
         {{- if .Values.preparation.enabled }}
-        - name: gestalt-state
+        - name: gestaltd-state
           emptyDir: {}
         {{- end }}
       {{- with .Values.nodeSelector }}

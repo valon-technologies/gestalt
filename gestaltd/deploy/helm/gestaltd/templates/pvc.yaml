@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "gestalt.fullname" . }}-data
+  name: {{ include "gestaltd.fullname" . }}-data
   labels:
-    {{- include "gestalt.labels" . | nindent 4 }}
+    {{- include "gestaltd.labels" . | nindent 4 }}
 spec:
   accessModes:
     {{- toYaml .Values.persistence.accessModes | nindent 4 }}
