@@ -150,6 +150,39 @@ func TestStartRuntimeProviderUsesStartupTimeout(t *testing.T) {
 	}
 }
 
+func TestConfigureRuntimeProviderUsesParentDeadlineWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * providerConfigureTimeout)
+	var configureRemaining time.Duration
+	client := &fakeProviderLifecycleClient{
+		getProviderIdentity: func(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ProviderIdentity, error) {
+			return &proto.ProviderIdentity{
+				Kind:               proto.ProviderKind_PROVIDER_KIND_AGENT,
+				Name:               "simple",
+				MinProtocolVersion: proto.CurrentProtocolVersion,
+				MaxProtocolVersion: proto.CurrentProtocolVersion,
+			}, nil
+		},
+		configureProvider: func(ctx context.Context, _ *proto.ConfigureProviderRequest, _ ...grpc.CallOption) (*proto.ConfigureProviderResponse, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("ConfigureProvider context has no deadline")
+			}
+			configureRemaining = time.Until(deadline)
+			return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+		},
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer cancel()
+	if _, err := ConfigureRuntimeProvider(ctx, client, proto.ProviderKind_PROVIDER_KIND_AGENT, "simple", nil); err != nil {
+		t.Fatalf("ConfigureRuntimeProvider: %v", err)
+	}
+	if configureRemaining <= providerConfigureTimeout {
+		t.Fatalf("ConfigureProvider remaining deadline = %s, want above configure timeout %s", configureRemaining, providerConfigureTimeout)
+	}
+}
+
 func TestStartRuntimeProviderValidatesProtocolVersion(t *testing.T) {
 	t.Parallel()
 

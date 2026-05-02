@@ -332,7 +332,7 @@ fn test_cli_lists_agent_sessions_with_server_side_filters() {
     let _mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/agent/sessions?provider=managed&state=active",
+        "/api/v1/agent/sessions?provider=managed&state=active&view=summary&limit=50",
         StatusCode::OK
     )
     .with_body(
@@ -352,6 +352,37 @@ fn test_cli_lists_agent_sessions_with_server_side_filters() {
             "managed",
             "--state",
             "active",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("session-a"));
+}
+
+#[test]
+fn test_cli_lists_agent_sessions_full_uses_legacy_unbounded_path() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/sessions?provider=managed",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[
+                {"id":"session-a","provider":"managed","model":"gpt-5.4","state":"active","updatedAt":"2026-04-22T00:00:00Z"}
+            ]"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "agent",
+            "sessions",
+            "list",
+            "--provider",
+            "managed",
+            "--full",
         ])
         .assert()
         .success()
@@ -1998,7 +2029,7 @@ fn test_cli_resumes_latest_active_agent_session() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/sessions?provider=managed&state=active",
+            "/api/v1/agent/sessions?provider=managed&state=active&view=summary&limit=50",
             StatusCode::OK,
             http::APPLICATION_JSON,
             r#"[
@@ -2090,7 +2121,7 @@ fn test_cli_resumes_latest_active_agent_session() {
 fn test_cli_resume_fails_without_active_agent_session() {
     let server = ScriptedServer::spawn(vec![ExpectedRequest::text(
         Method::GET,
-        "/api/v1/agent/sessions?state=active",
+        "/api/v1/agent/sessions?state=active&view=summary&limit=50",
         StatusCode::OK,
         http::APPLICATION_JSON,
         "[]",

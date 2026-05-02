@@ -170,10 +170,17 @@ fn dispatch_agent_command(
             AgentSessionCommands::Create(args) => {
                 commands::agents::create_session(client, &args, format)
             }
-            AgentSessionCommands::List { provider, state } => commands::agents::list_sessions(
+            AgentSessionCommands::List {
+                provider,
+                state,
+                limit,
+                full,
+            } => commands::agents::list_sessions(
                 client,
                 provider.as_deref(),
                 state.as_deref(),
+                limit,
+                full,
                 format,
             ),
             AgentSessionCommands::Get { id } => commands::agents::get_session(client, &id, format),

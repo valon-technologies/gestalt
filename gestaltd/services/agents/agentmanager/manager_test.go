@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -83,7 +84,10 @@ type routeCountingAgentProvider struct {
 	sessions        map[string]*coreagent.Session
 	turns           map[string]*coreagent.Turn
 	capabilities    *coreagent.ProviderCapabilities
+	capabilitiesErr error
 	createTurnReqs  []coreagent.CreateTurnRequest
+	listSessionReqs []coreagent.ListSessionsRequest
+	listTurnReqs    []coreagent.ListTurnsRequest
 	turnIDOverride  string
 	cancelStatus    coreagent.ExecutionStatus
 	getSessionCalls int
@@ -120,6 +124,36 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent
 	return cloneRouteSession(session), nil
 }
 
+func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	p.listSessionReqs = append(p.listSessionReqs, req)
+	var sessions []*coreagent.Session
+	requested := map[string]struct{}{}
+	for _, id := range req.SessionIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = struct{}{}
+		}
+	}
+	for _, session := range p.sessions {
+		if len(requested) > 0 {
+			if _, ok := requested[session.ID]; !ok {
+				continue
+			}
+		}
+		if req.Subject.SubjectID != "" && session.CreatedBy.SubjectID != req.Subject.SubjectID {
+			continue
+		}
+		if req.State != "" && session.State != req.State {
+			continue
+		}
+		sessions = append(sessions, cloneRouteSession(session))
+	}
+	if req.Limit > 0 && len(sessions) > req.Limit {
+		sessions = sessions[:req.Limit]
+	}
+	return sessions, nil
+}
+
 func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	p.createTurnReqs = append(p.createTurnReqs, req)
 	turnID := req.TurnID
@@ -149,6 +183,39 @@ func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req coreagent.Ge
 	return cloneRouteTurn(turn), nil
 }
 
+func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	p.listTurnReqs = append(p.listTurnReqs, req)
+	var turns []*coreagent.Turn
+	requested := map[string]struct{}{}
+	for _, id := range req.TurnIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = struct{}{}
+		}
+	}
+	for _, turn := range p.turns {
+		if len(requested) > 0 {
+			if _, ok := requested[turn.ID]; !ok {
+				continue
+			}
+		}
+		if req.SessionID != "" && turn.SessionID != req.SessionID {
+			continue
+		}
+		if req.Subject.SubjectID != "" && turn.CreatedBy.SubjectID != req.Subject.SubjectID {
+			continue
+		}
+		if req.Status != "" && turn.Status != req.Status {
+			continue
+		}
+		turns = append(turns, cloneRouteTurn(turn))
+	}
+	if req.Limit > 0 && len(turns) > req.Limit {
+		turns = turns[:req.Limit]
+	}
+	return turns, nil
+}
+
 func (p *routeCountingAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
 	turn := p.turns[strings.TrimSpace(req.TurnID)]
 	if turn == nil {
@@ -163,6 +230,9 @@ func (p *routeCountingAgentProvider) CancelTurn(_ context.Context, req coreagent
 }
 
 func (p *routeCountingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p.capabilitiesErr != nil {
+		return nil, p.capabilitiesErr
+	}
 	if p.capabilities != nil {
 		caps := *p.capabilities
 		caps.SupportedToolSources = append([]coreagent.ToolSourceMode(nil), p.capabilities.SupportedToolSources...)
@@ -320,6 +390,253 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 	}
 	if alpha.getTurnCalls != 1 {
 		t.Fatalf("GetTurn calls = %d, want 1 cached provider lookup", alpha.getTurnCalls)
+	}
+}
+
+func TestManagerListSessionsFallsBackToFullListForLegacyProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("legacy")
+	provider.capabilities = &coreagent.ProviderCapabilities{
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+	}
+	subjectID := principal.UserSubjectID("user-1")
+	oldTime := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	newTime := oldTime.Add(time.Hour)
+	provider.sessions["old"] = &coreagent.Session{
+		ID:           "old",
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		Metadata:     map[string]any{"heavy": "metadata"},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		UpdatedAt:    &oldTime,
+	}
+	provider.sessions["new"] = &coreagent.Session{
+		ID:           "new",
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		Metadata:     map[string]any{"heavy": "metadata"},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		UpdatedAt:    &newTime,
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "legacy",
+			names:       []string{"legacy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"legacy": provider,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+	p := &principal.Principal{SubjectID: subjectID}
+
+	sessions, err := manager.ListSessions(context.Background(), p, coreagent.ManagerListSessionsRequest{
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		Limit:        1,
+		SummaryOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(provider.listSessionReqs) != 1 {
+		t.Fatalf("provider ListSessions calls = %d, want 1", len(provider.listSessionReqs))
+	}
+	if got := provider.listSessionReqs[0].Limit; got != 0 {
+		t.Fatalf("legacy provider limit = %d, want fallback limit 0", got)
+	}
+	if provider.listSessionReqs[0].SummaryOnly {
+		t.Fatal("legacy provider received summary_only=true, want fallback full hydration")
+	}
+	if len(sessions) != 1 || sessions[0].ID != "new" {
+		t.Fatalf("manager sessions = %#v, want only newest session", sessions)
+	}
+	if sessions[0].Metadata != nil {
+		t.Fatalf("summary session metadata = %#v, want nil", sessions[0].Metadata)
+	}
+}
+
+func TestManagerListSessionsFallsBackWhenLegacyProviderCapabilitiesUnimplemented(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("legacy")
+	_, provider.capabilitiesErr = coreagent.UnimplementedProvider{}.GetCapabilities(context.Background(), coreagent.GetCapabilitiesRequest{})
+	subjectID := principal.UserSubjectID("user-1")
+	updatedAt := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	provider.sessions["session-1"] = &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		Metadata:     map[string]any{"heavy": "metadata"},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		UpdatedAt:    &updatedAt,
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "legacy",
+			names:       []string{"legacy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"legacy": provider,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+
+	sessions, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: subjectID}, coreagent.ManagerListSessionsRequest{
+		ProviderName: "legacy",
+		Limit:        1,
+		SummaryOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(provider.listSessionReqs) != 1 {
+		t.Fatalf("provider ListSessions calls = %d, want 1", len(provider.listSessionReqs))
+	}
+	if got := provider.listSessionReqs[0].Limit; got != 0 {
+		t.Fatalf("legacy provider limit = %d, want fallback limit 0", got)
+	}
+	if provider.listSessionReqs[0].SummaryOnly {
+		t.Fatal("legacy provider received summary_only=true, want fallback full hydration")
+	}
+	if len(sessions) != 1 || sessions[0].ID != "session-1" {
+		t.Fatalf("manager sessions = %#v, want session-1", sessions)
+	}
+	if sessions[0].Metadata != nil {
+		t.Fatalf("summary session metadata = %#v, want nil", sessions[0].Metadata)
+	}
+}
+
+func TestManagerListTurnsFallsBackToFullListForLegacyProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("legacy")
+	provider.capabilities = &coreagent.ProviderCapabilities{
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+	}
+	subjectID := principal.UserSubjectID("user-1")
+	oldTime := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	newTime := oldTime.Add(time.Hour)
+	provider.sessions["session-1"] = &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		UpdatedAt:    &newTime,
+	}
+	provider.turns["old"] = &coreagent.Turn{
+		ID:           "old",
+		SessionID:    "session-1",
+		ProviderName: "legacy",
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     []coreagent.Message{{Role: "user", Text: "heavy"}},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		CreatedAt:    &oldTime,
+	}
+	provider.turns["new"] = &coreagent.Turn{
+		ID:           "new",
+		SessionID:    "session-1",
+		ProviderName: "legacy",
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     []coreagent.Message{{Role: "user", Text: "heavy"}},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		CreatedAt:    &newTime,
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "legacy",
+			names:       []string{"legacy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"legacy": provider,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+	p := &principal.Principal{SubjectID: subjectID}
+
+	turns, err := manager.ListTurns(context.Background(), p, coreagent.ManagerListTurnsRequest{
+		SessionID:   "session-1",
+		Status:      coreagent.ExecutionStatusSucceeded,
+		Limit:       1,
+		SummaryOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListTurns: %v", err)
+	}
+	if len(provider.listTurnReqs) != 1 {
+		t.Fatalf("provider ListTurns calls = %d, want 1", len(provider.listTurnReqs))
+	}
+	if got := provider.listTurnReqs[0].Limit; got != 0 {
+		t.Fatalf("legacy provider turn limit = %d, want fallback limit 0", got)
+	}
+	if provider.listTurnReqs[0].SummaryOnly {
+		t.Fatal("legacy provider received turn summary_only=true, want fallback full hydration")
+	}
+	if len(turns) != 1 || turns[0].ID != "new" {
+		t.Fatalf("manager turns = %#v, want only newest turn", turns)
+	}
+	if turns[0].Messages != nil {
+		t.Fatalf("summary turn messages = %#v, want nil", turns[0].Messages)
+	}
+}
+
+func TestManagerListTurnsFallsBackWhenLegacyProviderCapabilitiesUnimplemented(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("legacy")
+	_, provider.capabilitiesErr = coreagent.UnimplementedProvider{}.GetCapabilities(context.Background(), coreagent.GetCapabilitiesRequest{})
+	subjectID := principal.UserSubjectID("user-1")
+	createdAt := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	provider.sessions["session-1"] = &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "legacy",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		UpdatedAt:    &createdAt,
+	}
+	provider.turns["turn-1"] = &coreagent.Turn{
+		ID:           "turn-1",
+		SessionID:    "session-1",
+		ProviderName: "legacy",
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     []coreagent.Message{{Role: "user", Text: "heavy"}},
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+		CreatedAt:    &createdAt,
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "legacy",
+			names:       []string{"legacy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"legacy": provider,
+			},
+		},
+		ToolGrants: newAgentManagerTestToolGrants(t),
+	})
+
+	turns, err := manager.ListTurns(context.Background(), &principal.Principal{SubjectID: subjectID}, coreagent.ManagerListTurnsRequest{
+		SessionID:   "session-1",
+		Limit:       1,
+		SummaryOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListTurns: %v", err)
+	}
+	if len(provider.listTurnReqs) != 1 {
+		t.Fatalf("provider ListTurns calls = %d, want 1", len(provider.listTurnReqs))
+	}
+	if got := provider.listTurnReqs[0].Limit; got != 0 {
+		t.Fatalf("legacy provider turn limit = %d, want fallback limit 0", got)
+	}
+	if provider.listTurnReqs[0].SummaryOnly {
+		t.Fatal("legacy provider received turn summary_only=true, want fallback full hydration")
+	}
+	if len(turns) != 1 || turns[0].ID != "turn-1" {
+		t.Fatalf("manager turns = %#v, want turn-1", turns)
+	}
+	if turns[0].Messages != nil {
+		t.Fatalf("summary turn messages = %#v, want nil", turns[0].Messages)
 	}
 }
 

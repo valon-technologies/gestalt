@@ -162,5 +162,8 @@ func providerConfigureContext(parent context.Context) (context.Context, context.
 	if parent == nil {
 		parent = context.Background()
 	}
+	if _, ok := parent.Deadline(); ok {
+		return context.WithCancel(parent)
+	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
 }

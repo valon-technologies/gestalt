@@ -564,6 +564,9 @@ pub struct AgentProviderCapabilities {
     pub resumable_turns: bool,
     #[prost(bool, tag = "7")]
     pub reasoning_summaries: bool,
+    /// Provider list APIs can apply non-zero limits and summary projections without
+    /// hydrating every source record. Providers that set this must order sessions
+    /// and turns by the relevant newest-first recency fields before applying limit.
     #[prost(bool, tag = "9")]
     pub bounded_list_hydration: bool,
     #[prost(enumeration = "AgentToolSourceMode", repeated, tag = "10")]
@@ -653,8 +656,12 @@ pub struct ListAgentProviderSessionsRequest {
     pub session_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(enumeration = "AgentSessionState", tag = "3")]
     pub state: i32,
+    /// When non-zero and bounded_list_hydration is supported, cap results after
+    /// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
     #[prost(int32, tag = "4")]
     pub limit: i32,
+    /// When true and bounded_list_hydration is supported, omit heavy fields such as
+    /// metadata unless exact session_ids require direct lookup.
     #[prost(bool, tag = "5")]
     pub summary_only: bool,
 }
@@ -784,8 +791,13 @@ pub struct ListAgentProviderTurnsRequest {
     pub turn_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
     pub status: i32,
+    /// When non-zero and bounded_list_hydration is supported, cap results after
+    /// ordering turns newest-first by created_at.
     #[prost(int32, tag = "5")]
     pub limit: i32,
+    /// When true and bounded_list_hydration is supported, omit heavy fields such as
+    /// messages, output text, and structured output unless exact turn_ids require
+    /// direct lookup.
     #[prost(bool, tag = "6")]
     pub summary_only: bool,
 }
@@ -963,6 +975,8 @@ pub struct AgentManagerListSessionsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(enumeration = "AgentSessionState", tag = "4")]
     pub state: i32,
+    /// Manager response cap after provider responses are normalized and globally
+    /// sorted by session recency.
     #[prost(int32, tag = "5")]
     pub limit: i32,
     #[prost(bool, tag = "6")]

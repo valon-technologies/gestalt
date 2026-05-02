@@ -393,6 +393,12 @@ pub enum AgentSessionCommands {
         /// Filter sessions by state
         #[arg(long)]
         state: Option<String>,
+        /// Maximum number of summary sessions to fetch
+        #[arg(long, conflicts_with = "full")]
+        limit: Option<usize>,
+        /// Fetch the legacy full session list without summary pagination
+        #[arg(long)]
+        full: bool,
     },
     /// Show a single agent session
     Get {
