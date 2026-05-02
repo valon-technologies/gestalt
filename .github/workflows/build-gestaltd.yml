@@ -204,6 +204,14 @@ jobs:
             -f gestaltd/deploy/helm/gestaltd/ci-values-preparation.yaml \
             > /tmp/rendered-preparation.yaml
 
+      - name: Verify preparation does not require a shell
+        run: |
+          set -euo pipefail
+          if grep -q '"/bin/sh"' /tmp/rendered-preparation.yaml; then
+            echo "Preparation init containers must not require /bin/sh from the gestaltd image" >&2
+            exit 1
+          fi
+
       - name: Validate Kubernetes schemas (preparation)
         run: kubeconform -strict -summary /tmp/rendered-preparation.yaml
 

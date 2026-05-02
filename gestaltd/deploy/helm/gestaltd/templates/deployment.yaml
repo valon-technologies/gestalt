@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       {{- if .Values.preparation.enabled }}
       initContainers:
-        - name: prepare-state
+        - name: lock-state
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
@@ -51,9 +51,12 @@ spec:
               type: RuntimeDefault
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["/bin/sh", "-c"]
           args:
-            - cp -r /etc/gestalt-config/. /etc/gestalt/ && /gestaltd lock --config /etc/gestalt/config.yaml && /gestaltd sync --locked --config /etc/gestalt/config.yaml
+            - lock
+            - --config
+            - /etc/gestalt-config/config.yaml
+            - --lockfile
+            - /etc/gestalt-state/gestalt.lock.json
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
@@ -63,7 +66,40 @@ spec:
               mountPath: /etc/gestalt-config
               readOnly: true
             - name: gestaltd-state
-              mountPath: /etc/gestalt
+              mountPath: /etc/gestalt-state
+            - name: tmp
+              mountPath: /tmp
+        - name: sync-state
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - sync
+            - --locked
+            - --config
+            - /etc/gestalt-config/config.yaml
+            - --lockfile
+            - /etc/gestalt-state/gestalt.lock.json
+            - --artifacts-dir
+            - /etc/gestalt-state/artifacts
+          {{- with .Values.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/gestalt-config
+              readOnly: true
+            - name: gestaltd-state
+              mountPath: /etc/gestalt-state
             - name: tmp
               mountPath: /tmp
       {{- end }}
@@ -86,7 +122,15 @@ spec:
             - --locked
             {{- end }}
             - --config
+            {{- if .Values.preparation.enabled }}
+            - /etc/gestalt-config/config.yaml
+            - --lockfile
+            - /etc/gestalt-state/gestalt.lock.json
+            - --artifacts-dir
+            - /etc/gestalt-state/artifacts
+            {{- else }}
             - /etc/gestalt/config.yaml
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ get $public "port" | default 8080 }}
@@ -114,8 +158,11 @@ spec:
           {{- end }}
           volumeMounts:
             {{- if .Values.preparation.enabled }}
+            - name: config
+              mountPath: /etc/gestalt-config
+              readOnly: true
             - name: gestaltd-state
-              mountPath: /etc/gestalt
+              mountPath: /etc/gestalt-state
               readOnly: true
             {{- else }}
             - name: config
