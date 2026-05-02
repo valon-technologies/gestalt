@@ -21,6 +21,7 @@ starts it with the permissions and request context it needs.
 | `authorization` | Dynamic subject authorization backends | `providers.authorization.<name>` |
 | `agent` | Global agent run backends that reason over messages and tools | `providers.agent.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
+| `external_credentials` | Subject-scoped third-party credential storage | `providers.external_credentials.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `runtime` | Hosted execution backends for executable plugins | `runtime.providers.<name>` |
 | `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
@@ -139,6 +140,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 - [Authentication](/providers/authentication): platform login providers
 - [Authorization](/providers/authorization): subject authorization providers
+- [External Credentials](/providers/external-credentials): subject-scoped credential storage
 - [Agent](/providers/agent): global agent-provider pool and selection model
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
