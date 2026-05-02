@@ -211,7 +211,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          CHART="gestaltd/deploy/helm/gestalt/Chart.yaml"
+          CHART="gestaltd/deploy/helm/gestaltd/Chart.yaml"
           sed -i "s/^version:.*/version: ${VERSION}/" "$CHART"
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "$CHART"
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
@@ -219,9 +219,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          helm package gestaltd/deploy/helm/gestalt --destination /tmp/charts
+          helm package gestaltd/deploy/helm/gestaltd --destination /tmp/charts
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push "/tmp/charts/gestalt-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          helm push "/tmp/charts/gestaltd-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
       - name: Authenticate to Google Cloud
         id: gcp-auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
@@ -236,12 +236,12 @@ jobs:
           CHART_REPOSITORY: ${{ vars.GESTALTD_CHART_REPOSITORY }}
         run: |
           echo "${{ steps.gcp-auth.outputs.access_token }}" | helm registry login "${ARTIFACT_REGISTRY_HOST}" --username oauth2accesstoken --password-stdin
-          helm push "/tmp/charts/gestalt-${VERSION}.tgz" "${CHART_REPOSITORY}"
+          helm push "/tmp/charts/gestaltd-${VERSION}.tgz" "${CHART_REPOSITORY}"
       - name: Commit and push repository updates
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/gestaltd.rb gestaltd/deploy/helm/gestalt/Chart.yaml
+          git add Formula/gestaltd.rb gestaltd/deploy/helm/gestaltd/Chart.yaml
           git diff --cached --quiet && { echo "No repository changes"; exit 0; }
           git commit -m "Update gestaltd formula and chart to v${{ steps.version.outputs.version }}"
           git pull --rebase origin main

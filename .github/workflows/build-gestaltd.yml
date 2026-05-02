@@ -147,16 +147,16 @@ jobs:
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Helm lint
-        run: helm lint gestaltd/deploy/helm/gestalt
+        run: helm lint gestaltd/deploy/helm/gestaltd
 
       - name: Helm template (default chart profile)
         run: |
-          helm template test-release gestaltd/deploy/helm/gestalt \
+          helm template test-release gestaltd/deploy/helm/gestaltd \
             > /tmp/rendered-default.yaml
 
       - name: Helm template (ingress)
         run: |
-          helm template test-release gestaltd/deploy/helm/gestalt \
+          helm template test-release gestaltd/deploy/helm/gestaltd \
             --set ingress.enabled=true \
             --set-string ingress.hosts[0].host=gestalt.example.com \
             --set-string ingress.hosts[0].paths[0].path=/gestalt \
@@ -165,8 +165,8 @@ jobs:
 
       - name: Helm template
         run: |
-          helm template test-release gestaltd/deploy/helm/gestalt \
-            -f gestaltd/deploy/helm/gestalt/ci-values.yaml \
+          helm template test-release gestaltd/deploy/helm/gestaltd \
+            -f gestaltd/deploy/helm/gestaltd/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform
@@ -200,8 +200,8 @@ jobs:
 
       - name: Helm template (preparation)
         run: |
-          helm template test-release gestaltd/deploy/helm/gestalt \
-            -f gestaltd/deploy/helm/gestalt/ci-values-preparation.yaml \
+          helm template test-release gestaltd/deploy/helm/gestaltd \
+            -f gestaltd/deploy/helm/gestaltd/ci-values-preparation.yaml \
             > /tmp/rendered-preparation.yaml
 
       - name: Validate Kubernetes schemas (preparation)

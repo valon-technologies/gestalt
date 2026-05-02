@@ -1,9 +1,9 @@
 {{- $management := .Values.config.server.management | default dict }}
-Gestalt has been deployed successfully.
+gestaltd has been deployed successfully.
 
 {{- if .Values.ingress.enabled }}
 
-Access Gestalt via ingress:
+Access gestaltd via ingress:
 {{- range $host := .Values.ingress.hosts }}
   {{- range .paths }}
   http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
@@ -13,7 +13,7 @@ Access Gestalt via ingress:
 {{- else if contains "NodePort" .Values.service.type }}
 
 Get the application URL by running:
-  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "gestalt.fullname" . }})
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "gestaltd.fullname" . }})
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
   echo http://$NODE_IP:$NODE_PORT
 
@@ -21,19 +21,19 @@ Get the application URL by running:
 
 Get the application URL by running:
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-  kubectl get --namespace {{ .Release.Namespace }} svc {{ include "gestalt.fullname" . }} -w
+  kubectl get --namespace {{ .Release.Namespace }} svc {{ include "gestaltd.fullname" . }} -w
 
 {{- else if contains "ClusterIP" .Values.service.type }}
 
-Access Gestalt by running:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestalt.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+Access gestaltd by running:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestaltd.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
 
 Then visit: http://127.0.0.1:{{ .Values.service.port }}
 
 {{- end }}
 
 Verify the deployment:
-  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "gestalt.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+  kubectl --namespace {{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ include "gestaltd.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
 
 Health check:
   curl http://127.0.0.1:{{ .Values.service.port }}/health
@@ -41,7 +41,7 @@ Health check:
 {{- if and .Values.managementService.enabled (get $management "port") }}
 
 Management listener:
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestalt.fullname" . }}-management {{ .Values.managementService.port }}:{{ .Values.managementService.port }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "gestaltd.fullname" . }}-management {{ .Values.managementService.port }}:{{ .Values.managementService.port }}
 
 Then visit:
   http://127.0.0.1:{{ .Values.managementService.port }}/admin
@@ -58,8 +58,8 @@ If you enable OAuth/OIDC or other ${VAR} placeholders, provide the matching
 environment variables via extraEnv.
 
 Common env vars:
-  GESTALT_BASE_URL         Public URL of this Gestalt instance
-  GESTALT_ENCRYPTION_KEY   Required for Gestalt auth/datastore encryption
+  GESTALT_BASE_URL         Public URL of this gestaltd instance
+  GESTALT_ENCRYPTION_KEY   Required for gestaltd auth/datastore encryption
 
 For Google OAuth:
   GOOGLE_CLIENT_ID         Google OAuth client ID
