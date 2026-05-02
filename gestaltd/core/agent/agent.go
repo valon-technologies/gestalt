@@ -198,11 +198,11 @@ type ListSessionsRequest struct {
 	Subject    SubjectContext
 	SessionIDs []string
 	State      SessionState
-	// Limit asks providers with BoundedListHydration to apply the cap before returning.
+	// Limit asks providers to apply the cap before returning.
 	// Providers must order sessions by recency before limiting: last turn time, then
 	// updated time, then created time, newest first.
 	Limit int
-	// SummaryOnly asks providers with BoundedListHydration to omit heavy fields.
+	// SummaryOnly asks providers to omit heavy fields.
 	// Exact SessionIDs may still be served by direct lookup rather than projections.
 	SummaryOnly bool
 }
@@ -260,10 +260,10 @@ type ListTurnsRequest struct {
 	Subject   SubjectContext
 	TurnIDs   []string
 	Status    ExecutionStatus
-	// Limit asks providers with BoundedListHydration to apply the cap before returning.
+	// Limit asks providers to apply the cap before returning.
 	// Providers must order turns by creation time, newest first, before limiting.
 	Limit int
-	// SummaryOnly asks providers with BoundedListHydration to omit heavy turn fields.
+	// SummaryOnly asks providers to omit heavy turn fields.
 	// Exact TurnIDs may still be served by direct lookup rather than projections.
 	SummaryOnly bool
 }
@@ -448,8 +448,8 @@ type ManagerCreateTurnRequest struct {
 type ManagerListSessionsRequest struct {
 	ProviderName string
 	State        SessionState
-	// Limit caps the globally sorted manager response. Providers that advertise
-	// BoundedListHydration also receive this cap for per-provider bounded listing.
+	// Limit caps the globally sorted manager response. Bounded providers receive
+	// this cap for per-provider listing.
 	Limit       int
 	SummaryOnly bool
 }

@@ -61,6 +61,11 @@ The host passes a `tool_grant` to `CreateTurn` when tools are available. Pass
 that grant back to `ListTools` or `ExecuteTool`; it is the scoped authority
 for resolving or executing tools during that turn.
 
+Providers that support limited or summary list requests must advertise bounded
+list hydration from `GetCapabilities`. When Gestalt asks for `limit` or
+`summary_only`, it expects the provider to apply those options before returning
+results instead of hydrating the full session or turn history in the daemon.
+
 ## Observability
 
 Provider authors do not need to emit the baseline `gestaltd` agent metrics.
@@ -251,11 +256,12 @@ events.
 
     func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
       return &proto.AgentProviderCapabilities{
-        StreamingText:    true,
-        ToolCalls:        true,
-        StructuredOutput: true,
-        Interactions:     true,
-        ResumableTurns:   true,
+        StreamingText:        true,
+        ToolCalls:            true,
+        StructuredOutput:     true,
+        Interactions:         true,
+        ResumableTurns:       true,
+        BoundedListHydration: true,
       }, nil
     }
 
@@ -368,6 +374,7 @@ events.
                 structured_output=True,
                 interactions=True,
                 resumable_turns=True,
+                bounded_list_hydration=True,
             )
 
 
@@ -551,6 +558,7 @@ events.
                 structured_output: true,
                 interactions: true,
                 resumable_turns: true,
+                bounded_list_hydration: true,
                 ..Default::default()
             }))
         }
@@ -715,6 +723,7 @@ events.
           structuredOutput: true,
           interactions: true,
           resumableTurns: true,
+          boundedListHydration: true,
         };
       },
     });
