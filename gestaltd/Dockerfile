@@ -7,6 +7,7 @@ ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestaltd
 
 FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine3.23@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS build-binary
 WORKDIR /build
+COPY go.mod go.sum ./
 COPY gestaltd/go.mod gestaltd/go.sum gestaltd/
 COPY sdk/go/go.mod sdk/go/go.sum sdk/go/
 RUN cd gestaltd && go mod download
