@@ -3,17 +3,11 @@ package gestalt
 import "context"
 
 // IndexedDBProvider is implemented by providers that serve an IndexedDB-style
-// datastore. It accepts both the authored SDK surface and the legacy generated
-// gRPC server surface while providers migrate.
+// datastore. The SDK owns the gRPC/protobuf transport adapter; provider code
+// implements this typed interface instead of importing generated protobuf
+// bindings.
 type IndexedDBProvider interface {
 	Provider
-}
-
-// AuthoredIndexedDBProvider is the preferred provider surface. The SDK owns the
-// gRPC/protobuf transport adapter; provider code should implement this
-// interface instead of importing generated protobuf bindings.
-type AuthoredIndexedDBProvider interface {
-	IndexedDBProvider
 	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
 	DeleteObjectStore(ctx context.Context, name string) error
 
