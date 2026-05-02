@@ -91,6 +91,7 @@ type TransactionIndex interface {
 	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
 	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 	Delete(ctx context.Context, values ...any) (int64, error)
+	DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 }
 
 // ObjectStore provides CRUD by primary key ("id" field) and index-based queries.
@@ -126,6 +127,7 @@ type Index interface {
 	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
 	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 	Delete(ctx context.Context, values ...any) (int64, error)
+	DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 
 	// Cursor iteration
 	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)

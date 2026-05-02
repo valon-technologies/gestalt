@@ -640,10 +640,14 @@ func (i *stubTransactionIndex) Count(ctx context.Context, r *indexeddb.KeyRange,
 }
 
 func (i *stubTransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	return i.DeleteRange(ctx, nil, values...)
+}
+
+func (i *stubTransactionIndex) DeleteRange(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
 	if err := i.tx.ensureActive(true); err != nil {
 		return 0, err
 	}
-	deleted, err := i.index.Delete(ctx, values...)
+	deleted, err := i.index.DeleteRange(ctx, r, values...)
 	if err != nil {
 		return 0, i.tx.abortWithError(err)
 	}
@@ -723,6 +727,10 @@ func (i transactionMissingIndex) Count(context.Context, *indexeddb.KeyRange, ...
 }
 
 func (i transactionMissingIndex) Delete(context.Context, ...any) (int64, error) {
+	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
+}
+
+func (i transactionMissingIndex) DeleteRange(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
 	return 0, i.tx.abortWithError(indexeddb.ErrNotFound)
 }
 
@@ -861,24 +869,23 @@ func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values .
 	return int64(len(c.keys)), nil
 }
 
-func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
+func (idx *stubIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	return idx.DeleteRange(ctx, nil, values...)
+}
+
+func (idx *stubIndex) DeleteRange(_ context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
 	done := idx.store.writeSchedule()
 	defer done()
+	c := idx.newCursor(indexeddb.CursorNext, r, true, values...)
 	idx.store.mu.Lock()
 	defer idx.store.mu.Unlock()
-	var toDelete []string
-	for id, r := range idx.store.records {
-		if idx.matches(r, values) {
-			toDelete = append(toDelete, id)
-		}
-	}
-	for _, id := range toDelete {
+	for _, id := range c.keys {
 		delete(idx.store.records, id)
 	}
-	return int64(len(toDelete)), nil
+	return int64(len(c.keys)), nil
 }
 
 func (idx *stubIndex) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {

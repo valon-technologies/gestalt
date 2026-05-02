@@ -397,14 +397,22 @@ func (idx *remoteIndex) OpenKeyCursor(ctx context.Context, r *coreindexeddb.KeyR
 }
 
 func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	return idx.DeleteRange(ctx, nil, values...)
+}
+
+func (idx *remoteIndex) DeleteRange(ctx context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
 	if err != nil {
 		return 0, err
 	}
+	kr, err := keyRangeToProto(r)
+	if err != nil {
+		return 0, err
+	}
 	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues,
+		Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcToDatastoreErr(err)
@@ -739,8 +747,12 @@ func (idx *remoteTransactionIndex) Count(_ context.Context, r *coreindexeddb.Key
 	return resp.GetCount().GetCount(), nil
 }
 
-func (idx *remoteTransactionIndex) Delete(_ context.Context, values ...any) (int64, error) {
-	req, err := idx.query(nil, values)
+func (idx *remoteTransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	return idx.DeleteRange(ctx, nil, values...)
+}
+
+func (idx *remoteTransactionIndex) DeleteRange(_ context.Context, r *coreindexeddb.KeyRange, values ...any) (int64, error) {
+	req, err := idx.query(r, values)
 	if err != nil {
 		return 0, err
 	}

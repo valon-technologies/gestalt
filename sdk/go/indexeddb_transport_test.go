@@ -539,12 +539,12 @@ func TestTransport_TransactionIndexAndBulkRollback(t *testing.T) {
 	if deletedRange != 2 {
 		t.Fatalf("DeleteRange deleted = %d, want 2", deletedRange)
 	}
-	deletedIndex, err := txs.Index("by_status").Delete(ctx, "active")
+	deletedIndex, err := txs.Index("by_status").DeleteRange(ctx, &gestalt.KeyRange{Lower: "active", Upper: "active"})
 	if err != nil {
-		t.Fatalf("tx index Delete active: %v", err)
+		t.Fatalf("tx index DeleteRange active: %v", err)
 	}
 	if deletedIndex != 2 {
-		t.Fatalf("index Delete deleted = %d, want 2", deletedIndex)
+		t.Fatalf("index DeleteRange deleted = %d, want 2", deletedIndex)
 	}
 	if err := txs.Clear(ctx); err != nil {
 		t.Fatalf("tx Clear: %v", err)
@@ -560,6 +560,31 @@ func TestTransport_TransactionIndexAndBulkRollback(t *testing.T) {
 	}
 	if inactive, err := s.Index("by_status").Count(ctx, nil, "inactive"); err != nil || inactive != 1 {
 		t.Fatalf("public inactive count after abort = %d, %v; want 1, nil", inactive, err)
+	}
+}
+
+func TestTransport_IndexDeleteRange(t *testing.T) {
+	ctx := context.Background()
+	store := seedStore(t)
+	s := testClient.ObjectStore(store)
+
+	deleted, err := s.Index("by_status").DeleteRange(ctx, &gestalt.KeyRange{Lower: "active", Upper: "active"})
+	if err != nil {
+		t.Fatalf("Index DeleteRange active: %v", err)
+	}
+	if deleted != 3 {
+		t.Fatalf("Index DeleteRange deleted = %d, want 3", deleted)
+	}
+
+	remaining, err := s.GetAll(ctx, nil)
+	if err != nil {
+		t.Fatalf("GetAll remaining: %v", err)
+	}
+	if got := len(remaining); got != 1 {
+		t.Fatalf("remaining len = %d, want 1", got)
+	}
+	if got := remaining[0]["id"]; got != "c" {
+		t.Fatalf("remaining id = %v, want c", got)
 	}
 }
 

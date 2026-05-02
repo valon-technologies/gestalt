@@ -328,6 +328,10 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 }
 
 func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQueryRequest) (*proto.DeleteResponse, error) {
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
 	values, err := protoValuesToAny(req.GetValues())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
@@ -336,7 +340,7 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	deleted, err := store.Index(req.GetIndex()).Delete(ctx, values...)
+	deleted, err := store.Index(req.GetIndex()).DeleteRange(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -709,11 +713,11 @@ func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx c
 }
 
 func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx coreindexeddb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
-	idx, values, _, err := s.transactionIndex(ctx, tx, req)
+	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return 0, err
 	}
-	return idx.Delete(ctx, values...)
+	return idx.DeleteRange(ctx, keyRange, values...)
 }
 
 func protoTransactionMode(mode proto.TransactionMode) coreindexeddb.TransactionMode {
