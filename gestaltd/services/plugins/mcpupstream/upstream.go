@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"sort"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/egress"
-	"github.com/valon-technologies/gestalt/server/services/plugins/headerutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
@@ -80,7 +80,7 @@ func New(_ context.Context, name string, url string, connMode core.ConnectionMod
 		desc:        fmt.Sprintf("MCP upstream: %s", url),
 		url:         url,
 		connMode:    connMode,
-		headers:     headerutil.NormalizeHeaders(headers),
+		headers:     normalizeHeaders(headers),
 		checkEgress: checkEgress,
 	}
 	for _, opt := range opts {
@@ -205,7 +205,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 			if token != "" {
 				authHeaders = map[string]string{"Authorization": core.BearerScheme + token}
 			}
-			return headerutil.MergeHeaders(u.headers, authHeaders)
+			return mergeHeaders(u.headers, authHeaders)
 		}),
 	)
 	if err != nil {
@@ -229,6 +229,37 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	}
 
 	return &managedMCPClient{MCPClient: client, onClose: closeIdleConnections}, nil
+}
+
+func normalizeHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(headers))
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out[http.CanonicalHeaderKey(k)] = headers[k]
+	}
+	return out
+}
+
+func mergeHeaders(base, override map[string]string) map[string]string {
+	out := normalizeHeaders(base)
+	if len(override) == 0 {
+		return out
+	}
+	if out == nil {
+		out = make(map[string]string, len(override))
+	}
+	for k, v := range override {
+		out[http.CanonicalHeaderKey(k)] = v
+	}
+	return out
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
