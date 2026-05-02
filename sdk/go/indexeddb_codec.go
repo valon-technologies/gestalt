@@ -51,16 +51,37 @@ func recordToProto(record Record) (*proto.Record, error) {
 	return indexeddbcodec.RecordToProto(record)
 }
 
+// RecordToProto converts a Go IndexedDB record into the provider wire
+// representation used by lower-level datastore APIs.
+func RecordToProto(record Record) (*proto.Record, error) {
+	return recordToProto(record)
+}
+
 func recordFromProto(record *proto.Record) (Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
+}
+
+// RecordFromProto converts a provider wire record into a Go IndexedDB record.
+func RecordFromProto(record *proto.Record) (Record, error) {
+	return recordFromProto(record)
 }
 
 func recordsFromProto(records []*proto.Record) ([]Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
 }
 
+// RecordsFromProto converts provider wire records into Go IndexedDB records.
+func RecordsFromProto(records []*proto.Record) ([]Record, error) {
+	return recordsFromProto(records)
+}
+
 func recordsToProto(records []Record) ([]*proto.Record, error) {
 	return indexeddbcodec.RecordsToProto(records)
+}
+
+// RecordsToProto converts Go IndexedDB records into provider wire records.
+func RecordsToProto(records []Record) ([]*proto.Record, error) {
+	return recordsToProto(records)
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
