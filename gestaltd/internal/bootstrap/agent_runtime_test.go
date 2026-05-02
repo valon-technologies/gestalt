@@ -2264,15 +2264,18 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Mint broad grant: %v", err)
 	}
-	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+	broadListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
 		ToolGrant:    broadGrant,
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ListTools with broad mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	if err != nil {
+		t.Fatalf("ListTools with broad mcp catalog grant: %v", err)
+	}
+	if broadListResp.NextPageToken != "" || len(broadListResp.Tools) != 1 || broadListResp.Tools[0].Ref.Operation != "sync" {
+		t.Fatalf("ListTools broad grant response = %#v, want sync tool", broadListResp)
 	}
 
 	execResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -2290,16 +2293,19 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		t.Fatalf("ExecuteTool response = %#v, want accepted task body", execResp)
 	}
 
-	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+	broadExecResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID:       tool.ToolID,
+		ToolID:       broadListResp.Tools[0].ToolID,
 		ToolGrant:    broadGrant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ExecuteTool with broad mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+	if err != nil {
+		t.Fatalf("ExecuteTool with broad mcp catalog grant: %v", err)
+	}
+	if broadExecResp == nil || broadExecResp.Status != http.StatusAccepted || broadExecResp.Body != `{"taskId":"task-123"}` {
+		t.Fatalf("ExecuteTool broad response = %#v, want accepted task body", broadExecResp)
 	}
 }
 

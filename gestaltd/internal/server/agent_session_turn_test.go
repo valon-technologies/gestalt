@@ -921,19 +921,19 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("provider turn tool refs = %#v, want docs.search", got)
 	}
 
-	broadTurnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"plugin":"docs"}]}`))
+	broadTurnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":null}`))
 	broadTurnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	broadTurnResp, err := http.DefaultClient.Do(broadTurnReq)
 	if err != nil {
-		t.Fatalf("create broad mcp catalog turn: %v", err)
+		t.Fatalf("create null tool refs turn: %v", err)
 	}
 	defer func() { _ = broadTurnResp.Body.Close() }()
 	if broadTurnResp.StatusCode != http.StatusBadRequest {
 		body, _ := io.ReadAll(broadTurnResp.Body)
-		t.Fatalf("create broad mcp catalog turn status = %d body=%s, want 400", broadTurnResp.StatusCode, body)
+		t.Fatalf("create null tool refs turn status = %d body=%s, want 400", broadTurnResp.StatusCode, body)
 	}
 	if got := len(provider.capturedTurnRequests()); got != 1 {
-		t.Fatalf("provider turn requests len after broad mcp catalog turn = %d, want 1", got)
+		t.Fatalf("provider turn requests len after null tool refs turn = %d, want 1", got)
 	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)
@@ -1046,6 +1046,94 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if cancelResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(cancelResp.Body)
 		t.Fatalf("cancel turn status = %d body=%s", cancelResp.StatusCode, body)
+	}
+}
+
+func TestAgentTurnToolRefsDefaultBroadAndExplicitEmpty(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent: agentControl,
+			Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "docs",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+					ID:       "search",
+					Title:    "Search",
+					ReadOnly: true,
+				}}},
+			}),
+			ToolGrants: newServerTestAgentToolGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	createTurn := func(name, body string, wantStatus int) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(body))
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: create turn: %v", name, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != wantStatus {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s: create turn status = %d body=%s, want %d", name, resp.StatusCode, respBody, wantStatus)
+		}
+	}
+
+	createTurn("omitted", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
+	createTurn("explicit empty", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
+	createTurn("plugin broad", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"plugin":"docs"}]}`, http.StatusCreated)
+	createTurn("null", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
+	createTurn("global credential mode", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"plugin":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
+	createTurn("system title", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
+
+	turnRequests := provider.capturedTurnRequests()
+	if len(turnRequests) != 3 {
+		t.Fatalf("provider turn requests len = %d, want 3", len(turnRequests))
+	}
+	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
+		t.Fatalf("omitted toolRefs provider refs = %#v, want global broad ref", got)
+	}
+	if got := turnRequests[1].ToolRefs; len(got) != 0 {
+		t.Fatalf("explicit empty toolRefs provider refs = %#v, want none", got)
+	}
+	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "" {
+		t.Fatalf("plugin broad provider refs = %#v, want docs broad ref", got)
 	}
 }
 
