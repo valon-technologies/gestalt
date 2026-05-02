@@ -1,4 +1,4 @@
-package discovery
+package server
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 const maxDiscoveryResponseSize = 5 * 1024 * 1024 // 5 MB
 
-func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([]core.DiscoveryCandidate, error) {
+func runDiscovery(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([]core.DiscoveryCandidate, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating discovery request: %w", err)
@@ -39,7 +39,7 @@ func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([
 		return nil, fmt.Errorf("parsing discovery response: %w", err)
 	}
 
-	items, err := extractItems(raw, cfg.ItemsPath)
+	items, err := extractDiscoveryItems(raw, cfg.ItemsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -54,17 +54,17 @@ func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([
 			Metadata: make(map[string]string),
 		}
 		if cfg.IDPath != "" {
-			if v, ok := extractPath(obj, cfg.IDPath); ok {
+			if v, ok := extractDiscoveryPath(obj, cfg.IDPath); ok {
 				c.ID = fmt.Sprintf("%v", v)
 			}
 		}
 		if cfg.NamePath != "" {
-			if v, ok := extractPath(obj, cfg.NamePath); ok {
+			if v, ok := extractDiscoveryPath(obj, cfg.NamePath); ok {
 				c.Name = fmt.Sprintf("%v", v)
 			}
 		}
 		for metaKey, jsonPath := range cfg.Metadata {
-			if v, ok := extractPath(obj, jsonPath); ok {
+			if v, ok := extractDiscoveryPath(obj, jsonPath); ok {
 				c.Metadata[metaKey] = fmt.Sprintf("%v", v)
 			}
 		}
@@ -74,7 +74,7 @@ func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([
 	return candidates, nil
 }
 
-func extractPath(data any, path string) (any, bool) {
+func extractDiscoveryPath(data any, path string) (any, bool) {
 	current := data
 	for _, part := range strings.Split(path, ".") {
 		m, ok := current.(map[string]any)
@@ -89,10 +89,10 @@ func extractPath(data any, path string) (any, bool) {
 	return current, true
 }
 
-func extractItems(data any, itemsPath string) ([]any, error) {
+func extractDiscoveryItems(data any, itemsPath string) ([]any, error) {
 	target := data
 	if itemsPath != "" {
-		v, ok := extractPath(data, itemsPath)
+		v, ok := extractDiscoveryPath(data, itemsPath)
 		if !ok {
 			return nil, fmt.Errorf("discovery: path %q not found", itemsPath)
 		}

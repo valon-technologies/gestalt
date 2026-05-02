@@ -16,7 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
-	"github.com/valon-technologies/gestalt/server/services/plugins/discovery"
 )
 
 type connectManualRequest struct {
@@ -444,7 +443,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm cred
 			Timeout:   30 * time.Second,
 			Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
 		}
-		candidates, err := discovery.Run(ctx, cfg, client)
+		candidates, err := runDiscovery(ctx, cfg, client)
 		if err != nil {
 			return nil, fmt.Errorf("discovery: %w", err)
 		}
