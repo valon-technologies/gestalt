@@ -21,9 +21,7 @@ changes where the configured plugin or agent provider process runs.
 
 By default, executable plugins and agent providers run on the same machine as
 `gestaltd`. A provider only uses a runtime provider when it opts in with
-`execution.mode: hosted`. Use `execution.mode: hosted` with
-`execution.runtime`; legacy `plugins.<name>.runtime` and
-`providers.agent.<name>.runtime` fields are no longer accepted.
+`execution.mode: hosted` and selects a backend with `execution.runtime`.
 
 When a provider does opt in, Gestalt selects a backend from `runtime.providers`,
 reads the backend's support profile, starts a runtime session, waits for that
