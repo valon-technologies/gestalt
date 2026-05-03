@@ -4324,6 +4324,12 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 			t.Fatalf("CreateObjectStore(external_credentials): %v", err)
 		}
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "external_credentials_v2",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(external_credentials_v2): %v", err)
+		}
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "plugin_credentials",
 			Schema: &proto.ObjectStoreSchema{},
 		}); err == nil {

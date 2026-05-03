@@ -1474,7 +1474,7 @@ func externalCredentialsIndexedDBHostService(envVar, providerName string, ds ind
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
-				AllowedStores: []string{"external_credentials"},
+				AllowedStores: []string{"external_credentials", "external_credentials_v2"},
 			}))
 		},
 	}
