@@ -568,10 +568,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
-	toolSource, err := validateProviderTurnToolSource(req.ToolSource)
-	if err != nil {
-		return nil, err
-	}
 	toolRefs, err := normalizeToolRefs(req.ToolRefs)
 	if err != nil {
 		return nil, err
@@ -580,23 +576,35 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
+	toolSource, err := validateProviderTurnToolSource(req.ToolSource)
+	if err != nil {
 		return nil, err
 	}
-	if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
-		return nil, err
+	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) > 0 {
+		toolSource = coreagent.ToolSourceModeMCPCatalog
 	}
 	var tools []coreagent.Tool
-	if supported, err := agentProviderSupportsToolSource(ctx, ownedSession.provider, toolSource); err != nil {
-		return nil, err
-	} else if !supported {
-		return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
+	if toolSource == coreagent.ToolSourceModeMCPCatalog {
+		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
+			return nil, err
+		}
+		if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
+			return nil, err
+		}
+		if supported, err := agentProviderSupportsToolSource(ctx, ownedSession.provider, toolSource); err != nil {
+			return nil, err
+		} else if !supported {
+			return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
+		}
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	toolGrant, err := m.mintToolGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
-	if err != nil {
-		return nil, err
+	var toolGrant string
+	if toolSource == coreagent.ToolSourceModeMCPCatalog {
+		toolGrant, err = m.mintToolGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
+		if err != nil {
+			return nil, err
+		}
 	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
 		TurnID:          turnID,
@@ -2237,7 +2245,7 @@ func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.
 	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
 	switch source {
 	case coreagent.ToolSourceModeUnspecified, coreagent.ToolSourceModeMCPCatalog:
-		return coreagent.ToolSourceModeMCPCatalog, nil
+		return source, nil
 	default:
 		return "", fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, source)
 	}

@@ -461,14 +461,12 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 	}
 }
 
-func TestManagerCreateTurnDefaultsToMCPCatalogForProviderTurns(t *testing.T) {
+func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
 	alpha.capabilities = &coreagent.ProviderCapabilities{
-		SupportedToolSources: []coreagent.ToolSourceMode{
-			coreagent.ToolSourceModeMCPCatalog,
-		},
+		BoundedListHydration: true,
 	}
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
@@ -499,11 +497,14 @@ func TestManagerCreateTurnDefaultsToMCPCatalogForProviderTurns(t *testing.T) {
 	if len(alpha.createTurnReqs) != 1 {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
-	if got := alpha.createTurnReqs[0].ToolSource; got != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", got)
+	if got := alpha.createTurnReqs[0].ToolSource; got != coreagent.ToolSourceModeUnspecified {
+		t.Fatalf("CreateTurn tool source = %q, want empty", got)
 	}
 	if got := alpha.createTurnReqs[0].Tools; len(got) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", got)
+	}
+	if got := alpha.createTurnReqs[0].ToolGrant; got != "" {
+		t.Fatalf("CreateTurn tool grant = %q, want empty", got)
 	}
 }
 
