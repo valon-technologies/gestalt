@@ -21,6 +21,7 @@ type Request struct {
 	Subject          Subject
 	Credential       Credential
 	Access           Access
+	Host             Host
 	IdempotencyKey   string
 	invocationToken  string
 }
@@ -228,6 +229,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
 			Access:           AccessFromContext(ctx),
+			Host:             HostContextFromContext(ctx),
 			IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 			invocationToken:  invocationTokenFromContext(ctx),
 		})

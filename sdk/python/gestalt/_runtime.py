@@ -16,7 +16,7 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _telemetry
-from ._api import Access, Credential, Request, Subject
+from ._api import Access, Credential, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
@@ -1012,6 +1012,7 @@ def _plugin_request(request: Any) -> Request:
         subject=_subject_from_proto(getattr(request, "context", None)),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
+        host=_host_from_proto(getattr(request, "context", None)),
         workflow=_workflow_from_proto(getattr(request, "context", None)),
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
         invocation_token=getattr(request, "invocation_token", ""),
@@ -1085,6 +1086,15 @@ def _access_from_proto(request_context: Any) -> Access:
         policy=getattr(access, "policy", ""),
         role=getattr(access, "role", ""),
     )
+
+
+def _host_from_proto(request_context: Any) -> Host:
+    if request_context is None:
+        return Host()
+    host = getattr(request_context, "host", None)
+    if host is None:
+        return Host()
+    return Host(public_base_url=getattr(host, "public_base_url", ""))
 
 
 def _workflow_from_proto(request_context: Any) -> dict[str, Any]:

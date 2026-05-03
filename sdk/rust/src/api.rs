@@ -41,6 +41,13 @@ pub struct Access {
     pub role: String,
 }
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Describes public host metadata attached to a request.
+pub struct Host {
+    /// Public base URL for the Gestalt host.
+    pub public_base_url: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Carries execution-scoped metadata into typed operation handlers.
 pub struct Request {
@@ -54,6 +61,8 @@ pub struct Request {
     pub credential: Credential,
     /// Access decision attached to the request.
     pub access: Access,
+    /// Public host metadata attached to the request.
+    pub host: Host,
     /// Idempotency key supplied by the host.
     pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object

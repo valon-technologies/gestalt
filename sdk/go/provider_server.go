@@ -290,6 +290,11 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			Role:   access.GetRole(),
 		})
 	}
+	if host := reqCtx.GetHost(); host != nil {
+		ctx = WithHostContext(ctx, Host{
+			PublicBaseURL: host.GetPublicBaseUrl(),
+		})
+	}
 	if workflow := reqCtx.GetWorkflow(); workflow != nil {
 		ctx = WithWorkflowContext(ctx, workflow.AsMap())
 	}

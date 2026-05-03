@@ -266,8 +266,14 @@ pub struct AccessContext {
     #[prost(string, tag = "2")]
     pub role: ::prost::alloc::string::String,
 }
-/// RequestContext bundles the caller, credential, and access metadata for one
-/// operation.
+/// HostContext describes stable public host metadata available to provider code.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HostContext {
+    #[prost(string, tag = "1")]
+    pub public_base_url: ::prost::alloc::string::String,
+}
+/// RequestContext bundles the caller, credential, access, and host metadata for
+/// one operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestContext {
     #[prost(message, optional, tag = "1")]
@@ -278,6 +284,8 @@ pub struct RequestContext {
     pub access: ::core::option::Option<AccessContext>,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub host: ::core::option::Option<HostContext>,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.

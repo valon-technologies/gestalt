@@ -192,13 +192,19 @@ message AccessContext {
   string role = 2;
 }
 
-// RequestContext bundles the caller, credential, and access metadata for one
-// operation.
+// HostContext describes stable public host metadata available to provider code.
+message HostContext {
+  string public_base_url = 1;
+}
+
+// RequestContext bundles the caller, credential, access, and host metadata for
+// one operation.
 message RequestContext {
   SubjectContext subject = 1;
   CredentialContext credential = 2;
   AccessContext access = 3;
   google.protobuf.Struct workflow = 4;
+  HostContext host = 5;
 }
 
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional

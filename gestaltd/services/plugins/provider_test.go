@@ -58,10 +58,11 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
 	access := invocation.AccessContextFromContext(ctx)
+	host := invocation.HostContextFromContext(ctx)
 	idempotencyKey := invocation.IdempotencyKeyFromContext(ctx)
 	return &core.OperationResult{
 		Status: 201,
-		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role, idempotencyKey),
+		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role, idempotencyKey, host.PublicBaseURL),
 	}, nil
 }
 
@@ -93,9 +94,10 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
 	access := invocation.AccessContextFromContext(ctx)
+	host := invocation.HostContextFromContext(ctx)
 	return &catalog.Catalog{
 		Name:        "roundtrip-session",
-		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role),
+		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role, host.PublicBaseURL),
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}, Tags: []string{"roundtrip", "session"}},
@@ -111,6 +113,15 @@ func (p *roundTripProvider) PostConnect(_ context.Context, token *core.ExternalC
 		"subject":    token.SubjectID,
 		"connection": token.Connection,
 		"instance":   token.Instance,
+	}, nil
+}
+
+func (p *roundTripProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	return &core.HTTPResolvedSubject{
+		ID:          "user:resolved",
+		Kind:        "user",
+		DisplayName: invocation.HostContextFromContext(ctx).PublicBaseURL,
+		AuthSource:  req.VerifiedSubject,
 	}, nil
 }
 
@@ -175,7 +186,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	client := newIntegrationProviderClient(t, NewProviderServer(&roundTripProvider{}))
-	prov, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil)
+	prov, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil, WithHostContext(" https://gestalt.example.test/ "))
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}
@@ -225,8 +236,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin|tool-call-123",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin|https://gestalt.example.test",
 		},
 		{
 			name: "service account subject",
@@ -236,8 +247,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin|tool-call-123",
-			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|roadmap|admin|https://gestalt.example.test",
 		},
 	}
 
@@ -309,6 +320,19 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}) {
 				t.Fatalf("unexpected post connect metadata: %+v", metadata)
 			}
+
+			resolved, attempted, err := core.ResolveHTTPSubject(context.Background(), prov, &core.HTTPSubjectResolveRequest{
+				VerifiedSubject: "host-only",
+			})
+			if err != nil {
+				t.Fatalf("ResolveHTTPSubject: %v", err)
+			}
+			if !attempted {
+				t.Fatal("expected core.ResolveHTTPSubject to report attempted")
+			}
+			if resolved == nil || resolved.DisplayName != "https://gestalt.example.test" || resolved.AuthSource != "host-only" {
+				t.Fatalf("unexpected resolved subject: %+v", resolved)
+			}
 		})
 	}
 
@@ -345,7 +369,7 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 		Role:   "viewer",
 	})
 
-	reqCtx, err := requestContextProto(ctx)
+	reqCtx, err := requestContextProto(ctx, "")
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -370,7 +394,7 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 		},
 	})
 
-	reqCtx, err := requestContextProto(ctx)
+	reqCtx, err := requestContextProto(ctx, "")
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -384,6 +408,21 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 		},
 	}) {
 		t.Fatalf("workflow context = %#v", got)
+	}
+}
+
+func TestRequestContextProto_PreservesHostOnlyContext(t *testing.T) {
+	t.Parallel()
+
+	reqCtx, err := requestContextProto(context.Background(), " https://valon.tools/ ")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetHost() == nil {
+		t.Fatal("expected host request context")
+	}
+	if got := reqCtx.GetHost().GetPublicBaseUrl(); got != "https://valon.tools" {
+		t.Fatalf("public base URL = %q, want %q", got, "https://valon.tools")
 	}
 }
 

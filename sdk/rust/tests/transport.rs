@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
-    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest,
-    RequestContext, StartProviderRequest, SubjectContext,
+    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, HostContext,
+    PostConnectRequest, RequestContext, StartProviderRequest, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -45,11 +45,12 @@ impl Provider for TestProvider {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: format!(
-                "{}|{}|{}|{}|{}",
+                "{}|{}|{}|{}|{}|{}",
                 request.connection_param("tenant").unwrap_or_default(),
                 request.subject.id,
                 request.credential.mode,
                 request.access.role,
+                request.host.public_base_url,
                 request
                     .workflow
                     .get("trigger")
@@ -91,6 +92,7 @@ struct Output {
     subject_id: String,
     credential_mode: String,
     access_role: String,
+    host_base_url: String,
     invocation_token: String,
     idempotency_key: String,
     workflow_run_id: String,
@@ -114,12 +116,14 @@ async fn serves_provider_requests_over_unix_socket() {
                 let subject_id = request.subject.id.clone();
                 let credential_mode = request.credential.mode.clone();
                 let access_role = request.access.role.clone();
+                let host_base_url = request.host.public_base_url.clone();
                 let invocation_token = request.invocation_token().to_string();
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
                     subject_id,
                     credential_mode,
                     access_role,
+                    host_base_url,
                     invocation_token,
                     idempotency_key: request.idempotency_key.clone(),
                     workflow_run_id: request
@@ -283,6 +287,9 @@ async fn serves_provider_requests_over_unix_socket() {
                         }
                     }
                 }))),
+                host: Some(HostContext {
+                    public_base_url: "https://gestalt.example.test".to_string(),
+                }),
             }),
         })
         .await
@@ -292,7 +299,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"user","access_role":"admin","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client
@@ -320,6 +327,9 @@ async fn serves_provider_requests_over_unix_socket() {
                     "runId": "run-999",
                     "trigger": {"kind": "schedule"}
                 }))),
+                host: Some(HostContext {
+                    public_base_url: "https://gestalt.example.test".to_string(),
+                }),
             }),
         })
         .await
@@ -329,7 +339,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(catalog.name, "session-example");
     assert_eq!(
         catalog.display_name,
-        "acme|user:user-123|user|viewer|schedule"
+        "acme|user:user-123|user|viewer|https://gestalt.example.test|schedule"
     );
 
     let err = client
