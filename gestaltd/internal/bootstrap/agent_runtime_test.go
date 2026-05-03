@@ -2202,14 +2202,14 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		PageSize:     100,
+		PageSize:     5,
 		ToolGrant:    manyDocsGrant,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with oversized page size: %v", err)
+		t.Fatalf("ListTools with small page size: %v", err)
 	}
-	if len(pagedDocs.Tools) != 10 || pagedDocs.NextPageToken != "10" {
-		t.Fatalf("ListTools oversized page = %d tools, next %q; want 10 tools and token 10", len(pagedDocs.Tools), pagedDocs.NextPageToken)
+	if len(pagedDocs.Tools) != 5 || pagedDocs.NextPageToken != "5" {
+		t.Fatalf("ListTools small page = %d tools, next %q; want 5 tools and token 5", len(pagedDocs.Tools), pagedDocs.NextPageToken)
 	}
 	for _, listed := range pagedDocs.Tools {
 		if listed.OutputSchemaJSON != "" {
@@ -2220,15 +2220,15 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		PageSize:     100,
+		PageSize:     10000,
 		PageToken:    pagedDocs.NextPageToken,
 		ToolGrant:    manyDocsGrant,
 	})
 	if err != nil {
-		t.Fatalf("ListTools final oversized page: %v", err)
+		t.Fatalf("ListTools final large page: %v", err)
 	}
-	if len(finalDocs.Tools) != 2 || finalDocs.NextPageToken != "" {
-		t.Fatalf("ListTools final oversized page = %d tools, next %q; want 2 tools and no token", len(finalDocs.Tools), finalDocs.NextPageToken)
+	if len(finalDocs.Tools) != 7 || finalDocs.NextPageToken != "" {
+		t.Fatalf("ListTools final large page = %d tools, next %q; want 7 tools and no token", len(finalDocs.Tools), finalDocs.NextPageToken)
 	}
 	for _, listed := range finalDocs.Tools {
 		if listed.OutputSchemaJSON != "" {
