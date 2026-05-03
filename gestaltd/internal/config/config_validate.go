@@ -219,7 +219,8 @@ func normalizeConnectionBindings(cfg *Config) error {
 		if entry == nil || len(entry.Connections) == 0 {
 			return nil
 		}
-		for rawLocalName, binding := range entry.Connections {
+		for _, rawLocalName := range slices.Sorted(maps.Keys(entry.Connections)) {
+			binding := entry.Connections[rawLocalName]
 			if binding == nil {
 				return fmt.Errorf("config validation: %s.%s.connections.%s is required", kind, name, rawLocalName)
 			}

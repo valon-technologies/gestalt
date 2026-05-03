@@ -4844,6 +4844,78 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	}
 }
 
+func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"shared": {
+				Mode: providermanifestv1.ConnectionModePlatform,
+				Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeNone},
+			},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					core.PluginConnectionAlias: {
+						Ref:      "shared",
+						Exposure: providermanifestv1.ConnectionExposureInternal,
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+	connections := cfg.Plugins["sample"].Connections
+	if _, ok := connections[core.PluginConnectionAlias]; ok {
+		t.Fatalf("connections[%q] present, want alias removed after canonicalization", core.PluginConnectionAlias)
+	}
+	canonical := connections[core.PluginConnectionName]
+	if canonical == nil {
+		t.Fatalf("connections[%q] missing", core.PluginConnectionName)
+	}
+	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
+		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
+	}
+	if canonical.Exposure != providermanifestv1.ConnectionExposureInternal {
+		t.Fatalf("canonical Exposure = %q, want %q", canonical.Exposure, providermanifestv1.ConnectionExposureInternal)
+	}
+}
+
+func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"primary":  {Mode: providermanifestv1.ConnectionModePlatform},
+			"fallback": {Mode: providermanifestv1.ConnectionModePlatform},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					core.PluginConnectionAlias: {Ref: "primary"},
+					core.PluginConnectionName:  {Ref: "fallback"},
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want alias conflict")
+	}
+	if !strings.Contains(err.Error(), "conflicts with alias") {
+		t.Fatalf("ValidateStructure() error = %v, want alias conflict", err)
+	}
+}
+
 func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 	t.Parallel()
 

@@ -3,11 +3,15 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -198,5 +202,102 @@ func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
 	}
 	if credential.ExpiresAt == nil {
 		t.Fatal("ExpiresAt = nil, want expiry from token endpoint")
+	}
+}
+
+func TestClientCredentialsTokenSourceCanceledCallerDoesNotCancelSharedFetch(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	secondRequest := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	var requests atomic.Int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch requests.Add(1) {
+		case 1:
+			close(started)
+		case 2:
+			close(secondRequest)
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "shared-token",
+			"expires_in":   3600,
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer func() {
+		releaseOnce.Do(func() { close(release) })
+		tokenServer.Close()
+	}()
+
+	source, err := newClientCredentialsTokenSource(config.ConnectionAuthDef{
+		TokenURL:     tokenServer.URL,
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+	})
+	if err != nil {
+		t.Fatalf("newClientCredentialsTokenSource() error = %v", err)
+	}
+
+	firstCtx, cancelFirst := context.WithCancel(context.Background())
+	firstErr := make(chan error, 1)
+	go func() {
+		_, err := source.ResolveConnectionCredential(firstCtx)
+		firstErr <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first token request")
+	}
+	cancelFirst()
+	select {
+	case err := <-firstErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("first ResolveConnectionCredential() error = %v, want context canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for canceled caller")
+	}
+
+	type result struct {
+		credentialToken string
+		err             error
+	}
+	secondResult := make(chan result, 1)
+	go func() {
+		credential, err := source.ResolveConnectionCredential(context.Background())
+		secondResult <- result{credentialToken: credential.Token, err: err}
+	}()
+
+	select {
+	case <-secondRequest:
+		t.Fatal("second caller started a new token request instead of sharing the in-flight fetch")
+	case <-time.After(100 * time.Millisecond):
+	}
+	releaseOnce.Do(func() { close(release) })
+
+	select {
+	case result := <-secondResult:
+		if result.err != nil {
+			t.Fatalf("second ResolveConnectionCredential() error = %v", result.err)
+		}
+		if result.credentialToken != "shared-token" {
+			t.Fatalf("second token = %q, want shared-token", result.credentialToken)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for second caller")
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("token requests = %d, want 1 shared request", got)
 	}
 }
