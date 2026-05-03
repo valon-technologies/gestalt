@@ -62,6 +62,7 @@ class DecodeInputTests(unittest.TestCase):
     def test_decode_primitives(self) -> None:
         self.assertEqual(decode_input(str, {"value": "hello"}), "hello")
         self.assertEqual(decode_input(int, {"value": 42}), 42)
+        self.assertEqual(decode_input(int, {"value": 42.0}), 42)
         self.assertEqual(decode_input(int, {"value": "42"}), 42)
         self.assertEqual(decode_input(float, {"v": 3.14}), 3.14)
         self.assertEqual(decode_input(float, {"v": 3}), 3.0)
