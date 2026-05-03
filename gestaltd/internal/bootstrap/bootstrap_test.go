@@ -4317,13 +4317,11 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	}
 
 	withIndexedDBHostClient(t, hostServices[0], func(client proto.IndexedDBClient) {
-		for _, store := range []string{"external_credentials", "external_credentials_v2"} {
-			if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
-				Name:   store,
-				Schema: &proto.ObjectStoreSchema{},
-			}); err != nil {
-				t.Fatalf("CreateObjectStore(%s): %v", store, err)
-			}
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "external_credentials",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(external_credentials): %v", err)
 		}
 		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
 			Name:   "plugin_credentials",

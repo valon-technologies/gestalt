@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
@@ -39,7 +38,7 @@ func (s *Server) unlinkStoredCredentialAuthorization(ctx context.Context, tok *c
 }
 
 func (s *Server) subjectHasOtherExternalIdentityLink(ctx context.Context, subjectID string, ref externalIdentityRef, skipCredentialID string) (bool, error) {
-	if coredata.ExternalCredentialProviderMissing(s.externalCredentials) || subjectID == "" {
+	if core.ExternalCredentialProviderMissing(s.externalCredentials) || subjectID == "" {
 		return false, nil
 	}
 	ref = normalizeExternalIdentityRef(ref)

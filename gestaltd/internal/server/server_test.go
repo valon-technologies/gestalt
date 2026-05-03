@@ -162,7 +162,7 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
 	}
 	if cfg.Invoker == nil {
-		externalCredentials := coredata.EffectiveExternalCredentialProvider(cfg.Services)
+		externalCredentials := cfg.Services.ExternalCredentials
 		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, externalCredentials, brokerOpts...)
 	}
 	srv, err := server.New(cfg)

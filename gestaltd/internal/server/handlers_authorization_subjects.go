@@ -738,7 +738,7 @@ func (s *Server) managedSubjectGrantRows(ctx context.Context, subjectID string) 
 }
 
 func (s *Server) deleteManagedSubjectCredentials(ctx context.Context, subjectID string) error {
-	if s.externalCredentials == nil || coredata.ExternalCredentialProviderMissing(s.externalCredentials) {
+	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
 		return nil
 	}
 	credentials, err := s.externalCredentials.ListCredentials(ctx, subjectID)
