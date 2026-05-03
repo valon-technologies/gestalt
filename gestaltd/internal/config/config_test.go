@@ -3977,6 +3977,55 @@ plugins:
 	}
 }
 
+func TestLoadConfigProviderPackageSourcesDoNotGetBuiltinDefaults(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteRawConfigFile(t, `
+apiVersion: gestaltd.config/v5
+providerRepositories:
+  local:
+    url: https://providers.example.test/index.yaml
+providers:
+  secrets:
+    vault:
+      source:
+        repo: local
+        package: github.com/acme/providers/secrets
+        version: 1.0.0
+  telemetry:
+    otel:
+      source:
+        repo: local
+        package: github.com/acme/providers/telemetry
+        version: 1.0.0
+  audit:
+    auditlog:
+      source:
+        repo: local
+        package: github.com/acme/providers/audit
+        version: 1.0.0
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for subject, entry := range map[string]*ProviderEntry{
+		"secrets.vault":  cfg.Providers.Secrets["vault"],
+		"telemetry.otel": cfg.Providers.Telemetry["otel"],
+		"audit.auditlog": cfg.Providers.Audit["auditlog"],
+	} {
+		if entry == nil {
+			t.Fatalf("%s entry = nil", subject)
+		}
+		if got := entry.Source.Builtin; got != "" {
+			t.Fatalf("%s Source.Builtin = %q, want empty for package source", subject, got)
+		}
+		if !entry.Source.IsPackage() {
+			t.Fatalf("%s Source.IsPackage = false, want true", subject)
+		}
+	}
+}
+
 func TestLoadConfigProviderPackageSourcesRequireV5(t *testing.T) {
 	t.Parallel()
 

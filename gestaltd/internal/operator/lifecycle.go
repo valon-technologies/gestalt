@@ -449,6 +449,16 @@ func (l *Lifecycle) resolvePackageSources(ctx context.Context, cfg *config.Confi
 			}
 		}
 	}
+	for name, entry := range cfg.Providers.IndexedDB {
+		if err := resolveEntry(string(config.HostProviderKindIndexedDB)+" "+strconv.Quote(name), entry); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.S3 {
+		if err := resolveEntry(providermanifestv1.KindS3+" "+strconv.Quote(name), entry); err != nil {
+			return err
+		}
+	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry != nil {
 			if err := resolveEntry("runtime "+strconv.Quote(name), &entry.ProviderEntry); err != nil {
@@ -480,6 +490,16 @@ func configHasPackageSources(cfg *config.Config) bool {
 			if entry != nil && entry.Source.IsPackage() {
 				return true
 			}
+		}
+	}
+	for _, entry := range cfg.Providers.IndexedDB {
+		if entry != nil && entry.Source.IsPackage() {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.S3 {
+		if entry != nil && entry.Source.IsPackage() {
+			return true
 		}
 	}
 	for _, entry := range cfg.Runtime.Providers {
