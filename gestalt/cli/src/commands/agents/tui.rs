@@ -8,7 +8,11 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers, MouseEvent, MouseEventKind,
+};
+use ratatui::crossterm::execute;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui_textarea::{CursorMove, TextArea};
@@ -32,6 +36,7 @@ use super::{
 
 const TICK_RATE: Duration = Duration::from_millis(50);
 const HISTORY_LIMIT: usize = 100;
+const MOUSE_SCROLL_LINES: usize = 3;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 const USER_PROMPT: &str = "› ";
 const ASSISTANT_BULLET: &str = "● ";
@@ -66,14 +71,22 @@ pub(super) fn run_shell(
 struct TerminalGuard {
     terminal: ratatui::DefaultTerminal,
     restored: bool,
+    mouse_capture_enabled: bool,
 }
 
 impl TerminalGuard {
     fn start() -> Result<Self> {
         let terminal = ratatui::try_init().context("failed to initialize terminal UI")?;
+        let mouse_capture_enabled = !mouse_capture_disabled();
+        if mouse_capture_enabled && let Err(err) = execute!(io::stdout(), EnableMouseCapture) {
+            let _ = execute!(io::stdout(), DisableMouseCapture);
+            let _ = ratatui::try_restore();
+            return Err(err).context("failed to enable terminal mouse capture");
+        }
         Ok(Self {
             terminal,
             restored: false,
+            mouse_capture_enabled,
         })
     }
 
@@ -83,11 +96,24 @@ impl TerminalGuard {
 
     fn restore(&mut self) -> Result<()> {
         if !self.restored {
-            let restore_result = ratatui::try_restore();
-            restore_result.context("failed to restore terminal UI")?;
-            self.restored = true;
+            let mouse_result = if self.mouse_capture_enabled {
+                execute!(io::stdout(), DisableMouseCapture)
+                    .context("failed to disable terminal mouse capture")
+            } else {
+                Ok(())
+            };
+            let restore_result = ratatui::try_restore().context("failed to restore terminal UI");
+            if mouse_result.is_ok() && restore_result.is_ok() {
+                self.restored = true;
+            }
+            mouse_result?;
+            restore_result?;
         }
         Ok(())
+    }
+
+    fn clear(&mut self) -> Result<()> {
+        self.terminal.clear().context("failed to clear terminal UI")
     }
 
     fn resize(&mut self) -> Result<()> {
@@ -100,10 +126,20 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if !self.restored {
+            if self.mouse_capture_enabled {
+                let _ = execute!(io::stdout(), DisableMouseCapture);
+            }
             ratatui::restore();
             self.restored = true;
         }
     }
+}
+
+fn mouse_capture_disabled() -> bool {
+    matches!(
+        env::var("GESTALT_CLI_DISABLE_MOUSE").as_deref(),
+        Ok("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
 }
 
 struct TuiApp {
@@ -120,6 +156,7 @@ struct TuiApp {
     transcript_visible_height: usize,
     transcript_content_height: usize,
     tick: usize,
+    clear_requested: bool,
     input_history: Vec<String>,
     history_cursor: Option<usize>,
     history_draft: String,
@@ -146,6 +183,7 @@ impl TuiApp {
             transcript_visible_height: 1,
             transcript_content_height: 0,
             tick: 0,
+            clear_requested: false,
             input_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
@@ -159,6 +197,10 @@ impl TuiApp {
             self.drain_worker_events();
             self.start_next_queued_turn();
             self.tick = self.tick.wrapping_add(1);
+            if self.clear_requested {
+                terminal.clear()?;
+                self.clear_requested = false;
+            }
             terminal.inner_mut().draw(|frame| self.draw(frame))?;
 
             if self.should_quit {
@@ -168,6 +210,7 @@ impl TuiApp {
             if event::poll(TICK_RATE).context("failed to poll terminal events")? {
                 match event::read().context("failed to read terminal event")? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key),
+                    Event::Mouse(mouse) => self.handle_mouse(mouse),
                     Event::Resize(_, _) => terminal.resize()?,
                     _ => {}
                 }
@@ -262,7 +305,7 @@ impl TuiApp {
             let help = if interaction.request.get("secret").and_then(Value::as_bool) == Some(true) {
                 "Enter submits. Typed secret input is masked."
             } else {
-                "Enter submits. Alt-Enter inserts a newline."
+                "Enter submits. Alt-Enter/Ctrl-J/Shift-Enter inserts a newline."
             };
             interaction_summary(interaction, self.interaction_input.validation(), help)
         };
@@ -367,6 +410,10 @@ impl TuiApp {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        if self.handle_global_key(&key) {
+            return;
+        }
+
         if self.state.pending_interaction.is_some() {
             self.handle_interaction_key(key);
             return;
@@ -376,19 +423,12 @@ impl TuiApp {
             (KeyCode::Char('c'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.handle_interrupt();
             }
-            (KeyCode::PageUp, _) => self.state.scroll_up(
-                self.transcript_visible_height,
-                self.transcript_content_height,
-            ),
-            (KeyCode::PageDown, _) => self.state.scroll_down(),
-            (KeyCode::Home, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.state.scroll_to_top(
-                    self.transcript_visible_height,
-                    self.transcript_content_height,
-                );
-            }
-            (KeyCode::End, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.state.scroll_to_bottom();
+            (KeyCode::Char('d'), modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL)
+                    && !self.state.busy
+                    && textarea_text(&self.composer).is_empty() =>
+            {
+                self.should_quit = true;
             }
             (KeyCode::Char('o'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.toggle_tool_detail_mode();
@@ -399,7 +439,7 @@ impl TuiApp {
             (KeyCode::Down, modifiers) if modifiers.is_empty() && self.history_cursor.is_some() => {
                 self.history_next();
             }
-            (KeyCode::Enter, modifiers) if modifiers.contains(KeyModifiers::ALT) => {
+            _ if is_newline_shortcut(&key) => {
                 self.reset_history_navigation();
                 self.composer.insert_newline();
             }
@@ -409,6 +449,59 @@ impl TuiApp {
                 self.composer.input(key);
             }
         }
+    }
+
+    fn handle_global_key(&mut self, key: &KeyEvent) -> bool {
+        match (key.code, key.modifiers) {
+            (KeyCode::PageUp, _) => {
+                self.scroll_transcript_up(self.page_scroll_lines());
+                true
+            }
+            (KeyCode::PageDown, _) => {
+                self.scroll_transcript_down(self.page_scroll_lines());
+                true
+            }
+            (KeyCode::Home, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.state.scroll_to_top(
+                    self.transcript_visible_height,
+                    self.transcript_content_height,
+                );
+                true
+            }
+            (KeyCode::End, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.state.scroll_to_bottom();
+                true
+            }
+            (KeyCode::Char('l'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.clear_requested = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => self.scroll_transcript_up(MOUSE_SCROLL_LINES),
+            MouseEventKind::ScrollDown => self.scroll_transcript_down(MOUSE_SCROLL_LINES),
+            _ => {}
+        }
+    }
+
+    fn page_scroll_lines(&self) -> usize {
+        (self.transcript_visible_height / 2).max(1)
+    }
+
+    fn scroll_transcript_up(&mut self, amount: usize) {
+        self.state.scroll_up_by(
+            self.transcript_visible_height,
+            self.transcript_content_height,
+            amount,
+        );
+    }
+
+    fn scroll_transcript_down(&mut self, amount: usize) {
+        self.state.scroll_down_by(amount);
     }
 
     fn handle_interaction_key(&mut self, key: KeyEvent) {
@@ -441,7 +534,7 @@ impl TuiApp {
             (KeyCode::Char('c'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.handle_interrupt();
             }
-            (KeyCode::Enter, modifiers) if modifiers.contains(KeyModifiers::ALT) => {
+            _ if is_newline_shortcut(&key) => {
                 self.interaction_input.insert_newline();
             }
             (KeyCode::Enter, _) => {
@@ -719,6 +812,16 @@ impl TuiApp {
 
 fn styled_textarea(title: &'static str) -> TextArea<'static> {
     textarea_with_text(title, "")
+}
+
+fn is_newline_shortcut(key: &KeyEvent) -> bool {
+    match (key.code, key.modifiers) {
+        (KeyCode::Enter, modifiers) => {
+            modifiers.contains(KeyModifiers::ALT) || modifiers.contains(KeyModifiers::SHIFT)
+        }
+        (KeyCode::Char('j'), modifiers) => modifiers.contains(KeyModifiers::CONTROL),
+        _ => false,
+    }
 }
 
 fn visible_lines(

@@ -255,10 +255,15 @@ parses the event stream, renders assistant/tool/interaction events, cancels the
 active turn on Ctrl-C, and resolves pending interactions inline. TTY sessions
 use a full-screen terminal UI with a persistent transcript, streaming assistant
 output, a multiline composer, queued prompts while a turn is running, Ctrl-C
-cancellation, and inline interaction panels. Press Enter to send, Alt-Enter to
-insert a newline, PageUp/PageDown to scroll, `/session` to show the active
-session and resume command, and `/model` to show or set the model for future
-turns. Non-TTY sessions keep the
+cancellation, and inline interaction panels. Press Enter to send, Alt-Enter or
+supported Shift-Enter to insert a newline, Ctrl-J to insert a portable newline,
+PageUp/PageDown to scroll half a screen, Ctrl-Home/Ctrl-End to jump to the
+transcript start or end, Ctrl-L to redraw, Ctrl-D to exit an idle empty prompt,
+Up/Down to recall input history, `/session` to show the active session and
+resume command, and `/model` to show or set the model for future turns. Wheel
+and trackpad scrolling moves the transcript; set `GESTALT_CLI_DISABLE_MOUSE=1`
+before launching the CLI to keep terminal-native mouse selection instead.
+Non-TTY sessions keep the
 prompt-and-print fallback used by scripts and tests; there, end an input line
 with `\` to continue the same user message on the next prompt.
 
