@@ -53,10 +53,15 @@ type CredentialContext struct {
 	Instance   string
 }
 
+type HostContext struct {
+	PublicBaseURL string
+}
+
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type accessCtxKey struct{}
+type hostCtxKey struct{}
 type workflowCtxKey struct{}
 type internalConnectionAccessCtxKey struct{}
 
@@ -104,6 +109,15 @@ func WithAccessContext(ctx context.Context, access AccessContext) context.Contex
 func AccessContextFromContext(ctx context.Context) AccessContext {
 	access, _ := ctx.Value(accessCtxKey{}).(AccessContext)
 	return access
+}
+
+func WithHostContext(ctx context.Context, host HostContext) context.Context {
+	return context.WithValue(ctx, hostCtxKey{}, host)
+}
+
+func HostContextFromContext(ctx context.Context) HostContext {
+	host, _ := ctx.Value(hostCtxKey{}).(HostContext)
+	return host
 }
 
 func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.Context {

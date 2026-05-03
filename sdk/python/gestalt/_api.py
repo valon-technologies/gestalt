@@ -65,6 +65,13 @@ class Access:
 
 
 @dataclasses.dataclass(slots=True)
+class Host:
+    """Public host metadata for the request."""
+
+    public_base_url: str = ""
+
+
+@dataclasses.dataclass(slots=True)
 class Request:
     """Host-provided request context for an operation invocation."""
 
@@ -79,6 +86,7 @@ class Request:
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
     idempotency_key: str = ""
+    host: Host = dataclasses.field(default_factory=Host)
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

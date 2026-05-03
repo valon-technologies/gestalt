@@ -824,6 +824,7 @@ function providerRequest(
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
   const access = requestContext?.access;
+  const host = requestContext?.host;
   return {
     token,
     connectionParams: {
@@ -847,6 +848,9 @@ function providerRequest(
     },
     workflow: {
       ...(requestContext?.workflow ?? {}),
+    },
+    host: {
+      publicBaseUrl: host?.publicBaseUrl ?? "",
     },
     invocationToken,
     idempotencyKey: idempotencyKey.trim(),
@@ -881,6 +885,7 @@ function providerHTTPSubjectResolutionContext(
     subject: request.subject,
     credential: request.credential,
     access: request.access,
+    host: request.host,
     workflow: request.workflow,
   };
 }

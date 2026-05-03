@@ -973,13 +973,16 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted plugin: %w", err)
 	}
-	opts := []pluginservice.RemoteProviderOption{pluginservice.WithCloser(&runtimeBackedHostedCloser{
-		conn:         conn,
-		runtime:      runtimeProvider,
-		sessionID:    sessionID,
-		closeRuntime: runtimeOwned,
-		cleanup:      cleanup,
-	})}
+	opts := []pluginservice.RemoteProviderOption{
+		pluginservice.WithCloser(&runtimeBackedHostedCloser{
+			conn:         conn,
+			runtime:      runtimeProvider,
+			sessionID:    sessionID,
+			closeRuntime: runtimeOwned,
+			cleanup:      cleanup,
+		}),
+		pluginservice.WithHostContext(deps.BaseURL),
+	}
 	if invTokens != nil {
 		opts = append(opts,
 			pluginservice.WithInvocationTokens(invTokens),

@@ -47,6 +47,7 @@ import {
   CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
+  HostContextSchema,
   HTTPSubjectRequestSchema,
   PostConnectRequestSchema,
   RequestContextSchema,
@@ -747,6 +748,9 @@ test("integration provider service resolves hosted HTTP subjects through the plu
           policy: "hosted_http",
           role: "binding",
         }),
+        host: create(HostContextSchema, {
+          publicBaseUrl: "https://gestalt.example.test",
+        }),
         workflow: {
           http: {
             binding: "command",
@@ -799,6 +803,9 @@ test("integration provider service resolves hosted HTTP subjects through the plu
     access: {
       policy: "hosted_http",
       role: "binding",
+    },
+    host: {
+      publicBaseUrl: "https://gestalt.example.test",
     },
     workflow: {
       http: {
@@ -1885,6 +1892,7 @@ test("integration provider request context includes workflow metadata", async ()
         id: "inspect",
         handler(_input, request) {
           return {
+            host: request.host,
             workflow: request.workflow,
           };
         },
@@ -1899,6 +1907,9 @@ test("integration provider request context includes workflow metadata", async ()
       params: {},
       token: "token-123",
       context: create(RequestContextSchema, {
+        host: create(HostContextSchema, {
+          publicBaseUrl: "https://gestalt.example.test",
+        }),
         workflow: {
           runId: "run-123",
           provider: "temporal",
@@ -1940,6 +1951,9 @@ test("integration provider request context includes workflow metadata", async ()
   );
 
   expect(JSON.parse(result.body)).toEqual({
+    host: {
+      publicBaseUrl: "https://gestalt.example.test",
+    },
     workflow: {
       runId: "run-123",
       provider: "temporal",

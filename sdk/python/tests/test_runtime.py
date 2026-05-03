@@ -404,6 +404,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
                 "access_role": request.access.role,
+                "host_base_url": request.host.public_base_url,
                 "idempotency_key": request.idempotency_key,
                 "invocation_token": request.invocation_token,
                 "workflow_run_id": str(request.workflow.get("runId", "")),
@@ -423,6 +424,7 @@ class MainEntrypointTests(unittest.TestCase):
                         request.subject.id,
                         request.credential.mode,
                         request.access.role,
+                        request.host.public_base_url,
                         str(request.workflow.get("runId", "")),
                     ]
                 ),
@@ -515,6 +517,9 @@ class MainEntrypointTests(unittest.TestCase):
                         policy="sample_policy",
                         role="admin",
                     ),
+                    host=plugin_pb2.HostContext(
+                        public_base_url="https://gestalt.example.test",
+                    ),
                     workflow=execute_workflow,
                 ),
             ),
@@ -530,6 +535,9 @@ class MainEntrypointTests(unittest.TestCase):
                     access=plugin_pb2.AccessContext(
                         policy="sample_policy",
                         role="viewer",
+                    ),
+                    host=plugin_pb2.HostContext(
+                        public_base_url="https://gestalt.example.test",
                     ),
                     workflow=catalog_workflow,
                 ),
@@ -589,6 +597,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": "user:user-123",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
+                "host_base_url": "https://gestalt.example.test",
                 "idempotency_key": "tool-call-123",
                 "workflow_run_id": "run-123",
                 "workflow_trigger_kind": "event",
@@ -619,7 +628,7 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.name, "session-source")
         self.assertEqual(
             catalog.display_name,
-            "acme|user:user-123|user|viewer|run-456",
+            "acme|user:user-123|user|viewer|https://gestalt.example.test|run-456",
         )
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")

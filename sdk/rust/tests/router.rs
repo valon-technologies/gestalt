@@ -287,6 +287,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                 }),
                 access: None,
                 workflow: None,
+                host: None,
             }),
             idempotency_key: " tool-call-123 ".to_owned(),
         }))

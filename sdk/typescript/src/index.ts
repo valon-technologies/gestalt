@@ -52,6 +52,7 @@ export {
   responseBrand,
   request,
   type Access,
+  type Host,
   type MaybePromise,
   type Credential,
   type OperationResult,

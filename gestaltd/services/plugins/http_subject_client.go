@@ -17,7 +17,7 @@ func (p *remoteProviderBase) ResolveHTTPSubject(ctx context.Context, req *core.H
 		return nil, nil
 	}
 
-	reqCtx, err := requestContextProto(ctx)
+	reqCtx, err := p.requestContextProto(ctx)
 	if err != nil {
 		return nil, err
 	}

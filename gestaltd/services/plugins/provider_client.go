@@ -33,22 +33,23 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client       proto.IntegrationProviderClient
-	support      integrationProviderSupport
-	name         string
-	displayName  string
-	description  string
-	connection   core.ConnectionMode
-	catalog      *catalog.Catalog
-	iconSVG      string
-	authTypes    []string
-	connParams   map[string]core.ConnectionParamDef
-	credFields   []core.CredentialFieldDef
-	discovery    *core.DiscoveryConfig
-	closer       io.Closer
-	invTokens    *plugininvokerservice.InvocationTokenManager
-	callerPlugin string
-	invokeGrants plugininvokerservice.InvocationGrants
+	client        proto.IntegrationProviderClient
+	support       integrationProviderSupport
+	name          string
+	displayName   string
+	description   string
+	connection    core.ConnectionMode
+	catalog       *catalog.Catalog
+	iconSVG       string
+	authTypes     []string
+	connParams    map[string]core.ConnectionParamDef
+	credFields    []core.CredentialFieldDef
+	discovery     *core.DiscoveryConfig
+	closer        io.Closer
+	publicBaseURL string
+	invTokens     *plugininvokerservice.InvocationTokenManager
+	callerPlugin  string
+	invokeGrants  plugininvokerservice.InvocationGrants
 }
 
 var (
@@ -68,6 +69,10 @@ type RemoteProviderOption func(*remoteProviderBase)
 // This is used to tie process lifecycle to provider lifecycle.
 func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
+}
+
+func WithHostContext(publicBaseURL string) RemoteProviderOption {
+	return func(b *remoteProviderBase) { b.publicBaseURL = normalizePublicBaseURL(publicBaseURL) }
 }
 
 func WithInvocationTokens(tokens *plugininvokerservice.InvocationTokenManager) RemoteProviderOption {
@@ -172,7 +177,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 			return nil, err
 		}
 	}
-	reqCtx, err := requestContextProto(ctx)
+	reqCtx, err := p.requestContextProto(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +234,7 @@ func (p *remoteProviderBase) CatalogForRequest(ctx context.Context, token string
 }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
-	reqCtx, err := requestContextProto(ctx)
+	reqCtx, err := p.requestContextProto(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +339,14 @@ func invocationIDFromContext(ctx context.Context) string {
 	return meta.RequestID
 }
 
-func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
+func (p *remoteProviderBase) requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
+	if p == nil {
+		return requestContextProto(ctx, "")
+	}
+	return requestContextProto(ctx, p.publicBaseURL)
+}
+
+func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.RequestContext, error) {
 	var out proto.RequestContext
 
 	if p := principal.FromContext(ctx); p != nil {
@@ -369,10 +381,21 @@ func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 		out.Workflow = value
 	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil {
+	if publicBaseURL = normalizePublicBaseURL(publicBaseURL); publicBaseURL == "" {
+		publicBaseURL = normalizePublicBaseURL(invocation.HostContextFromContext(ctx).PublicBaseURL)
+	}
+	if publicBaseURL != "" {
+		out.Host = &proto.HostContext{PublicBaseUrl: publicBaseURL}
+	}
+
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil {
 		return nil, nil
 	}
 	return &out, nil
+}
+
+func normalizePublicBaseURL(baseURL string) string {
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
 func postConnectCredentialToProto(token *core.ExternalCredential) *proto.PostConnectCredential {

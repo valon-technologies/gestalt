@@ -123,6 +123,7 @@ where
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
+                    host: request_host(request.context.as_ref()),
                     idempotency_key: request.idempotency_key.trim().to_string(),
                     workflow: request_workflow(request.context.as_ref()),
                     invocation_token: request.invocation_token,
@@ -153,6 +154,7 @@ where
             subject: request_subject(request.context.as_ref()),
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
+            host: request_host(request.context.as_ref()),
             workflow: request_workflow(request.context.as_ref()),
             idempotency_key: String::new(),
             invocation_token: String::new(),
@@ -223,6 +225,18 @@ fn request_access(context: Option<&crate::generated::v1::RequestContext>) -> Acc
     Access {
         policy: access.policy.clone(),
         role: access.role.clone(),
+    }
+}
+
+fn request_host(context: Option<&crate::generated::v1::RequestContext>) -> crate::Host {
+    let Some(context) = context else {
+        return crate::Host::default();
+    };
+    let Some(host) = context.host.as_ref() else {
+        return crate::Host::default();
+    };
+    crate::Host {
+        public_base_url: host.public_base_url.clone(),
     }
 }
 

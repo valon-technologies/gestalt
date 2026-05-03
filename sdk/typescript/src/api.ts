@@ -27,6 +27,13 @@ export interface Access {
 }
 
 /**
+ * Describes public host metadata available to provider code.
+ */
+export interface Host {
+  publicBaseUrl: string;
+}
+
+/**
  * Request metadata forwarded to provider handlers by the Gestalt runtime.
  */
 export interface Request {
@@ -35,6 +42,7 @@ export interface Request {
   subject: Subject;
   credential: Credential;
   access: Access;
+  host: Host;
   idempotencyKey: string;
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
   // runId, target.plugin.pluginName, trigger.scheduleId, and trigger.event.specVersion.
@@ -106,6 +114,7 @@ export function request(
   workflow: Record<string, unknown> = {},
   invocationToken = "",
   idempotencyKey = "",
+  host: Partial<Host> = {},
 ): Request {
   return {
     token,
@@ -130,6 +139,9 @@ export function request(
     },
     workflow: {
       ...workflow,
+    },
+    host: {
+      publicBaseUrl: host.publicBaseUrl ?? "",
     },
     invocationToken,
     idempotencyKey: idempotencyKey.trim(),

@@ -137,6 +137,11 @@ type Access struct {
 	Role   string
 }
 
+// Host describes public host metadata attached to a request.
+type Host struct {
+	PublicBaseURL string
+}
+
 // OperationResult is the serialized result returned by the provider runtime.
 type OperationResult struct {
 	Status int
@@ -147,6 +152,7 @@ type connectionParamsKey struct{}
 type subjectKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
+type hostKey struct{}
 type idempotencyKeyKey struct{}
 type invocationTokenKey struct{}
 type workflowKey struct{}
@@ -198,6 +204,18 @@ func WithAccess(ctx context.Context, access Access) context.Context {
 func AccessFromContext(ctx context.Context) Access {
 	access, _ := ctx.Value(accessKey{}).(Access)
 	return access
+}
+
+// WithHostContext returns a child context carrying public host metadata for the
+// current request.
+func WithHostContext(ctx context.Context, host Host) context.Context {
+	return context.WithValue(ctx, hostKey{}, host)
+}
+
+// HostContextFromContext extracts public host metadata from ctx.
+func HostContextFromContext(ctx context.Context) Host {
+	host, _ := ctx.Value(hostKey{}).(Host)
+	return host
 }
 
 // WithIdempotencyKey returns a child context carrying a caller-supplied

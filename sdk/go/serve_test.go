@@ -31,6 +31,7 @@ type stubOutput struct {
 	CredentialSubjectID string `json:"credential_subject_id"`
 	AccessPolicy        string `json:"access_policy"`
 	AccessRole          string `json:"access_role"`
+	HostBaseURL         string `json:"host_base_url"`
 	IdempotencyKey      string `json:"idempotency_key"`
 }
 
@@ -95,6 +96,7 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		CredentialSubjectID: req.Credential.SubjectID,
 		AccessPolicy:        req.Access.Policy,
 		AccessRole:          req.Access.Role,
+		HostBaseURL:         req.Host.PublicBaseURL,
 		IdempotencyKey:      req.IdempotencyKey,
 	}), nil
 }
@@ -147,7 +149,8 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ st
 		subject := gestalt.SubjectFromContext(ctx)
 		credential := gestalt.CredentialFromContext(ctx)
 		access := gestalt.AccessFromContext(ctx)
-		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role
+		host := gestalt.HostContextFromContext(ctx)
+		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role + "|" + host.PublicBaseURL
 	}
 	return cat, nil
 }
@@ -316,6 +319,9 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 					Policy: "roadmap",
 					Role:   "viewer",
 				},
+				Host: &proto.HostContext{
+					PublicBaseUrl: "https://gestalt.example.test",
+				},
 			},
 		})
 		if err != nil {
@@ -324,8 +330,8 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		if resp.GetCatalog() == nil {
 			t.Fatal("expected session catalog")
 		}
-		if resp.GetCatalog().GetDisplayName() != "user:user-123|user|roadmap|viewer" {
-			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|user|roadmap|viewer")
+		if resp.GetCatalog().GetDisplayName() != "user:user-123|user|roadmap|viewer|https://gestalt.example.test" {
+			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|user|roadmap|viewer|https://gestalt.example.test")
 		}
 		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
 			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
@@ -384,7 +390,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -404,6 +410,9 @@ func TestProviderServerExecute(t *testing.T) {
 					Access: &proto.AccessContext{
 						Policy: "roadmap",
 						Role:   "admin",
+					},
+					Host: &proto.HostContext{
+						PublicBaseUrl: "https://gestalt.example.test",
 					},
 				},
 				IdempotencyKey: " tool-call-123 ",

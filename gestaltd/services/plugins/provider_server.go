@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
@@ -69,6 +70,35 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	return &proto.GetSessionCatalogResponse{Catalog: catalogToProto(cat)}, nil
 }
 
+func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.ResolveHTTPSubjectRequest) (*proto.ResolveHTTPSubjectResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx = applyRequestContext(ctx, req.GetContext())
+	subject, _, err := core.ResolveHTTPSubject(ctx, s.provider, httpSubjectRequestFromProto(req.GetRequest()))
+	if err != nil {
+		var resolveErr *core.HTTPSubjectResolveError
+		if errors.As(err, &resolveErr) {
+			return &proto.ResolveHTTPSubjectResponse{
+				RejectStatus:  int32(resolveErr.Status),
+				RejectMessage: resolveErr.Message,
+			}, nil
+		}
+		return nil, status.Errorf(codes.Unknown, "resolve http subject: %v", err)
+	}
+	if subject == nil {
+		return &proto.ResolveHTTPSubjectResponse{}, nil
+	}
+	return &proto.ResolveHTTPSubjectResponse{
+		Subject: &proto.SubjectContext{
+			Id:          subject.ID,
+			Kind:        subject.Kind,
+			DisplayName: subject.DisplayName,
+			AuthSource:  subject.AuthSource,
+		},
+	}, nil
+}
+
 func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {
 	if !core.SupportsPostConnect(s.provider) {
 		return nil, status.Error(codes.Unimplemented, "provider does not support post connect")
@@ -78,6 +108,36 @@ func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnect
 		return nil, status.Errorf(codes.Unknown, "post connect: %v", err)
 	}
 	return &proto.PostConnectResponse{Metadata: metadata}, nil
+}
+
+func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) *core.HTTPSubjectResolveRequest {
+	if req == nil {
+		return nil
+	}
+	return &core.HTTPSubjectResolveRequest{
+		Binding:         req.GetBinding(),
+		Method:          req.GetMethod(),
+		Path:            req.GetPath(),
+		ContentType:     req.GetContentType(),
+		Headers:         mapStringLists(req.GetHeaders()),
+		Query:           mapStringLists(req.GetQuery()),
+		Params:          mapFromStruct(req.GetParams()),
+		RawBody:         append([]byte(nil), req.GetRawBody()...),
+		SecurityScheme:  req.GetSecurityScheme(),
+		VerifiedSubject: req.GetVerifiedSubject(),
+		VerifiedClaims:  cloneStringMap(req.GetVerifiedClaims()),
+	}
+}
+
+func mapStringLists[V ~map[string]*proto.StringList](values V) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(values))
+	for key, value := range values {
+		out[key] = append([]string(nil), value.GetValues()...)
+	}
+	return out
 }
 
 func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {
@@ -99,6 +159,11 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
 			Policy: access.GetPolicy(),
 			Role:   access.GetRole(),
+		})
+	}
+	if host := reqCtx.GetHost(); host != nil {
+		ctx = invocation.WithHostContext(ctx, invocation.HostContext{
+			PublicBaseURL: host.GetPublicBaseUrl(),
 		})
 	}
 	if workflow := reqCtx.GetWorkflow(); workflow != nil {

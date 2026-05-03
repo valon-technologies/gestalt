@@ -27,6 +27,7 @@ type ExecConfig struct {
 	HostBinary       string
 	Cleanup          func()
 	HostServices     []runtimehost.HostService
+	PublicBaseURL    string
 	InvocationTokens *plugininvokerservice.InvocationTokenManager
 	InvocationGrants plugininvokerservice.InvocationGrants
 	ProviderName     string
@@ -39,7 +40,10 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
 		return nil, err
 	}
 
-	opts := []RemoteProviderOption{WithCloser(process)}
+	opts := []RemoteProviderOption{
+		WithCloser(process),
+		WithHostContext(cfg.PublicBaseURL),
+	}
 	if cfg.InvocationTokens != nil {
 		opts = append(opts,
 			WithInvocationTokens(cfg.InvocationTokens),

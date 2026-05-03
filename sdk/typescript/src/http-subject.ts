@@ -1,4 +1,4 @@
-import type { Access, Credential, MaybePromise, Subject } from "./api.ts";
+import type { Access, Credential, Host, MaybePromise, Subject } from "./api.ts";
 
 /**
  * Verified hosted HTTP request metadata passed into optional plugin-local
@@ -26,6 +26,7 @@ export interface HTTPSubjectResolutionContext {
   subject: Subject;
   credential: Credential;
   access: Access;
+  host: Host;
   workflow: Record<string, unknown>;
 }
 
@@ -95,6 +96,9 @@ export function cloneHTTPSubjectResolutionContext(
     },
     access: {
       ...input.access,
+    },
+    host: {
+      ...input.host,
     },
     workflow: {
       ...input.workflow,
