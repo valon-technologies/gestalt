@@ -2336,17 +2336,6 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 			delete(operationsByPlugin, plugin)
 			continue
 		}
-		if p != nil && p.TokenPermissions != nil {
-			tokenOps, ok := p.TokenPermissions[plugin]
-			if !ok {
-				return nil, false
-			}
-			if len(tokenOps) > 0 {
-				if _, ok := tokenOps[operation]; !ok {
-					return nil, false
-				}
-			}
-		}
 		if _, ok := providerWide[plugin]; ok {
 			continue
 		}

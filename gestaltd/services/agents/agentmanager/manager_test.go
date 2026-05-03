@@ -845,6 +845,30 @@ func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 	}
 }
 
+func TestAgentRunPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
+	t.Parallel()
+
+	perms := principal.CompilePermissions([]core.AccessPermission{
+		{Plugin: "linear", Operations: []string{"mcp.call"}},
+		{Plugin: "slack"},
+	})
+	p := &principal.Principal{
+		SubjectID:        principal.UserSubjectID("user-1"),
+		UserID:           "user-1",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceAPIToken,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+
+	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{{Plugin: "linear", Operation: "viewer"}})
+	want := []core.AccessPermission{{Plugin: "linear", Operations: []string{"viewer"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
+	}
+}
+
 func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 	t.Parallel()
 
