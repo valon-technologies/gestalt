@@ -3125,6 +3125,97 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	}
 }
 
+func TestLockMatchesConfig_UIPackageSourceAllowsLegacyMetadataURLFingerprint(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/roadmap-ui"
+	version := "0.9.1"
+	metadataURL := "https://example.invalid/providers/roadmap/provider-release.yaml"
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := "apiVersion: " + config.ConfigAPIVersionV5 + "\n" + strings.Join([]string{
+		"providerRepositories:",
+		"  local:",
+		"    url: file://" + filepath.ToSlash(filepath.Join(dir, "provider-index.yaml")),
+	}, "\n") + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + strings.Join([]string{
+		"  ui:",
+		"    roadmap:",
+		"      source:",
+		"        repo: local",
+		"        package: " + packageSource,
+		"        version: " + version,
+		"      path: /roadmap",
+		"server:",
+	}, "\n") + "\n" + requiredServerDatastoreYAML() + "  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfg.Plugins = nil
+	cfg.Runtime.Providers = nil
+	cfg.Providers = config.ProvidersConfig{UI: map[string]*config.UIEntry{"roadmap": cfg.Providers.UI["roadmap"]}}
+	paths := lifecyclePathsForConfig(cfgPath)
+	uiDir := uiDestDir(paths, "roadmap")
+	if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll ui dist: %v", err)
+	}
+	manifest, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindUI,
+		Source:      packageSource,
+		Version:     version,
+		DisplayName: "Roadmap UI",
+		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+	})
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uiDir, providerpkg.ManifestFile), manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index: %v", err)
+	}
+
+	legacyFingerprint, err := NamedUIProviderFingerprint("roadmap", &config.ProviderEntry{
+		Source: config.NewMetadataSource(metadataURL),
+	}, paths.configDir)
+	if err != nil {
+		t.Fatalf("NamedUIProviderFingerprint legacy: %v", err)
+	}
+	lock := newLockfile()
+	lock.UIs["roadmap"] = LockEntry{
+		Fingerprint: legacyFingerprint,
+		Package:     packageSource,
+		Kind:        providermanifestv1.KindUI,
+		Runtime:     providerReleaseRuntimeUI,
+		Source:      metadataURL,
+		Version:     version,
+	}
+	lockEntry := lock.UIs["roadmap"]
+	if !uiLockEntryMetadataMatches(paths, "roadmap", &cfg.Providers.UI["roadmap"].ProviderEntry, lockEntry, true) {
+		t.Fatal("uiLockEntryMetadataMatches returned false for legacy metadata URL fingerprint")
+	}
+	install, err := inspectPreparedInstall(uiDestDir(paths, "roadmap"))
+	if err != nil {
+		t.Fatalf("inspectPreparedInstall: %v", err)
+	}
+	if !preparedManifestMatchesLock(lockEntry, install.manifest) {
+		t.Fatal("preparedManifestMatchesLock returned false")
+	}
+	if install.assetRootPath == "" {
+		t.Fatal("prepared install assetRootPath is empty")
+	}
+	if _, err := os.Stat(install.assetRootPath); err != nil {
+		t.Fatalf("Stat assetRootPath: %v", err)
+	}
+	if !lockMatchesConfig(cfg, paths, lock) {
+		t.Fatal("lockMatchesConfig returned false for UI package source with legacy metadata URL fingerprint")
+	}
+}
+
 func mustFingerprint(t *testing.T, name string, entry *config.ProviderEntry, configDir string) string {
 	t.Helper()
 	fingerprint, err := ProviderFingerprint(name, entry, configDir)

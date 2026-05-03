@@ -16,6 +16,7 @@ import (
 
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -79,6 +80,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateTopLevelConnections(cfg); err != nil {
+		return err
+	}
+	if err := validateAPIVersionFeatures(cfg); err != nil {
 		return err
 	}
 
@@ -178,7 +182,7 @@ func validateAPIVersion(cfg *Config) error {
 	// Config values may omit it and use current source normalization.
 	apiVersion := strings.TrimSpace(cfg.APIVersion)
 	switch apiVersion {
-	case "", ConfigAPIVersion:
+	case "", ConfigAPIVersionV4, ConfigAPIVersionV5:
 		return nil
 	default:
 		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
@@ -186,7 +190,72 @@ func validateAPIVersion(cfg *Config) error {
 }
 
 func requiredAPIVersionError() error {
-	return fmt.Errorf("config validation: apiVersion is required; supported value is %q", ConfigAPIVersion)
+	return fmt.Errorf("config validation: apiVersion is required; supported values are %q and %q", ConfigAPIVersionV4, ConfigAPIVersionV5)
+}
+
+func validateAPIVersionFeatures(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	v5 := strings.TrimSpace(cfg.APIVersion) == ConfigAPIVersionV5
+	if len(cfg.ProviderRepositories) > 0 && !v5 {
+		return fmt.Errorf("config validation: providerRepositories requires apiVersion %q", ConfigAPIVersionV5)
+	}
+	for name, repo := range cfg.ProviderRepositories {
+		if err := providerregistry.ValidateRepositoryName(name); err != nil {
+			return fmt.Errorf("config validation: providerRepositories.%s: %w", name, err)
+		}
+		if strings.TrimSpace(repo.URL) == "" {
+			return fmt.Errorf("config validation: providerRepositories.%s.url is required", name)
+		}
+	}
+	checkEntry := func(kind, name string, entry *ProviderEntry) error {
+		if entry == nil || !entry.Source.IsPackage() || v5 {
+			return nil
+		}
+		return fmt.Errorf("config validation: %s %q source.package requires apiVersion %q", kind, name, ConfigAPIVersionV5)
+	}
+	for name, entry := range cfg.Plugins {
+		if err := checkEntry("plugin", name, entry); err != nil {
+			return err
+		}
+	}
+	for _, collection := range []struct {
+		kind    HostProviderKind
+		entries map[string]*ProviderEntry
+	}{
+		{HostProviderKindAuthentication, cfg.Providers.Authentication},
+		{HostProviderKindAuthorization, cfg.Providers.Authorization},
+		{HostProviderKindExternalCredentials, cfg.Providers.ExternalCredentials},
+		{HostProviderKindSecrets, cfg.Providers.Secrets},
+		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
+		{HostProviderKindAudit, cfg.Providers.Audit},
+		{HostProviderKindIndexedDB, cfg.Providers.IndexedDB},
+		{HostProviderKindCache, cfg.Providers.Cache},
+		{HostProviderKindWorkflow, cfg.Providers.Workflow},
+		{HostProviderKindAgent, cfg.Providers.Agent},
+	} {
+		for name, entry := range collection.entries {
+			if err := checkEntry(string(collection.kind), name, entry); err != nil {
+				return err
+			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			if err := checkEntry("runtime", name, &entry.ProviderEntry); err != nil {
+				return err
+			}
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil {
+			if err := checkEntry("ui", name, &entry.ProviderEntry); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeConnectionBindings(cfg *Config) error {
@@ -473,6 +542,9 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsGitHubRelease() {
 		modeCount++
 	}
+	if src.IsPackage() {
+		modeCount++
+	}
 	if src.IsLocalMetadataPath() {
 		modeCount++
 	}
@@ -509,8 +581,18 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q source.githubRelease.repo must be owner/name", kind, name)
 		}
 	}
+	if src.IsPackage() {
+		if err := providerregistry.ValidatePackageAddress(src.PackageAddress()); err != nil {
+			return fmt.Errorf("config validation: %s %q source.package: %w", kind, name, err)
+		}
+		if src.PackageRepo() != "" {
+			if err := providerregistry.ValidateRepositoryName(src.PackageRepo()); err != nil {
+				return fmt.Errorf("config validation: %s %q source.repo: %w", kind, name, err)
+			}
+		}
+	}
 	if auth != nil {
-		if !src.IsMetadataURL() && !src.IsGitHubRelease() && !src.IsLocalMetadataPath() {
+		if !src.IsMetadataURL() && !src.IsGitHubRelease() && !src.IsLocalMetadataPath() && !src.IsPackage() {
 			return fmt.Errorf("config validation: %s %q auth is only valid with provider-release metadata sources", kind, name)
 		}
 		if strings.TrimSpace(auth.Token) == "" {

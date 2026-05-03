@@ -16,6 +16,7 @@ const (
 )
 
 var segmentRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+var hostRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 
 type Source struct {
 	Host  string
@@ -37,8 +38,8 @@ func Parse(raw string) (Source, error) {
 
 	host, owner, repo := parts[0], parts[1], parts[2]
 
-	if host != HostGitHub {
-		return Source{}, fmt.Errorf("plugin source: unsupported host %q (only %s is supported)", host, HostGitHub)
+	if !hostRe.MatchString(host) {
+		return Source{}, fmt.Errorf("plugin source: invalid host %q", host)
 	}
 
 	for _, seg := range parts[1:] {

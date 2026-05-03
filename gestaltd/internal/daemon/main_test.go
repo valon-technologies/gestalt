@@ -1,9 +1,14 @@
 package daemon
 
 import (
+	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 func TestE2ECLIHelp(t *testing.T) {
@@ -39,7 +44,12 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider",
 			args:      []string{"provider", "--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "attach", "dev", "validate", "release"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "dev", "info", "remove", "repo", "search", "upgrade", "validate", "release"},
+		},
+		{
+			name:      "provider repo",
+			args:      []string{"provider", "repo", "--help"},
+			wantParts: []string{"gestaltd provider repo <command> [flags]", "add", "list", "remove", "update"},
 		},
 		{
 			name:      "provider attach",
@@ -78,6 +88,63 @@ func TestE2ECLIHelp(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestE2EProviderAddPackageSourceUpdatesConfig(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v4\nplugins:\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	indexPath := filepath.Join(dir, "provider-index.yaml")
+	indexYAML := `
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  github.com/acme/providers/alpha:
+    displayName: Alpha
+    versions:
+      1.2.3:
+        metadata: file:///tmp/provider-release.yaml
+        kind: plugin
+        runtime: executable
+`
+	if err := os.WriteFile(indexPath, []byte(indexYAML), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+	indexURL := (&url.URL{Scheme: "file", Path: indexPath}).String()
+
+	out, err := exec.Command(gestaltdBin, "provider", "repo", "add", "local", indexURL, "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("provider repo add failed: %v\n%s", err, out)
+	}
+	out, err = exec.Command(gestaltdBin, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--package-source", "--no-lock").CombinedOutput()
+	if err != nil {
+		t.Fatalf("provider add failed: %v\n%s", err, out)
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.APIVersion; got != config.ConfigAPIVersionV5 {
+		t.Fatalf("APIVersion = %q, want %q", got, config.ConfigAPIVersionV5)
+	}
+	if got := cfg.ProviderRepositories["local"].URL; got != indexURL {
+		t.Fatalf("providerRepositories.local.url = %q, want %q", got, indexURL)
+	}
+	entry := cfg.Plugins["alpha"]
+	if entry == nil {
+		t.Fatal(`Plugins["alpha"] = nil`)
+	}
+	if got := entry.Source.PackageRepo(); got != "local" {
+		t.Fatalf("Source.PackageRepo = %q, want local", got)
+	}
+	if got := entry.Source.PackageAddress(); got != "github.com/acme/providers/alpha" {
+		t.Fatalf("Source.PackageAddress = %q, want package", got)
 	}
 }
 

@@ -44,9 +44,9 @@ func TestParse(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "reject non-github host",
-			input:   "gitlab.com/testowner/testrepo/testplugin",
-			wantErr: true,
+			name:  "valid non-github host",
+			input: "gitlab.com/testowner/testrepo/testplugin",
+			want:  Source{Host: "gitlab.com", Owner: "testowner", Repo: "testrepo", Path: "testplugin"},
 		},
 		{
 			name:    "reject empty segment",

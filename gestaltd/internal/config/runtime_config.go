@@ -26,9 +26,12 @@ func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, pr
 	node := componentRuntimeConfig{
 		Name: name,
 		Source: &ProviderSource{
-			Path:          entry.Source.Path,
-			metadataURL:   entry.Source.MetadataURL(),
-			GitHubRelease: entry.Source.GitHubReleaseSource(),
+			Path:           entry.Source.Path,
+			metadataURL:    entry.Source.MetadataURL(),
+			packageRepo:    entry.Source.PackageRepo(),
+			packageName:    entry.Source.PackageAddress(),
+			packageVersion: entry.Source.PackageVersionConstraint(),
+			GitHubRelease:  entry.Source.GitHubReleaseSource(),
 		},
 		Command:      entry.Command,
 		Args:         append([]string(nil), entry.Args...),

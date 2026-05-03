@@ -32,8 +32,20 @@ func runProvider(args []string) error {
 		return flag.ErrHelp
 	case "attach":
 		return runProviderAttach(args[1:])
+	case "add":
+		return runProviderAdd(args[1:])
 	case "dev":
 		return runProviderDev(args[1:])
+	case "info":
+		return runProviderInfo(args[1:])
+	case "remove":
+		return runProviderRemove(args[1:])
+	case "repo":
+		return runProviderRepo(args[1:])
+	case "search":
+		return runProviderSearch(args[1:])
+	case "upgrade":
+		return runProviderUpgrade(args[1:])
 	case "validate":
 		return runProviderValidate(args[1:])
 	case "release":
@@ -606,8 +618,14 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  attach      List, inspect, or detach remote provider-dev attachments")
+	writeUsageLine(w, "  add         Add a provider package to config and update lock state")
 	writeUsageLine(w, "  dev         Run a local source plugin inside a synthesized Gestalt config")
+	writeUsageLine(w, "  info        Show provider package metadata from configured repositories")
 	writeUsageLine(w, "  release     Build provider release archives")
+	writeUsageLine(w, "  remove      Remove a provider entry from config and update lock state")
+	writeUsageLine(w, "  repo        Manage provider package repositories")
+	writeUsageLine(w, "  search      Search configured provider package repositories")
+	writeUsageLine(w, "  upgrade     Refresh a provider package lock or version constraint")
 	writeUsageLine(w, "  validate    Validate a local source plugin inside a synthesized Gestalt config")
 }
 
