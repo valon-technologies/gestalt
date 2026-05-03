@@ -614,6 +614,10 @@ func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testin
 
 	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
 	t.Setenv("PATH", pathWithoutGo(t))
+	ambientPythonPath := filepath.Join(t.TempDir(), "ambient-sdk")
+	t.Setenv("PYTHONPATH", ambientPythonPath)
+	t.Setenv("GESTALT_TEST_EXPECT_EMPTY_PYTHONPATH", "1")
+	t.Setenv("GESTALT_TEST_FORBID_PYTHONPATH_ENTRY", ambientPythonPath)
 
 	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
@@ -671,6 +675,35 @@ func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testin
 	}
 	if !strings.Contains(result.Body, "Hi, Ada!") {
 		t.Fatalf("body = %q, want greeting", result.Body)
+	}
+}
+
+func TestRun_ProviderReleaseUsesExplicitPythonSDKDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+	sdkDir := writeFakePythonSDKDir(t, t.TempDir())
+	ambientPythonPath := filepath.Join(t.TempDir(), "ambient-pythonpath")
+	t.Setenv("GESTALT_PYTHON_SDK_DIR", sdkDir)
+	t.Setenv("PYTHONPATH", ambientPythonPath)
+	t.Setenv("GESTALT_TEST_EXPECT_PYTHONPATH_PREFIX", sdkDir)
+	t.Setenv("GESTALT_TEST_EXPECT_PYTHONPATH_ENTRY", ambientPythonPath)
+
+	pluginDir := newPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-test-sdk-dir"
+
+	runProviderReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
+	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
+		t.Fatalf("expected archive %s: %v", archiveName, err)
 	}
 }
 
@@ -2646,6 +2679,18 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	return pluginDir
 }
 
+func writeFakePythonSDKDir(t *testing.T, dir string) string {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Join(dir, "gestalt"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(fake Python SDK): %v", err)
+	}
+	writeTestFile(t, dir, "pyproject.toml", []byte(`[project]
+name = "gestalt-sdk"
+`), 0o644)
+	return dir
+}
+
 func newManifestBackedPythonSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -2866,6 +2911,37 @@ func writeFakePythonReleaseInterpreterForKind(
 
 	script := `#!/bin/sh
 set -eu
+
+if [ "${GESTALT_TEST_EXPECT_EMPTY_PYTHONPATH:-}" = "1" ] && [ -n "${PYTHONPATH:-}" ]; then
+  echo "unexpected PYTHONPATH: ${PYTHONPATH}" >&2
+  exit 1
+fi
+if [ -n "${GESTALT_TEST_EXPECT_PYTHONPATH_PREFIX:-}" ]; then
+  case "${PYTHONPATH:-}" in
+    "${GESTALT_TEST_EXPECT_PYTHONPATH_PREFIX}"|"${GESTALT_TEST_EXPECT_PYTHONPATH_PREFIX}":*) ;;
+    *)
+      echo "PYTHONPATH ${PYTHONPATH:-} does not start with ${GESTALT_TEST_EXPECT_PYTHONPATH_PREFIX}" >&2
+      exit 1
+      ;;
+  esac
+fi
+if [ -n "${GESTALT_TEST_EXPECT_PYTHONPATH_ENTRY:-}" ]; then
+  case ":${PYTHONPATH:-}:" in
+    *:"${GESTALT_TEST_EXPECT_PYTHONPATH_ENTRY}":*) ;;
+    *)
+      echo "expected PYTHONPATH entry missing: ${GESTALT_TEST_EXPECT_PYTHONPATH_ENTRY}" >&2
+      exit 1
+      ;;
+  esac
+fi
+if [ -n "${GESTALT_TEST_FORBID_PYTHONPATH_ENTRY:-}" ]; then
+  case ":${PYTHONPATH:-}:" in
+    *:"${GESTALT_TEST_FORBID_PYTHONPATH_ENTRY}":*)
+      echo "forbidden PYTHONPATH entry present: ${GESTALT_TEST_FORBID_PYTHONPATH_ENTRY}" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   if [ -z "${GESTALT_TEST_PYINSTALLER_BINARY:-}" ]; then
