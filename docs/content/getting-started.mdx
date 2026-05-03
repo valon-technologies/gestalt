@@ -23,6 +23,54 @@ When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml
 2026/04/10 10:00:01 INFO gestaltd ready url=http://localhost:8080
 ```
 
+## Try provider package commands
+
+The generated config is a normal Gestalt config file. In another terminal, list
+the providers it is using:
+
+```sh
+gestaltd provider list --config ~/.gestaltd/config.yaml
+```
+
+Search the first-party provider repository:
+
+```sh
+gestaltd provider search httpbin --config ~/.gestaltd/config.yaml
+gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/httpbin --config ~/.gestaltd/config.yaml
+```
+
+Add a second HTTPBin plugin entry from the package index:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/httpbin \
+  --config ~/.gestaltd/config.yaml \
+  --name httpbin_demo
+```
+
+The command writes the provider entry and updates `~/.gestaltd/gestalt.lock.json`:
+
+```text
+Added plugin httpbin_demo
+Package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+Repository: valon
+Version: 0.0.1-alpha.3
+Config: ~/.gestaltd/config.yaml
+Lockfile: ~/.gestaltd/gestalt.lock.json
+```
+
+Refresh lock state after package-index updates:
+
+```sh
+gestaltd provider upgrade --config ~/.gestaltd/config.yaml
+```
+
+If `gestaltd` is already running, restart it before invoking the newly added
+plugin. To return to the default generated config, remove the extra entry:
+
+```sh
+gestaltd provider remove httpbin_demo --config ~/.gestaltd/config.yaml --kind plugin
+```
+
 ## Using the client
 
 In a separate terminal, run the setup wizard:

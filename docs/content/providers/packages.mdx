@@ -1,0 +1,356 @@
+# Provider Packages
+
+Provider packages let a config name a package address and version constraint
+instead of a release metadata URL. Use package sources for indexed providers
+that should be easy to search, add, list, remove, and upgrade from the CLI.
+
+```sh
+gestaltd provider search github
+gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/github
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github --config ./gestalt.yaml --name github
+```
+
+`provider add` writes a package source by default:
+
+```yaml
+apiVersion: gestaltd.config/v5
+plugins:
+  github:
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+```
+
+Then it resolves the selected release and updates the lockfile unless
+`--no-lock` is set.
+
+## Search for a Package
+
+The built-in `valon` repository points at the first-party provider index.
+
+```sh
+gestaltd provider search
+gestaltd provider search github
+gestaltd provider search github --repo valon
+```
+
+Search matches the package address, display name, and description. The output
+prints repository name, package address, and display name:
+
+```text
+valon  github.com/valon-technologies/gestalt-providers/plugins/github  GitHub
+```
+
+Use `provider info` to see the versions published for one package:
+
+```sh
+gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/github
+```
+
+## Add a Provider
+
+Add the package to one writable config file:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github \
+  --config ./gestalt.yaml \
+  --name github
+```
+
+Mutating provider commands accept one `--config` path. This keeps the command
+from guessing which file should be edited when your normal runtime uses layered
+config.
+
+Set a version constraint when you want future upgrades to stay inside a range:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc \
+  --config ./gestalt.yaml \
+  --kind authentication \
+  --name oidc \
+  --version '^1.4.0'
+```
+
+When no version is given, Gestalt chooses the newest non-yanked stable version.
+If a package has no stable versions, it chooses the newest non-yanked
+prerelease. Yanked versions are skipped unless you request an exact yanked
+version.
+
+`provider add` validates the changed config and lockfile in a scratch
+directory before writing either file.
+
+## Add Providers by Kind
+
+Gestalt usually infers the config location from the package metadata. Pass
+`--kind` when you need to override that location.
+
+| Kind | Config location | Notes |
+| --- | --- | --- |
+| `plugin` | `plugins.<name>` | Default location for plugin packages. |
+| `ui` | `providers.ui.<name>` | Requires `--set path=/mount` when adding a directly mounted UI. |
+| `authentication` | `providers.authentication.<name>` | Select with `server.providers.authentication` when more than one exists. |
+| `authorization` | `providers.authorization.<name>` | Select with `server.providers.authorization` when more than one exists. |
+| `external_credentials` | `providers.externalCredentials.<name>` | Select with `server.providers.externalCredentials` when more than one exists. |
+| `secrets` | `providers.secrets.<name>` | Select with `server.providers.secrets` when more than one exists. |
+| `indexeddb` | `providers.indexeddb.<name>` | Select with `server.providers.indexeddb`. |
+| `cache` | `providers.cache.<name>` | Bind from `plugins.<name>.cache`. |
+| `s3` | `providers.s3.<name>` | Bind from `plugins.<name>.s3`. |
+| `workflow` | `providers.workflow.<name>` | Bind from workflow schedules and triggers. |
+| `agent` | `providers.agent.<name>` | Used by agent sessions and turns. |
+| `runtime` | `runtime.providers.<name>` | Used by hosted executable providers. |
+
+`provider add` does not create telemetry or audit providers yet. Existing
+telemetry and audit entries can still appear in `provider list`, lockfiles, and
+package-source upgrades.
+
+Add a directly mounted UI with a path:
+
+```sh
+gestaltd provider add github.com/acme/gestalt-providers/ui/console \
+  --config ./gestalt.yaml \
+  --kind ui \
+  --name console \
+  --set path=/console
+```
+
+## List Providers
+
+`provider list` shows configured provider entries and how they relate to the
+lockfile:
+
+```sh
+gestaltd provider list --config ./gestalt.yaml
+gestaltd provider list --config ./gestalt.yaml --kind plugin
+```
+
+Output columns:
+
+| Column | Meaning |
+| --- | --- |
+| `KIND` | Provider kind and config collection. |
+| `NAME` | Config entry name. |
+| `SOURCE` | Source shape: `package`, `metadata`, `github`, `local`, `builtin`, or `unsupported`. |
+| `PACKAGE` | Package address for package sources. |
+| `VERSION` | Version constraint from config. |
+| `LOCKED` | Exact version recorded in the lockfile. |
+| `STATUS` | Lock status for the entry. |
+
+Status values:
+
+| Status | Meaning |
+| --- | --- |
+| `builtin` | Built into `gestaltd`; no release artifact is locked. |
+| `locked` | The lockfile matches the current source config. |
+| `unverified` | The config and lock agree on package and version, but this list operation did not re-resolve package metadata. |
+| `unlocked` | The source-backed entry has no matching lock entry. |
+| `drifted` | A lock entry exists, but it no longer matches the current source config. |
+
+Run `gestaltd lock --check --config ./gestalt.yaml` in CI when you need a
+strict lockfile check.
+
+## Upgrade Providers
+
+Refresh lock state for every configured package source:
+
+```sh
+gestaltd provider upgrade --config ./gestalt.yaml
+```
+
+This does not edit version constraints. It re-resolves package sources and
+writes the lockfile with the selected versions.
+
+Change one package source to a new constraint:
+
+```sh
+gestaltd provider upgrade github \
+  --config ./gestalt.yaml \
+  --kind plugin \
+  --version '^1.5.0'
+```
+
+The named entry must already be a package source. If the same name exists under
+more than one provider kind, pass `--kind`.
+
+## Remove a Provider
+
+Remove one entry from config and update the lockfile:
+
+```sh
+gestaltd provider remove github --config ./gestalt.yaml --kind plugin
+```
+
+Omit `--kind` only when the name is unique across provider kinds.
+
+## Use Provider Repositories
+
+A provider repository is a static YAML index. Gestalt fetches the index, picks a
+version, then fetches that version's `provider-release.yaml`. Normal package
+resolution does not call the GitHub Releases API.
+
+The default repository is named `valon`:
+
+```text
+https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml
+```
+
+List configured repositories:
+
+```sh
+gestaltd provider repo list
+gestaltd provider repo list --config ./gestalt.yaml
+```
+
+Add a repository to your user-level store:
+
+```sh
+gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml
+```
+
+Add a repository to project config:
+
+```sh
+gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml \
+  --config ./gestalt.yaml
+```
+
+The project form writes:
+
+```yaml
+providerRepositories:
+  acme:
+    url: https://artifacts.example.com/gestalt/provider-index.yaml
+```
+
+Project config overrides the repository URL for that project. A user-level
+repository with the same name can still supply a token for private indexes.
+
+Fetch repository indexes into the local cache:
+
+```sh
+gestaltd provider repo update
+gestaltd provider repo update --config ./gestalt.yaml
+```
+
+Remove a repository from the same place you added it:
+
+```sh
+gestaltd provider repo remove acme
+gestaltd provider repo remove acme --config ./gestalt.yaml
+```
+
+Use `source.repo` when the package should resolve from a non-default
+repository, or when the same package address exists in more than one repository:
+
+```yaml
+plugins:
+  support:
+    source:
+      repo: acme
+      package: github.com/acme/gestalt-providers/plugins/support
+      version: ^1.3.0
+```
+
+## Publish an Index
+
+A provider index is ordinary YAML:
+
+```yaml
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  github.com/acme/gestalt-providers/plugins/support:
+    displayName: Support
+    description: Internal support tools
+    versions:
+      1.3.0:
+        kind: plugin
+        runtime: go
+        metadata: ./plugins/support/1.3.0/provider-release.yaml
+        platforms:
+          - darwin/arm64
+          - linux/amd64
+```
+
+`metadata` may be an absolute `https://` or `file://` URL, or a relative path
+resolved from the index URL. Keep the index small enough to fetch often; Gestalt
+rejects indexes larger than 10 MiB.
+
+## Use Exact Sources
+
+Package sources are the default because they keep the package address and
+version constraint in config. Use exact sources when you need to pin something
+outside an index, such as a one-off metadata URL, a local release file, or a
+private GitHub Release asset.
+
+Write the resolved metadata URL instead of a package source:
+
+```sh
+gestaltd provider add github.com/acme/gestalt-providers/plugins/support \
+  --config ./gestalt.yaml \
+  --repo acme \
+  --exact-source
+```
+
+The resulting config looks like:
+
+```yaml
+plugins:
+  support:
+    source: https://artifacts.example.com/gestalt/plugins/support/1.3.0/provider-release.yaml
+```
+
+Exact sources do not retain repository or version-constraint data, so
+`provider upgrade NAME --version ...` cannot move them to a new package version.
+Edit the source manually or re-add the provider as a package source.
+
+For private metadata or archives, put fetch credentials under `source.auth`:
+
+```yaml
+plugins:
+  support:
+    source:
+      repo: acme
+      package: github.com/acme/gestalt-providers/plugins/support
+      version: ^1.3.0
+      auth:
+        token: ${GESTALT_PROVIDER_TOKEN}
+```
+
+Use `source.githubRelease` when the checked-in config should name a GitHub
+release asset logically:
+
+```yaml
+plugins:
+  support:
+    source:
+      githubRelease:
+        repo: acme/gestalt-provider-releases
+        tag: plugins/support/v1.3.0
+        asset: provider-release.yaml
+      auth:
+        token: ${GITHUB_TOKEN}
+```
+
+GitHub release sources use GitHub release asset lookup. Package sources use the
+static provider repository index instead.
+
+## Lock and Sync
+
+`provider add`, `provider remove`, and `provider upgrade NAME --version ...`
+update the lockfile by default. `provider add` and `provider remove` accept
+`--no-lock` when you need to edit config first and run `gestaltd lock` later.
+
+Materialize artifacts immediately after adding a provider:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github \
+  --config ./gestalt.yaml \
+  --sync
+```
+
+For production deployments, keep the same three-step lifecycle:
+
+```sh
+gestaltd lock --config ./gestalt.yaml
+gestaltd sync --locked --config ./gestalt.yaml
+gestaltd serve --locked --config ./gestalt.yaml
+```

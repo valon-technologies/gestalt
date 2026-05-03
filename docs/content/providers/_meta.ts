@@ -1,4 +1,5 @@
 export default {
+  packages: "Provider Packages",
   agent: "Agent",
   authentication: "Authentication",
   authorization: "Authorization",
