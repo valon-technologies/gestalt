@@ -772,6 +772,13 @@ func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name str
 	if l.configSecretResolver == nil || provider == nil {
 		return nil
 	}
+	deps, err := secretsProviderMetadataDependencies(name, provider)
+	if err != nil {
+		return err
+	}
+	if len(deps) == 0 {
+		return nil
+	}
 	secrets := make(map[string]*config.ProviderEntry, len(available)+1)
 	for availableName, entry := range available {
 		secrets[availableName] = entry
