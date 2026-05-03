@@ -202,6 +202,52 @@ calling user's credential. Platform-scoped credentials are useful when the
 caller is a batch job or an integration that should act on behalf of the
 deployment, not on behalf of a user.
 
+### Service accounts for direct API calls
+
+Use the host-provided plugin invoker when a plugin calls another plugin as part
+of the current request. The invoker sends an invocation token through the SDK
+host service, so the nested call keeps the original subject, credential context,
+and permission ceiling from `plugins.<caller>.invokes`.
+
+Use a managed subject when the call should run as a stable non-human principal
+instead of the current caller. Managed subjects are service-account identities
+with canonical IDs like `service_account:release-bot`. You can grant a managed
+subject access to specific plugins, store upstream credentials under that same
+subject, and create a subject-owned API token for direct calls to
+`/api/v1/{integration}/{operation}`.
+
+This pattern is useful when you want to:
+
+- Run release bots, sync jobs, or shared automation under one owned identity
+- Give a plugin access to a narrow set of Gestalt operations without inheriting
+  the invoking user's full access
+- Rotate the Gestalt API token independently from upstream OAuth tokens or API
+  keys
+
+Before a managed subject can call a plugin operation, it needs both Gestalt API
+access and plugin runtime access:
+
+1. Create a managed subject, such as `service_account:release-bot`.
+2. Grant the managed subject the plugin role required by the target plugin.
+3. If the target plugin uses a `user` connection, connect OAuth or manual
+   credentials for the managed subject. Gestalt stores those credentials under
+   the same `service_account:<id>` subject ID.
+4. Create a subject-owned API token with only the plugin operations the caller
+   needs.
+5. Store that API token as a secret and use it as
+   `Authorization: Bearer gst_api_...` when calling the Gestalt HTTP API.
+
+The API token authenticates the caller to Gestalt. It does not replace upstream
+credentials. The target operation still resolves credentials from its configured
+connection mode. For `user` connections, that means the managed subject's stored
+credential. For `platform` connections, that means the platform-scoped
+credential configured for the deployment.
+
+Subject-owned API tokens cannot manage managed subjects. Use a browser session
+or an unscoped user-owned API token for managed-subject administration. See
+[HTTP API > Managed Subjects](/reference/http-api#managed-subjects) for the
+management endpoints and example requests.
+
 ## Workflow execution
 
 Workflow authorization happens twice. Gestalt checks access when a user creates

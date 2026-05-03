@@ -31,6 +31,12 @@ Connections are still stored per subject. Authorization answers whether the
 subject may invoke the plugin, while authentication and connection management
 answer how that subject proves itself to the upstream system.
 
+When executable plugins call other Gestalt operations, use the SDK plugin
+invoker for request-scoped nested calls. Use a managed subject and scoped API
+token when the plugin should call the Gestalt HTTP API as a stable service
+account instead. See
+[Authorization > Service accounts for direct API calls](/providers/authorization#service-accounts-for-direct-api-calls).
+
 ## First-party plugin packages
 
 First-party plugins live under
