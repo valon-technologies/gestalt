@@ -1847,8 +1847,6 @@ fn build_turn_create_body(args: &AgentTurnCreateArgs) -> Result<Value> {
             "toolRefs".to_string(),
             Value::Array(args.tools.iter().map(agent_tool_ref_value).collect()),
         );
-    } else if !body.contains_key("toolRefs") {
-        body.insert("toolRefs".to_string(), Value::Array(Vec::new()));
     }
 
     validate_turn_create_body(&body)?;
