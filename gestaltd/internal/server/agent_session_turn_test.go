@@ -338,6 +338,7 @@ type memoryAgentProvider struct {
 	listTurnRequests    []coreagent.ListTurnsRequest
 	createSessionHook   func()
 	listTurnEventsErr   error
+	capabilities        *coreagent.ProviderCapabilities
 }
 
 func newMemoryAgentProvider() *memoryAgentProvider {
@@ -662,6 +663,11 @@ func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagen
 }
 
 func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p.capabilities != nil {
+		caps := *p.capabilities
+		caps.SupportedToolSources = append([]coreagent.ToolSourceMode(nil), p.capabilities.SupportedToolSources...)
+		return &caps, nil
+	}
 	return &coreagent.ProviderCapabilities{
 		StreamingText:        true,
 		ToolCalls:            true,
@@ -1053,7 +1059,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAgentTurnToolRefsDefaultBroadAndExplicitEmpty(t *testing.T) {
+func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
@@ -1133,11 +1139,68 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmpty(t *testing.T) {
 	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
 		t.Fatalf("omitted toolRefs provider refs = %#v, want global broad ref", got)
 	}
-	if got := turnRequests[1].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
-		t.Fatalf("explicit empty toolRefs provider refs = %#v, want global broad ref", got)
+	if got := turnRequests[1].ToolRefs; len(got) != 0 {
+		t.Fatalf("explicit empty toolRefs provider refs = %#v, want none", got)
 	}
 	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "" {
 		t.Fatalf("plugin broad provider refs = %#v, want docs broad ref", got)
+	}
+}
+
+func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	provider.capabilities = &coreagent.ProviderCapabilities{
+		BoundedListHydration: true,
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		cfg.Auth = nil
+		cfg.Services = services
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, body)
+	}
+
+	turnRequests := provider.capturedTurnRequests()
+	if len(turnRequests) != 1 {
+		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
+	}
+	if got := turnRequests[0].ToolSource; got != coreagent.ToolSourceModeUnspecified {
+		t.Fatalf("provider turn tool source = %q, want unspecified", got)
+	}
+	if got := turnRequests[0].ToolRefs; len(got) != 0 {
+		t.Fatalf("provider turn tool refs = %#v, want none", got)
 	}
 }
 
