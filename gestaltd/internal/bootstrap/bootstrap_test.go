@@ -4315,6 +4315,23 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 			t.Fatalf("external credentials indexeddb env[%d] = %q, want %q", i, got, want)
 		}
 	}
+
+	withIndexedDBHostClient(t, hostServices[0], func(client proto.IndexedDBClient) {
+		for _, store := range []string{"external_credentials", "external_credentials_v2"} {
+			if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+				Name:   store,
+				Schema: &proto.ObjectStoreSchema{},
+			}); err != nil {
+				t.Fatalf("CreateObjectStore(%s): %v", store, err)
+			}
+		}
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "plugin_credentials",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err == nil {
+			t.Fatal("CreateObjectStore(plugin_credentials) succeeded, want allowlist failure")
+		}
+	})
 }
 
 func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
