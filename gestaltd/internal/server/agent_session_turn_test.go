@@ -337,6 +337,7 @@ type memoryAgentProvider struct {
 	listSessionRequests []coreagent.ListSessionsRequest
 	listTurnRequests    []coreagent.ListTurnsRequest
 	createSessionHook   func()
+	listTurnEventsErr   error
 }
 
 func newMemoryAgentProvider() *memoryAgentProvider {
@@ -597,6 +598,9 @@ func (p *memoryAgentProvider) ListTurnEvents(_ context.Context, req coreagent.Li
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if p.listTurnEventsErr != nil {
+		return nil, p.listTurnEventsErr
+	}
 	events := p.turnEvents[req.TurnID]
 	out := make([]*coreagent.TurnEvent, 0, len(events))
 	for _, event := range events {
@@ -1341,6 +1345,115 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 	}
 	if turn["sessionId"] != sessionID {
 		t.Fatalf("turn sessionId = %#v, want %q", turn["sessionId"], sessionID)
+	}
+}
+
+func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, body)
+	}
+	var turn map[string]any
+	if err := json.NewDecoder(turnResp.Body).Decode(&turn); err != nil {
+		t.Fatalf("decode turn: %v", err)
+	}
+	turnID := turn["id"].(string)
+
+	provider.mu.Lock()
+	provider.turns[turnID].Status = coreagent.ExecutionStatusRunning
+	provider.turns[turnID].CompletedAt = nil
+	provider.turnEvents[turnID] = nil
+	provider.mu.Unlock()
+
+	streamCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=0&limit=10", nil)
+	streamReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	streamResp, err := http.DefaultClient.Do(streamReq)
+	if err != nil {
+		t.Fatalf("stream quiet events: %v", err)
+	}
+	defer func() { _ = streamResp.Body.Close() }()
+	if streamResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(streamResp.Body)
+		t.Fatalf("stream quiet events status = %d body=%s", streamResp.StatusCode, body)
+	}
+	if got := streamResp.Header.Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
+		t.Fatalf("stream quiet events content-type = %q, want text/event-stream", got)
+	}
+	reader := bufio.NewReader(streamResp.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read heartbeat: %v", err)
+	}
+	if got := strings.TrimRight(line, "\r\n"); got != ": stream-open" {
+		t.Fatalf("first stream line = %q, want stream-open heartbeat", got)
+	}
+
+	provider.mu.Lock()
+	provider.listTurnEventsErr = core.ErrNotFound
+	provider.mu.Unlock()
+
+	var errorFrame string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read stream error: %v", err)
+		}
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "data: ") {
+			errorFrame = strings.TrimPrefix(line, "data: ")
+			break
+		}
+	}
+	if !strings.Contains(errorFrame, `"type":"stream.error"`) {
+		t.Fatalf("stream error frame = %s, want stream.error event", errorFrame)
 	}
 }
 

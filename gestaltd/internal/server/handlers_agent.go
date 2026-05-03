@@ -31,6 +31,7 @@ const defaultAgentTurnEventLimit = 100
 const maxAgentTurnEventLimit = 1000
 const agentTurnEventStreamUntilTerminal = "terminal"
 const agentTurnEventStreamUntilBlockedOrTerminal = "blocked_or_terminal"
+const agentTurnEventStreamHeartbeatInterval = 15 * time.Second
 
 type agentMessageRequest struct {
 	Role     string                    `json:"role,omitempty"`
@@ -534,6 +535,12 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	ctx := r.Context()
+	events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+	if err != nil {
+		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
@@ -542,9 +549,18 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	ctx := r.Context()
+	w.Header().Set("X-Accel-Buffering", "no")
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
+	lastWrite := time.Now()
+
+	writeHeartbeat := func(comment string) {
+		_, _ = w.Write([]byte(": "))
+		_, _ = w.Write([]byte(comment))
+		_, _ = w.Write([]byte("\n\n"))
+		flusher.Flush()
+		lastWrite = time.Now()
+	}
 
 	writeEvents := func(events []*coreagent.TurnEvent) bool {
 		pageFull := limit > 0 && len(events) == limit
@@ -559,6 +575,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(payload)
 			_, _ = w.Write([]byte("\n\n"))
 			flusher.Flush()
+			lastWrite = time.Now()
 			if info.Seq > afterSeq {
 				afterSeq = info.Seq
 			}
@@ -566,37 +583,77 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 		return pageFull
 	}
 
-	for {
-		events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
-		if err != nil {
-			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+	writeStreamError := func(err error) {
+		slog.ErrorContext(ctx, "agent turn event stream failed", "turn_id", turnID, "error", err)
+		info := agentTurnEventInfo{
+			TurnID:     turnID,
+			Type:       "stream.error",
+			Source:     "gestaltd",
+			Visibility: "public",
+			Data: map[string]any{
+				"message": "agent event stream failed",
+			},
+			Display: &agentTurnDisplayInfo{
+				Kind:  "error",
+				Phase: "failed",
+				Text:  "agent event stream failed",
+			},
+		}
+		payload, marshalErr := json.Marshal(info)
+		if marshalErr != nil {
+			slog.ErrorContext(ctx, "marshal agent turn stream error", "turn_id", turnID, "error", marshalErr)
 			return
 		}
-		pageFull := writeEvents(events)
+		_, _ = w.Write([]byte("event: error\n"))
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(payload)
+		_, _ = w.Write([]byte("\n\n"))
+		flusher.Flush()
+		lastWrite = time.Now()
+	}
+
+	writeHeartbeat("stream-open")
+	pageFull := writeEvents(events)
+	for {
 		if pageFull {
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			if err != nil {
+				writeStreamError(err)
+				return
+			}
+			pageFull = writeEvents(events)
 			continue
 		}
 		done, err := s.agentTurnStreamDone(ctx, p, turnID, until)
 		if err != nil {
-			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+			writeStreamError(err)
 			return
 		}
 		if done {
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
 			if err != nil {
-				s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+				writeStreamError(err)
 				return
 			}
 			if len(events) == 0 {
 				return
 			}
-			writeEvents(events)
+			pageFull = writeEvents(events)
 			continue
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if time.Since(lastWrite) >= agentTurnEventStreamHeartbeatInterval {
+				writeHeartbeat("keepalive")
+			}
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			if err != nil {
+				writeStreamError(err)
+				return
+			}
+			pageFull = writeEvents(events)
 		}
 	}
 }
