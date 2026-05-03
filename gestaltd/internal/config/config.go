@@ -36,7 +36,7 @@ const (
 	DefaultIndexedDBProvider           = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion            = "0.0.1-alpha.4"
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/external_credentials/default"
-	DefaultExternalCredentialsVersion  = "0.0.1-alpha.3"
+	DefaultExternalCredentialsVersion  = "0.0.1-alpha.5"
 	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
 	DefaultUIVersion                   = "0.0.1-alpha.18"
 	DefaultProviderInstance            = "default"
