@@ -151,6 +151,47 @@ func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *tes
 	}
 }
 
+func TestBrokerResolveToken_PlatformConnectionAppliesRuntimeParams(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "looker",
+			ConnMode: core.ConnectionModePlatform,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionRuntime(ConnectionRuntimeMap{
+			"looker": {
+				core.PluginConnectionName: {
+					Mode:  core.ConnectionModePlatform,
+					Token: "platform-token",
+					Params: map[string]string{
+						"host": "valon.cloud.looker.com",
+					},
+				},
+			},
+		}.Resolve),
+	)
+	subject := &principal.Principal{
+		SubjectID: "service_account:workflow-config",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	}
+
+	ctx, token, err := broker.ResolveToken(context.Background(), subject, "looker", "", "")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if token != "platform-token" {
+		t.Fatalf("token = %q, want platform-token", token)
+	}
+	if got := core.ConnectionParams(ctx)["host"]; got != "valon.cloud.looker.com" {
+		t.Fatalf("connection param host = %q, want valon.cloud.looker.com", got)
+	}
+}
+
 func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
 	t.Parallel()
 

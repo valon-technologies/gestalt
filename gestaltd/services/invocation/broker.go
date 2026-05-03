@@ -833,6 +833,9 @@ func (b *Broker) resolvePlatformRuntimeCredential(ctx context.Context, providerN
 		SubjectID:  platformSubjectID,
 		Connection: connection,
 	})
+	if len(info.Params) > 0 {
+		ctx = core.WithConnectionParams(ctx, info.Params)
+	}
 	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
 }
 
