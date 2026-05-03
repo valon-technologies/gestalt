@@ -96,7 +96,7 @@ func TestE2EProviderAddPackageSourceUpdatesConfig(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v4\nplugins:\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("apiVersion: gestaltd.config/v5\nplugins:\n"), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	indexPath := filepath.Join(dir, "provider-index.yaml")
@@ -121,7 +121,7 @@ packages:
 	if err != nil {
 		t.Fatalf("provider repo add failed: %v\n%s", err, out)
 	}
-	out, err = exec.Command(gestaltdBin, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--package-source", "--no-lock").CombinedOutput()
+	out, err = exec.Command(gestaltdBin, "provider", "add", "github.com/acme/providers/alpha", "--config", cfgPath, "--repo", "local", "--name", "alpha", "--no-lock").CombinedOutput()
 	if err != nil {
 		t.Fatalf("provider add failed: %v\n%s", err, out)
 	}
@@ -130,8 +130,8 @@ packages:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.APIVersion; got != config.ConfigAPIVersionV5 {
-		t.Fatalf("APIVersion = %q, want %q", got, config.ConfigAPIVersionV5)
+	if got := cfg.APIVersion; got != config.ConfigAPIVersion {
+		t.Fatalf("APIVersion = %q, want %q", got, config.ConfigAPIVersion)
 	}
 	if got := cfg.ProviderRepositories["local"].URL; got != indexURL {
 		t.Fatalf("providerRepositories.local.url = %q, want %q", got, indexURL)

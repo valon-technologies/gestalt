@@ -283,7 +283,6 @@ func runProviderAdd(args []string) error {
 	noLock := fs.Bool("no-lock", false, "do not update lockfile")
 	sync := fs.Bool("sync", false, "materialize prepared artifacts after locking")
 	exactSource := fs.Bool("exact-source", false, "write resolved provider-release metadata URL instead of package source")
-	packageSource := fs.Bool("package-source", false, "upgrade v4 config and write package source")
 	dryRun := fs.Bool("dry-run", false, "print resolved package without editing")
 	fs.Var(&configPaths, "config", "path to config file")
 	fs.Var(&setFlags, "set", "set shallow entry field, e.g. path=/ui")
@@ -324,15 +323,11 @@ func runProviderAdd(args []string) error {
 		fmt.Printf("%s\t%s\t%s\t%s\n", resolved.Package, resolved.Version, resolved.Kind, resolved.MetadataURL)
 		return nil
 	}
-	apiVersion := config.ConfigAPIVersionV4
+	apiVersion := config.ConfigAPIVersion
 	if cfg != nil && strings.TrimSpace(cfg.APIVersion) != "" {
 		apiVersion = strings.TrimSpace(cfg.APIVersion)
 	}
-	writePackageSource := apiVersion == config.ConfigAPIVersionV5 && !*exactSource
-	if *packageSource {
-		writePackageSource = true
-		apiVersion = config.ConfigAPIVersionV5
-	}
+	writePackageSource := !*exactSource
 	entryKind := providermanifestv1.NormalizeKind(*kind)
 	if entryKind == "" {
 		entryKind = resolved.Kind
@@ -509,7 +504,7 @@ func editProjectProviderRepository(path, name, repoURL string, dryRun bool) erro
 	if err != nil {
 		return err
 	}
-	setScalar(doc, "apiVersion", config.ConfigAPIVersionV5)
+	setScalar(doc, "apiVersion", config.ConfigAPIVersion)
 	repos := ensureMapping(doc, "providerRepositories")
 	repoNode := yamlMapping(map[string]any{"url": repoURL})
 	setNode(repos, name, repoNode)

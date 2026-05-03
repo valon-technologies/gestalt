@@ -117,7 +117,7 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 	}
 }
 
-func TestE2EValidateAcceptsV3TelemetryBuiltins(t *testing.T) {
+func TestE2EValidateAcceptsTelemetryBuiltins(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {

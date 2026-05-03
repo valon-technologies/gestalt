@@ -2146,7 +2146,7 @@ server:
 		}
 	})
 
-	t.Run("local external credentials source is rejected", func(t *testing.T) {
+	t.Run("external credentials scalar local source is a path", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2166,12 +2166,12 @@ server:
   encryptionKey: server-key
 `)
 
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
 		}
-		if !strings.Contains(err.Error(), `externalCredentials provider "default" does not support builtin providers`) {
-			t.Fatalf("unexpected error: %v", err)
+		if got := cfg.Providers.ExternalCredentials["default"].SourcePath(); got != filepath.Join(filepath.Dir(path), "local") {
+			t.Fatalf("externalCredentials source path = %q, want local path", got)
 		}
 	})
 }
@@ -3985,8 +3985,8 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.APIVersion; got != ConfigAPIVersionV5 {
-		t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersionV5)
+	if got := cfg.APIVersion; got != ConfigAPIVersion {
+		t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersion)
 	}
 	if got := cfg.ProviderRepositories["local"].URL; got != "https://providers.example.test/index.yaml" {
 		t.Fatalf("providerRepositories.local.url = %q", got)
@@ -4061,7 +4061,7 @@ providers:
 	}
 }
 
-func TestLoadConfigProviderPackageSourcesRequireV5(t *testing.T) {
+func TestLoadConfigProviderPackageSourceValidation(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -4069,28 +4069,6 @@ func TestLoadConfigProviderPackageSourcesRequireV5(t *testing.T) {
 		yaml string
 		want string
 	}{
-		{
-			name: "v4 rejects package source",
-			yaml: `
-apiVersion: gestaltd.config/v4
-plugins:
-  service:
-    source:
-      package: github.com/acme/providers/service
-`,
-			want: `source.package requires apiVersion "gestaltd.config/v5"`,
-		},
-		{
-			name: "v4 rejects provider repositories",
-			yaml: `
-apiVersion: gestaltd.config/v4
-providerRepositories:
-  local:
-    url: https://providers.example.test/index.yaml
-plugins:
-`,
-			want: `providerRepositories requires apiVersion "gestaltd.config/v5"`,
-		},
 		{
 			name: "package and url are mutually exclusive",
 			yaml: `
@@ -4121,17 +4099,17 @@ plugins:
 	}
 }
 
-func TestLoadPathsProviderPackageSourceAPIVersionLayering(t *testing.T) {
+func TestLoadPathsProviderPackageSourceLayering(t *testing.T) {
 	t.Parallel()
 
-	t.Run("v5 overlay enables package source", func(t *testing.T) {
+	t.Run("overlay replaces metadata URL with package source", func(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
 		basePath := filepath.Join(dir, "base.yaml")
 		overridePath := filepath.Join(dir, "override.yaml")
 		if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 plugins:
   service:
     source: https://example.com/service/provider-release.yaml
@@ -4156,41 +4134,11 @@ plugins:
 		if err != nil {
 			t.Fatalf("LoadPaths: %v", err)
 		}
-		if got := cfg.APIVersion; got != ConfigAPIVersionV5 {
-			t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersionV5)
+		if got := cfg.APIVersion; got != ConfigAPIVersion {
+			t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersion)
 		}
 		if !cfg.Plugins["service"].Source.IsPackage() {
 			t.Fatal("merged source is not package source")
-		}
-	})
-
-	t.Run("v4 overlay disables package source features", func(t *testing.T) {
-		t.Parallel()
-
-		dir := t.TempDir()
-		basePath := filepath.Join(dir, "base.yaml")
-		overridePath := filepath.Join(dir, "override.yaml")
-		if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v5
-plugins:
-  service:
-    source:
-      package: github.com/acme/providers/service
-`), 0o644); err != nil {
-			t.Fatalf("write base: %v", err)
-		}
-		if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v4
-`), 0o644); err != nil {
-			t.Fatalf("write override: %v", err)
-		}
-
-		_, err := LoadPaths([]string{basePath, overridePath})
-		if err == nil {
-			t.Fatal("LoadPaths: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `source.package requires apiVersion "gestaltd.config/v5"`) {
-			t.Fatalf("LoadPaths error = %v, want package source apiVersion error", err)
 		}
 	})
 }
