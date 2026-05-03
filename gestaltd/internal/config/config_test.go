@@ -4812,7 +4812,10 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					"sample": {
 						Source: ProviderSource{Path: "./manifest.yaml"},
 						Connections: map[string]*ConnectionDef{
-							"default": {Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth}},
+							"default": {
+								Mode: providermanifestv1.ConnectionModePlatform,
+								Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
+							},
 						},
 					},
 				},
@@ -4913,6 +4916,32 @@ func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "conflicts with alias") {
 		t.Fatalf("ValidateStructure() error = %v, want alias conflict", err)
+	}
+}
+
+func TestValidateStructureRejectsInlineUserMCPOAuthConnection(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Connections: map[string]*ConnectionDef{
+					"mcp": {
+						Mode: providermanifestv1.ConnectionModeUser,
+						Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
+					},
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want inline user mcp_oauth rejection")
+	}
+	if !strings.Contains(err.Error(), "user-owned inline connections are not supported") {
+		t.Fatalf("ValidateStructure() error = %v, want inline user connection rejection", err)
 	}
 }
 

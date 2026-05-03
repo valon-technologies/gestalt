@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 func TestBuildConnectionRuntimePlatformManualDirectAuthMapping(t *testing.T) {
@@ -147,6 +148,62 @@ func TestBuildConnectionRuntimeRejectsProviderNamespaceCollision(t *testing.T) {
 	}
 }
 
+func TestBuildConnectionRuntimeClientCredentialsTokenSourceUsesProviderEgress(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "blocked-token",
+			"expires_in":   3600,
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer tokenServer.Close()
+
+	runtime, err := BuildConnectionRuntime(&config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"sample": {
+				Egress: &config.ProviderEgressConfig{AllowedHosts: []string{"allowed.example.com"}},
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						Mode: providermanifestv1.ConnectionModePlatform,
+						Auth: config.ConnectionAuthDef{
+							Type:         providermanifestv1.AuthTypeOAuth2,
+							GrantType:    "client_credentials",
+							TokenURL:     tokenServer.URL,
+							ClientID:     "client-id",
+							ClientSecret: "client-secret",
+							ClientAuth:   "header",
+							AcceptHeader: "application/json",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildConnectionRuntime() error = %v", err)
+	}
+	info, ok := runtime.Resolve("sample", "default")
+	if !ok {
+		t.Fatal("runtime.Resolve(sample, default) not found")
+	}
+	if info.TokenSource == nil {
+		t.Fatal("TokenSource = nil")
+	}
+	_, err = info.TokenSource.ResolveConnectionCredential(context.Background())
+	if !errors.Is(err, egress.ErrEgressDenied) {
+		t.Fatalf("ResolveConnectionCredential() error = %v, want egress denied", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("token endpoint requests = %d, want 0 after egress denial", got)
+	}
+}
+
 func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
 	t.Parallel()
 
@@ -201,6 +258,48 @@ func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
 	}
 	if credential.ExpiresAt == nil {
 		t.Fatal("ExpiresAt = nil, want expiry from token endpoint")
+	}
+}
+
+func TestClientCredentialsTokenSourceCachesTokenWithoutExpiresIn(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "no-expiry-token",
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer tokenServer.Close()
+
+	source, err := newClientCredentialsTokenSource(config.ConnectionAuthDef{
+		TokenURL:     tokenServer.URL,
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+	})
+	if err != nil {
+		t.Fatalf("newClientCredentialsTokenSource() error = %v", err)
+	}
+	first, err := source.ResolveConnectionCredential(context.Background())
+	if err != nil {
+		t.Fatalf("first ResolveConnectionCredential() error = %v", err)
+	}
+	second, err := source.ResolveConnectionCredential(context.Background())
+	if err != nil {
+		t.Fatalf("second ResolveConnectionCredential() error = %v", err)
+	}
+	if first.Token != "no-expiry-token" || second.Token != "no-expiry-token" {
+		t.Fatalf("tokens = %q/%q, want cached no-expiry token", first.Token, second.Token)
+	}
+	if first.ExpiresAt != nil || second.ExpiresAt != nil {
+		t.Fatalf("ExpiresAt = %v/%v, want nil when token response omits expires_in", first.ExpiresAt, second.ExpiresAt)
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("token requests = %d, want 1 cached request", got)
 	}
 }
 

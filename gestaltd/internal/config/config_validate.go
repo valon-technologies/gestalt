@@ -319,7 +319,7 @@ func connectionBindingRequiresUserCredential(conn *ConnectionDef) bool {
 		return false
 	}
 	switch conn.Auth.Type {
-	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeOAuth2:
+	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeOAuth2, providermanifestv1.AuthTypeMCPOAuth:
 		return true
 	default:
 		return false

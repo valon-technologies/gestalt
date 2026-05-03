@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"golang.org/x/sync/singleflight"
@@ -86,6 +87,7 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	if cfg == nil {
 		return runtime, nil
 	}
+	egressDeps := newEgressDeps(cfg)
 
 	addProviderRuntime := func(kind, name string, entry *config.ProviderEntry) error {
 		if entry == nil {
@@ -102,8 +104,9 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		if err != nil {
 			return fmt.Errorf("%s %q: %w", kind, name, err)
 		}
+		policy := egressDeps.ProviderPolicy(entry)
 		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
-			info, err := connectionRuntimeInfo(name, connName, conn)
+			info, err := connectionRuntimeInfo(name, connName, conn, policy)
 			if err != nil {
 				return err
 			}
@@ -140,13 +143,17 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	return runtime, nil
 }
 
-func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
-	return StaticConnectionRuntimeInfo(integration, connection, *conn)
+func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef, policy egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
+	return staticConnectionRuntimeInfo(integration, connection, *conn, policy)
 }
 
 // StaticConnectionRuntimeInfo validates and materializes deployment-owned
 // connection material using the same rules as invocation bootstrap.
 func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
+	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow})
+}
+
+func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, policy egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
 	info := invocation.ConnectionRuntimeInfo{
 		ConnectionID: conn.ConnectionID,
@@ -186,7 +193,7 @@ func StaticConnectionRuntimeInfo(integration, connection string, conn config.Con
 		if strings.TrimSpace(conn.Auth.GrantType) != "client_credentials" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials", integration, connection)
 		}
-		source, err := newClientCredentialsTokenSource(conn.Auth)
+		source, err := newClientCredentialsTokenSource(conn.Auth, policy)
 		if err != nil {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: %w", integration, connection, err)
 		}
@@ -215,6 +222,8 @@ func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[st
 
 type clientCredentialsTokenSource struct {
 	auth         config.ConnectionAuthDef
+	httpClient   *http.Client
+	egressPolicy egress.Policy
 	now          func() time.Time
 	fetchTimeout time.Duration
 
@@ -225,7 +234,7 @@ type clientCredentialsTokenSource struct {
 
 const clientCredentialsTokenFetchTimeout = 30 * time.Second
 
-func newClientCredentialsTokenSource(auth config.ConnectionAuthDef) (*clientCredentialsTokenSource, error) {
+func newClientCredentialsTokenSource(auth config.ConnectionAuthDef, policies ...egress.Policy) (*clientCredentialsTokenSource, error) {
 	if strings.TrimSpace(auth.TokenURL) == "" {
 		return nil, fmt.Errorf("auth.tokenUrl is required")
 	}
@@ -235,7 +244,30 @@ func newClientCredentialsTokenSource(auth config.ConnectionAuthDef) (*clientCred
 	if strings.TrimSpace(auth.ClientSecret) == "" {
 		return nil, fmt.Errorf("auth.clientSecret is required")
 	}
-	return &clientCredentialsTokenSource{auth: auth, now: time.Now, fetchTimeout: clientCredentialsTokenFetchTimeout}, nil
+	policy := egress.Policy{DefaultAction: egress.PolicyAllow}
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	return &clientCredentialsTokenSource{
+		auth:         auth,
+		httpClient:   newClientCredentialsHTTPClient(policy),
+		egressPolicy: policy,
+		now:          time.Now,
+		fetchTimeout: clientCredentialsTokenFetchTimeout,
+	}, nil
+}
+
+func newClientCredentialsHTTPClient(policy egress.Policy) *http.Client {
+	transport := egress.CloneDefaultTransport()
+	return &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if req == nil || req.URL == nil {
+				return nil
+			}
+			return policy.CheckHost(req.URL.Host)
+		},
+	}
 }
 
 func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
@@ -243,8 +275,7 @@ func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.C
 		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token source is not configured")
 	}
 	s.mu.Lock()
-	if s.cached.Token != "" && s.cached.ExpiresAt != nil && s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
-		cached := s.cached
+	if cached, ok := s.cachedCredentialLocked(); ok {
 		s.mu.Unlock()
 		return cached, nil
 	}
@@ -252,8 +283,7 @@ func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.C
 
 	resultCh := s.group.DoChan("token", func() (any, error) {
 		s.mu.Lock()
-		if s.cached.Token != "" && s.cached.ExpiresAt != nil && s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
-			cached := s.cached
+		if cached, ok := s.cachedCredentialLocked(); ok {
 			s.mu.Unlock()
 			return cached, nil
 		}
@@ -282,6 +312,16 @@ func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.C
 	case <-ctx.Done():
 		return invocation.ConnectionRuntimeCredential{}, ctx.Err()
 	}
+}
+
+func (s *clientCredentialsTokenSource) cachedCredentialLocked() (invocation.ConnectionRuntimeCredential, bool) {
+	if s.cached.Token == "" {
+		return invocation.ConnectionRuntimeCredential{}, false
+	}
+	if s.cached.ExpiresAt == nil || s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
+		return s.cached, true
+	}
+	return invocation.ConnectionRuntimeCredential{}, false
 }
 
 func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
@@ -321,7 +361,14 @@ func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (invocation.Co
 	if clientAuth == "header" {
 		req.SetBasicAuth(clientID, clientSecret)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	if err := s.egressPolicy.CheckHost(req.URL.Host); err != nil {
+		return invocation.ConnectionRuntimeCredential{}, err
+	}
+	client := s.httpClient
+	if client == nil {
+		client = newClientCredentialsHTTPClient(s.egressPolicy)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return invocation.ConnectionRuntimeCredential{}, err
 	}
