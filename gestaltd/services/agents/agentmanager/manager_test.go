@@ -3,6 +3,7 @@ package agentmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -731,6 +732,68 @@ func TestResolveToolsExpandsPluginOnlyRefs(t *testing.T) {
 	}
 	if tools[0].Target.Operation != "search" || tools[1].Target.Operation != "summarize" {
 		t.Fatalf("ResolveTools operations = %q, %q; want search, summarize", tools[0].Target.Operation, tools[1].Target.Operation)
+	}
+}
+
+func TestListToolsClampsOversizedPageSize(t *testing.T) {
+	t.Parallel()
+
+	const toolCount = agentToolListMaxPageSize + 7
+	docsOps := make([]catalog.CatalogOperation, toolCount)
+	for i := range docsOps {
+		docsOps[i] = catalog.CatalogOperation{
+			ID:       fmt.Sprintf("fetch_%04d", i+1),
+			Title:    "Fetch",
+			ReadOnly: true,
+		}
+	}
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:          "docs",
+			ConnMode:   core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: docsOps},
+		},
+	}
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	firstPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		PageSize:   5,
+	})
+	if err != nil {
+		t.Fatalf("ListTools first page: %v", err)
+	}
+	if len(firstPage.Tools) != 5 || firstPage.NextPageToken != "5" {
+		t.Fatalf("ListTools first page = %d tools, next %q; want 5 tools and token 5", len(firstPage.Tools), firstPage.NextPageToken)
+	}
+
+	clampedPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		PageSize:   10000,
+		PageToken:  firstPage.NextPageToken,
+	})
+	if err != nil {
+		t.Fatalf("ListTools clamped page: %v", err)
+	}
+	wantNextPageToken := fmt.Sprintf("%d", 5+agentToolListMaxPageSize)
+	if len(clampedPage.Tools) != agentToolListMaxPageSize || clampedPage.NextPageToken != wantNextPageToken {
+		t.Fatalf("ListTools clamped page = %d tools, next %q; want %d tools and token %s", len(clampedPage.Tools), clampedPage.NextPageToken, agentToolListMaxPageSize, wantNextPageToken)
+	}
+
+	lastPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		PageSize:   10000,
+		PageToken:  clampedPage.NextPageToken,
+	})
+	if err != nil {
+		t.Fatalf("ListTools last page: %v", err)
+	}
+	if len(lastPage.Tools) != 2 || lastPage.NextPageToken != "" {
+		t.Fatalf("ListTools last page = %d tools, next %q; want 2 tools and no token", len(lastPage.Tools), lastPage.NextPageToken)
 	}
 }
 

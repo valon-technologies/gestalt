@@ -45,8 +45,8 @@ var (
 
 const (
 	agentToolSearchAllPlugin     = "*"
-	agentToolListDefaultPageSize = 10
-	agentToolListMaxPageSize     = 10
+	agentToolListDefaultPageSize = 100
+	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
 	maxAgentRouteCacheEntries    = 20_000
 	AgentListSummaryDefaultLimit = 100
