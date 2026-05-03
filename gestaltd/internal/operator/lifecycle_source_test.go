@@ -895,31 +895,6 @@ packages:
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	legacyConfigPath := filepath.Join(dir, "legacy-direct-url.yaml")
-	legacyConfigYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "legacy-data.db")) + strings.Join([]string{
-		"plugins:",
-		"  alpha:",
-		"    source:",
-		"      url: " + srv.URL + metadataPath,
-		"      auth:",
-		"        token: test-token",
-		"server:",
-		"  providers:",
-		"    indexeddb: sqlite",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}, "\n") + "\n"
-	if err := os.WriteFile(legacyConfigPath, []byte(legacyConfigYAML), 0o644); err != nil {
-		t.Fatalf("write legacy config: %v", err)
-	}
-	legacyCfg, err := config.Load(legacyConfigPath)
-	if err != nil {
-		t.Fatalf("load legacy config: %v", err)
-	}
-	legacyFingerprint, err := ProviderFingerprint("alpha", legacyCfg.Plugins["alpha"], filepath.Dir(legacyConfigPath))
-	if err != nil {
-		t.Fatalf("legacy ProviderFingerprint: %v", err)
-	}
 
 	lc := NewLifecycle()
 	lock, err := lc.PrepareAtPath(configPath)
@@ -1011,49 +986,6 @@ packages:
 	}
 	if got := cfg.Plugins["alpha"].ResolvedManifest.Source; got != packageSource {
 		t.Fatalf("ResolvedManifest.Source = %q, want %q", got, packageSource)
-	}
-
-	legacyEntry := lock.Providers["alpha"]
-	legacyEntry.Source = srv.URL + metadataPath
-	legacyEntry.Fingerprint = legacyFingerprint
-	lock.Providers["alpha"] = legacyEntry
-	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
-		t.Fatalf("WriteLockfile legacy: %v", err)
-	}
-	if err := os.RemoveAll(pluginRoot); err != nil {
-		t.Fatalf("RemoveAll plugin root before legacy sync: %v", err)
-	}
-	archiveBeforeLegacy := archiveCount.Load()
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-		t.Fatalf("SyncAtPathsWithStatePaths legacy lock: %v", err)
-	}
-	if handlerErr := nextHandlerErr(); handlerErr != nil {
-		t.Fatal(handlerErr)
-	}
-	if got := indexCount.Load(); got != indexBefore {
-		t.Fatalf("index request count after legacy sync = %d, want %d", got, indexBefore)
-	}
-	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count after legacy sync = %d, want %d", got, metadataBefore)
-	}
-	if got := archiveCount.Load(); got != archiveBeforeLegacy+1 {
-		t.Fatalf("archive request count after legacy sync = %d, want %d", got, archiveBeforeLegacy+1)
-	}
-	archiveBeforeLegacyLoad := archiveCount.Load()
-	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
-		t.Fatalf("LoadForExecutionAtPath(legacy locked=true): %v", err)
-	}
-	if got := indexCount.Load(); got != indexBefore {
-		t.Fatalf("index request count after legacy locked load = %d, want %d", got, indexBefore)
-	}
-	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count after legacy locked load = %d, want %d", got, metadataBefore)
-	}
-	if got := archiveCount.Load(); got != archiveBeforeLegacyLoad {
-		t.Fatalf("archive request count after legacy locked load = %d, want %d", got, archiveBeforeLegacyLoad)
 	}
 }
 

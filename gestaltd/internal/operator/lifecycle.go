@@ -1656,24 +1656,7 @@ func lockEntryFingerprintMatchesProvider(name string, provider *config.ProviderE
 	if err != nil {
 		return false, err
 	}
-	if entry.Fingerprint == fingerprint {
-		return true, nil
-	}
-	if provider == nil || !provider.Source.IsPackage() {
-		return false, nil
-	}
-	legacySource := strings.TrimSpace(entry.Source)
-	if legacySource == "" {
-		return false, nil
-	}
-	legacyFingerprint, err := hashProviderFingerprintInput(providerFingerprintInput{
-		Name:   name,
-		Source: legacySource,
-	})
-	if err != nil {
-		return false, err
-	}
-	return entry.Fingerprint == legacyFingerprint, nil
+	return entry.Fingerprint == fingerprint, nil
 }
 
 func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
