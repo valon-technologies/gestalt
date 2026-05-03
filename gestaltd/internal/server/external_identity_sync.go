@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -10,6 +11,41 @@ import (
 )
 
 var errExternalIdentityAlreadyLinked = errors.New("external identity already linked")
+var errDuplicateExternalIdentityCredential = errors.New("duplicate external identity credential")
+
+type duplicateExternalIdentityCredentialError struct {
+	integration       string
+	connection        string
+	existingInstance  string
+	requestedInstance string
+}
+
+func (e *duplicateExternalIdentityCredentialError) Error() string {
+	connection := strings.TrimSpace(e.connection)
+	if connection == "" {
+		connection = "default"
+	}
+	existingInstance := strings.TrimSpace(e.existingInstance)
+	if existingInstance == "" {
+		existingInstance = "default"
+	}
+	requestedInstance := strings.TrimSpace(e.requestedInstance)
+	if requestedInstance == "" {
+		requestedInstance = "default"
+	}
+	return fmt.Sprintf(
+		"%s: integration %q connection %q is already connected as instance %q; reconnect that instance or disconnect it before adding instance %q",
+		errDuplicateExternalIdentityCredential,
+		strings.TrimSpace(e.integration),
+		connection,
+		existingInstance,
+		requestedInstance,
+	)
+}
+
+func (e *duplicateExternalIdentityCredentialError) Unwrap() error {
+	return errDuplicateExternalIdentityCredential
+}
 
 func (s *Server) syncStoredCredentialAuthorization(ctx context.Context, tok *core.ExternalCredential) error {
 	if s.authorizationProvider == nil || tok == nil {
@@ -20,6 +56,49 @@ func (s *Server) syncStoredCredentialAuthorization(ctx context.Context, tok *cor
 		return err
 	}
 	return s.ensureExternalIdentityLink(ctx, strings.TrimSpace(tok.SubjectID), ref)
+}
+
+func (s *Server) ensureNoDuplicateExternalIdentityCredential(ctx context.Context, tok *core.ExternalCredential) error {
+	if core.ExternalCredentialProviderMissing(s.externalCredentials) || tok == nil {
+		return nil
+	}
+	ref, ok, err := externalIdentityRefFromMetadataJSON(tok.MetadataJSON)
+	if err != nil || !ok {
+		return err
+	}
+	subjectID := strings.TrimSpace(tok.SubjectID)
+	connectionID := strings.TrimSpace(tok.ConnectionID)
+	if subjectID == "" || connectionID == "" {
+		return nil
+	}
+	tokens, err := s.externalCredentials.ListCredentialsForConnection(ctx, subjectID, connectionID)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range tokens {
+		if candidate == nil {
+			continue
+		}
+		if strings.TrimSpace(candidate.Instance) == strings.TrimSpace(tok.Instance) {
+			continue
+		}
+		candidateRef, candidateOK, err := externalIdentityRefFromMetadataJSON(candidate.MetadataJSON)
+		if err != nil {
+			return err
+		}
+		if !candidateOK {
+			continue
+		}
+		if externalIdentityRefsEqual(candidateRef, ref) {
+			return &duplicateExternalIdentityCredentialError{
+				integration:       tok.Integration,
+				connection:        tok.Connection,
+				existingInstance:  candidate.Instance,
+				requestedInstance: tok.Instance,
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) unlinkStoredCredentialAuthorization(ctx context.Context, tok *core.ExternalCredential) error {

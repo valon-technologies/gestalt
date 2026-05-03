@@ -444,7 +444,11 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	}
 	if _, err := s.completeConnection(credentialMaterialContext(r.Context(), completionPrincipal, tm), prov, tm); err != nil {
 		auditErr = errors.New("failed to store connection")
-		writeError(w, http.StatusInternalServerError, "failed to store connection")
+		status := http.StatusInternalServerError
+		if errors.Is(err, errDuplicateExternalIdentityCredential) {
+			status = http.StatusConflict
+		}
+		writeError(w, status, connectionSetupAPIErrorMessage(err))
 		return
 	}
 

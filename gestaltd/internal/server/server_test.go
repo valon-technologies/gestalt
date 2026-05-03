@@ -19513,6 +19513,65 @@ func TestConnectManual(t *testing.T) {
 		}
 	})
 
+	t.Run("duplicate external identity under another instance is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		svc := testutil.NewStubServices(t)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
+				stubManualProvider: stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+				},
+				connectionParams: map[string]core.ConnectionParamDef{
+					"team_id": {Required: true},
+					"user_id": {Required: true},
+				},
+				postConnect: testSlackPostConnect,
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		connect := func(instance, credential string) *http.Response {
+			t.Helper()
+			body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","instance":%q,"credential":%q,"connectionParams":{"team_id":"T123","user_id":"U456"}}`, instance, credential))
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			return resp
+		}
+
+		firstResp := connect("sa", "first-key")
+		defer func() { _ = firstResp.Body.Close() }()
+		if firstResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(firstResp.Body)
+			t.Fatalf("expected first connect 200, got %d: %s", firstResp.StatusCode, body)
+		}
+
+		duplicateResp := connect("z", "duplicate-key")
+		defer func() { _ = duplicateResp.Body.Close() }()
+		if duplicateResp.StatusCode != http.StatusConflict {
+			body, _ := io.ReadAll(duplicateResp.Body)
+			t.Fatalf("expected duplicate connect 409, got %d: %s", duplicateResp.StatusCode, body)
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if err != nil {
+			t.Fatalf("ListCredentials: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("expected exactly one stored token after duplicate rejection, got %d", len(tokens))
+		}
+		if tokens[0].Instance != "sa" || tokens[0].AccessToken != "first-key" {
+			t.Fatalf("unexpected stored token after duplicate rejection: %+v", tokens[0])
+		}
+	})
+
 	t.Run("selection_required", func(t *testing.T) {
 		t.Parallel()
 
