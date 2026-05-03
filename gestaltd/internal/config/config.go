@@ -1769,59 +1769,6 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-func EffectivePluginConnectionDef(plugin *ProviderEntry) ConnectionDef {
-	conn := ConnectionDef{}
-	if plugin != nil {
-		override := &ConnectionDef{
-			Mode:             plugin.ConnectionMode,
-			ConnectionParams: plugin.ConnectionParams,
-		}
-		if plugin.Auth != nil {
-			override.Auth = *plugin.Auth
-		}
-		MergeConnectionDef(&conn, override)
-	}
-	return conn
-}
-
-func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec, name string) (ConnectionDef, bool) {
-	conn := ConnectionDef{}
-	found := false
-
-	if manifestPlugin != nil && manifestPlugin.Connections != nil {
-		if def, ok := manifestPlugin.Connections[name]; ok && def != nil {
-			found = true
-			conn.DisplayName = def.DisplayName
-			if def.Mode != "" {
-				conn.Mode = def.Mode
-			}
-			if def.Exposure != "" {
-				conn.Exposure = def.Exposure
-			}
-			if def.Auth != nil {
-				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
-			}
-			if len(def.Params) > 0 {
-				conn.ConnectionParams = maps.Clone(def.Params)
-			}
-			if def.Discovery != nil {
-				conn.Discovery = def.Discovery
-			}
-		}
-	}
-	if plugin != nil {
-		if def, ok := plugin.Connections[name]; ok {
-			found = true
-			MergeConnectionDef(&conn, def)
-		}
-	}
-
-	if found {
-		return conn, true
-	}
-	return ConnectionDef{}, false
-}
-
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 

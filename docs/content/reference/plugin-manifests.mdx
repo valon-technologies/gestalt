@@ -88,7 +88,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
-| `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Legacy manifests may also use `spec.auth` for upstream connection auth when no `connections` map is defined. |
+| `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Upstream auth belongs in `spec.connections.<name>.auth`. |
 | `securitySchemes` | map[string]HTTPSecurityScheme | Named hosted HTTP security schemes referenced by `spec.http.<name>.security`. |
 | `http` | map[string]HTTPBinding | Optional hosted HTTP bindings layered on top of operations. Each binding mounts under the plugin prefix and targets an operation ID. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |

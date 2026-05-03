@@ -44,7 +44,7 @@ pub struct Access {
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Carries execution-scoped metadata into typed operation handlers.
 pub struct Request {
-    /// Request token used by legacy operation handlers.
+    /// Request token supplied to hosted HTTP operation handlers.
     pub token: String,
     /// Connection parameters resolved by the host.
     pub connection_params: BTreeMap<String, String>,

@@ -520,7 +520,17 @@ func namedConnectionNames(plugin *ProviderEntry, manifestPlugin *providermanifes
 }
 
 func ResolvePluginConnectionDef(plugin *ProviderEntry) ResolvedConnectionDef {
-	conn := EffectivePluginConnectionDef(plugin)
+	conn := ConnectionDef{}
+	if plugin != nil {
+		override := &ConnectionDef{
+			Mode:             plugin.ConnectionMode,
+			ConnectionParams: plugin.ConnectionParams,
+		}
+		if plugin.Auth != nil {
+			override.Auth = *plugin.Auth
+		}
+		MergeConnectionDef(&conn, override)
+	}
 	conn.Mode = providermanifestv1.ConnectionMode(ConnectionModeForConnection(conn))
 	conn.Exposure = providermanifestv1.ConnectionExposure(ConnectionExposureForConnection(conn))
 	source := ResolvedConnectionSource{
