@@ -2303,10 +2303,107 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPlug
 	if p == nil {
 		return nil
 	}
+	if permissions, ok := compactAgentRunPermissionsForRefs(p, refs); ok {
+		return permissions
+	}
 	if shouldUseResolvedUserToolScope(ctx, p, callerPluginName, refs) {
 		return nil
 	}
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
+}
+
+func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.ToolRef) ([]core.AccessPermission, bool) {
+	if len(refs) == 0 {
+		return nil, false
+	}
+	operationsByPlugin := map[string]map[string]struct{}{}
+	providerWide := map[string]struct{}{}
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.System) != "" {
+			continue
+		}
+		plugin := strings.TrimSpace(ref.Plugin)
+		if plugin == "" || plugin == agentToolSearchAllPlugin || strings.Contains(plugin, "*") {
+			return nil, false
+		}
+		operation := strings.TrimSpace(ref.Operation)
+		if strings.Contains(operation, "*") {
+			return nil, false
+		}
+		if operation == "" {
+			providerWide[plugin] = struct{}{}
+			delete(operationsByPlugin, plugin)
+			continue
+		}
+		if p != nil && p.TokenPermissions != nil {
+			tokenOps, ok := p.TokenPermissions[plugin]
+			if !ok {
+				return nil, false
+			}
+			if len(tokenOps) > 0 {
+				if _, ok := tokenOps[operation]; !ok {
+					return nil, false
+				}
+			}
+		}
+		if _, ok := providerWide[plugin]; ok {
+			continue
+		}
+		ops := operationsByPlugin[plugin]
+		if ops == nil {
+			ops = map[string]struct{}{}
+			operationsByPlugin[plugin] = ops
+		}
+		ops[operation] = struct{}{}
+	}
+	if len(providerWide) == 0 && len(operationsByPlugin) == 0 {
+		return nil, false
+	}
+	plugins := make([]string, 0, len(providerWide)+len(operationsByPlugin))
+	for plugin := range providerWide {
+		plugins = append(plugins, plugin)
+	}
+	for plugin := range operationsByPlugin {
+		if _, ok := providerWide[plugin]; !ok {
+			plugins = append(plugins, plugin)
+		}
+	}
+	sort.Strings(plugins)
+	out := make([]core.AccessPermission, 0, len(plugins))
+	for _, plugin := range plugins {
+		if _, ok := providerWide[plugin]; ok {
+			if p != nil && p.TokenPermissions != nil {
+				tokenOps, ok := p.TokenPermissions[plugin]
+				if !ok {
+					return nil, false
+				}
+				perm := core.AccessPermission{Plugin: plugin}
+				if len(tokenOps) > 0 {
+					ops := make([]string, 0, len(tokenOps))
+					for operation := range tokenOps {
+						ops = append(ops, operation)
+					}
+					sort.Strings(ops)
+					perm.Operations = ops
+				}
+				out = append(out, perm)
+				continue
+			}
+			out = append(out, core.AccessPermission{Plugin: plugin})
+			continue
+		}
+		ops := make([]string, 0, len(operationsByPlugin[plugin]))
+		for operation := range operationsByPlugin[plugin] {
+			ops = append(ops, operation)
+		}
+		sort.Strings(ops)
+		out = append(out, core.AccessPermission{
+			Plugin:     plugin,
+			Operations: ops,
+		})
+	}
+	return out, true
 }
 
 func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) bool {

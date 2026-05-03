@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -808,6 +809,66 @@ func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.
 	got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{Plugin: "*"}})
 	if len(got) != 1 || got[0].Plugin != "linear" || len(got[0].Operations) != 1 || got[0].Operations[0] != "issues" {
 		t.Fatalf("agentRunPermissions = %#v, want API token permissions preserved", got)
+	}
+}
+
+func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
+	t.Parallel()
+
+	perms := principal.CompilePermissions([]core.AccessPermission{
+		{Plugin: "linear", Operations: []string{"viewer", "issues.list", "issues.create"}},
+		{Plugin: "slack"},
+		{Plugin: "github"},
+	})
+	p := &principal.Principal{
+		SubjectID:        principal.UserSubjectID("user-1"),
+		UserID:           "user-1",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceAPIToken,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+
+	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
+		{Plugin: "slack", Operation: "chat.postMessage"},
+		{Plugin: "linear", Operation: "viewer"},
+		{Plugin: "slack", Operation: "chat.postMessage"},
+		{System: coreagent.SystemToolWorkflow, Operation: "run"},
+	})
+	want := []core.AccessPermission{
+		{Plugin: "linear", Operations: []string{"viewer"}},
+		{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
+	}
+}
+
+func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
+	t.Parallel()
+
+	perms := principal.CompilePermissions([]core.AccessPermission{
+		{Plugin: "linear", Operations: []string{"viewer"}},
+		{Plugin: "slack"},
+	})
+	p := &principal.Principal{
+		SubjectID:        principal.UserSubjectID("user-1"),
+		UserID:           "user-1",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceAPIToken,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+
+	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
+		{Plugin: "linear", Operation: "viewer"},
+		{Plugin: "linear"},
+	})
+	want := []core.AccessPermission{{Plugin: "linear", Operations: []string{"viewer"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
 	}
 }
 
