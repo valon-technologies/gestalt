@@ -509,6 +509,152 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 	}
 }
 
+func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestToolGrants(t)
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		ToolGrants: grants,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
+	}
+	if got := req.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want global broad catalog ref", got)
+	}
+	if strings.TrimSpace(req.ToolGrant) == "" {
+		t.Fatal("CreateTurn tool grant is empty")
+	}
+	grant, err := grants.Resolve(req.ToolGrant)
+	if err != nil {
+		t.Fatalf("Resolve tool grant: %v", err)
+	}
+	if grant.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("grant tool source = %q, want mcp_catalog", grant.ToolSource)
+	}
+	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("grant tool refs = %#v, want global broad catalog ref", got)
+	}
+}
+
+func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:  session.ID,
+		Model:      "test-model",
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
+	}
+	if got := req.ToolRefs; len(got) != 0 {
+		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty catalog source", got)
+	}
+	if strings.TrimSpace(req.ToolGrant) == "" {
+		t.Fatal("CreateTurn tool grant is empty")
+	}
+}
+
+func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:   session.ID,
+		Model:       "test-model",
+		ToolRefsSet: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeUnspecified {
+		t.Fatalf("CreateTurn tool source = %q, want empty", req.ToolSource)
+	}
+	if got := req.ToolRefs; len(got) != 0 {
+		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
+	}
+	if req.ToolGrant != "" {
+		t.Fatalf("CreateTurn tool grant = %q, want empty", req.ToolGrant)
+	}
+}
+
 func TestManagerCancelTurnRevokesToolGrantWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
