@@ -315,7 +315,6 @@ func runProviderAdd(args []string) error {
 	noLock := fs.Bool("no-lock", false, "do not update lockfile")
 	sync := fs.Bool("sync", false, "materialize prepared artifacts after locking")
 	exactSource := fs.Bool("exact-source", false, "write resolved provider-release metadata URL instead of package source")
-	fs.Bool("package-source", false, "accepted for compatibility; package sources are written by default")
 	dryRun := fs.Bool("dry-run", false, "print resolved package without editing")
 	fs.Var(&configPaths, "config", "path to config file")
 	fs.Var(&setFlags, "set", "set shallow entry field, e.g. path=/ui")

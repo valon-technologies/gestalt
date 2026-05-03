@@ -90,7 +90,7 @@ When repeated, `--config` files merge left-to-right. Maps deep-merge, later
 scalar values win, lists replace inherited lists, and `null` deletes inherited
 keys. By default, lockfiles and artifact paths stay rooted at the leftmost
 config file. `--lockfile` overrides only the lockfile path. `--artifacts-dir`
-keeps its existing config-relative behavior for backward compatibility.
+keeps the same config-relative resolution used by `sync` and `serve`.
 
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
