@@ -33,6 +33,21 @@ import { Callout } from 'nextra/components'
 
 | Command | Purpose |
 | --- | --- |
+| `gestaltd provider search [QUERY]` | Search configured provider repositories. Pass `--repo NAME` to search one repository. |
+| `gestaltd provider info PACKAGE` | Show available versions and release metadata for one package. Pass `--repo NAME` to disambiguate. |
+| `gestaltd provider add PACKAGE --config PATH` | Add an indexed provider package to config and update the lockfile. Package sources are written by default. |
+| `gestaltd provider add PACKAGE --kind KIND --name NAME` | Choose the provider kind and config entry name explicitly. UI providers also require `--set path=/mount`. |
+| `gestaltd provider add PACKAGE --version CONSTRAINT` | Write a semver version constraint such as `^1.4.0`, `~1.4.0`, or an exact version. |
+| `gestaltd provider add PACKAGE --exact-source` | Write the resolved `provider-release.yaml` URL instead of a package source. |
+| `gestaltd provider add PACKAGE --sync` | Materialize prepared artifacts after locking. |
+| `gestaltd provider list --config PATH` | List configured providers and lock status. Pass `--kind KIND` to filter. |
+| `gestaltd provider remove NAME --config PATH` | Remove one provider entry and update the lockfile. Pass `--kind KIND` when the name is ambiguous. |
+| `gestaltd provider upgrade --config PATH` | Refresh lock state for all package sources without editing config version constraints. |
+| `gestaltd provider upgrade NAME --version CONSTRAINT` | Change one package source's version constraint and update the lockfile. |
+| `gestaltd provider repo add NAME URL` | Add a provider repository to the user-level store. Pass `--config PATH` to write `providerRepositories` into project config instead. |
+| `gestaltd provider repo list` | List the default, user-level, and project provider repositories. |
+| `gestaltd provider repo update` | Fetch and cache provider repository indexes. |
+| `gestaltd provider repo remove NAME` | Remove a provider repository from the user-level store. Pass `--config PATH` to remove it from project config instead. |
 | `gestaltd provider dev --path PATH` | Run a local source plugin or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
 | `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, plugin config, and host services. |
@@ -53,6 +68,13 @@ precedence for plugin-owned or sibling UI, and explicit
 `providers.ui.<name>.path` values take precedence when developing a UI bundle
 directly.
 
+Provider package commands use the provider repository model described in
+[Provider Packages](/providers/packages). Mutating package commands accept one
+`--config` path so the CLI edits the intended file instead of a merged runtime
+view. `provider add`, `provider remove`, and `provider upgrade NAME --version`
+update the lockfile by default. `provider add` and `provider remove` accept
+`--no-lock` when you need to edit config only.
+
 ## Examples
 
 ```sh
@@ -68,6 +90,19 @@ gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.j
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
+gestaltd provider search github
+gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/github
+gestaltd provider repo list
+gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml --config ./config.yaml
+gestaltd provider repo update --config ./config.yaml
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github --config ./config.yaml --name github
+gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind authentication --name oidc --version '^1.4.0'
+gestaltd provider add github.com/acme/gestalt-providers/ui/console --config ./config.yaml --repo acme --kind ui --name console --set path=/console
+gestaltd provider list --config ./config.yaml
+gestaltd provider list --config ./config.yaml --kind plugin
+gestaltd provider upgrade --config ./config.yaml
+gestaltd provider upgrade github --config ./config.yaml --kind plugin --version '^1.5.0'
+gestaltd provider remove github --config ./config.yaml --kind plugin
 gestaltd provider validate --path ./plugins/support
 gestaltd provider validate --path ./ui/dashboard
 gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml --config ./dev/local.yaml

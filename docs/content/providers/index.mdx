@@ -17,11 +17,11 @@ starts it with the permissions and request context it needs.
 | Kind | Purpose | Config location |
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
-| `auth` | Platform authentication backends | `providers.authentication.<name>` |
+| `authentication` | Platform authentication backends | `providers.authentication.<name>` |
 | `authorization` | Dynamic subject authorization backends | `providers.authorization.<name>` |
 | `agent` | Global agent run backends that reason over messages and tools | `providers.agent.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
-| `external_credentials` | Subject-scoped third-party credential storage | `providers.external_credentials.<name>` |
+| `external_credentials` | Subject-scoped third-party credential storage | `providers.externalCredentials.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `runtime` | Hosted execution backends for executable plugins | `runtime.providers.<name>` |
 | `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
@@ -31,13 +31,18 @@ starts it with the permissions and request context it needs.
 
 ## How providers work
 
+- Use [Provider Packages](/providers/packages) for published providers that are
+  listed in a provider repository. Package sources keep a package address and
+  version constraint in config, so `gestaltd provider add`, `list`, `remove`,
+  and `upgrade` can manage them directly.
 - Use `source.path` during local development to point at a provider manifest in
   a local source tree.
-- Use `source: https://.../provider-release.yaml` to consume a published provider package.
+- Use `source: https://.../provider-release.yaml` when you need an exact
+  metadata URL outside a provider repository.
 - Use `source.githubRelease` when the published `provider-release.yaml` lives in
   a private GitHub Release and you want checked-in config to stay readable.
-- Use sibling `auth.token` when a remote release source, including
-  `source.githubRelease`, needs authenticated metadata or archive fetches.
+- Use `source.auth.token` when a package repository, remote release source, or
+  `source.githubRelease` needs authenticated metadata or archive fetches.
 - Executable providers run as child processes and connect back to the host over
   gRPC on a temporary Unix socket.
 - UI providers are static asset bundles rather than executable processes.
@@ -72,7 +77,17 @@ a custom provider with the neutral agent protocol described in
 
 ## Using providers
 
-Reference the package you want to run, then initialize or start the server:
+Use `gestaltd provider add` when the package is indexed:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc \
+  --config ./gestalt.yaml \
+  --kind authentication \
+  --name oidc
+gestaltd provider list --config ./gestalt.yaml
+```
+
+The command writes a package source and updates the lockfile by default:
 
 ```yaml
 server:
@@ -82,7 +97,8 @@ server:
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -93,13 +109,15 @@ providers:
 
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${DATABASE_URL}
 
   cache:
     session:
-      source: https://artifacts.example.com/cache/valkey/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/cache/valkey
       config:
         address: ${VALKEY_ADDR}
 
@@ -117,7 +135,8 @@ providers:
 
 plugins:
   github:
-    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
     cache:
       - session
 

@@ -10,9 +10,10 @@ them left-to-right before validation and bootstrap. The top-level keys are
 `authorization` (shared subject access policy), `connections` (reusable
 upstream credential definitions), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
-workflow, cache, s3, and agent entries), `runtime` (hosted execution backends),
-`workflows` (config-managed schedules and triggers), and `plugins`
-(executable integrations and optional plugin-backed UI mounts):
+workflow, cache, s3, and agent entries), `providerRepositories` (package index
+URLs), `runtime` (hosted execution backends), `workflows` (config-managed
+schedules and triggers), and `plugins` (executable integrations and optional
+plugin-backed UI mounts):
 
 ```yaml
 apiVersion: gestaltd.config/v5
@@ -21,6 +22,7 @@ server:
 authorization:
   policies: {}
 connections: {}
+providerRepositories: {}
 runtime:
   providers: {}
 providers:
@@ -103,6 +105,29 @@ gestaltd validate --config ./base.yaml --config ./overrides/local.yaml
 The resulting config keeps `server.public.port`, adds `server.management.port`,
 replaces `plugins.github.egress.allowedHosts`, resolves `iconFile` relative to
 `./overrides/local.yaml`, and deletes the inherited `displayName`.
+
+## `providerRepositories`
+
+`providerRepositories` declares package indexes that this project can use for
+package sources. The built-in `valon` repository points at the first-party
+provider index, so most first-party packages do not need a project-level
+repository entry.
+
+```yaml
+providerRepositories:
+  acme:
+    url: https://artifacts.example.com/gestalt/provider-index.yaml
+```
+
+Use `gestaltd provider repo add NAME URL --config ./gestalt.yaml` to write this
+section from the CLI. Without `--config`, repository commands edit the
+user-level repository store instead. When the same repository name appears in
+both places, project config supplies the URL and the user-level store can still
+supply a token.
+
+| Field | Description |
+| --- | --- |
+| `providerRepositories.<name>.url` | HTTP(S) or `file://` URL for a `gestaltd-provider-index` YAML file. |
 
 ## `server`
 
@@ -222,7 +247,7 @@ plugins that set `execution.mode: hosted` without an explicit
 | Field | Description |
 | --- | --- |
 | `providers.<name>.driver` | Optional built-in runtime selector. The only built-in runtime is `local`. |
-| `providers.<name>.source` | Source or provider-release reference for an installable `kind: runtime` provider such as Modal. |
+| `providers.<name>.source` | Package source, local manifest path, metadata URL, `source.url`, or `source.githubRelease` for an installable `kind: runtime` provider such as Modal. |
 | `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.defaultHostedProvider` is omitted. Only one runtime may be default. |
 | `providers.<name>.config` | Runtime-provider-specific config blob. Built-ins such as `local` reject custom config entirely. |
 
@@ -351,8 +376,8 @@ Authentication providers use the same `ProviderEntry` shape under `providers.aut
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named authentication entry as the default selection when `server.providers.authentication` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, local release metadata, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -429,8 +454,8 @@ The exact config fields depend on the selected authorization provider package. T
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named authorization entry as the default selection when `server.providers.authorization` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -497,8 +522,8 @@ allowlist logical stores exposed through that binding.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named workflow entry as the default selection when a config-managed workflow object or API request omits `provider`. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
@@ -560,8 +585,8 @@ operator-facing egress policy.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named agent entry as the default selection when a session request omits `provider`. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
@@ -686,8 +711,8 @@ First-party cache providers are published at
 
 | Field | Description |
 | --- | --- |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -1048,7 +1073,7 @@ plugins:
 | `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
 | `ui` | Optional plugin-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
-| `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
+| `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the plugin manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
@@ -1068,6 +1093,30 @@ binding is configured, Gestalt also sets `GESTALT_S3_SOCKET`.
 ### `plugins.*.source`
 
 Every plugin uses a `source` block to declare its backing provider.
+
+For indexed providers, use a package source:
+
+```yaml
+source:
+  package: github.com/valon-technologies/gestalt-providers/plugins/github
+  version: ^1.2.0
+```
+
+Add `repo` when the package comes from a non-default provider repository, or
+when the package address exists in more than one repository:
+
+```yaml
+source:
+  repo: acme
+  package: github.com/acme/gestalt-providers/plugins/support
+  version: ^1.3.0
+```
+
+`gestaltd provider add` writes package sources by default. See
+[Provider Packages](/providers/packages) for repository, add, list, remove, and
+upgrade behavior.
+
+For exact published releases, point at a `provider-release.yaml` URL:
 
 ```yaml
 source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
@@ -1229,8 +1278,8 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 | Field | Description |
 | --- | --- |
-| `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
+| `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes and on plugin-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -1504,8 +1553,8 @@ When `authorizationPolicy` is set on a mounted UI, the referenced UI manifest mu
 | --- | --- |
 | `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.ui.path`. |
 | `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.ui.path`. |
-| `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Package source, local UI manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules
@@ -1514,7 +1563,9 @@ Structural validation runs at config load time (`lock`, `sync`, `validate`, `ser
 
 ### Structural
 
-Each plugin must set `source` to exactly one loading mode: a local manifest path or a published `provider-release.yaml` metadata URL.
+Each plugin must set `source` to exactly one loading mode: package source,
+local manifest path, published `provider-release.yaml` metadata URL,
+`source.url`, or `source.githubRelease`.
 
 Host-provider entries use the same ProviderEntry shape. When
 `providers.authentication.<name>`, `providers.cache.<name>`,
@@ -1530,7 +1581,11 @@ connections that collect or exchange credentials are not supported; declare a
 top-level connection and reference it with `ref`. All connections in a plugin
 must share the same mode.
 
-Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
+Each `providers.ui.<name>` entry must set `source` to exactly one loading mode:
+package source, local UI manifest path, published `provider-release.yaml`
+metadata URL, `source.url`, or `source.githubRelease`.
+`providers.ui.<name>.config` is only allowed when
+`providers.ui.<name>.source` is set.
 
 Each `plugins.<name>` entry may set `ui.path` to publish a plugin-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `ui.path` must use the same path rules as a directly mounted UI.
 
