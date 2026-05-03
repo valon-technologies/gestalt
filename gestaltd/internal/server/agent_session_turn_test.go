@@ -1129,8 +1129,8 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmpty(t *testing.T) {
 	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
 		t.Fatalf("omitted toolRefs provider refs = %#v, want global broad ref", got)
 	}
-	if got := turnRequests[1].ToolRefs; len(got) != 0 {
-		t.Fatalf("explicit empty toolRefs provider refs = %#v, want none", got)
+	if got := turnRequests[1].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
+		t.Fatalf("explicit empty toolRefs provider refs = %#v, want global broad ref", got)
 	}
 	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "" {
 		t.Fatalf("plugin broad provider refs = %#v, want docs broad ref", got)

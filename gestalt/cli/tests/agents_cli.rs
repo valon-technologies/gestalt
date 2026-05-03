@@ -712,8 +712,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}],"toolRefs":[]}"#
-            .to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}]}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -802,7 +801,7 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello tui"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello tui"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -911,7 +910,7 @@ fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"override model"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"override model"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -984,7 +983,7 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display tools"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1117,7 +1116,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"use tools"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"use tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1206,7 +1205,7 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"ambiguous tools"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"ambiguous tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1283,7 +1282,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1319,7 +1318,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1355,7 +1354,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft text"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft text"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1513,7 +1512,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"render markdown"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"render markdown"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1596,7 +1595,7 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"wide text"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"wide text"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1664,7 +1663,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"slow turn"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"slow turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1701,7 +1700,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"pending turn"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"pending turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1804,7 +1803,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first turn"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1839,7 +1838,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"second turn"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"second turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1911,7 +1910,7 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"needs secret"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"needs secret"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2057,7 +2056,7 @@ fn test_cli_resumes_latest_active_agent_session() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-new/turns",
-            r#"{"messages":[{"role":"user","text":"continue plan"}],"toolRefs":[]}"#,
+            r#"{"messages":[{"role":"user","text":"continue plan"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2235,7 +2234,7 @@ fn test_cli_agent_model_slash_sets_future_turn_model() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"hello"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"hello"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2305,7 +2304,7 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-2/turns",
-            r#"{"messages":[{"role":"user","text":"need incident context"}],"toolRefs":[]}"#,
+            r#"{"messages":[{"role":"user","text":"need incident context"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2438,7 +2437,7 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"approve deployment"}],"toolRefs":[]}"#,
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"approve deployment"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
