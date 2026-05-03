@@ -38,6 +38,8 @@ func runProvider(args []string) error {
 		return runProviderDev(args[1:])
 	case "info":
 		return runProviderInfo(args[1:])
+	case "list":
+		return runProviderList(args[1:])
 	case "remove":
 		return runProviderRemove(args[1:])
 	case "repo":
@@ -621,6 +623,7 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  add         Add a provider package to config and update lock state")
 	writeUsageLine(w, "  dev         Run a local source plugin inside a synthesized Gestalt config")
 	writeUsageLine(w, "  info        Show provider package metadata from configured repositories")
+	writeUsageLine(w, "  list        List configured providers and lock status")
 	writeUsageLine(w, "  release     Build provider release archives")
 	writeUsageLine(w, "  remove      Remove a provider entry from config and update lock state")
 	writeUsageLine(w, "  repo        Manage provider package repositories")

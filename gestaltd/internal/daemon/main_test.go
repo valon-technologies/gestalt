@@ -44,7 +44,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider",
 			args:      []string{"provider", "--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "dev", "info", "remove", "repo", "search", "upgrade", "validate", "release"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "dev", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
 		},
 		{
 			name:      "provider repo",
