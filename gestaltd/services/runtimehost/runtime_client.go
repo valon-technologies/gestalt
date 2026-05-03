@@ -14,7 +14,11 @@ import (
 
 const (
 	// ProviderRPCTimeout is the default deadline for individual provider RPCs.
-	ProviderRPCTimeout   = 10 * time.Second
+	//
+	// Hosted agent providers can do real setup work during session creation
+	// after the runtime itself is ready. Keep this below the API route timeout,
+	// but above short health-check style deadlines.
+	ProviderRPCTimeout   = 30 * time.Second
 	providerStartTimeout = 2 * time.Minute
 )
 
