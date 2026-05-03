@@ -561,7 +561,8 @@ export class S3 {
       ...(transportOptions.nodeOptions
         ? {
             nodeOptions: {
-              createConnection: () => connect(transportOptions.nodeOptions!.path),
+              createConnection: () =>
+                connect({ path: transportOptions.nodeOptions!.path }),
             },
           }
         : {}),

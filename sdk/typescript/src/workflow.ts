@@ -332,7 +332,7 @@ export class WorkflowHost {
     const transport = createGrpcTransport({
       baseUrl: "http://localhost",
       nodeOptions: {
-        createConnection: () => connect(socketPath),
+        createConnection: () => connect({ path: socketPath }),
       },
     });
     this.client = createClient(WorkflowHostService, transport);

@@ -89,7 +89,7 @@ export class RuntimeLogHost {
         ? {
             nodeOptions: {
               createConnection: () =>
-                connect(transportOptions.nodeOptions!.path),
+                connect({ path: transportOptions.nodeOptions!.path }),
             },
           }
         : {}),

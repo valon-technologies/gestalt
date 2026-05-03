@@ -89,7 +89,7 @@ export function createUnixGrpcClient<T extends DescService>(service: T, socketPa
   const transport = createGrpcTransport({
     baseUrl: "http://localhost",
     nodeOptions: {
-      createConnection: () => connect(socketPath),
+      createConnection: () => connect({ path: socketPath }),
     },
   });
   return createClient(service, transport);
