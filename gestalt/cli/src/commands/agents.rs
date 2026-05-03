@@ -307,10 +307,38 @@ fn agent_help_lines() -> Vec<String> {
 
 fn agent_tui_help_lines() -> Vec<String> {
     let mut lines = agent_help_lines();
+    for line in &mut lines {
+        match line.as_str() {
+            "  Alt-Enter inserts a newline." => {
+                *line =
+                    "  Alt-Enter/Ctrl-J/Shift-Enter inserts a newline where supported.".to_string();
+            }
+            "  Up/Down recalls prompt history." => {
+                *line = "  Up/Down recalls input history.".to_string();
+            }
+            "  PgUp/PgDn scrolls the transcript." => {
+                *line = "  PgUp/PgDn scrolls the transcript by half a screen.".to_string();
+            }
+            _ => {}
+        }
+    }
     let insert_at = lines
         .iter()
         .position(|line| line.contains("Ctrl-C cancels"))
         .unwrap_or(lines.len());
+    lines.insert(
+        insert_at,
+        "  Ctrl-D exits when idle and input is empty.".to_string(),
+    );
+    lines.insert(insert_at, "  Ctrl-L redraws the terminal.".to_string());
+    lines.insert(
+        insert_at,
+        "  Ctrl-Home/Ctrl-End jumps to transcript start/end.".to_string(),
+    );
+    lines.insert(
+        insert_at,
+        "  Wheel/trackpad scrolls the transcript.".to_string(),
+    );
     lines.insert(
         insert_at,
         "  Ctrl-O toggles compact/full tool details.".to_string(),

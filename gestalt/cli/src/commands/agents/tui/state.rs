@@ -633,15 +633,15 @@ impl AgentUiState {
             .map(|started_at| format_brewed_duration(started_at.elapsed()))
     }
 
-    pub(super) fn scroll_up(&mut self, height: usize, content_height: usize) {
+    pub(super) fn scroll_up_by(&mut self, height: usize, content_height: usize, amount: usize) {
         self.scroll_offset = self
             .scroll_offset
-            .saturating_add(5)
+            .saturating_add(amount.max(1))
             .min(max_scroll_offset(height, content_height));
     }
 
-    pub(super) fn scroll_down(&mut self) {
-        self.scroll_offset = self.scroll_offset.saturating_sub(5);
+    pub(super) fn scroll_down_by(&mut self, amount: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(amount.max(1));
     }
 
     pub(super) fn scroll_to_top(&mut self, height: usize, content_height: usize) {

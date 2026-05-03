@@ -122,6 +122,30 @@ const TURN_EVENTS_JSON: &str = r#"[
     }
 ]"#;
 
+#[cfg(unix)]
+const MOUSE_ENABLE_SEQUENCES: [&str; 5] = [
+    "\x1b[?1000h",
+    "\x1b[?1002h",
+    "\x1b[?1003h",
+    "\x1b[?1015h",
+    "\x1b[?1006h",
+];
+
+#[cfg(unix)]
+const MOUSE_DISABLE_SEQUENCES: [&str; 5] = [
+    "\x1b[?1006l",
+    "\x1b[?1015l",
+    "\x1b[?1003l",
+    "\x1b[?1002l",
+    "\x1b[?1000l",
+];
+
+#[cfg(unix)]
+const MOUSE_SCROLL_UP: &str = "\x1b[<64;1;1M";
+
+#[cfg(unix)]
+const MOUSE_SCROLL_DOWN: &str = "\x1b[<65;1;1M";
+
 const TURN_TRANSCRIPT_JSON: &str = r#"{
     "id":"turn-1",
     "sessionId":"session-1",
@@ -858,6 +882,7 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
     session.write("\x03");
     session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
     session.wait_for_exit();
+    session.drain_pending(&mut output);
 
     assert!(
         output.contains("› hello tui") && output.contains("●"),
@@ -868,12 +893,16 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
         "TTY did not enter the alternate screen, so terminal scrollback can include shell output before the session:\n{output}"
     );
     assert!(
-        !output.contains("\x1b[?1000h")
-            && !output.contains("\x1b[?1002h")
-            && !output.contains("\x1b[?1003h")
-            && !output.contains("\x1b[?1015h")
-            && !output.contains("\x1b[?1006h"),
-        "TTY enabled mouse capture, which prevents normal drag selection:\n{output}"
+        MOUSE_ENABLE_SEQUENCES
+            .iter()
+            .all(|sequence| output.contains(sequence)),
+        "TTY did not enable mouse capture for wheel scrolling:\n{output}"
+    );
+    assert!(
+        MOUSE_DISABLE_SEQUENCES
+            .iter()
+            .all(|sequence| output.contains(sequence)),
+        "TTY did not disable mouse capture on exit:\n{output}"
     );
     assert!(
         !output.contains("**hello**"),
@@ -893,6 +922,50 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
             && !output.contains("assistant>"),
         "TTY transcript rendered prompt labels:\n{output}"
     );
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_can_disable_mouse_capture() {
+    let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
+        Method::POST,
+        "/api/v1/agent/sessions",
+        r#"{"provider":"managed","model":"gpt-5.4"}"#,
+        StatusCode::CREATED,
+        http::APPLICATION_JSON,
+        SESSION_JSON,
+    )]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli_with_size_and_env(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        24,
+        100,
+        &[("GESTALT_CLI_DISABLE_MOUSE", "1")],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("\x03");
+    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for_exit();
+    session.drain_pending(&mut output);
+
+    assert!(
+        MOUSE_ENABLE_SEQUENCES
+            .iter()
+            .all(|sequence| !output.contains(sequence)),
+        "TTY enabled mouse capture despite GESTALT_CLI_DISABLE_MOUSE=1:\n{output}"
+    );
+    assert!(
+        MOUSE_DISABLE_SEQUENCES
+            .iter()
+            .all(|sequence| !output.contains(sequence)),
+        "TTY disabled mouse capture even though it was never enabled:\n{output}"
+    );
+
     server.assert_finished();
 }
 
@@ -1419,6 +1492,72 @@ fn test_cli_tty_help_and_prompt_history() {
 
 #[cfg(unix)]
 #[test]
+fn test_cli_tty_ctrl_j_inserts_multiline_prompt() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first\nsecond"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-multiline",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-multiline/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"multiline received\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-multiline",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-multiline",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"multiline received"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("first\x0asecond\r");
+    session.wait_for(&mut output, "multiline received");
+    session.write("\x03");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
 fn test_cli_tty_scrolls_multiline_help_rows() {
     let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
         Method::POST,
@@ -1434,19 +1573,130 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
         home.path(),
         server.url(),
         &["agent", "--provider", "managed", "--model", "gpt-5.4"],
-        8,
+        15,
         80,
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("/help\r");
-    session.wait_for(&mut output, "PgUp/PgDn");
+    session.wait_for(&mut output, "Wheel/trackpad");
+    session.write("/help\r");
+    session.wait_for(&mut output, "Ctrl-D exits");
     output.clear();
-    session.write("\x1b[5~\x1b[5~");
+    session.write("\x1b[5~\x0c");
+    session.wait_for(&mut output, "Ctrl-C");
+    output.clear();
+    session.write(&format!("{}\x0c", MOUSE_SCROLL_UP.repeat(5)));
     session.wait_for(&mut output, "Commands");
     output.clear();
-    session.write("\x1b[6~\x1b[6~");
+    session.write(&format!("{}\x0c", MOUSE_SCROLL_DOWN.repeat(5)));
     session.wait_for(&mut output, "Ctrl-C");
+    output.clear();
+    session.write("\x1b[6~\x0c");
+    session.wait_for(&mut output, "Ctrl-C");
+    session.write("\x03");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_ctrl_d_exits_empty_prompt() {
+    let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
+        Method::POST,
+        "/api/v1/agent/sessions",
+        r#"{"provider":"managed","model":"gpt-5.4"}"#,
+        StatusCode::CREATED,
+        http::APPLICATION_JSON,
+        SESSION_JSON,
+    )]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("\x04");
+    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_ctrl_l_redraw_preserves_transcript_and_input() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft input"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-redraw",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-redraw/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"redraw preserved input\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-redraw",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-redraw",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"redraw preserved input"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("/help\r");
+    session.wait_for(&mut output, "Show commands");
+    session.write("draft input");
+    output.clear();
+    session.write("\x0c");
+    session.wait_for(&mut output, "Commands:");
+    assert!(
+        output.contains("Commands:"),
+        "Ctrl-L redraw did not preserve transcript content:\n{output}"
+    );
+    session.write("\r");
+    session.wait_for(&mut output, "redraw preserved input");
     session.write("\x03");
     session.wait_for_exit();
 
@@ -1745,6 +1995,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
     session.wait_for(&mut output, "Session");
     session.write("slow turn\r");
     session.wait_for(&mut output, "working");
+    session.write("\x04");
     session.write("pending turn\r");
     session.wait_for(&mut output, "queued");
     output.clear();
@@ -2744,6 +2995,13 @@ impl TtyCliSession {
         }
     }
 
+    fn drain_pending(&mut self, output: &mut String) {
+        while let Ok(chunk) = self.rx.try_recv() {
+            self.respond_to_cursor_position_requests(&chunk);
+            output.push_str(&chunk);
+        }
+    }
+
     fn resize(&mut self, rows: u16, cols: u16) {
         self.rows = rows.max(1);
         self.cols = cols.max(1);
@@ -2796,6 +3054,18 @@ fn spawn_tty_cli_with_size(
     rows: u16,
     cols: u16,
 ) -> TtyCliSession {
+    spawn_tty_cli_with_size_and_env(home, url, args, rows, cols, &[])
+}
+
+#[cfg(unix)]
+fn spawn_tty_cli_with_size_and_env(
+    home: &std::path::Path,
+    url: &str,
+    args: &[&str],
+    rows: u16,
+    cols: u16,
+    envs: &[(&str, &str)],
+) -> TtyCliSession {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
     std::fs::create_dir_all(home).unwrap();
@@ -2814,6 +3084,10 @@ fn spawn_tty_cli_with_size(
     cmd.env("XDG_CONFIG_HOME", home.join("xdg-config"));
     cmd.env("GESTALT_API_KEY", TEST_TOKEN);
     cmd.env_remove("GESTALT_URL");
+    cmd.env_remove("GESTALT_CLI_DISABLE_MOUSE");
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
     cmd.arg("--url");
     cmd.arg(url);
     cmd.args(args);
