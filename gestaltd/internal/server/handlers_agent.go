@@ -898,9 +898,6 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 }
 
 func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []coreagent.ToolRef {
-	if !req.toolRefsSet || (strings.TrimSpace(req.ToolSource) == "" && len(req.ToolRefs) == 0) {
-		return []coreagent.ToolRef{{Plugin: "*"}}
-	}
 	return agentToolRefsFromRequest(req.ToolRefs)
 }
 
