@@ -614,6 +614,7 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestRunGrants(t)
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -622,6 +623,7 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 				"alpha": alpha,
 			},
 		},
+		RunGrants: grants,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -650,8 +652,21 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	if got := req.ToolRefs; len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
 	}
-	if req.RunGrant != "" {
-		t.Fatalf("CreateTurn run grant = %q, want empty", req.RunGrant)
+	if strings.TrimSpace(req.RunGrant) == "" {
+		t.Fatal("CreateTurn run grant is empty")
+	}
+	grant, err := grants.Resolve(req.RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if grant.ToolSource != coreagent.ToolSourceModeUnspecified {
+		t.Fatalf("grant tool source = %q, want empty", grant.ToolSource)
+	}
+	if got := grant.ToolRefs; len(got) != 0 {
+		t.Fatalf("grant tool refs = %#v, want none for explicit empty tool refs", got)
+	}
+	if got := grant.Tools; len(got) != 0 {
+		t.Fatalf("grant tools = %#v, want none for explicit empty tool refs", got)
 	}
 }
 
