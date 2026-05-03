@@ -61,9 +61,17 @@ func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state ope
 	return cfg, nil
 }
 
-func loadConfigForValidationWithStatePaths(configFlags []string, state operator.StatePaths) ([]string, *config.Config, error) {
+func loadConfigForValidationWithStatePaths(configFlags []string, state operator.StatePaths, opts validateConfigOptions) ([]string, *config.Config, error) {
 	configPaths := operator.ResolveConfigPaths(configFlags)
-	cfg, err := operatorLifecycle().LoadForValidationAtPathsWithStatePaths(configPaths, state)
+	var (
+		cfg *config.Config
+		err error
+	)
+	if opts.Runtime {
+		cfg, err = operatorLifecycle().LoadForValidationAtPathsWithStatePaths(configPaths, state)
+	} else {
+		cfg, err = operatorLifecycle().LoadForStaticValidationAtPathsWithStatePaths(configPaths, state, operator.StaticValidationOptions{Platform: opts.Platform})
+	}
 	if err != nil {
 		return nil, nil, err
 	}

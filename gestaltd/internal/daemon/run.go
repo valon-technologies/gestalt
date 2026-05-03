@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 )
 
@@ -182,6 +183,8 @@ func runValidate(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
+	platform := fs.String("platform", "", "target platform for static validation, formatted os/arch")
+	runtimeValidation := fs.Bool("runtime", false, "run deep runtime validation that starts configured providers")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -189,10 +192,34 @@ func runValidate(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return validateConfig(configPaths, *lockfilePath)
+	opts, err := parseValidateConfigOptions(*platform, *runtimeValidation)
+	if err != nil {
+		return err
+	}
+	return validateConfig(configPaths, *lockfilePath, opts)
 }
 
-func validateConfig(configFlags []string, lockfilePath string) error {
+type validateConfigOptions struct {
+	Platform string
+	Runtime  bool
+}
+
+func parseValidateConfigOptions(platform string, runtimeValidation bool) (validateConfigOptions, error) {
+	platform = strings.TrimSpace(platform)
+	if platform != "" {
+		goos, goarch, err := providerpkg.ParsePlatformString(platform)
+		if err != nil {
+			return validateConfigOptions{}, fmt.Errorf("invalid --platform %q, expected os/arch", platform)
+		}
+		platform = goos + "/" + goarch
+	}
+	if runtimeValidation && platform != "" && platform != currentReleasePlatform() {
+		return validateConfigOptions{}, fmt.Errorf("--runtime validation executes host providers; --platform must be omitted or equal the host platform %q", currentReleasePlatform())
+	}
+	return validateConfigOptions{Platform: platform, Runtime: runtimeValidation}, nil
+}
+
+func validateConfig(configFlags []string, lockfilePath string, opts validateConfigOptions) error {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-validate-*")
 	if err != nil {
 		return fmt.Errorf("create validation scratch dir: %w", err)
@@ -202,7 +229,7 @@ func validateConfig(configFlags []string, lockfilePath string) error {
 	result, err := validateConfigWithStatePaths(configFlags, operator.StatePaths{
 		ArtifactsDir: scratchDir,
 		LockfilePath: lockfilePath,
-	})
+	}, opts)
 	if err != nil {
 		return err
 	}
@@ -279,7 +306,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
@@ -340,10 +367,11 @@ func printSyncUsage(w io.Writer) {
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
-	writeUsageLine(w, "Validation always stages source-backed providers in a temporary scratch dir.")
+	writeUsageLine(w, "Static validation uses locked provider metadata and temporary scratch state.")
+	writeUsageLine(w, "Use --runtime to opt into deep validation that starts configured providers.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
 	writeUsageLine(w, "The --lockfile path follows normal CLI path resolution; --artifacts-dir keeps")
 	writeUsageLine(w, "the same config-relative resolution used by sync and serve.")

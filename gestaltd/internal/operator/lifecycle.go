@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -69,16 +71,25 @@ type LockArchive struct {
 }
 
 type LockEntry struct {
-	Fingerprint string                 `json:"fingerprint"`
-	Package     string                 `json:"package,omitempty"`
-	Kind        string                 `json:"kind,omitempty"`
-	Runtime     string                 `json:"runtime,omitempty"`
-	Source      string                 `json:"source,omitempty"`
-	Version     string                 `json:"version,omitempty"`
-	Archives    map[string]LockArchive `json:"archives,omitempty"`
-	Manifest    string                 `json:"manifest"`
-	Executable  string                 `json:"executable,omitempty"`
-	AssetRoot   string                 `json:"assetRoot,omitempty"`
+	Fingerprint              string                       `json:"fingerprint"`
+	Package                  string                       `json:"package,omitempty"`
+	Kind                     string                       `json:"kind,omitempty"`
+	Runtime                  string                       `json:"runtime,omitempty"`
+	Source                   string                       `json:"source,omitempty"`
+	Version                  string                       `json:"version,omitempty"`
+	Archives                 map[string]LockArchive       `json:"archives,omitempty"`
+	Manifest                 string                       `json:"manifest"`
+	Executable               string                       `json:"executable,omitempty"`
+	AssetRoot                string                       `json:"assetRoot,omitempty"`
+	StaticManifest           *providermanifestv1.Manifest `json:"-"`
+	StaticCatalogAvailable   bool                         `json:"-"`
+	StaticCatalogFingerprint string                       `json:"-"`
+	StaticCatalogOperations  []string                     `json:"-"`
+	StaticCatalogSessionOnly bool                         `json:"-"`
+}
+
+type StaticValidationOptions struct {
+	Platform string
 }
 
 type Lifecycle struct {
@@ -296,7 +307,11 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
-	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+	catalogs, err := pluginservice.EffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg))
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
 	return lock, cfg, paths, nil
@@ -680,6 +695,50 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 		return nil, err
 	}
 	if err := pluginservice.ValidateDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
+	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
+		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	platform := strings.TrimSpace(opts.Platform)
+	if platform == "" {
+		platform = providerpkg.CurrentPlatformString()
+	}
+
+	var lock *Lockfile
+	lockErr := error(nil)
+	if configHasProviderLoading(cfg) {
+		lock, lockErr = ReadLockfile(paths.lockfilePath)
+		if lockErr != nil && configRequiresStaticLock(cfg) {
+			if configRequiresRemoteStaticLock(cfg) || platform != providerpkg.CurrentPlatformString() || !os.IsNotExist(lockErr) {
+				return nil, fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), lockErr)
+			}
+			_, scratchCfg, _, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
+			if cleanup != nil {
+				defer cleanup()
+			}
+			if err != nil {
+				return nil, err
+			}
+			return scratchCfg, nil
+		}
+	}
+	if err := l.applyStaticValidationProviders(context.Background(), paths, lock, cfg, platform); err != nil {
+		return nil, err
+	}
+	if err := config.ValidateResolvedStructure(cfg); err != nil {
+		return nil, err
+	}
+	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -1091,39 +1150,7 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 }
 
 func configHasProviderLoading(cfg *config.Config) bool {
-	for _, entry := range cfg.Plugins {
-		if sourceBacked(entry) {
-			return true
-		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			if sourceBacked(entry) {
-				return true
-			}
-		}
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if runtimeSourceBacked(entry) {
-			return true
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil && sourceBacked(&entry.ProviderEntry) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if sourceBacked(def) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if sourceBacked(def) {
-			return true
-		}
-	}
-	return false
+	return configHasMatchingProviderEntry(cfg, sourceBacked)
 }
 
 func configHasLocalProviderSources(cfg *config.Config) bool {
@@ -2570,6 +2597,502 @@ func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage,
 		}
 		return os.RemoveAll(cleanupDir)
 	}, commit, nil
+}
+
+func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs map[string]pluginservice.EffectiveCatalogResult) error {
+	if lock == nil || cfg == nil {
+		return nil
+	}
+	attach := func(entries map[string]LockEntry, name string, entry *config.ProviderEntry) {
+		if entries == nil || entry == nil || entry.ResolvedManifest == nil {
+			return
+		}
+		lockEntry, ok := entries[name]
+		if !ok {
+			return
+		}
+		lockEntry.StaticManifest = entry.ResolvedManifest
+		entries[name] = lockEntry
+	}
+	for name, entry := range cfg.Plugins {
+		attach(lock.Providers, name, entry)
+		if entry == nil || entry.ResolvedManifest == nil {
+			continue
+		}
+		lockEntry, ok := lock.Providers[name]
+		if !ok {
+			continue
+		}
+		resolved := catalogs[name]
+		fingerprint, err := staticCatalogInputFingerprint(entry)
+		if err != nil {
+			return err
+		}
+		lockEntry.StaticCatalogAvailable = resolved.Available
+		lockEntry.StaticCatalogFingerprint = fingerprint
+		lockEntry.StaticCatalogOperations = staticCatalogOperationIDs(resolved.Catalog)
+		lockEntry.StaticCatalogSessionOnly = resolved.SessionOnly
+		lock.Providers[name] = lockEntry
+		entry.ResolvedCatalog = catalogFromStaticOperationIDs(lockEntry.StaticCatalogOperations, resolved.Available)
+		entry.ResolvedCatalogAvailable = resolved.Available
+		entry.ResolvedCatalogSessionOnly = resolved.SessionOnly
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		entries := lockEntriesForKind(lock, collection.kind)
+		for name, entry := range collection.entries {
+			attach(entries, name, entry)
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			attach(lock.Runtimes, name, &entry.ProviderEntry)
+		}
+	}
+	for name, entry := range cfg.Providers.IndexedDB {
+		attach(lock.IndexedDBs, name, entry)
+	}
+	for name, entry := range cfg.Providers.S3 {
+		attach(lock.S3, name, entry)
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil {
+			attach(lock.UIs, name, &entry.ProviderEntry)
+		}
+	}
+	return nil
+}
+
+func staticCatalogOperationIDs(cat *catalog.Catalog) []string {
+	if cat == nil || len(cat.Operations) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(cat.Operations))
+	for i := range cat.Operations {
+		id := strings.TrimSpace(cat.Operations[i].ID)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func catalogFromStaticOperationIDs(ids []string, available bool) *catalog.Catalog {
+	if !available {
+		return nil
+	}
+	cat := &catalog.Catalog{
+		Operations: make([]catalog.CatalogOperation, 0, len(ids)),
+	}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		cat.Operations = append(cat.Operations, catalog.CatalogOperation{ID: id})
+	}
+	return cat
+}
+
+func staticCatalogInputFingerprint(entry *config.ProviderEntry) (string, error) {
+	type input struct {
+		AllowedOperations map[string]*config.OperationOverride `json:"allowedOperations,omitempty"`
+		GraphQLSurfaceURL string                               `json:"graphqlSurfaceUrl,omitempty"`
+		MCPSurfaceURL     string                               `json:"mcpSurfaceUrl,omitempty"`
+	}
+	var allowed map[string]*config.OperationOverride
+	var graphQLURL, mcpURL string
+	if entry != nil {
+		allowed = entry.AllowedOperations
+		graphQLURL = config.ProviderSurfaceURLOverride(entry, config.SpecSurfaceGraphQL)
+		mcpURL = config.ProviderSurfaceURLOverride(entry, config.SpecSurfaceMCP)
+	}
+	payload, err := json.Marshal(input{
+		AllowedOperations: allowed,
+		GraphQLSurfaceURL: graphQLURL,
+		MCPSurfaceURL:     mcpURL,
+	})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func staticManifestReferencesPackageFiles(manifest *providermanifestv1.Manifest) bool {
+	if manifest == nil {
+		return false
+	}
+	if strings.TrimSpace(manifest.IconFile) != "" {
+		return true
+	}
+	spec := manifest.Spec
+	if spec == nil {
+		return false
+	}
+	if strings.TrimSpace(spec.ConfigSchemaPath) != "" {
+		return true
+	}
+	return spec.UI != nil && strings.TrimSpace(spec.UI.Path) != ""
+}
+
+func configRequiresStaticLock(cfg *config.Config) bool {
+	return configHasMatchingProviderEntry(cfg, func(entry *config.ProviderEntry) bool {
+		return sourceBacked(entry) && !entry.HasLocalSource()
+	})
+}
+
+func configRequiresRemoteStaticLock(cfg *config.Config) bool {
+	return configHasMatchingProviderEntry(cfg, func(entry *config.ProviderEntry) bool {
+		return sourceBacked(entry) && !entry.HasLocalSource() && !entry.HasLocalReleaseSource()
+	})
+}
+
+func configHasMatchingProviderEntry(cfg *config.Config, matches func(*config.ProviderEntry) bool) bool {
+	if cfg == nil || matches == nil {
+		return false
+	}
+	for _, entry := range cfg.Plugins {
+		if matches(entry) {
+			return true
+		}
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		for _, entry := range collection.entries {
+			if matches(entry) {
+				return true
+			}
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil && matches(&entry.ProviderEntry) {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.IndexedDB {
+		if matches(entry) {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.S3 {
+		if matches(entry) {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil && matches(&entry.ProviderEntry) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *Lifecycle) applyStaticValidationProviders(ctx context.Context, paths lifecyclePaths, lock *Lockfile, cfg *config.Config, platform string) error {
+	if !configHasProviderLoading(cfg) {
+		return nil
+	}
+	for name, entry := range cfg.Plugins {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
+		}
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindPlugin), providermanifestv1.KindPlugin, name, entry, configMap, providerDestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+			return bindResolvedProviderManifest(name, entry, manifestPath, manifest, configMap)
+		}); err != nil {
+			return err
+		}
+		if entry.ResolvedManifest != nil {
+			entry.DisplayName = cmp.Or(entry.DisplayName, entry.ResolvedManifest.DisplayName)
+			entry.Description = cmp.Or(entry.Description, entry.ResolvedManifest.Description)
+		}
+		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+	}
+	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
+		return err
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		lockEntries := lockEntriesForKind(lock, collection.kind)
+		kind := providerManifestKind(collection.kind)
+		for name, entry := range collection.entries {
+			if entry == nil {
+				continue
+			}
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+			}
+			if err := l.applyStaticValidationEntry(ctx, paths, lockEntries, kind, name, entry, configMap, componentDestDir(paths, collection.kind, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+				return bindResolvedComponentManifest(kind, name, entry, manifestPath, manifest, configMap)
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindRuntime, name, err)
+		}
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindRuntime), providermanifestv1.KindRuntime, name, &entry.ProviderEntry, configMap, runtimeDestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+			return bindResolvedComponentManifest(providermanifestv1.KindRuntime, name, &entry.ProviderEntry, manifestPath, manifest, configMap)
+		}); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.IndexedDB {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindIndexedDB, name, err)
+		}
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindIndexedDB), providermanifestv1.KindIndexedDB, name, entry, configMap, indexeddbDestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+			return bindResolvedComponentManifest(providermanifestv1.KindIndexedDB, name, entry, manifestPath, manifest, configMap)
+		}); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.S3 {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindS3, name, err)
+		}
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindS3), providermanifestv1.KindS3, name, entry, configMap, s3DestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+			return bindResolvedComponentManifest(providermanifestv1.KindS3, name, entry, manifestPath, manifest, configMap)
+		}); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode ui %q config: %w", name, err)
+		}
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindUI), providermanifestv1.KindUI, name, &entry.ProviderEntry, configMap, uiDestDir(paths, name), platform, true, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+			return bindResolvedUIManifest(&entry.ProviderEntry, manifestPath, manifest, configMap)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecyclePaths, lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, configMap map[string]any, destDir, platform string, ui bool, bind func(string, *providermanifestv1.Manifest) error) error {
+	if provider == nil || !sourceBacked(provider) {
+		return nil
+	}
+	var entry LockEntry
+	found := false
+	if lockEntries != nil {
+		entry, found = lockEntries[name]
+	}
+	if found {
+		if ui {
+			if !uiLockEntryMetadataMatches(paths, name, provider, entry, true) {
+				return lockMetadataStaleError(paths, "lock entry for ui %q is stale", name)
+			}
+		} else if !lockEntryMetadataMatches(paths, kind, name, provider, entry, true) {
+			return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
+		}
+		if len(entry.Archives) > 0 {
+			_, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
+			if !ok {
+				return fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
+			}
+			if err := validateStaticLockedArchivePolicy(archivePolicySubject(kind, name), archivePolicyKind(kind), entry, platform, resolvedKey); err != nil {
+				return err
+			}
+		}
+		if entry.StaticManifest != nil && !staticManifestReferencesPackageFiles(entry.StaticManifest) {
+			if kind == providermanifestv1.KindPlugin {
+				fingerprint, err := staticCatalogInputFingerprint(provider)
+				if err != nil {
+					return err
+				}
+				if entry.StaticCatalogFingerprint != "" && entry.StaticCatalogFingerprint != fingerprint {
+					return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
+				}
+			}
+			provider.ResolvedCatalog = catalogFromStaticOperationIDs(entry.StaticCatalogOperations, entry.StaticCatalogAvailable)
+			provider.ResolvedCatalogAvailable = entry.StaticCatalogAvailable
+			provider.ResolvedCatalogSessionOnly = entry.StaticCatalogSessionOnly
+			return bind("", entry.StaticManifest)
+		}
+	}
+	if provider.HasLocalSource() {
+		install, cleanup, _, err := stageLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
+		if err != nil {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return err
+		}
+		if found && !preparedManifestMatchesLock(entry, install.manifest) {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
+		}
+		if err := bind(install.manifestPath, install.manifest); err != nil {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return err
+		}
+		return nil
+	}
+	if !found {
+		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
+	}
+	install, cleanup, err := l.installLockedArchiveForStaticValidation(ctx, paths, kind, name, provider, entry, destDir, platform)
+	if cleanup != nil {
+		defer func() { cleanup() }()
+	}
+	if err != nil {
+		if isStaticArchiveUnavailable(err) {
+			if manifest := fallbackStaticValidationManifest(kind, entry); manifest != nil {
+				provider.ResolvedCatalogSessionOnly = kind == providermanifestv1.KindPlugin
+				provider.StaticManifestUnavailable = true
+				return bind("", manifest)
+			}
+		}
+		return err
+	}
+	return bind(install.manifestPath, install.manifest)
+}
+
+type staticArchiveUnavailableError struct {
+	err error
+}
+
+func (e staticArchiveUnavailableError) Error() string {
+	return e.err.Error()
+}
+
+func (e staticArchiveUnavailableError) Unwrap() error {
+	return e.err
+}
+
+func isStaticArchiveUnavailable(err error) bool {
+	var unavailable staticArchiveUnavailableError
+	return errors.As(err, &unavailable)
+}
+
+func fallbackStaticValidationManifest(kind string, entry LockEntry) *providermanifestv1.Manifest {
+	normalizedKind := providermanifestv1.NormalizeKind(lockEntryKind(entry, kind))
+	if normalizedKind == "" {
+		normalizedKind = providermanifestv1.NormalizeKind(kind)
+	}
+	if normalizedKind == "" {
+		return nil
+	}
+	manifest := &providermanifestv1.Manifest{
+		Kind:    normalizedKind,
+		Source:  lockEntryPackage(entry),
+		Version: entry.Version,
+		Spec:    &providermanifestv1.Spec{},
+	}
+	if lockEntryRuntime(entry, kind) == providerReleaseRuntimeExecutable {
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "static-validation-placeholder"}
+	}
+	return manifest
+}
+
+func (l *Lifecycle) installLockedArchiveForStaticValidation(ctx context.Context, paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, entry LockEntry, destDir, platform string) (*preparedInstall, func(), error) {
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return nil, nil, fmt.Errorf("no archive for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
+	}
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve locked source provider for %s %q: %w", kind, name, err)
+	}
+	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
+		return nil, nil, fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
+	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(provider), archiveLocation)
+	if err != nil {
+		return nil, nil, staticArchiveUnavailableError{
+			err: fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err),
+		}
+	}
+	cleanup := download.Cleanup
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		cleanup()
+		return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
+	}
+	if archive.SHA256 == "" {
+		sourceLocation := entry.Source
+		if !isRemoteReleaseMetadataLocation(sourceLocation) {
+			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
+		}
+		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("load local archive metadata for %s %q: %w", kind, name, err)
+		}
+		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
+			cleanup()
+			return nil, nil, fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, expectedSHA)
+		}
+	}
+	if err := os.RemoveAll(destDir); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("reset static validation install dir for %s %q: %w", kind, name, err)
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("create static validation install dir for %s %q: %w", kind, name, err)
+	}
+	install, err := installPackageForStaticValidation(download.LocalPath, destDir)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("inspect locked source provider for %s %q: %w", kind, name, err)
+	}
+	if install.manifest.Source != lockEntryPackage(entry) {
+		cleanup()
+		return nil, nil, fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, install.manifest.Source, lockEntryPackage(entry))
+	}
+	if install.manifest.Version != entry.Version {
+		cleanup()
+		return nil, nil, fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, install.manifest.Version, entry.Version)
+	}
+	if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), archivePolicyKind(kind), install.manifest, entry, platform, resolvedKey); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return install, cleanup, nil
+}
+
+func installPackageForStaticValidation(packagePath, destDir string) (*preparedInstall, error) {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create plugin directory: %w", err)
+	}
+	if err := providerpkg.ExtractPackage(packagePath, destDir); err != nil {
+		return nil, err
+	}
+	manifestPath, err := providerpkg.FindManifestFile(destDir)
+	if err != nil {
+		return nil, err
+	}
+	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	return &preparedInstall{manifestPath: manifestPath, manifest: manifest}, nil
 }
 
 func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode) error {

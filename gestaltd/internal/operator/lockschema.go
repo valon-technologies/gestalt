@@ -3,6 +3,7 @@ package operator
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -10,7 +11,8 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 5
+	providerLockSchemaVersion      = 6
+	providerLockMinSchemaVersion   = 5
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -46,13 +48,18 @@ type providerLockBuckets struct {
 }
 
 type portableLockEntry struct {
-	InputDigest string                 `json:"inputDigest,omitempty"`
-	Package     string                 `json:"package"`
-	Kind        string                 `json:"kind"`
-	Runtime     string                 `json:"runtime"`
-	Source      string                 `json:"source,omitempty"`
-	Version     string                 `json:"version,omitempty"`
-	Archives    map[string]LockArchive `json:"archives,omitempty"`
+	InputDigest        string                       `json:"inputDigest,omitempty"`
+	Package            string                       `json:"package"`
+	Kind               string                       `json:"kind"`
+	Runtime            string                       `json:"runtime"`
+	Source             string                       `json:"source,omitempty"`
+	Version            string                       `json:"version,omitempty"`
+	Archives           map[string]LockArchive       `json:"archives,omitempty"`
+	Manifest           *providermanifestv1.Manifest `json:"manifest,omitempty"`
+	CatalogAvailable   bool                         `json:"catalogAvailable,omitempty"`
+	CatalogFingerprint string                       `json:"catalogFingerprint,omitempty"`
+	CatalogOperations  []string                     `json:"catalogOperations,omitempty"`
+	CatalogSessionOnly bool                         `json:"catalogSessionOnly,omitempty"`
 }
 
 func newLockfile() *Lockfile {
@@ -234,7 +241,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd lock` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion != providerLockSchemaVersion {
+	if lock.SchemaVersion < providerLockMinSchemaVersion || lock.SchemaVersion > providerLockSchemaVersion {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd lock` to upgrade", lock.SchemaVersion)
 	}
 	return nil
@@ -253,13 +260,18 @@ func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) m
 			source = ""
 		}
 		portable[name] = portableLockEntry{
-			InputDigest: entry.Fingerprint,
-			Package:     packageRef,
-			Kind:        lockEntryKind(entry, kind),
-			Runtime:     lockEntryRuntime(entry, kind),
-			Source:      source,
-			Version:     entry.Version,
-			Archives:    maps.Clone(entry.Archives),
+			InputDigest:        entry.Fingerprint,
+			Package:            packageRef,
+			Kind:               lockEntryKind(entry, kind),
+			Runtime:            lockEntryRuntime(entry, kind),
+			Source:             source,
+			Version:            entry.Version,
+			Archives:           maps.Clone(entry.Archives),
+			Manifest:           entry.StaticManifest,
+			CatalogAvailable:   entry.StaticCatalogAvailable,
+			CatalogFingerprint: entry.StaticCatalogFingerprint,
+			CatalogOperations:  slices.Clone(entry.StaticCatalogOperations),
+			CatalogSessionOnly: entry.StaticCatalogSessionOnly,
 		}
 	}
 	return portable
@@ -270,19 +282,25 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		return make(map[string]LockEntry)
 	}
 	runtimeEntries := make(map[string]LockEntry, len(entries))
-	for name, entry := range entries {
+	for name := range entries {
+		entry := entries[name]
 		source := entry.Source
 		if source == "" {
 			source = entry.Package
 		}
 		runtimeEntries[name] = LockEntry{
-			Fingerprint: entry.InputDigest,
-			Package:     entry.Package,
-			Kind:        providermanifestv1.NormalizeKind(entry.Kind),
-			Runtime:     entry.Runtime,
-			Source:      source,
-			Version:     entry.Version,
-			Archives:    maps.Clone(entry.Archives),
+			Fingerprint:              entry.InputDigest,
+			Package:                  entry.Package,
+			Kind:                     providermanifestv1.NormalizeKind(entry.Kind),
+			Runtime:                  entry.Runtime,
+			Source:                   source,
+			Version:                  entry.Version,
+			Archives:                 maps.Clone(entry.Archives),
+			StaticManifest:           entry.Manifest,
+			StaticCatalogAvailable:   entry.CatalogAvailable,
+			StaticCatalogFingerprint: entry.CatalogFingerprint,
+			StaticCatalogOperations:  slices.Clone(entry.CatalogOperations),
+			StaticCatalogSessionOnly: entry.CatalogSessionOnly,
 		}
 	}
 	return runtimeEntries

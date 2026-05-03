@@ -20,13 +20,17 @@ func PluginValidationEntry(entry *ProviderEntry) *pluginservice.ValidationPlugin
 		return nil
 	}
 	return &pluginservice.ValidationPlugin{
-		Manifest:            entry.ResolvedManifest,
-		ManifestPath:        entry.ResolvedManifestPath,
-		AllowedOperations:   entry.AllowedOperations,
-		Invokes:             pluginInvocationDependencies(entry.Invokes),
-		SurfaceURLOverrides: pluginSurfaceURLOverrides(entry),
-		ReadStaticCatalog:   pluginservice.StaticCatalogReaderForManifest(entry.ResolvedManifestPath),
-		LoadAPICatalog:      pluginservice.DefaultAPICatalogLoader,
+		Manifest:                    entry.ResolvedManifest,
+		ManifestPath:                entry.ResolvedManifestPath,
+		AllowedOperations:           entry.AllowedOperations,
+		Invokes:                     pluginInvocationDependencies(entry.Invokes),
+		SurfaceURLOverrides:         pluginSurfaceURLOverrides(entry),
+		EffectiveCatalog:            entry.ResolvedCatalog,
+		EffectiveCatalogAvailable:   entry.ResolvedCatalogAvailable,
+		EffectiveCatalogSessionOnly: entry.ResolvedCatalogSessionOnly,
+		StaticMetadataUnavailable:   entry.StaticManifestUnavailable,
+		ReadStaticCatalog:           pluginservice.StaticCatalogReaderForManifest(entry.ResolvedManifestPath),
+		LoadAPICatalog:              pluginservice.DefaultAPICatalogLoader,
 	}
 }
 

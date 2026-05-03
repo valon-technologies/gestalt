@@ -17,6 +17,12 @@ type resolvedDependencyCatalog struct {
 	err         error
 }
 
+type EffectiveCatalogResult struct {
+	Catalog     *catalog.Catalog
+	Available   bool
+	SessionOnly bool
+}
+
 type catalogResolutionCache struct {
 	entries map[string]resolvedDependencyCatalog
 }
@@ -47,8 +53,12 @@ func ValidateEffectiveCatalog(ctx context.Context, name string, entry *Validatio
 	if entry == nil {
 		return nil
 	}
-	_, _, err := resolveStaticCatalog(ctx, name, entry)
+	_, _, err := EffectiveCatalog(ctx, name, entry)
 	return err
+}
+
+func EffectiveCatalog(ctx context.Context, name string, entry *ValidationPlugin) (*catalog.Catalog, bool, error) {
+	return resolveStaticCatalog(ctx, name, entry)
 }
 
 func ValidateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig) error {
@@ -59,14 +69,30 @@ func ValidateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig) error
 }
 
 func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *ValidationConfig) error {
+	_, err := EffectiveCatalogsAndDependencies(ctx, cfg)
+	return err
+}
+
+func EffectiveCatalogsAndDependencies(ctx context.Context, cfg *ValidationConfig) (map[string]EffectiveCatalogResult, error) {
 	if cfg == nil {
-		return nil
+		return nil, nil
 	}
 	cache := newCatalogResolutionCache(len(cfg.Plugins))
 	if err := validateEffectiveCatalogs(ctx, cfg, cache); err != nil {
-		return err
+		return nil, err
 	}
-	return validateDependencies(ctx, cfg, cache)
+	if err := validateDependencies(ctx, cfg, cache); err != nil {
+		return nil, err
+	}
+	results := make(map[string]EffectiveCatalogResult, len(cache.entries))
+	for name, resolved := range cache.entries {
+		results[name] = EffectiveCatalogResult{
+			Catalog:     resolved.catalog.Clone(),
+			Available:   resolved.catalog != nil,
+			SessionOnly: resolved.sessionOnly,
+		}
+	}
+	return results, nil
 }
 
 func validateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig, cache *catalogResolutionCache) error {
@@ -108,6 +134,9 @@ func validateDependencies(ctx context.Context, cfg *ValidationConfig, cache *cat
 			targetEntry, ok := cfg.Plugins[dependency.Plugin]
 			if !ok || targetEntry == nil {
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d] references unknown plugin %q", callerName, i, dependency.Plugin)
+			}
+			if targetEntry.StaticMetadataUnavailable {
+				continue
 			}
 			if dependency.Surface != "" {
 				if !pluginSupportsSurface(targetEntry, dependency.Surface) {
@@ -162,6 +191,9 @@ func pluginSupportsSurface(entry *ValidationPlugin, surface SpecSurface) bool {
 }
 
 func resolveStaticCatalog(ctx context.Context, name string, entry *ValidationPlugin) (*catalog.Catalog, bool, error) {
+	if entry != nil && (entry.EffectiveCatalogAvailable || entry.EffectiveCatalog != nil || entry.EffectiveCatalogSessionOnly) {
+		return entry.EffectiveCatalog.Clone(), entry.EffectiveCatalogSessionOnly, nil
+	}
 	manifest := entry.Manifest
 	spec := entry.manifestSpec()
 	if manifest == nil || spec == nil {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"gopkg.in/yaml.v3"
@@ -415,19 +416,23 @@ type ProviderEntry struct {
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
-	Command              string                                `yaml:"-"`
-	Args                 []string                              `yaml:"-"`
-	ResolvedManifestPath string                                `yaml:"-"`
-	ResolvedManifest     *providermanifestv1.Manifest          `yaml:"-"`
-	ResolvedIconFile     string                                `yaml:"-"`
-	HostBinary           string                                `yaml:"-"`
-	ConnectionMode       providermanifestv1.ConnectionMode     `yaml:"-"`
-	Auth                 *ConnectionAuthDef                    `yaml:"-"`
-	DefaultConnection    string                                `yaml:"-"`
-	ConnectionParams     map[string]ConnectionParamDef         `yaml:"-"`
-	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
-	ResolvedAssetRoot    string                                `yaml:"-"`
-	MCPToolPrefix        string                                `yaml:"-"`
+	Command                    string                                `yaml:"-"`
+	Args                       []string                              `yaml:"-"`
+	ResolvedManifestPath       string                                `yaml:"-"`
+	ResolvedManifest           *providermanifestv1.Manifest          `yaml:"-"`
+	ResolvedCatalog            *catalog.Catalog                      `yaml:"-"`
+	ResolvedCatalogAvailable   bool                                  `yaml:"-"`
+	ResolvedCatalogSessionOnly bool                                  `yaml:"-"`
+	StaticManifestUnavailable  bool                                  `yaml:"-"`
+	ResolvedIconFile           string                                `yaml:"-"`
+	HostBinary                 string                                `yaml:"-"`
+	ConnectionMode             providermanifestv1.ConnectionMode     `yaml:"-"`
+	Auth                       *ConnectionAuthDef                    `yaml:"-"`
+	DefaultConnection          string                                `yaml:"-"`
+	ConnectionParams           map[string]ConnectionParamDef         `yaml:"-"`
+	Discovery                  *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ResolvedAssetRoot          string                                `yaml:"-"`
+	MCPToolPrefix              string                                `yaml:"-"`
 }
 
 type providerEntryFields ProviderEntry
