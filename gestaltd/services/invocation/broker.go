@@ -123,9 +123,12 @@ type Broker struct {
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
 	providerOverrides ProviderOverrideResolver
+	notConnected      NotConnectedMessageFunc
 }
 
 type BrokerOption func(*Broker)
+
+type NotConnectedMessageFunc func(providerName, connection, instance string) string
 
 func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.connMapper = m }
@@ -147,12 +150,25 @@ func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
 	return func(b *Broker) { b.providerOverrides = r }
 }
 
+func WithNotConnectedMessage(f NotConnectedMessageFunc) BrokerOption {
+	return func(b *Broker) { b.notConnected = f }
+}
+
 func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
 	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
 	}
 	return b
+}
+
+func (b *Broker) noCredentialError(providerName, connection, instance, fallback string) error {
+	if b != nil && b.notConnected != nil {
+		if message := strings.TrimSpace(b.notConnected(providerName, connection, instance)); message != "" {
+			return &NoCredentialError{Message: message}
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrNoCredential, fallback)
 }
 
 func (b *Broker) ListProviders() []string {
@@ -881,9 +897,19 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		switch {
 		case errors.Is(err, core.ErrNotFound):
 			if instance != "" {
-				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
+				return ctx, ConnectionRuntimeCredential{}, b.noCredentialError(
+					providerName,
+					connection,
+					instance,
+					fmt.Sprintf("no external credential stored for integration %q instance %q", providerName, instance),
+				)
 			}
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+			return ctx, ConnectionRuntimeCredential{}, b.noCredentialError(
+				providerName,
+				connection,
+				instance,
+				fmt.Sprintf("no external credential stored for integration %q", providerName),
+			)
 		case errors.Is(err, core.ErrAmbiguousCredential):
 			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: integration %q has multiple connections; specify which instance to use with the %q parameter",
 				ErrAmbiguousInstance, providerName, "_instance")
@@ -898,7 +924,12 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	}
 	storedCredential := resp.Credential
 	if storedCredential == nil {
-		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+		return ctx, ConnectionRuntimeCredential{}, b.noCredentialError(
+			providerName,
+			connection,
+			instance,
+			fmt.Sprintf("no external credential stored for integration %q", providerName),
+		)
 	}
 	credentialConnection := strings.TrimSpace(storedCredential.Connection)
 	if credentialConnection == "" {

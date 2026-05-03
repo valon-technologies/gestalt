@@ -80,6 +80,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
+		invocation.WithNotConnectedMessage(notConnectedMessageFunc(cfg)),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)

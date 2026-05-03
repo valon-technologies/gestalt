@@ -135,6 +135,31 @@ plugins:
 	}
 }
 
+func TestLoadConfigParsesServerConnectionHelp(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  baseUrl: https://gestalt.example.test/
+  connectionHelp:
+    notConnectedMessage: '{DISPLAY_NAME} is not connected. Visit {CONNECT_URL}.'
+plugins:
+  slack:
+    displayName: Slack
+    source:
+      path: /tmp/slack/manifest.yaml
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Server.ConnectionHelp.NotConnectedMessage; got != "{DISPLAY_NAME} is not connected. Visit {CONNECT_URL}." {
+		t.Fatalf("notConnectedMessage = %q", got)
+	}
+}
+
 func TestLoadConfigValidatesProviderDevAttachmentState(t *testing.T) {
 	t.Parallel()
 

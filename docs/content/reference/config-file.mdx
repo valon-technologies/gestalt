@@ -140,6 +140,8 @@ server:
     host: 127.0.0.1
     port: 9090
   baseUrl: https://gestalt.example.com
+  connectionHelp:
+    notConnectedMessage: "{DISPLAY_NAME} is not connected. Go to {CONNECT_URL} to connect {DISPLAY_NAME} first."
   encryptionKey:
     secret:
       provider: default
@@ -174,6 +176,8 @@ authorization:
 
 `baseUrl` derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. When unset, the management admin UI omits the `Client UI` link rather than sending operators to a broken same-origin `/`.
 
+`connectionHelp` configures user-facing guidance when an operation cannot run because the caller has not connected a user-owned plugin credential. `{CONNECT_URL}` resolves to `server.baseUrl`. `notConnectedMessage` is an optional template; when omitted and `server.baseUrl` is set, Gestalt uses a default message that tells the user to open the deployment root. Templates may use `{BASE_URL}`, `{CONNECT_URL}`, `{PLUGIN}`, `{DISPLAY_NAME}`, `{CONNECTION}`, and `{INSTANCE}`.
+
 `encryptionKey` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `lock`/`sync`/`serve` lifecycle.
@@ -200,6 +204,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
 | `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in `/admin` on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
+| `connectionHelp.notConnectedMessage` | | Optional template for missing user credential errors. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |

@@ -1460,17 +1460,22 @@ type AdminConfig struct {
 }
 
 type ServerConfig struct {
-	Public        ListenerConfig           `yaml:"public"`
-	Management    ManagementListenerConfig `yaml:"management"`
-	BaseURL       string                   `yaml:"baseUrl"`
-	EncryptionKey string                   `yaml:"encryptionKey"`
-	APITokenTTL   string                   `yaml:"apiTokenTtl"`
-	ArtifactsDir  string                   `yaml:"artifactsDir"`
-	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
-	Dev           DevConfig                `yaml:"dev,omitempty"`
-	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
-	Egress        EgressConfig             `yaml:"egress,omitempty"`
-	Admin         AdminConfig              `yaml:"admin,omitempty"`
+	Public         ListenerConfig           `yaml:"public"`
+	Management     ManagementListenerConfig `yaml:"management"`
+	BaseURL        string                   `yaml:"baseUrl"`
+	ConnectionHelp ConnectionHelpConfig     `yaml:"connectionHelp,omitempty"`
+	EncryptionKey  string                   `yaml:"encryptionKey"`
+	APITokenTTL    string                   `yaml:"apiTokenTtl"`
+	ArtifactsDir   string                   `yaml:"artifactsDir"`
+	Providers      ServerProvidersConfig    `yaml:"providers,omitempty"`
+	Dev            DevConfig                `yaml:"dev,omitempty"`
+	Runtime        ServerRuntimeConfig      `yaml:"runtime,omitempty"`
+	Egress         EgressConfig             `yaml:"egress,omitempty"`
+	Admin          AdminConfig              `yaml:"admin,omitempty"`
+}
+
+type ConnectionHelpConfig struct {
+	NotConnectedMessage string `yaml:"notConnectedMessage,omitempty"`
 }
 
 type DevConfig struct {

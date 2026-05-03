@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -148,6 +149,49 @@ func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *tes
 	}
 	if cred := CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.Connection != "bot" {
 		t.Fatalf("credential context = %#v, want platform bot", cred)
+	}
+}
+
+func TestBrokerResolveToken_UsesConfiguredNotConnectedMessage(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithNotConnectedMessage(func(providerName, connection, instance string) string {
+			if providerName != "slack" || connection != "workspace" || instance != "team-a" {
+				t.Fatalf("not-connected callback got %q/%q/%q", providerName, connection, instance)
+			}
+			return "Slack is not connected. Go to https://gestalt.example.test/integrations/ to connect Slack first."
+		}),
+	)
+
+	_, _, err := broker.ResolveToken(
+		context.Background(),
+		&principal.Principal{
+			SubjectID: principal.UserSubjectID("u-slack"),
+			UserID:    "u-slack",
+			Kind:      principal.KindUser,
+		},
+		"slack",
+		"workspace",
+		"team-a",
+	)
+	if !errors.Is(err, ErrNoCredential) {
+		t.Fatalf("ResolveToken error = %v, want ErrNoCredential", err)
+	}
+	message, ok := NoCredentialErrorMessage(err)
+	if !ok {
+		t.Fatalf("NoCredentialErrorMessage(%v) ok = false", err)
+	}
+	want := "Slack is not connected. Go to https://gestalt.example.test/integrations/ to connect Slack first."
+	if message != want || err.Error() != want {
+		t.Fatalf("not-connected message = %q / error %q, want %q", message, err.Error(), want)
 	}
 }
 

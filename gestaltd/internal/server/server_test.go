@@ -12166,6 +12166,62 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("no_token_uses_configured_connection_help", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "slack", ConnMode: core.ConnectionModeUser},
+			},
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		svc := testutil.NewStubServices(t)
+		broker := invocation.NewBroker(
+			providers,
+			svc.Users,
+			svc.ExternalCredentials,
+			invocation.WithConnectionMapper(invocation.ConnectionMap{"slack": testCatalogConnection}),
+			invocation.WithNotConnectedMessage(func(providerName, _, _ string) string {
+				return fmt.Sprintf("%s is not connected. Go to https://gestalt.example.test/integrations/ to connect %s first.", providerName, providerName)
+			}),
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = providers
+			cfg.Services = svc
+			cfg.Invoker = broker
+			cfg.CatalogConnection = map[string]string{"slack": testCatalogConnection}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/slack/operations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusPreconditionFailed {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+		}
+
+		var errResp struct {
+			Error       string `json:"error"`
+			Code        string `json:"code"`
+			Integration string `json:"integration"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decoding error response: %v", err)
+		}
+		if errResp.Error != "slack is not connected. Go to https://gestalt.example.test/integrations/ to connect slack first." {
+			t.Fatalf("expected configured message, got %q", errResp.Error)
+		}
+		if errResp.Code != "not_connected" || errResp.Integration != "slack" {
+			t.Fatalf("typed error = {%q, %q}, want not_connected/slack", errResp.Code, errResp.Integration)
+		}
+	})
+
 	t.Run("ambiguous_instance", func(t *testing.T) {
 		t.Parallel()
 

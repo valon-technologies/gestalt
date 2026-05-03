@@ -1077,6 +1077,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
+		invocation.WithNotConnectedMessage(notConnectedMessageFunc(cfg)),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)

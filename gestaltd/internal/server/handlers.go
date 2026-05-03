@@ -844,12 +844,16 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 			)
 			return
 		}
+		message := fmt.Sprintf("no external credential stored for integration %q; connect via OAuth first", providerName)
+		if customMessage, ok := invocation.NoCredentialErrorMessage(err); ok {
+			message = customMessage
+		}
 		writeTypedError(
 			w,
 			http.StatusPreconditionFailed,
 			"not_connected",
 			providerName,
-			fmt.Sprintf("no external credential stored for integration %q; connect via OAuth first", providerName),
+			message,
 		)
 	case errors.Is(err, invocation.ErrReconnectRequired):
 		writeTypedError(
