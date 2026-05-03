@@ -27,8 +27,8 @@ message BoundWorkflowPluginTarget {
 }
 
 message BoundWorkflowAgentTarget {
-  reserved 6;
-  reserved "tool_source";
+  reserved 6, 9;
+  reserved "tool_source", "provider_options";
   string provider_name = 1;
   string model = 2;
   string prompt = 3;
@@ -36,9 +36,9 @@ message BoundWorkflowAgentTarget {
   repeated AgentToolRef tool_refs = 5;
   google.protobuf.Struct response_schema = 7;
   google.protobuf.Struct metadata = 8;
-  google.protobuf.Struct provider_options = 9;
   int32 timeout_seconds = 10;
   WorkflowOutputDelivery output_delivery = 11;
+  google.protobuf.Struct model_options = 12;
 }
 
 message WorkflowOutputDelivery {

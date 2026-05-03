@@ -91,19 +91,14 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 	if err != nil {
 		return nil, err
 	}
-	providerOptions, err := structFromMap(req.ProviderOptions)
-	if err != nil {
-		return nil, err
-	}
 	resp, err := r.client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:       req.SessionID,
-		IdempotencyKey:  req.IdempotencyKey,
-		Model:           req.Model,
-		ClientRef:       req.ClientRef,
-		Metadata:        metadata,
-		ProviderOptions: providerOptions,
-		CreatedBy:       agentActorToProto(req.CreatedBy),
-		Subject:         agentSubjectContextToProto(req.Subject),
+		SessionId:      req.SessionID,
+		IdempotencyKey: req.IdempotencyKey,
+		Model:          req.Model,
+		ClientRef:      req.ClientRef,
+		Metadata:       metadata,
+		CreatedBy:      agentActorToProto(req.CreatedBy),
+		Subject:        agentSubjectContextToProto(req.Subject),
 	})
 	if err != nil {
 		return nil, err
@@ -187,26 +182,26 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 	if err != nil {
 		return nil, err
 	}
-	providerOptions, err := structFromMap(req.ProviderOptions)
+	modelOptions, err := structFromMap(req.ModelOptions)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := r.client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
-		TurnId:          req.TurnID,
-		SessionId:       req.SessionID,
-		IdempotencyKey:  req.IdempotencyKey,
-		Model:           req.Model,
-		Messages:        messages,
-		Tools:           tools,
-		ResponseSchema:  responseSchema,
-		Metadata:        metadata,
-		ProviderOptions: providerOptions,
-		CreatedBy:       agentActorToProto(req.CreatedBy),
-		ExecutionRef:    req.ExecutionRef,
-		ToolRefs:        agentToolRefsToProto(req.ToolRefs),
-		ToolSource:      agentToolSourceModeToProto(req.ToolSource),
-		Subject:         agentSubjectContextToProto(req.Subject),
-		ToolGrant:       req.ToolGrant,
+		TurnId:         req.TurnID,
+		SessionId:      req.SessionID,
+		IdempotencyKey: req.IdempotencyKey,
+		Model:          req.Model,
+		Messages:       messages,
+		Tools:          tools,
+		ResponseSchema: responseSchema,
+		Metadata:       metadata,
+		ModelOptions:   modelOptions,
+		CreatedBy:      agentActorToProto(req.CreatedBy),
+		ExecutionRef:   req.ExecutionRef,
+		ToolRefs:       agentToolRefsToProto(req.ToolRefs),
+		ToolSource:     agentToolSourceModeToProto(req.ToolSource),
+		Subject:        agentSubjectContextToProto(req.Subject),
+		RunGrant:       req.RunGrant,
 	})
 	if err != nil {
 		return nil, err

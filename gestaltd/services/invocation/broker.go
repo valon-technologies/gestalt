@@ -584,6 +584,20 @@ func (b *Broker) resolveConnectionExposure(providerName, connection string) core
 	return core.ConnectionExposureUser
 }
 
+func (b *Broker) connectionID(providerName, connection string) string {
+	providerName = strings.TrimSpace(providerName)
+	connection = strings.TrimSpace(connection)
+	if connection == "" {
+		connection = core.PluginConnectionName
+	}
+	if b != nil && b.connectionRuntime != nil {
+		if info, ok := b.connectionRuntime(providerName, connection); ok && strings.TrimSpace(info.ConnectionID) != "" {
+			return strings.TrimSpace(info.ConnectionID)
+		}
+	}
+	return providerName + ":" + connection
+}
+
 func allowsInternalConnection(ctx context.Context) bool {
 	if InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTPBinding && HTTPBindingFromContext(ctx) != "" {
 		return true
@@ -636,7 +650,8 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 			continue
 		}
 
-		credentials, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, providerName, target.Connection)
+		connectionID := b.connectionID(providerName, target.Connection)
+		credentials, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, connectionID)
 		if listErr != nil {
 			return nil, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
@@ -714,6 +729,52 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	}
 }
 
+func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, ConnectionRuntimeCredential, ConnectionRuntimeInfo, error) {
+	if !InternalConnectionAccessFromContext(ctx) {
+		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: runtime connection credential resolution requires internal access", ErrAuthorizationDenied)
+	}
+	if b == nil || b.connectionRuntime == nil {
+		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: runtime connection resolver is not configured", ErrNoCredential)
+	}
+	providerName = strings.TrimSpace(providerName)
+	connection = core.ResolveConnectionAlias(connection)
+	if connection == "" {
+		connection = core.PluginConnectionName
+	}
+	info, ok := b.connectionRuntime(providerName, connection)
+	if !ok {
+		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: no runtime credential configured for provider %q connection %q", ErrNoCredential, providerName, connection)
+	}
+	if core.NormalizeConnectionExposure(info.Exposure) == core.ConnectionExposureInternal && !allowsInternalConnection(ctx) {
+		return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: provider %q connection %q is internal", ErrAuthorizationDenied, providerName, connection)
+	}
+	switch core.NormalizeConnectionMode(info.Mode) {
+	case core.ConnectionModeNone:
+		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
+		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
+		return ctx, ConnectionRuntimeCredential{}, info, nil
+
+	case core.ConnectionModePlatform:
+		resolvedCtx, credential, err := b.resolvePlatformRuntimeCredential(ctx, providerName, connection, instance, info)
+		return resolvedCtx, credential, info, err
+
+	case core.ConnectionModeUser:
+		if err := b.resolveUserPrincipal(ctx, p); err != nil {
+			return ctx, ConnectionRuntimeCredential{}, info, err
+		}
+		ctx = withResolvedPrincipal(ctx, p)
+		subjectID := principal.EffectiveCredentialSubjectID(p)
+		if subjectID == "" {
+			return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
+		}
+		resolvedCtx, credential, err := b.resolveSubjectRuntimeCredential(ctx, nil, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		return resolvedCtx, credential, info, err
+
+	default:
+		return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: unknown connection mode %q", ErrInternal, info.Mode)
+	}
+}
+
 func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, connection, instance string) (context.Context, string, error) {
 	if b == nil || b.connectionRuntime == nil {
 		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q", ErrNoCredential, providerName)
@@ -727,9 +788,37 @@ func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, co
 		connection = core.PluginConnectionName
 	}
 	info, ok := b.connectionRuntime(providerName, connection)
-	token := strings.TrimSpace(info.Token)
-	if !ok || token == "" {
+	if !ok {
 		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
+	}
+	ctx, credential, err := b.resolvePlatformRuntimeCredential(ctx, providerName, connection, instance, info)
+	if err != nil {
+		return ctx, "", err
+	}
+	return ctx, credential.Token, nil
+}
+
+func (b *Broker) resolvePlatformRuntimeCredential(ctx context.Context, providerName, connection, instance string, info ConnectionRuntimeInfo) (context.Context, ConnectionRuntimeCredential, error) {
+	instance = strings.TrimSpace(instance)
+	if instance != "" {
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: deployment-managed connection for integration %q does not support instances", ErrNoCredential, providerName)
+	}
+	connection = strings.TrimSpace(connection)
+	if connection == "" {
+		connection = core.PluginConnectionName
+	}
+	token := strings.TrimSpace(info.Token)
+	var expiresAt *time.Time
+	if info.TokenSource != nil {
+		credential, err := info.TokenSource.ResolveConnectionCredential(ctx)
+		if err != nil {
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving deployment credential for integration %q connection %q: %v", ErrNoCredential, providerName, connection, err)
+		}
+		token = strings.TrimSpace(credential.Token)
+		expiresAt = credential.ExpiresAt
+	}
+	if token == "" {
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
 	}
 	SetCredentialAudit(ctx, core.ConnectionModePlatform, platformSubjectID, connection, "")
 	ctx = WithCredentialContext(ctx, CredentialContext{
@@ -737,7 +826,7 @@ func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, co
 		SubjectID:  platformSubjectID,
 		Connection: connection,
 	})
-	return ctx, token, nil
+	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
@@ -767,29 +856,35 @@ func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principa
 }
 
 func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
+	ctx, credential, err := b.resolveSubjectRuntimeCredential(ctx, prov, subjectID, providerName, connection, instance, credentialMode, credentialSubjectID)
+	return ctx, credential.Token, err
+}
+
+func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, ConnectionRuntimeCredential, error) {
 	if b == nil || core.ExternalCredentialProviderMissing(b.externalCreds) {
-		return ctx, "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 
 	var storedCredential *core.ExternalCredential
 	var err error
 
+	connectionID := b.connectionID(providerName, connection)
 	if instance != "" {
-		storedCredential, err = b.externalCreds.GetCredential(ctx, subjectID, providerName, connection, instance)
+		storedCredential, err = b.externalCreds.GetCredential(ctx, subjectID, connectionID, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
-				return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
+				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
 			}
-			return ctx, "", fmt.Errorf("%w: retrieving external credential: %v", ErrInternal, err)
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: retrieving external credential: %v", ErrInternal, err)
 		}
 	} else {
-		tokens, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, providerName, connection)
+		tokens, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, connectionID)
 		if listErr != nil {
-			return ctx, "", fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
 		switch len(tokens) {
 		case 0:
-			return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 		case 1:
 			storedCredential = tokens[0]
 		default:
@@ -797,19 +892,26 @@ func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provide
 			for i, t := range tokens {
 				instances[i] = t.Instance
 			}
-			return ctx, "", fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use with the %q parameter",
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use with the %q parameter",
 				ErrAmbiguousInstance, providerName, len(tokens), instances, "_instance")
 		}
 	}
 
 	if storedCredential == nil {
-		return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 	}
-	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, storedCredential.Connection, storedCredential.Instance)
+	credentialConnection := strings.TrimSpace(storedCredential.Connection)
+	if credentialConnection == "" {
+		credentialConnection = strings.TrimSpace(connection)
+	}
+	if credentialConnection == "" {
+		credentialConnection = core.PluginConnectionName
+	}
+	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Instance)
 	ctx = WithCredentialContext(ctx, CredentialContext{
 		Mode:       credentialMode,
 		SubjectID:  credentialSubjectID,
-		Connection: storedCredential.Connection,
+		Connection: credentialConnection,
 		Instance:   storedCredential.Instance,
 	})
 
@@ -823,7 +925,7 @@ func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provide
 	}
 
 	accessToken, err := b.refreshCredentialIfNeeded(ctx, storedCredential, providerName, connection, metricutil.NormalizeConnectionMode(credentialMode))
-	return ctx, accessToken, err
+	return ctx, ConnectionRuntimeCredential{Token: accessToken, ExpiresAt: storedCredential.ExpiresAt}, err
 }
 
 // ResolveSubjectToken exposes the broker's refresh-aware token lookup for
@@ -850,7 +952,11 @@ func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.Exte
 		return token.AccessToken, nil
 	}
 
-	key := token.SubjectID + ":" + providerName + ":" + connection + ":" + token.Instance
+	connectionID := token.ConnectionID
+	if connectionID == "" {
+		connectionID = b.connectionID(providerName, connection)
+	}
+	key := token.SubjectID + ":" + connectionID + ":" + token.Instance
 	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
 		refreshCtx := context.WithoutCancel(ctx)
 		startedAt := time.Now()
@@ -859,7 +965,7 @@ func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.Exte
 		return resp, err
 	})
 	if err != nil {
-		fresh, fetchErr := b.externalCreds.GetCredential(ctx, token.SubjectID, token.Integration, token.Connection, token.Instance)
+		fresh, fetchErr := b.externalCreds.GetCredential(ctx, token.SubjectID, connectionID, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
 		}

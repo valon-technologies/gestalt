@@ -3,22 +3,24 @@ import { Tabs } from 'nextra/components'
 # Config File
 
 Every `gestaltd` deployment reads one or more YAML config files. The current
-config API version is `gestaltd.config/v4`, and every config file must declare
+config API version is `gestaltd.config/v5`, and every config file must declare
 it with `apiVersion`. When you pass multiple `--config` flags, Gestalt merges
 them left-to-right before validation and bootstrap. The top-level keys are
 `server` (listener, encryption, egress, and host-provider selection),
-`authorization` (shared subject access policy), `providers` (named
+`authorization` (shared subject access policy), `connections` (reusable
+upstream credential definitions), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `runtime` (hosted execution backends),
 `workflows` (config-managed schedules and triggers), and `plugins`
 (executable integrations and optional plugin-backed UI mounts):
 
 ```yaml
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   # listener, encryption, egress, host-provider selectors
 authorization:
   policies: {}
+connections: {}
 runtime:
   providers: {}
 providers:
@@ -631,7 +633,7 @@ workflows:
 | `target.plugin.connection` | Optional target connection name. |
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
-| `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `providerOptions`, and `timeout`. |
+| `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `modelOptions`, and `timeout`. |
 | `permissions` | Optional additional plugin-operation permissions granted to the config-owned execution principal. The direct target operation is always included. These scopes do not grant credentials; invoked operations still resolve credentials through their configured connection. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
@@ -1053,7 +1055,7 @@ plugins:
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the plugin manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the plugin manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
-| `connections` | Named connection declarations. See [connections](#connections) below. |
+| `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local plugin connection name; single-use platform or `none` connections may be declared inline. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `dev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
 | `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. |
@@ -1084,7 +1086,7 @@ source:
 Plugin route auth overrides are declared separately:
 
 ```yaml
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 plugins:
   slack_bot:
     source: ./dist/provider-release.yaml
@@ -1234,19 +1236,18 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | `env` | Extra environment variables passed to the provider process. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
-### `connections`
+## `connections`
 
-Connections declare how users authenticate to the upstream service. A provider
-manifest can declare connection defaults under `spec.connections`; deployment
-YAML can override or extend those defaults under `plugins.<name>.connections`.
-When both declare the same connection name, deployment values are merged on top
-of the manifest defaults. Only `connections.default` should define `params` and
-`discovery` today. See [Provider Manifests](/reference/plugin-manifests#connections)
-for the manifest-side schema.
+Top-level `connections` declare reusable upstream credential definitions. Plugins
+and agent providers bind those definitions under their local
+`plugins.<name>.connections` or `providers.agent.<name>.connections` maps with
+`ref`. The top-level connection ID is the stable credential namespace used by
+the external-credentials provider; the local binding name is only how that
+provider refers to the connection at runtime.
 
 ```yaml
 connections:
-  default:
+  slack-workspace:
     mode: user
     auth:
       type: oauth2
@@ -1258,10 +1259,44 @@ connections:
       tenant:
         required: true
         description: Tenant identifier
-  mcp:
-    mode: user
+
+plugins:
+  slack:
+    source: ./plugins/slack/manifest.yaml
+    connections:
+      default:
+        ref: slack-workspace
+```
+
+Agent providers use the same binding model. This lets an agent backend resolve a
+provider-owned model connection through `AgentHost.ResolveConnection` instead of
+receiving secrets in static config:
+
+```yaml
+connections:
+  vertex-kimi:
+    mode: platform
     auth:
-      type: mcp_oauth
+      type: oauth2
+      grantType: client_credentials
+      tokenUrl: https://oauth2.googleapis.com/token
+      clientId: ${VERTEX_CLIENT_ID}
+      clientSecret: ${VERTEX_CLIENT_SECRET}
+    params:
+      baseUrl: https://example.vertexai.goog/v1
+
+providers:
+  agent:
+    simple:
+      source: ./providers/agent/simple/manifest.yaml
+      connections:
+        model:
+          ref: vertex-kimi
+      config:
+        defaultModel: vertex/kimi-k2-6
+        modelOptions:
+          vertex:
+            connection: model
 ```
 
 The effective connection is resolved from the most specific declaration first.
@@ -1269,10 +1304,16 @@ A manifest surface can name a connection with `spec.surfaces.<surface>.connectio
 and declarative REST operations can name a connection directly. If no surface
 or operation connection is named, Gestalt uses `defaultConnection`, then a
 connection literally named `default`, then the only named connection when there
-is exactly one. If none of those apply, legacy plugin-level auth is exposed as
-the `_plugin` connection.
+is exactly one.
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, `platform` uses deployer-managed credential material, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
+
+Binding entries that use `ref` may set only binding metadata such as
+`displayName` and `exposure`; they cannot override `mode`, `auth`, or `params`.
+Top-level connections cannot set `ref` or `exposure`. Inline connection bindings
+are available for simple single-use `none` or `platform` cases; user-owned
+connections that collect or exchange credentials must be declared at the top
+level and referenced by `ref`.
 
 #### Authentication Shapes
 
@@ -1281,6 +1322,7 @@ Every connection `auth` block uses the same shape. `type` selects the auth strat
 | Field | Default | Description |
 | --- | --- | --- |
 | `type` | | Authentication strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
+| `grantType` | | OAuth2 grant type. Only `client_credentials` is currently supported, and only on `mode: platform` connections. |
 | `authorizationUrl` | | OAuth2 authorization endpoint. |
 | `tokenUrl` | | OAuth2 token endpoint. |
 | `clientId` | | OAuth2 client identifier. |
@@ -1483,7 +1525,11 @@ must be present.
 `providers.indexeddb.<name>.config`, and `providers.s3.<name>.config` are only
 allowed when their corresponding source is set.
 
-Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
+Top-level connections cannot set `ref` or `exposure`. Connection bindings that
+set `ref` cannot also set `mode`, `auth`, or `params`. User-owned inline
+connections that collect or exchange credentials are not supported; declare a
+top-level connection and reference it with `ref`. All connections in a plugin
+must share the same mode.
 
 Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 

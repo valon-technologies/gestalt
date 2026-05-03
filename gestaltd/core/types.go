@@ -27,6 +27,7 @@ type ManagedSubject struct {
 type ExternalCredential struct {
 	ID                string
 	SubjectID         string
+	ConnectionID      string
 	Integration       string
 	Connection        string
 	Instance          string

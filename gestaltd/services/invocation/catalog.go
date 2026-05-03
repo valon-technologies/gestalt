@@ -21,6 +21,10 @@ type TokenResolver interface {
 	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 }
 
+type RuntimeCredentialResolver interface {
+	ResolveRuntimeConnectionCredential(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, ConnectionRuntimeCredential, ConnectionRuntimeInfo, error)
+}
+
 type subjectTokenResolver interface {
 	ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error)
 }

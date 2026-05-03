@@ -28,7 +28,7 @@ type toolBinding struct {
 
 func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 	if m == nil {
-		return "", fmt.Errorf("agent tool grants are not available")
+		return "", fmt.Errorf("agent run grants are not available")
 	}
 	target = coreagent.ToolTarget{
 		System:         strings.TrimSpace(target.System),
@@ -50,7 +50,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 
 func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	if m == nil {
-		return coreagent.ToolTarget{}, fmt.Errorf("agent tool grants are not available")
+		return coreagent.ToolTarget{}, fmt.Errorf("agent run grants are not available")
 	}
 	id = strings.TrimSpace(id)
 	if !strings.HasPrefix(id, toolIDPrefix) {
@@ -120,7 +120,7 @@ func (m *Manager) openValue(purpose, token string, value any) error {
 
 func (m *Manager) sealer(purpose string) (cipher.AEAD, error) {
 	if m == nil {
-		return nil, fmt.Errorf("agent tool grants are not available")
+		return nil, fmt.Errorf("agent run grants are not available")
 	}
 	key := deriveSealKey(m.secret, purpose)
 	block, err := aes.NewCipher(key[:])

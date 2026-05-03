@@ -577,8 +577,9 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	AgentHost_ListTools_FullMethodName   = "/gestalt.provider.v1.AgentHost/ListTools"
-	AgentHost_ExecuteTool_FullMethodName = "/gestalt.provider.v1.AgentHost/ExecuteTool"
+	AgentHost_ListTools_FullMethodName         = "/gestalt.provider.v1.AgentHost/ListTools"
+	AgentHost_ExecuteTool_FullMethodName       = "/gestalt.provider.v1.AgentHost/ExecuteTool"
+	AgentHost_ResolveConnection_FullMethodName = "/gestalt.provider.v1.AgentHost/ResolveConnection"
 )
 
 // AgentHostClient is the client API for AgentHost service.
@@ -587,6 +588,7 @@ const (
 type AgentHostClient interface {
 	ListTools(ctx context.Context, in *ListAgentToolsRequest, opts ...grpc.CallOption) (*ListAgentToolsResponse, error)
 	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
+	ResolveConnection(ctx context.Context, in *ResolveAgentConnectionRequest, opts ...grpc.CallOption) (*ResolvedAgentConnection, error)
 }
 
 type agentHostClient struct {
@@ -617,12 +619,23 @@ func (c *agentHostClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolR
 	return out, nil
 }
 
+func (c *agentHostClient) ResolveConnection(ctx context.Context, in *ResolveAgentConnectionRequest, opts ...grpc.CallOption) (*ResolvedAgentConnection, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolvedAgentConnection)
+	err := c.cc.Invoke(ctx, AgentHost_ResolveConnection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentHostServer is the server API for AgentHost service.
 // All implementations must embed UnimplementedAgentHostServer
 // for forward compatibility.
 type AgentHostServer interface {
 	ListTools(context.Context, *ListAgentToolsRequest) (*ListAgentToolsResponse, error)
 	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
+	ResolveConnection(context.Context, *ResolveAgentConnectionRequest) (*ResolvedAgentConnection, error)
 	mustEmbedUnimplementedAgentHostServer()
 }
 
@@ -638,6 +651,9 @@ func (UnimplementedAgentHostServer) ListTools(context.Context, *ListAgentToolsRe
 }
 func (UnimplementedAgentHostServer) ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteTool not implemented")
+}
+func (UnimplementedAgentHostServer) ResolveConnection(context.Context, *ResolveAgentConnectionRequest) (*ResolvedAgentConnection, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveConnection not implemented")
 }
 func (UnimplementedAgentHostServer) mustEmbedUnimplementedAgentHostServer() {}
 func (UnimplementedAgentHostServer) testEmbeddedByValue()                   {}
@@ -696,6 +712,24 @@ func _AgentHost_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentHost_ResolveConnection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveAgentConnectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentHostServer).ResolveConnection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentHost_ResolveConnection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentHostServer).ResolveConnection(ctx, req.(*ResolveAgentConnectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentHost_ServiceDesc is the grpc.ServiceDesc for AgentHost service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -710,6 +744,10 @@ var AgentHost_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExecuteTool",
 			Handler:    _AgentHost_ExecuteTool_Handler,
+		},
+		{
+			MethodName: "ResolveConnection",
+			Handler:    _AgentHost_ResolveConnection_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

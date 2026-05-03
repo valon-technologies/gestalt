@@ -1514,6 +1514,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 
 	credential := &core.ExternalCredential{
 		SubjectID:    "user:user-123",
+		ConnectionID: "slack:default",
 		Integration:  "slack",
 		Connection:   "default",
 		Instance:     "workspace-1",
@@ -1531,7 +1532,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		t.Fatalf("credential timestamps = created_at:%v updated_at:%v", credential.CreatedAt, credential.UpdatedAt)
 	}
 
-	got, err := provider.GetCredential(context.Background(), credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
+	got, err := provider.GetCredential(context.Background(), credential.SubjectID, credential.ConnectionID, credential.Instance)
 	if err != nil {
 		t.Fatalf("GetCredential: %v", err)
 	}
@@ -1539,7 +1540,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		t.Fatalf("credential tokens = access:%q refresh:%q", got.AccessToken, got.RefreshToken)
 	}
 
-	listed, err := provider.ListCredentialsForConnection(context.Background(), credential.SubjectID, credential.Integration, credential.Connection)
+	listed, err := provider.ListCredentialsForConnection(context.Background(), credential.SubjectID, credential.ConnectionID)
 	if err != nil {
 		t.Fatalf("ListCredentialsForConnection: %v", err)
 	}
@@ -1551,7 +1552,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		t.Fatalf("DeleteCredential: %v", err)
 	}
 
-	_, err = provider.GetCredential(context.Background(), credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
+	_, err = provider.GetCredential(context.Background(), credential.SubjectID, credential.ConnectionID, credential.Instance)
 	if !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetCredential after delete error = %v, want core.ErrNotFound", err)
 	}

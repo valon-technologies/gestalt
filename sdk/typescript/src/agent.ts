@@ -65,7 +65,9 @@ import {
   type ListAgentProviderTurnEventsRequest,
   type ListAgentProviderTurnsRequest,
   type ListedAgentTool,
+  type ResolveAgentConnectionRequest,
   type ResolveAgentProviderInteractionRequest,
+  type ResolvedAgentConnection,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
@@ -114,7 +116,9 @@ export type {
   ListAgentProviderTurnEventsRequest,
   ListAgentProviderTurnsRequest,
   ListedAgentTool,
+  ResolveAgentConnectionRequest,
   ResolveAgentProviderInteractionRequest,
+  ResolvedAgentConnection,
   ResolvedAgentTool,
   UpdateAgentProviderSessionRequest,
 };
@@ -460,6 +464,13 @@ export class AgentHost {
     request: ListAgentToolsRequest,
   ): Promise<ListAgentToolsResponse> {
     return await this.client.listTools(request);
+  }
+
+  /** Resolves a configured agent connection for the current turn. */
+  async resolveConnection(
+    request: ResolveAgentConnectionRequest,
+  ): Promise<ResolvedAgentConnection> {
+    return await this.client.resolveConnection(request);
   }
 }
 

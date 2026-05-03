@@ -67,7 +67,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: google
@@ -400,7 +400,7 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   encryptionKey: server-key
   providers:
@@ -469,7 +469,7 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: local
@@ -528,7 +528,7 @@ func TestLoadConfigAcceptsAuthenticationConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: local
@@ -1194,7 +1194,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1217,7 +1217,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1233,11 +1233,11 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion v4 classifies scalar local provider-release metadata sources", func(t *testing.T) {
+	t.Run("apiVersion v5 classifies scalar local provider-release metadata sources", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1255,7 +1255,7 @@ plugins:
 			t.Fatalf("unexpected plugin release metadata path: %q", got)
 		}
 		if got := cfg.Plugins["custom_tool"].SourcePath(); got != "" {
-			t.Fatalf("SourcePath() = %q, want empty for v4 local release metadata", got)
+			t.Fatalf("SourcePath() = %q, want empty for v5 local release metadata", got)
 		}
 	})
 
@@ -1263,7 +1263,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   workflow:
     demo:
@@ -1284,7 +1284,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   ui:
     dashboard:
@@ -1306,7 +1306,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1389,7 +1389,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: corporate
@@ -1468,7 +1468,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: corporate
@@ -1529,7 +1529,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1587,7 +1587,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -1634,7 +1634,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   secrets:
     default:
@@ -2115,7 +2115,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   externalCredentials:
     default:
@@ -3881,7 +3881,7 @@ func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   encryptionKey: server-key
 plugins:
@@ -3904,7 +3904,7 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 plugins:
   service:
     execution:
@@ -3994,7 +3994,7 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   authentication:
     primary:
@@ -4004,7 +4004,7 @@ providers:
 		{
 			name: "apiVersion scalar local source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4014,7 +4014,7 @@ plugins:
 		{
 			name: "apiVersion metadata url with plugin route auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: corporate
@@ -4032,7 +4032,7 @@ plugins:
 		{
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4045,7 +4045,7 @@ plugins:
 		{
 			name: "provider metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   authentication:
     primary:
@@ -4122,7 +4122,7 @@ plugins:
 		{
 			name: "provider auth override is rejected outside plugins",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   cache:
     shared:
@@ -4201,7 +4201,7 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
   external:
@@ -4302,7 +4302,7 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "metadata source plugin only",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     custom_tool:
@@ -4388,7 +4388,7 @@ plugins:
 		{
 			name: "apiVersion route auth override is valid",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: corporate
@@ -4406,7 +4406,7 @@ plugins:
 		{
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4422,7 +4422,7 @@ plugins:
 		{
 			name: "apiVersion github release source requires repo",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4436,7 +4436,7 @@ plugins:
 		{
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4451,7 +4451,7 @@ plugins:
 		{
 			name: "apiVersion nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4464,7 +4464,7 @@ plugins:
 		{
 			name: "plugin auth override is valid alongside nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   providers:
     authentication: corporate
@@ -4485,7 +4485,7 @@ plugins:
 		{
 			name: "plugin auth override rejects source auth token mix",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4499,7 +4499,7 @@ plugins:
 		{
 			name: "plugin auth override rejects unknown auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4512,7 +4512,7 @@ plugins:
 		{
 			name: "plugin auth override rejects server alias without configured auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4525,7 +4525,7 @@ plugins:
 		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4536,9 +4536,9 @@ plugins:
 			wantErr: "field token not found",
 		},
 		{
-			name: "apiVersion v4 local provider-release metadata is valid",
+			name: "apiVersion v5 local provider-release metadata is valid",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4546,9 +4546,9 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion v4 local provider-release metadata allows current-directory file",
+			name: "apiVersion v5 local provider-release metadata allows current-directory file",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4556,9 +4556,9 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion v4 local provider-release metadata accepts nested source auth",
+			name: "apiVersion v5 local provider-release metadata accepts nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4571,7 +4571,7 @@ plugins:
 		{
 			name: "apiVersion accepts local source manifests",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4581,7 +4581,7 @@ plugins:
 		{
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4591,7 +4591,7 @@ plugins:
 		{
 			name: "apiVersion rejects git scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4602,7 +4602,7 @@ plugins:
 		{
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4613,7 +4613,7 @@ plugins:
 		{
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4624,7 +4624,7 @@ plugins:
 		{
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     external:
@@ -4635,7 +4635,7 @@ plugins:
 		{
 			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   telemetry:
     default:
@@ -4812,7 +4812,10 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					"sample": {
 						Source: ProviderSource{Path: "./manifest.yaml"},
 						Connections: map[string]*ConnectionDef{
-							"default": {Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth}},
+							"default": {
+								Mode: providermanifestv1.ConnectionModePlatform,
+								Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
+							},
 						},
 					},
 				},
@@ -4844,6 +4847,104 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	}
 }
 
+func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"shared": {
+				Mode: providermanifestv1.ConnectionModePlatform,
+				Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeNone},
+			},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					core.PluginConnectionAlias: {
+						Ref:      "shared",
+						Exposure: providermanifestv1.ConnectionExposureInternal,
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+	connections := cfg.Plugins["sample"].Connections
+	if _, ok := connections[core.PluginConnectionAlias]; ok {
+		t.Fatalf("connections[%q] present, want alias removed after canonicalization", core.PluginConnectionAlias)
+	}
+	canonical := connections[core.PluginConnectionName]
+	if canonical == nil {
+		t.Fatalf("connections[%q] missing", core.PluginConnectionName)
+	}
+	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
+		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
+	}
+	if canonical.Exposure != providermanifestv1.ConnectionExposureInternal {
+		t.Fatalf("canonical Exposure = %q, want %q", canonical.Exposure, providermanifestv1.ConnectionExposureInternal)
+	}
+}
+
+func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"primary":  {Mode: providermanifestv1.ConnectionModePlatform},
+			"fallback": {Mode: providermanifestv1.ConnectionModePlatform},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					core.PluginConnectionAlias: {Ref: "primary"},
+					core.PluginConnectionName:  {Ref: "fallback"},
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want alias conflict")
+	}
+	if !strings.Contains(err.Error(), "conflicts with alias") {
+		t.Fatalf("ValidateStructure() error = %v, want alias conflict", err)
+	}
+}
+
+func TestValidateStructureRejectsInlineUserMCPOAuthConnection(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Connections: map[string]*ConnectionDef{
+					"mcp": {
+						Mode: providermanifestv1.ConnectionModeUser,
+						Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
+					},
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want inline user mcp_oauth rejection")
+	}
+	if !strings.Contains(err.Error(), "user-owned inline connections are not supported") {
+		t.Fatalf("ValidateStructure() error = %v, want inline user connection rejection", err)
+	}
+}
+
 func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 	t.Parallel()
 
@@ -4862,7 +4963,7 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   authentication:
     authentication:
@@ -4913,7 +5014,7 @@ func TestLoadPaths_ResolvesRelativeScalarSourcePathsPerFile(t *testing.T) {
 		t.Fatalf("MkdirAll base: %v", err)
 	}
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     sample:
@@ -4927,7 +5028,7 @@ plugins:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
 plugins:
     sample:
@@ -4951,7 +5052,7 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 providers:
   authentication:
     authentication:
@@ -5056,7 +5157,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v4
+	cfg := `apiVersion: gestaltd.config/v5
 providers:
 plugins:
     sample:

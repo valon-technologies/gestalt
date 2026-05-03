@@ -252,7 +252,7 @@ fn test_cli_creates_agent_turn_from_input() {
         "model":"gpt-5.4",
         "toolSource":"mcp_catalog",
         "metadata":{"ticket":"TASK-123"},
-        "providerOptions":{"temperature":0.2},
+        "modelOptions":{"temperature":0.2},
         "responseSchema":{
             "type":"object",
             "properties":{"summary":{"type":"string"}},

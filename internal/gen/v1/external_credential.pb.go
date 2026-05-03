@@ -27,8 +27,6 @@ type ExternalCredential struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	SubjectId         string                 `protobuf:"bytes,2,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Integration       string                 `protobuf:"bytes,3,opt,name=integration,proto3" json:"integration,omitempty"`
-	Connection        string                 `protobuf:"bytes,4,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance          string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	AccessToken       string                 `protobuf:"bytes,6,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
 	RefreshToken      string                 `protobuf:"bytes,7,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
@@ -39,6 +37,7 @@ type ExternalCredential struct {
 	MetadataJson      string                 `protobuf:"bytes,12,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
 	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ConnectionId      string                 `protobuf:"bytes,15,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -83,20 +82,6 @@ func (x *ExternalCredential) GetId() string {
 func (x *ExternalCredential) GetSubjectId() string {
 	if x != nil {
 		return x.SubjectId
-	}
-	return ""
-}
-
-func (x *ExternalCredential) GetIntegration() string {
-	if x != nil {
-		return x.Integration
-	}
-	return ""
-}
-
-func (x *ExternalCredential) GetConnection() string {
-	if x != nil {
-		return x.Connection
 	}
 	return ""
 }
@@ -171,12 +156,18 @@ func (x *ExternalCredential) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *ExternalCredential) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
 type ExternalCredentialLookup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Integration   string                 `protobuf:"bytes,2,opt,name=integration,proto3" json:"integration,omitempty"`
-	Connection    string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance      string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,23 +209,16 @@ func (x *ExternalCredentialLookup) GetSubjectId() string {
 	return ""
 }
 
-func (x *ExternalCredentialLookup) GetIntegration() string {
-	if x != nil {
-		return x.Integration
-	}
-	return ""
-}
-
-func (x *ExternalCredentialLookup) GetConnection() string {
-	if x != nil {
-		return x.Connection
-	}
-	return ""
-}
-
 func (x *ExternalCredentialLookup) GetInstance() string {
 	if x != nil {
 		return x.Instance
+	}
+	return ""
+}
+
+func (x *ExternalCredentialLookup) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -338,9 +322,8 @@ func (x *GetExternalCredentialRequest) GetLookup() *ExternalCredentialLookup {
 type ListExternalCredentialsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Integration   string                 `protobuf:"bytes,2,opt,name=integration,proto3" json:"integration,omitempty"`
-	Connection    string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
 	Instance      string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -382,23 +365,16 @@ func (x *ListExternalCredentialsRequest) GetSubjectId() string {
 	return ""
 }
 
-func (x *ListExternalCredentialsRequest) GetIntegration() string {
-	if x != nil {
-		return x.Integration
-	}
-	return ""
-}
-
-func (x *ListExternalCredentialsRequest) GetConnection() string {
-	if x != nil {
-		return x.Connection
-	}
-	return ""
-}
-
 func (x *ListExternalCredentialsRequest) GetInstance() string {
 	if x != nil {
 		return x.Instance
+	}
+	return ""
+}
+
+func (x *ListExternalCredentialsRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return ""
 }
@@ -495,15 +471,11 @@ var File_v1_external_credential_proto protoreflect.FileDescriptor
 
 const file_v1_external_credential_proto_rawDesc = "" +
 	"\n" +
-	"\x1cv1/external_credential.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcf\x04\n" +
+	"\x1cv1/external_credential.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\x04\n" +
 	"\x12ExternalCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
-	"subject_id\x18\x02 \x01(\tR\tsubjectId\x12 \n" +
-	"\vintegration\x18\x03 \x01(\tR\vintegration\x12\x1e\n" +
-	"\n" +
-	"connection\x18\x04 \x01(\tR\n" +
-	"connection\x12\x1a\n" +
+	"subject_id\x18\x02 \x01(\tR\tsubjectId\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12!\n" +
 	"\faccess_token\x18\x06 \x01(\tR\vaccessToken\x12#\n" +
 	"\rrefresh_token\x18\a \x01(\tR\frefreshToken\x12\x16\n" +
@@ -517,30 +489,28 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x97\x01\n" +
+	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
+	"\rconnection_id\x18\x0f \x01(\tR\fconnectionIdJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\vintegrationR\n" +
+	"connection\"\x9f\x01\n" +
 	"\x18ExternalCredentialLookup\x12\x1d\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12 \n" +
-	"\vintegration\x18\x02 \x01(\tR\vintegration\x12\x1e\n" +
-	"\n" +
-	"connection\x18\x03 \x01(\tR\n" +
-	"connection\x12\x1a\n" +
-	"\binstance\x18\x04 \x01(\tR\binstance\"\x9b\x01\n" +
+	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1a\n" +
+	"\binstance\x18\x04 \x01(\tR\binstance\x12#\n" +
+	"\rconnection_id\x18\x05 \x01(\tR\fconnectionIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\vintegrationR\n" +
+	"connection\"\x9b\x01\n" +
 	"\x1fUpsertExternalCredentialRequest\x12G\n" +
 	"\n" +
 	"credential\x18\x01 \x01(\v2'.gestalt.provider.v1.ExternalCredentialR\n" +
 	"credential\x12/\n" +
 	"\x13preserve_timestamps\x18\x02 \x01(\bR\x12preserveTimestamps\"e\n" +
 	"\x1cGetExternalCredentialRequest\x12E\n" +
-	"\x06lookup\x18\x01 \x01(\v2-.gestalt.provider.v1.ExternalCredentialLookupR\x06lookup\"\x9d\x01\n" +
+	"\x06lookup\x18\x01 \x01(\v2-.gestalt.provider.v1.ExternalCredentialLookupR\x06lookup\"\xa5\x01\n" +
 	"\x1eListExternalCredentialsRequest\x12\x1d\n" +
 	"\n" +
-	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12 \n" +
-	"\vintegration\x18\x02 \x01(\tR\vintegration\x12\x1e\n" +
-	"\n" +
-	"connection\x18\x03 \x01(\tR\n" +
-	"connection\x12\x1a\n" +
-	"\binstance\x18\x04 \x01(\tR\binstance\"l\n" +
+	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1a\n" +
+	"\binstance\x18\x04 \x01(\tR\binstance\x12#\n" +
+	"\rconnection_id\x18\x05 \x01(\tR\fconnectionIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\vintegrationR\n" +
+	"connection\"l\n" +
 	"\x1fListExternalCredentialsResponse\x12I\n" +
 	"\vcredentials\x18\x01 \x03(\v2'.gestalt.provider.v1.ExternalCredentialR\vcredentials\"1\n" +
 	"\x1fDeleteExternalCredentialRequest\x12\x0e\n" +

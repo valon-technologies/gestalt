@@ -221,6 +221,14 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 	if err := transformConfigStringFieldsInStruct(&cfg.Authorization, transform); err != nil {
 		return err
 	}
+	for _, conn := range cfg.Connections {
+		if conn == nil {
+			continue
+		}
+		if err := transformConfigStringFieldsInStruct(conn, transform); err != nil {
+			return err
+		}
+	}
 	for _, entries := range []map[string]*ProviderEntry{
 		cfg.Providers.Authentication,
 		cfg.Providers.Authorization,

@@ -241,19 +241,19 @@ func (x *BoundWorkflowPluginTarget) GetInstance() string {
 }
 
 type BoundWorkflowAgentTarget struct {
-	state           protoimpl.MessageState  `protogen:"open.v1"`
-	ProviderName    string                  `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	Model           string                  `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
-	Prompt          string                  `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
-	Messages        []*AgentMessage         `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
-	ToolRefs        []*AgentToolRef         `protobuf:"bytes,5,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
-	ResponseSchema  *structpb.Struct        `protobuf:"bytes,7,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
-	Metadata        *structpb.Struct        `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	ProviderOptions *structpb.Struct        `protobuf:"bytes,9,opt,name=provider_options,json=providerOptions,proto3" json:"provider_options,omitempty"`
-	TimeoutSeconds  int32                   `protobuf:"varint,10,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	OutputDelivery  *WorkflowOutputDelivery `protobuf:"bytes,11,opt,name=output_delivery,json=outputDelivery,proto3" json:"output_delivery,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state          protoimpl.MessageState  `protogen:"open.v1"`
+	ProviderName   string                  `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Model          string                  `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	Prompt         string                  `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Messages       []*AgentMessage         `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
+	ToolRefs       []*AgentToolRef         `protobuf:"bytes,5,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
+	ResponseSchema *structpb.Struct        `protobuf:"bytes,7,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
+	Metadata       *structpb.Struct        `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	TimeoutSeconds int32                   `protobuf:"varint,10,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	OutputDelivery *WorkflowOutputDelivery `protobuf:"bytes,11,opt,name=output_delivery,json=outputDelivery,proto3" json:"output_delivery,omitempty"`
+	ModelOptions   *structpb.Struct        `protobuf:"bytes,12,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BoundWorkflowAgentTarget) Reset() {
@@ -335,13 +335,6 @@ func (x *BoundWorkflowAgentTarget) GetMetadata() *structpb.Struct {
 	return nil
 }
 
-func (x *BoundWorkflowAgentTarget) GetProviderOptions() *structpb.Struct {
-	if x != nil {
-		return x.ProviderOptions
-	}
-	return nil
-}
-
 func (x *BoundWorkflowAgentTarget) GetTimeoutSeconds() int32 {
 	if x != nil {
 		return x.TimeoutSeconds
@@ -352,6 +345,13 @@ func (x *BoundWorkflowAgentTarget) GetTimeoutSeconds() int32 {
 func (x *BoundWorkflowAgentTarget) GetOutputDelivery() *WorkflowOutputDelivery {
 	if x != nil {
 		return x.OutputDelivery
+	}
+	return nil
+}
+
+func (x *BoundWorkflowAgentTarget) GetModelOptions() *structpb.Struct {
+	if x != nil {
+		return x.ModelOptions
 	}
 	return nil
 }
@@ -4518,7 +4518,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x04 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
-	"\binstance\x18\x05 \x01(\tR\binstance\"\xb9\x04\n" +
+	"\binstance\x18\x05 \x01(\tR\binstance\"\xcb\x04\n" +
 	"\x18BoundWorkflowAgentTarget\x12#\n" +
 	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +
@@ -4526,11 +4526,12 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\bmessages\x18\x04 \x03(\v2!.gestalt.provider.v1.AgentMessageR\bmessages\x12>\n" +
 	"\ttool_refs\x18\x05 \x03(\v2!.gestalt.provider.v1.AgentToolRefR\btoolRefs\x12@\n" +
 	"\x0fresponse_schema\x18\a \x01(\v2\x17.google.protobuf.StructR\x0eresponseSchema\x123\n" +
-	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12B\n" +
-	"\x10provider_options\x18\t \x01(\v2\x17.google.protobuf.StructR\x0fproviderOptions\x12'\n" +
+	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12'\n" +
 	"\x0ftimeout_seconds\x18\n" +
 	" \x01(\x05R\x0etimeoutSeconds\x12T\n" +
-	"\x0foutput_delivery\x18\v \x01(\v2+.gestalt.provider.v1.WorkflowOutputDeliveryR\x0eoutputDeliveryJ\x04\b\x06\x10\aR\vtool_source\"\xdc\x01\n" +
+	"\x0foutput_delivery\x18\v \x01(\v2+.gestalt.provider.v1.WorkflowOutputDeliveryR\x0eoutputDelivery\x12<\n" +
+	"\rmodel_options\x18\f \x01(\v2\x17.google.protobuf.StructR\fmodelOptionsJ\x04\b\x06\x10\aJ\x04\b\t\x10\n" +
+	"R\vtool_sourceR\x10provider_options\"\xdc\x01\n" +
 	"\x16WorkflowOutputDelivery\x12F\n" +
 	"\x06target\x18\x01 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetR\x06target\x12Q\n" +
 	"\x0einput_bindings\x18\x02 \x03(\v2*.gestalt.provider.v1.WorkflowOutputBindingR\rinputBindings\x12'\n" +
@@ -5025,8 +5026,8 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	72,  // 4: gestalt.provider.v1.BoundWorkflowAgentTarget.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
 	70,  // 5: gestalt.provider.v1.BoundWorkflowAgentTarget.response_schema:type_name -> google.protobuf.Struct
 	70,  // 6: gestalt.provider.v1.BoundWorkflowAgentTarget.metadata:type_name -> google.protobuf.Struct
-	70,  // 7: gestalt.provider.v1.BoundWorkflowAgentTarget.provider_options:type_name -> google.protobuf.Struct
-	4,   // 8: gestalt.provider.v1.BoundWorkflowAgentTarget.output_delivery:type_name -> gestalt.provider.v1.WorkflowOutputDelivery
+	4,   // 7: gestalt.provider.v1.BoundWorkflowAgentTarget.output_delivery:type_name -> gestalt.provider.v1.WorkflowOutputDelivery
+	70,  // 8: gestalt.provider.v1.BoundWorkflowAgentTarget.model_options:type_name -> google.protobuf.Struct
 	2,   // 9: gestalt.provider.v1.WorkflowOutputDelivery.target:type_name -> gestalt.provider.v1.BoundWorkflowPluginTarget
 	5,   // 10: gestalt.provider.v1.WorkflowOutputDelivery.input_bindings:type_name -> gestalt.provider.v1.WorkflowOutputBinding
 	6,   // 11: gestalt.provider.v1.WorkflowOutputBinding.value:type_name -> gestalt.provider.v1.WorkflowOutputValueSource

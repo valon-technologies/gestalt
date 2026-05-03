@@ -20,6 +20,7 @@ func declarativeConnectionAuthDef(auth config.ConnectionAuthDef) declarative.Con
 	return declarative.ConnectionAuthDef{
 		Type:                auth.Type,
 		Token:               auth.Token,
+		GrantType:           auth.GrantType,
 		AuthorizationURL:    auth.AuthorizationURL,
 		TokenURL:            auth.TokenURL,
 		ClientID:            auth.ClientID,

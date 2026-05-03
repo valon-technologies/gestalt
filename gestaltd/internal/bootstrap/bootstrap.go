@@ -159,7 +159,7 @@ type Deps struct {
 	S3                    map[string]s3store.Client
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
-	AgentToolGrants       *agentgrant.Manager
+	AgentRunGrants        *agentgrant.Manager
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
@@ -780,9 +780,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if requireEncryptionKey && encKey == nil {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required")
 	}
-	agentToolGrants, err := agentgrant.NewManager(encKey)
+	agentRunGrants, err := agentgrant.NewManager(encKey)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: agent tool grants: %w", err)
+		return nil, fmt.Errorf("bootstrap: agent run grants: %w", err)
 	}
 	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
 	if err != nil {
@@ -795,7 +795,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		RuntimeRelayBaseURL:  cfg.Server.Runtime.RelayBaseURL,
 		SecretManager:        sm,
 		Telemetry:            tp,
-		AgentToolGrants:      agentToolGrants,
+		AgentRunGrants:       agentRunGrants,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
@@ -810,7 +810,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AgentRuntime = agentRuntime
-	deps.AgentRuntime.SetToolGrants(agentToolGrants)
+	deps.AgentRuntime.SetRunGrants(agentRunGrants)
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -1083,12 +1083,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
 		WorkflowTools:     workflowTools,
-		ToolGrants:        prepared.Deps.AgentToolGrants,
+		RunGrants:         prepared.Deps.AgentRunGrants,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 		PluginInvokes:     agentPluginInvokes(cfg),
+		AgentConnections:  agentConnectionBindings(cfg),
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
@@ -1773,7 +1774,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: agentservice.DefaultHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, agentservice.NewHostServer(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool))
+			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
 	}}
 	var cleanup func()

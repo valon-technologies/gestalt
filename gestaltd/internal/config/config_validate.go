@@ -41,6 +41,9 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeConfigShape(cfg); err != nil {
 		return err
 	}
+	if err := normalizeConnectionBindings(cfg); err != nil {
+		return err
+	}
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
 	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIBindings); err != nil {
 		return err
@@ -73,6 +76,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateRuntimeConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateTopLevelConnections(cfg); err != nil {
 		return err
 	}
 
@@ -181,6 +187,162 @@ func validateAPIVersion(cfg *Config) error {
 
 func requiredAPIVersionError() error {
 	return fmt.Errorf("config validation: apiVersion is required; supported value is %q", ConfigAPIVersion)
+}
+
+func normalizeConnectionBindings(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.Connections == nil {
+		cfg.Connections = map[string]*ConnectionDef{}
+	}
+	for id, conn := range cfg.Connections {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return fmt.Errorf("config validation: connections contains an empty connection id")
+		}
+		if conn == nil {
+			return fmt.Errorf("config validation: connections.%s is required", id)
+		}
+		conn.Ref = strings.TrimSpace(conn.Ref)
+		if conn.Ref != "" {
+			return fmt.Errorf("config validation: connections.%s.ref is not allowed on top-level connections", id)
+		}
+		if conn.Exposure != "" {
+			return fmt.Errorf("config validation: connections.%s.exposure is binding-only; set exposure where the connection is used", id)
+		}
+		conn.ConnectionID = id
+		conn.BindingResolved = false
+	}
+
+	normalizeEntry := func(kind, name string, entry *ProviderEntry) error {
+		if entry == nil || len(entry.Connections) == 0 {
+			return nil
+		}
+		for _, rawLocalName := range slices.Sorted(maps.Keys(entry.Connections)) {
+			binding := entry.Connections[rawLocalName]
+			if binding == nil {
+				return fmt.Errorf("config validation: %s.%s.connections.%s is required", kind, name, rawLocalName)
+			}
+			localName := ResolveConnectionAlias(rawLocalName)
+			if localName == "" {
+				return fmt.Errorf("config validation: %s.%s.connections contains an empty connection name", kind, name)
+			}
+			if localName != rawLocalName {
+				if existing := entry.Connections[localName]; existing != nil && existing != binding {
+					return fmt.Errorf("config validation: %s.%s.connections.%s conflicts with alias %q", kind, name, localName, rawLocalName)
+				}
+				delete(entry.Connections, rawLocalName)
+				entry.Connections[localName] = binding
+			}
+			ref := strings.TrimSpace(binding.Ref)
+			if ref == "" {
+				if binding.ConnectionID == "" {
+					binding.ConnectionID = inlineConnectionID(kind, name, localName)
+				}
+				if !binding.BindingResolved && ConnectionModeForConnection(*binding) == core.ConnectionModeUser && connectionBindingRequiresUserCredential(binding) {
+					return fmt.Errorf("config validation: %s.%s.connections.%s user-owned inline connections are not supported; define a top-level connection and reference it with ref", kind, name, localName)
+				}
+				continue
+			}
+			if binding.BindingResolved && binding.ConnectionID == ref {
+				continue
+			}
+			if connectionBindingHasCredentialMaterial(binding) {
+				return fmt.Errorf("config validation: %s.%s.connections.%s uses ref %q and cannot override mode, auth, or params", kind, name, localName, ref)
+			}
+			global := cfg.Connections[ref]
+			if global == nil {
+				return fmt.Errorf("config validation: %s.%s.connections.%s references unknown top-level connection %q", kind, name, localName, ref)
+			}
+			resolved := cloneConnectionDef(*global)
+			resolved.Ref = ref
+			resolved.ConnectionID = ref
+			resolved.BindingResolved = true
+			if binding.DisplayName != "" {
+				resolved.DisplayName = binding.DisplayName
+			}
+			resolved.Exposure = binding.Exposure
+			entry.Connections[localName] = &resolved
+		}
+		return nil
+	}
+	for name, entry := range cfg.Plugins {
+		if err := normalizeEntry("plugins", name, entry); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.Agent {
+		if err := normalizeEntry("providers.agent", name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func inlineConnectionID(kind, name, localName string) string {
+	return "inline:" + strings.TrimSpace(kind) + ":" + strings.TrimSpace(name) + ":" + strings.TrimSpace(localName)
+}
+
+func connectionBindingHasCredentialMaterial(conn *ConnectionDef) bool {
+	if conn == nil {
+		return false
+	}
+	return conn.Mode != "" ||
+		conn.Auth.Type != "" ||
+		conn.Auth.Token != "" ||
+		conn.Auth.GrantType != "" ||
+		conn.Auth.AuthorizationURL != "" ||
+		conn.Auth.TokenURL != "" ||
+		conn.Auth.ClientID != "" ||
+		conn.Auth.ClientSecret != "" ||
+		conn.Auth.RedirectURL != "" ||
+		conn.Auth.ClientAuth != "" ||
+		conn.Auth.TokenExchange != "" ||
+		len(conn.Auth.Scopes) > 0 ||
+		conn.Auth.ScopeParam != "" ||
+		conn.Auth.ScopeSeparator != "" ||
+		conn.Auth.PKCE ||
+		len(conn.Auth.AuthorizationParams) > 0 ||
+		len(conn.Auth.TokenParams) > 0 ||
+		len(conn.Auth.RefreshParams) > 0 ||
+		conn.Auth.AcceptHeader != "" ||
+		conn.Auth.AccessTokenPath != "" ||
+		len(conn.Auth.TokenMetadata) > 0 ||
+		len(conn.Auth.Credentials) > 0 ||
+		conn.Auth.AuthMapping != nil ||
+		len(conn.ConnectionParams) > 0
+}
+
+func connectionBindingRequiresUserCredential(conn *ConnectionDef) bool {
+	if conn == nil {
+		return false
+	}
+	switch conn.Auth.Type {
+	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeOAuth2, providermanifestv1.AuthTypeMCPOAuth:
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneConnectionDef(src ConnectionDef) ConnectionDef {
+	dst := src
+	dst.Auth = cloneConnectionAuthDef(src.Auth)
+	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
+	return dst
+}
+
+func cloneConnectionAuthDef(src ConnectionAuthDef) ConnectionAuthDef {
+	dst := src
+	dst.Scopes = slices.Clone(src.Scopes)
+	dst.AuthorizationParams = maps.Clone(src.AuthorizationParams)
+	dst.TokenParams = maps.Clone(src.TokenParams)
+	dst.RefreshParams = maps.Clone(src.RefreshParams)
+	dst.TokenMetadata = slices.Clone(src.TokenMetadata)
+	dst.Credentials = slices.Clone(src.Credentials)
+	dst.AuthMapping = CloneAuthMapping(src.AuthMapping)
+	return dst
 }
 
 func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry) error {
@@ -367,6 +529,42 @@ func validateConfigSecretRefs(cfg *Config) error {
 		entry, ok := cfg.Providers.Secrets[name]
 		if !ok || entry == nil {
 			return fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", name)
+		}
+	}
+	return nil
+}
+
+func validateTopLevelConnections(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for id, conn := range cfg.Connections {
+		if conn == nil {
+			return fmt.Errorf("config validation: connections.%s is required", id)
+		}
+		mode := ConnectionModeForConnection(*conn)
+		switch mode {
+		case core.ConnectionModeNone, core.ConnectionModePlatform, core.ConnectionModeUser:
+		default:
+			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
+		}
+		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
+			if mode != core.ConnectionModePlatform {
+				return fmt.Errorf("config validation: connections.%s oauth2 client_credentials requires mode platform", id)
+			}
+			if strings.TrimSpace(conn.Auth.TokenURL) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.tokenUrl is required for oauth2 client_credentials", id)
+			}
+			if strings.TrimSpace(conn.Auth.ClientID) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.clientId is required for oauth2 client_credentials", id)
+			}
+			if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.clientSecret is required for oauth2 client_credentials", id)
+			}
+			continue
+		}
+		if strings.TrimSpace(conn.Auth.GrantType) != "" {
+			return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials", id)
 		}
 	}
 	return nil

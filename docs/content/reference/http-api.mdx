@@ -110,11 +110,11 @@ shape.
 | `POST` | `/api/v1/agent/turns/{turnID}/interactions/{interactionID}/resolve` | Resolve one pending interaction by submitting a `resolution` payload. |
 
 Session creation accepts `provider`, `model`, optional `clientRef`, optional
-`metadata`, optional `providerOptions`, and optional `idempotencyKey`.
+`metadata`, and optional `idempotencyKey`.
 
 Turn creation accepts `model`, `messages`, optional `toolRefs`, optional
 `toolSource`, optional `responseSchema`, optional `metadata`, optional
-`providerOptions`, and optional `idempotencyKey`. Missing
+`modelOptions`, and optional `idempotencyKey`. Missing
 `toolRefs[].pluginName` or `toolRefs[].operation` returns `400`. Conflicting
 header/body idempotency keys also return `400`, an in-progress idempotent
 create returns `409`, and an unconfigured agent surface returns `412`.

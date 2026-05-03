@@ -321,15 +321,15 @@ func workflowSystemToolCreateScheduleSchema() map[string]any {
 			"input":      map[string]any{"type": "object"},
 		}),
 		"agent": workflowSystemToolObjectSchema([]string{}, map[string]any{
-			"provider":        workflowSystemToolStringSchema("Agent provider name."),
-			"model":           workflowSystemToolStringSchema("Agent model."),
-			"prompt":          workflowSystemToolStringSchema("Agent prompt."),
-			"messages":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"toolRefs":        map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"responseSchema":  map[string]any{"type": "object"},
-			"metadata":        map[string]any{"type": "object"},
-			"providerOptions": map[string]any{"type": "object"},
-			"timeoutSeconds":  map[string]any{"type": "integer", "minimum": 0},
+			"provider":       workflowSystemToolStringSchema("Agent provider name."),
+			"model":          workflowSystemToolStringSchema("Agent model."),
+			"prompt":         workflowSystemToolStringSchema("Agent prompt."),
+			"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+			"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+			"responseSchema": map[string]any{"type": "object"},
+			"metadata":       map[string]any{"type": "object"},
+			"modelOptions":   map[string]any{"type": "object"},
+			"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
 		}),
 	})
 	return workflowSystemToolObjectSchema([]string{"cron", "target"}, map[string]any{
@@ -414,7 +414,7 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 	if !ok {
 		return coreworkflow.Target{}, fmt.Errorf("%w: target.agent must be an object", invocation.ErrInvalidInvocation)
 	}
-	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "model", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "providerOptions", "timeoutSeconds"); err != nil {
+	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "model", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "modelOptions", "timeoutSeconds"); err != nil {
 		return coreworkflow.Target{}, err
 	}
 	toolRefs, err := workflowSystemToolRefsFromValue(agentMap["toolRefs"])
@@ -433,20 +433,20 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
-	providerOptions, err := workflowSystemToolObjectArg(agentMap, "providerOptions", "target.agent")
+	modelOptions, err := workflowSystemToolObjectArg(agentMap, "modelOptions", "target.agent")
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
 	return coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName:    workflowSystemToolStringArg(agentMap, "provider"),
-		Model:           workflowSystemToolStringArg(agentMap, "model"),
-		Prompt:          workflowSystemToolStringArg(agentMap, "prompt"),
-		Messages:        messages,
-		ToolRefs:        toolRefs,
-		ResponseSchema:  responseSchema,
-		Metadata:        metadata,
-		ProviderOptions: providerOptions,
-		TimeoutSeconds:  workflowSystemToolIntArg(agentMap, "timeoutSeconds"),
+		ProviderName:   workflowSystemToolStringArg(agentMap, "provider"),
+		Model:          workflowSystemToolStringArg(agentMap, "model"),
+		Prompt:         workflowSystemToolStringArg(agentMap, "prompt"),
+		Messages:       messages,
+		ToolRefs:       toolRefs,
+		ResponseSchema: responseSchema,
+		Metadata:       metadata,
+		ModelOptions:   modelOptions,
+		TimeoutSeconds: workflowSystemToolIntArg(agentMap, "timeoutSeconds"),
 	}}, nil
 }
 

@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 mod helpers;
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::agent_host_server::{
@@ -370,6 +371,22 @@ impl AgentHostRpc for TestAgentHostService {
             ),
         }))
     }
+
+    async fn resolve_connection(
+        &self,
+        request: GrpcRequest<pb::ResolveAgentConnectionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ResolvedAgentConnection>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::ResolvedAgentConnection {
+            connection_id: "vertex-ai".to_string(),
+            connection: request.connection,
+            instance: request.instance,
+            mode: "platform".to_string(),
+            headers: BTreeMap::from([("authorization".to_string(), "Bearer token".to_string())]),
+            params: BTreeMap::from([("endpoint".to_string(), "vertex-endpoint".to_string())]),
+            ..Default::default()
+        }))
+    }
 }
 
 #[tokio::test]
@@ -652,7 +669,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             page_size: 10,
             page_token: "page-0".to_string(),
-            tool_grant: "grant-token".to_string(),
+            run_grant: "grant-token".to_string(),
         })
         .await
         .expect("list tools");
@@ -676,6 +693,26 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         .expect("execute tool");
     assert_eq!(invoked.status, 207);
     assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
+
+    let resolved_connection = host
+        .resolve_connection(pb::ResolveAgentConnectionRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            connection: "model".to_string(),
+            instance: "default".to_string(),
+            run_grant: "grant-token".to_string(),
+        })
+        .await
+        .expect("resolve connection");
+    assert_eq!(resolved_connection.connection_id, "vertex-ai");
+    assert_eq!(
+        resolved_connection.headers.get("authorization"),
+        Some(&"Bearer token".to_string())
+    );
+    assert_eq!(
+        resolved_connection.params.get("endpoint"),
+        Some(&"vertex-endpoint".to_string())
+    );
 
     host_task.abort();
     let _ = host_task.await;

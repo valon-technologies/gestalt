@@ -282,6 +282,9 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		TokenExpiresAt: tokenExpiresAt,
 		MetadataJSON:   metadata,
 	}
+	if conn, ok := s.effectiveConnectionDef(providerName, state.Connection); ok {
+		tm.ConnectionID = conn.ConnectionID
+	}
 	tm.ActorSubjectID = state.ActorSubjectID
 	tm.ActorUserID = state.ActorUserID
 	tm.ActorAuthSource = state.ActorAuthSource

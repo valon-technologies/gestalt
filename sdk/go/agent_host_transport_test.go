@@ -19,6 +19,7 @@ type agentHostTransportHarness struct {
 	mu           sync.Mutex
 	toolRequests []*proto.ExecuteAgentToolRequest
 	listRequests []*proto.ListAgentToolsRequest
+	connRequests []*proto.ResolveAgentConnectionRequest
 	tokens       []string
 }
 
@@ -51,6 +52,25 @@ func (h *agentHostTransportHarness) ListTools(ctx context.Context, req *proto.Li
 			Description: "Send a direct message",
 		}},
 		NextPageToken: "next-page",
+	}, nil
+}
+
+func (h *agentHostTransportHarness) ResolveConnection(ctx context.Context, req *proto.ResolveAgentConnectionRequest) (*proto.ResolvedAgentConnection, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
+	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
+	h.connRequests = append(h.connRequests, gproto.Clone(req).(*proto.ResolveAgentConnectionRequest))
+	h.mu.Unlock()
+	return &proto.ResolvedAgentConnection{
+		ConnectionId: "vertex-ai",
+		Connection:   req.GetConnection(),
+		Instance:     req.GetInstance(),
+		Mode:         "platform",
+		Headers:      map[string]string{"authorization": "Bearer token"},
+		Params:       map[string]string{"endpoint": "vertex-endpoint"},
 	}, nil
 }
 
@@ -104,6 +124,19 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(listResp.GetTools()) != 1 || listResp.GetTools()[0].GetId() != "tool-2" || listResp.GetTools()[0].GetMcpName() != "slack__send_message" || listResp.GetNextPageToken() != "next-page" {
 		t.Fatalf("list response = %#v", listResp)
 	}
+	connResp, err := client.ResolveConnection(context.Background(), &proto.ResolveAgentConnectionRequest{
+		SessionId:  "session-1",
+		TurnId:     "turn-1",
+		Connection: "model",
+		Instance:   "default",
+		RunGrant:   "run-grant-1",
+	})
+	if err != nil {
+		t.Fatalf("ResolveConnection: %v", err)
+	}
+	if connResp.GetConnectionId() != "vertex-ai" || connResp.GetHeaders()["authorization"] != "Bearer token" || connResp.GetParams()["endpoint"] != "vertex-endpoint" {
+		t.Fatalf("connection response = %#v", connResp)
+	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
@@ -119,7 +152,13 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if harness.listRequests[0].GetSessionId() != "session-1" || harness.listRequests[0].GetTurnId() != "turn-1" || harness.listRequests[0].GetPageSize() != 25 || harness.listRequests[0].GetPageToken() != "page-1" {
 		t.Fatalf("list request = %#v", harness.listRequests[0])
 	}
-	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
-		t.Fatalf("relay tokens = %#v, want two relay-token-go values", harness.tokens)
+	if len(harness.connRequests) != 1 {
+		t.Fatalf("connRequests len = %d, want 1", len(harness.connRequests))
+	}
+	if harness.connRequests[0].GetSessionId() != "session-1" || harness.connRequests[0].GetTurnId() != "turn-1" || harness.connRequests[0].GetConnection() != "model" || harness.connRequests[0].GetInstance() != "default" || harness.connRequests[0].GetRunGrant() != "run-grant-1" {
+		t.Fatalf("connection request = %#v", harness.connRequests[0])
+	}
+	if len(harness.tokens) != 3 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" || harness.tokens[2] != "relay-token-go" {
+		t.Fatalf("relay tokens = %#v, want three relay-token-go values", harness.tokens)
 	}
 }

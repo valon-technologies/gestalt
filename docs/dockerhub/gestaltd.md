@@ -58,7 +58,7 @@ Generate the encryption key once with `openssl rand -hex 32` and use that value 
 Example minimal config:
 
 ```yaml
-apiVersion: gestaltd.config/v4
+apiVersion: gestaltd.config/v5
 server:
   public:
     port: 8080

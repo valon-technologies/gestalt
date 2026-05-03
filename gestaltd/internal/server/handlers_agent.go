@@ -78,12 +78,12 @@ type agentToolRefRequest struct {
 }
 
 type agentSessionCreateRequest struct {
-	ProviderName    string         `json:"provider,omitempty"`
-	Model           string         `json:"model,omitempty"`
-	ClientRef       string         `json:"clientRef,omitempty"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
-	ProviderOptions map[string]any `json:"providerOptions,omitempty"`
-	IdempotencyKey  string         `json:"idempotencyKey,omitempty"`
+	ProviderName   string         `json:"provider,omitempty"`
+	Model          string         `json:"model,omitempty"`
+	ClientRef      string         `json:"clientRef,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+	ModelOptions   map[string]any `json:"modelOptions,omitempty"`
+	IdempotencyKey string         `json:"idempotencyKey,omitempty"`
 }
 
 type agentSessionUpdateRequest struct {
@@ -93,15 +93,15 @@ type agentSessionUpdateRequest struct {
 }
 
 type agentTurnCreateRequest struct {
-	Model           string                `json:"model,omitempty"`
-	Messages        []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ToolSource      string                `json:"toolSource,omitempty"`
-	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
-	Metadata        map[string]any        `json:"metadata,omitempty"`
-	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
-	IdempotencyKey  string                `json:"idempotencyKey,omitempty"`
-	toolRefsSet     bool
+	Model          string                `json:"model,omitempty"`
+	Messages       []agentMessageRequest `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest `json:"toolRefs,omitempty"`
+	ToolSource     string                `json:"toolSource,omitempty"`
+	ResponseSchema map[string]any        `json:"responseSchema,omitempty"`
+	Metadata       map[string]any        `json:"metadata,omitempty"`
+	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
+	IdempotencyKey string                `json:"idempotencyKey,omitempty"`
+	toolRefsSet    bool
 }
 
 type agentTurnCancelRequest struct {
@@ -222,12 +222,11 @@ func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, err := s.agentRuns.CreateSession(r.Context(), p, coreagent.ManagerCreateSessionRequest{
-		IdempotencyKey:  idempotencyKey,
-		ProviderName:    strings.TrimSpace(req.ProviderName),
-		Model:           strings.TrimSpace(req.Model),
-		ClientRef:       strings.TrimSpace(req.ClientRef),
-		Metadata:        maps.Clone(req.Metadata),
-		ProviderOptions: maps.Clone(req.ProviderOptions),
+		IdempotencyKey: idempotencyKey,
+		ProviderName:   strings.TrimSpace(req.ProviderName),
+		Model:          strings.TrimSpace(req.Model),
+		ClientRef:      strings.TrimSpace(req.ClientRef),
+		Metadata:       maps.Clone(req.Metadata),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", "", nil, err)
@@ -387,16 +386,16 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turn, err := s.agentRuns.CreateTurn(r.Context(), p, coreagent.ManagerCreateTurnRequest{
-		IdempotencyKey:  idempotencyKey,
-		Model:           strings.TrimSpace(req.Model),
-		SessionID:       strings.TrimSpace(sessionID),
-		Messages:        agentMessagesFromRequest(req.Messages),
-		ToolRefs:        agentToolRefsForCreateTurn(req),
-		ToolRefsSet:     req.toolRefsSet,
-		ToolSource:      toolSource,
-		ResponseSchema:  maps.Clone(req.ResponseSchema),
-		Metadata:        maps.Clone(req.Metadata),
-		ProviderOptions: maps.Clone(req.ProviderOptions),
+		IdempotencyKey: idempotencyKey,
+		Model:          strings.TrimSpace(req.Model),
+		SessionID:      strings.TrimSpace(sessionID),
+		Messages:       agentMessagesFromRequest(req.Messages),
+		ToolRefs:       agentToolRefsForCreateTurn(req),
+		ToolRefsSet:    req.toolRefsSet,
+		ToolSource:     toolSource,
+		ResponseSchema: maps.Clone(req.ResponseSchema),
+		Metadata:       maps.Clone(req.Metadata),
+		ModelOptions:   maps.Clone(req.ModelOptions),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", sessionID, req.ToolRefs, err)

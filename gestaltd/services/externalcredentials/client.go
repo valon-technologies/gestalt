@@ -76,16 +76,15 @@ func (r *remoteExternalCredentialProvider) RestoreCredential(ctx context.Context
 	return nil
 }
 
-func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, connectionID, instance string) (*core.ExternalCredential, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
 	resp, err := r.client.GetCredential(ctx, &proto.GetExternalCredentialRequest{
 		Lookup: &proto.ExternalCredentialLookup{
-			SubjectId:   strings.TrimSpace(subjectID),
-			Integration: strings.TrimSpace(integration),
-			Connection:  strings.TrimSpace(connection),
-			Instance:    strings.TrimSpace(instance),
+			SubjectId:    strings.TrimSpace(subjectID),
+			ConnectionId: strings.TrimSpace(connectionID),
+			Instance:     strings.TrimSpace(instance),
 		},
 	})
 	if err != nil {
@@ -103,18 +102,10 @@ func (r *remoteExternalCredentialProvider) ListCredentials(ctx context.Context, 
 	})
 }
 
-func (r *remoteExternalCredentialProvider) ListCredentialsForProvider(ctx context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
+func (r *remoteExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
 	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId:   strings.TrimSpace(subjectID),
-		Integration: strings.TrimSpace(integration),
-	})
-}
-
-func (r *remoteExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
-	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId:   strings.TrimSpace(subjectID),
-		Integration: strings.TrimSpace(integration),
-		Connection:  strings.TrimSpace(connection),
+		SubjectId:    strings.TrimSpace(subjectID),
+		ConnectionId: strings.TrimSpace(connectionID),
 	})
 }
 
@@ -186,8 +177,7 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 	return &proto.ExternalCredential{
 		Id:                credential.ID,
 		SubjectId:         strings.TrimSpace(credential.SubjectID),
-		Integration:       strings.TrimSpace(credential.Integration),
-		Connection:        strings.TrimSpace(credential.Connection),
+		ConnectionId:      strings.TrimSpace(credential.ConnectionID),
 		Instance:          strings.TrimSpace(credential.Instance),
 		AccessToken:       credential.AccessToken,
 		RefreshToken:      credential.RefreshToken,
@@ -208,8 +198,7 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 	return &core.ExternalCredential{
 		ID:                strings.TrimSpace(credential.GetId()),
 		SubjectID:         strings.TrimSpace(credential.GetSubjectId()),
-		Integration:       strings.TrimSpace(credential.GetIntegration()),
-		Connection:        strings.TrimSpace(credential.GetConnection()),
+		ConnectionID:      strings.TrimSpace(credential.GetConnectionId()),
 		Instance:          strings.TrimSpace(credential.GetInstance()),
 		AccessToken:       credential.GetAccessToken(),
 		RefreshToken:      credential.GetRefreshToken(),

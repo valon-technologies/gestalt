@@ -451,7 +451,7 @@ func (*closableExternalCredentialProvider) RestoreCredential(context.Context, *c
 	return nil
 }
 
-func (*closableExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+func (*closableExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
 	return nil, core.ErrNotFound
 }
 
@@ -459,11 +459,7 @@ func (*closableExternalCredentialProvider) ListCredentials(context.Context, stri
 	return nil, nil
 }
 
-func (*closableExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*closableExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+func (*closableExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -1016,7 +1012,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 				SessionId: req.SessionID,
 				TurnId:    turnID,
 				PageSize:  5,
-				ToolGrant: req.ToolGrant,
+				RunGrant:  req.RunGrant,
 			}
 			listResp, err := client.ListTools(ctx, listReq)
 			if err != nil {
@@ -1039,7 +1035,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 				TurnId:     turnID,
 				ToolCallId: "tool-call-1",
 				ToolId:     tools[0].ID,
-				ToolGrant:  req.ToolGrant,
+				RunGrant:   req.RunGrant,
 				Arguments: func() *structpb.Struct {
 					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 					if err != nil {
@@ -1546,7 +1542,7 @@ func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Targe
 		agent.Messages = slices.Clone(agent.Messages)
 		agent.ToolRefs = slices.Clone(agent.ToolRefs)
 		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.ProviderOptions = maps.Clone(agent.ProviderOptions)
+		agent.ModelOptions = maps.Clone(agent.ModelOptions)
 		agent.Metadata = maps.Clone(agent.Metadata)
 		clone.Agent = &agent
 	}
@@ -2624,8 +2620,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].Plugin != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.ToolRefs)
 	}
-	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
-		t.Fatal("CreateTurn tool_grant is empty")
+	if strings.TrimSpace(createTurnReq.RunGrant) == "" {
+		t.Fatal("CreateTurn run_grant is empty")
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
@@ -6468,8 +6464,8 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		stored.CompletedAt = nil
 	}
 	providerImpl.mu.Unlock()
-	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
-		t.Fatal("CreateTurn tool_grant is empty")
+	if strings.TrimSpace(createTurnReq.RunGrant) == "" {
+		t.Fatal("CreateTurn run_grant is empty")
 	}
 	if len(createTurnReq.Tools) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
@@ -6478,7 +6474,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId: session.ID,
 		TurnId:    turn.ID,
 		PageSize:  5,
-		ToolGrant: createTurnReq.ToolGrant,
+		RunGrant:  createTurnReq.RunGrant,
 	})
 	if len(listResp.GetTools()) != 1 {
 		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
@@ -6494,7 +6490,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-1",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	})
 	if err != nil {
 		t.Fatalf("invoke agent host callback: %v", err)
@@ -6515,7 +6511,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-mismatch",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback with mismatched session status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
@@ -6533,7 +6529,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-wrong-turn",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback with mismatched provider turn status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
@@ -6567,7 +6563,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-2",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback after cancel status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
@@ -6654,8 +6650,8 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		stored.CompletedAt = nil
 	}
 	providerImpl.mu.Unlock()
-	if strings.TrimSpace(createTurnReq.ToolGrant) == "" {
-		t.Fatal("CreateTurn tool_grant is empty")
+	if strings.TrimSpace(createTurnReq.RunGrant) == "" {
+		t.Fatal("CreateTurn run_grant is empty")
 	}
 	if len(createTurnReq.Tools) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
@@ -6664,7 +6660,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionId: session.ID,
 		TurnId:    turn.ID,
 		PageSize:  5,
-		ToolGrant: createTurnReq.ToolGrant,
+		RunGrant:  createTurnReq.RunGrant,
 	})
 	if len(listResp.GetTools()) != 1 {
 		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
@@ -6680,7 +6676,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		ToolCallId: "tool-call-before-cancel",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	}); err != nil {
 		t.Fatalf("invoke agent host callback before cancel: %v", err)
 	}
@@ -6696,7 +6692,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		ToolCallId: "tool-call-after-live-cancel",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		ToolGrant:  createTurnReq.ToolGrant,
+		RunGrant:   createTurnReq.RunGrant,
 	}); err != nil {
 		t.Fatalf("invoke agent host callback after live cancel: %v", err)
 	}

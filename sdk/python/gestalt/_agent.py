@@ -224,6 +224,18 @@ def ListAgentToolsResponse(*args: Any, **kwargs: Any) -> Any:
     return pb.ListAgentToolsResponse(*args, **kwargs)
 
 
+def ResolveAgentConnectionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ResolveConnection request."""
+
+    return pb.ResolveAgentConnectionRequest(*args, **kwargs)
+
+
+def ResolvedAgentConnection(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host ResolveConnection response."""
+
+    return pb.ResolvedAgentConnection(*args, **kwargs)
+
+
 def AgentManagerCreateSessionRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an agent-manager create-session request."""
 
@@ -320,6 +332,11 @@ class AgentHost:
         """List host tools visible to the current agent request."""
 
         return _grpc_call(self._stub.ListTools, request)
+
+    def resolve_connection(self, request: Any) -> Any:
+        """Resolve an agent connection for the current turn."""
+
+        return _grpc_call(self._stub.ResolveConnection, request)
 
     def __enter__(self) -> AgentHost:
         """Return the client for ``with`` statements."""

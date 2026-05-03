@@ -480,7 +480,7 @@ func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExte
 	}
 
 	value := cloneExternalCredential(req.GetCredential())
-	key := externalCredentialLookupKey(value.GetSubjectId(), value.GetIntegration(), value.GetConnection(), value.GetInstance())
+	key := externalCredentialLookupKey(value.GetSubjectId(), value.GetConnectionId(), value.GetInstance())
 	now := timestamppb.Now()
 
 	p.mu.Lock()
@@ -493,7 +493,7 @@ func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExte
 		}
 	} else {
 		if value.GetId() == "" {
-			value.Id = "cred-" + value.GetIntegration() + "-" + value.GetConnection() + "-" + value.GetInstance()
+			value.Id = "cred-" + value.GetConnectionId() + "-" + value.GetInstance()
 		}
 		if value.GetCreatedAt() == nil {
 			value.CreatedAt = now
@@ -524,8 +524,7 @@ func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCr
 
 	value, ok := p.credentials[externalCredentialLookupKey(
 		req.GetLookup().GetSubjectId(),
-		req.GetLookup().GetIntegration(),
-		req.GetLookup().GetConnection(),
+		req.GetLookup().GetConnectionId(),
 		req.GetLookup().GetInstance(),
 	)]
 	if !ok {
@@ -553,10 +552,7 @@ func (p *Provider) ListCredentials(ctx context.Context, req *gestalt.ListExterna
 		if req.GetSubjectId() != "" && value.GetSubjectId() != req.GetSubjectId() {
 			continue
 		}
-		if req.GetIntegration() != "" && value.GetIntegration() != req.GetIntegration() {
-			continue
-		}
-		if req.GetConnection() != "" && value.GetConnection() != req.GetConnection() {
+		if req.GetConnectionId() != "" && value.GetConnectionId() != req.GetConnectionId() {
 			continue
 		}
 		if req.GetInstance() != "" && value.GetInstance() != req.GetInstance() {
@@ -601,8 +597,8 @@ func cloneExternalCredential(src *gestalt.ExternalCredential) *gestalt.ExternalC
 	return &value
 }
 
-func externalCredentialLookupKey(subjectID, integration, connection, instance string) string {
-	return subjectID + "\x00" + integration + "\x00" + connection + "\x00" + instance
+func externalCredentialLookupKey(subjectID, connectionID, instance string) string {
+	return subjectID + "\x00" + connectionID + "\x00" + instance
 }
 
 func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, error) {

@@ -108,24 +108,26 @@ type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
 	WorkflowTools     WorkflowSystemTools
-	ToolGrants        *agentgrant.Manager
+	RunGrants         *agentgrant.Manager
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	PluginInvokes     map[string][]invocation.PluginInvocationDependency
+	AgentConnections  map[string][]string
 }
 
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
 	workflowTools     WorkflowSystemTools
-	toolGrants        *agentgrant.Manager
+	runGrants         *agentgrant.Manager
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
 	pluginInvokes     map[string][]invocation.PluginInvocationDependency
+	agentConnections  map[string][]string
 	// Route caches are process-local accelerators; providers remain the durable source of truth.
 	routeMu       sync.Mutex
 	sessionRoutes agentRouteCache
@@ -137,15 +139,27 @@ func New(cfg Config) *Manager {
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
 		workflowTools:     cfg.WorkflowTools,
-		toolGrants:        cfg.ToolGrants,
+		runGrants:         cfg.RunGrants,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
+		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionRoutes:     newAgentRouteCache(),
 		turnRoutes:        newAgentRouteCache(),
 	}
+}
+
+func cloneStringSliceMap(src map[string][]string) map[string][]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string][]string, len(src))
+	for key, value := range src {
+		dst[key] = append([]string(nil), value...)
+	}
+	return dst
 }
 
 func (m *Manager) cachedSessionRoute(sessionID string) string {
@@ -412,14 +426,13 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	sessionID := uuid.NewString()
 	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
-		SessionID:       sessionID,
-		IdempotencyKey:  idempotencyKey,
-		Model:           strings.TrimSpace(req.Model),
-		ClientRef:       strings.TrimSpace(req.ClientRef),
-		Metadata:        maps.Clone(req.Metadata),
-		ProviderOptions: maps.Clone(req.ProviderOptions),
-		CreatedBy:       agentActorFromPrincipal(p),
-		Subject:         agentSubjectFromPrincipal(p),
+		SessionID:      sessionID,
+		IdempotencyKey: idempotencyKey,
+		Model:          strings.TrimSpace(req.Model),
+		ClientRef:      strings.TrimSpace(req.ClientRef),
+		Metadata:       maps.Clone(req.Metadata),
+		CreatedBy:      agentActorFromPrincipal(p),
+		Subject:        agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{
@@ -603,29 +616,26 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	var toolGrant string
-	if toolSource == coreagent.ToolSourceModeMCPCatalog {
-		toolGrant, err = m.mintToolGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
-		if err != nil {
-			return nil, err
-		}
+	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
+	if err != nil {
+		return nil, err
 	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
-		TurnID:          turnID,
-		SessionID:       ownedSession.session.ID,
-		IdempotencyKey:  idempotencyKey,
-		Model:           strings.TrimSpace(req.Model),
-		Messages:        append([]coreagent.Message(nil), req.Messages...),
-		ToolRefs:        append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolSource:      toolSource,
-		Tools:           append([]coreagent.Tool(nil), tools...),
-		ResponseSchema:  maps.Clone(req.ResponseSchema),
-		Metadata:        maps.Clone(req.Metadata),
-		ProviderOptions: maps.Clone(req.ProviderOptions),
-		CreatedBy:       agentActorFromPrincipal(p),
-		ExecutionRef:    turnID,
-		Subject:         agentSubjectFromPrincipal(p),
-		ToolGrant:       toolGrant,
+		TurnID:         turnID,
+		SessionID:      ownedSession.session.ID,
+		IdempotencyKey: idempotencyKey,
+		Model:          strings.TrimSpace(req.Model),
+		Messages:       append([]coreagent.Message(nil), req.Messages...),
+		ToolRefs:       append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolSource:     toolSource,
+		Tools:          append([]coreagent.Tool(nil), tools...),
+		ResponseSchema: maps.Clone(req.ResponseSchema),
+		Metadata:       maps.Clone(req.Metadata),
+		ModelOptions:   maps.Clone(req.ModelOptions),
+		CreatedBy:      agentActorFromPrincipal(p),
+		ExecutionRef:   turnID,
+		Subject:        agentSubjectFromPrincipal(p),
+		RunGrant:       runGrant,
 	})
 	if err != nil {
 		fallback, getErr := ownedSession.provider.GetTurn(ctx, coreagent.GetTurnRequest{
@@ -751,10 +761,10 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 	if coreagent.ExecutionStatusIsLive(normalized.Status) {
 		return nil, fmt.Errorf("%w: agent provider %q returned live turn %q after cancel", invocation.ErrInternal, owned.providerName, strings.TrimSpace(normalized.ID))
 	}
-	if m.toolGrants != nil {
-		m.toolGrants.RevokeTurn(owned.providerName, normalized.SessionID, normalized.ID)
+	if m.runGrants != nil {
+		m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, normalized.ID)
 		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
-			m.toolGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
+			m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
 		}
 	}
 	m.rememberTurnRoute(normalized.ID, owned.providerName)
@@ -1090,12 +1100,12 @@ func agentProviderReturnedNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (m *Manager) mintToolGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
-	if m == nil || m.toolGrants == nil {
-		return "", fmt.Errorf("%w: agent tool grants are not configured", invocation.ErrInternal)
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
+	if m == nil || m.runGrants == nil {
+		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
 	subject := agentSubjectFromPrincipal(p)
-	return m.toolGrants.Mint(agentgrant.Grant{
+	return m.runGrants.Mint(agentgrant.Grant{
 		ProviderName:        providerName,
 		SessionID:           sessionID,
 		TurnID:              turnID,
@@ -1108,7 +1118,26 @@ func (m *Manager) mintToolGrant(ctx context.Context, p *principal.Principal, pro
 		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
 		Tools:               append([]coreagent.Tool(nil), tools...),
 		ToolSource:          toolSource,
+		Connections:         m.agentConnectionBindings(providerName),
 	})
+}
+
+func (m *Manager) agentConnectionBindings(providerName string) []agentgrant.ConnectionBinding {
+	if m == nil {
+		return nil
+	}
+	names := append([]string(nil), m.agentConnections[strings.TrimSpace(providerName)]...)
+	if len(names) == 0 {
+		return nil
+	}
+	out := make([]agentgrant.ConnectionBinding, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			out = append(out, agentgrant.ConnectionBinding{Connection: name})
+		}
+	}
+	return out
 }
 
 func (m *Manager) ListTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
@@ -2225,10 +2254,10 @@ func sanitizeMCPNamePart(value string) string {
 }
 
 func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
-	if m == nil || m.toolGrants == nil {
-		return "", fmt.Errorf("%w: agent tool grants are not configured", invocation.ErrInternal)
+	if m == nil || m.runGrants == nil {
+		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
-	id, err := m.toolGrants.MintToolID(target)
+	id, err := m.runGrants.MintToolID(target)
 	if err != nil {
 		return "", fmt.Errorf("%w: mint agent tool id: %v", invocation.ErrInternal, err)
 	}

@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/external_credential.proto.
  */
 export const file_v1_external_credential: GenFile = /*@__PURE__*/
-  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIqcDChJFeHRlcm5hbENyZWRlbnRpYWwSCgoCaWQYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRITCgtpbnRlZ3JhdGlvbhgDIAEoCRISCgpjb25uZWN0aW9uGAQgASgJEhAKCGluc3RhbmNlGAUgASgJEhQKDGFjY2Vzc190b2tlbhgGIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAcgASgJEg4KBnNjb3BlcxgIIAEoCRIuCgpleHBpcmVzX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI1ChFsYXN0X3JlZnJlc2hlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTcmVmcmVzaF9lcnJvcl9jb3VudBgLIAEoBRIVCg1tZXRhZGF0YV9qc29uGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wImkKGEV4dGVybmFsQ3JlZGVudGlhbExvb2t1cBISCgpzdWJqZWN0X2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiewofVXBzZXJ0RXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBI7CgpjcmVkZW50aWFsGAEgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwSGwoTcHJlc2VydmVfdGltZXN0YW1wcxgCIAEoCCJdChxHZXRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0Ej0KBmxvb2t1cBgBIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsTG9va3VwIm8KHkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiXwofTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXNwb25zZRI8CgtjcmVkZW50aWFscxgBIAMoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsIi0KH0RlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSCgoCaWQYASABKAky3AMKGkV4dGVybmFsQ3JlZGVudGlhbFByb3ZpZGVyEnEKEFVwc2VydENyZWRlbnRpYWwSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLlVwc2VydEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbBJrCg1HZXRDcmVkZW50aWFsEjEuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwSfAoPTGlzdENyZWRlbnRpYWxzEjMuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1JlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2USYAoQRGVsZXRlQ3JlZGVudGlhbBI0Lmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIroDChJFeHRlcm5hbENyZWRlbnRpYWwSCgoCaWQYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRIQCghpbnN0YW5jZRgFIAEoCRIUCgxhY2Nlc3NfdG9rZW4YBiABKAkSFQoNcmVmcmVzaF90b2tlbhgHIAEoCRIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSFQoNbWV0YWRhdGFfanNvbhgMIAEoCRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1jb25uZWN0aW9uX2lkGA8gASgJSgQIAxAESgQIBBAFUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ8ChhFeHRlcm5hbENyZWRlbnRpYWxMb29rdXASEgoKc3ViamVjdF9pZBgBIAEoCRIQCghpbnN0YW5jZRgEIAEoCRIVCg1jb25uZWN0aW9uX2lkGAUgASgJSgQIAhADSgQIAxAEUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ7Ch9VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EjsKCmNyZWRlbnRpYWwYASABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbBIbChNwcmVzZXJ2ZV90aW1lc3RhbXBzGAIgASgIIl0KHEdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSPQoGbG9va3VwGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxMb29rdXAiggEKHkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhAKCGluc3RhbmNlGAQgASgJEhUKDWNvbm5lY3Rpb25faWQYBSABKAlKBAgCEANKBAgDEARSC2ludGVncmF0aW9uUgpjb25uZWN0aW9uIl8KH0xpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2USPAoLY3JlZGVudGlhbHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbCItCh9EZWxldGVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EgoKAmlkGAEgASgJMtwDChpFeHRlcm5hbENyZWRlbnRpYWxQcm92aWRlchJxChBVcHNlcnRDcmVkZW50aWFsEjQuZ2VzdGFsdC5wcm92aWRlci52MS5VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwSawoNR2V0Q3JlZGVudGlhbBIxLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0RXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsEnwKD0xpc3RDcmVkZW50aWFscxIzLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXF1ZXN0GjQuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1Jlc3BvbnNlEmAKEERlbGV0ZUNyZWRlbnRpYWwSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHlCPVo7Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9pbnRlcm5hbC9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredential
@@ -27,16 +27,6 @@ export type ExternalCredential = Message<"gestalt.provider.v1.ExternalCredential
    * @generated from field: string subject_id = 2;
    */
   subjectId: string;
-
-  /**
-   * @generated from field: string integration = 3;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 4;
-   */
-  connection: string;
 
   /**
    * @generated from field: string instance = 5;
@@ -87,6 +77,11 @@ export type ExternalCredential = Message<"gestalt.provider.v1.ExternalCredential
    * @generated from field: google.protobuf.Timestamp updated_at = 14;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string connection_id = 15;
+   */
+  connectionId: string;
 };
 
 /**
@@ -106,19 +101,14 @@ export type ExternalCredentialLookup = Message<"gestalt.provider.v1.ExternalCred
   subjectId: string;
 
   /**
-   * @generated from field: string integration = 2;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 3;
-   */
-  connection: string;
-
-  /**
    * @generated from field: string instance = 4;
    */
   instance: string;
+
+  /**
+   * @generated from field: string connection_id = 5;
+   */
+  connectionId: string;
 };
 
 /**
@@ -177,19 +167,14 @@ export type ListExternalCredentialsRequest = Message<"gestalt.provider.v1.ListEx
   subjectId: string;
 
   /**
-   * @generated from field: string integration = 2;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 3;
-   */
-  connection: string;
-
-  /**
    * @generated from field: string instance = 4;
    */
   instance: string;
+
+  /**
+   * @generated from field: string connection_id = 5;
+   */
+  connectionId: string;
 };
 
 /**

@@ -138,6 +138,104 @@ func (p *pingAgentProvider) Ping(ctx context.Context) error {
 	return p.err
 }
 
+type turnLookupAgentProvider struct {
+	coreagent.UnimplementedProvider
+	turn *coreagent.Turn
+}
+
+func (p *turnLookupAgentProvider) GetTurn(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	if p.turn == nil {
+		return nil, core.ErrNotFound
+	}
+	return p.turn, nil
+}
+
+type staticRuntimeCredentialSource struct {
+	credential invocation.ConnectionRuntimeCredential
+	err        error
+}
+
+func (s staticRuntimeCredentialSource) ResolveConnectionCredential(context.Context) (invocation.ConnectionRuntimeCredential, error) {
+	return s.credential, s.err
+}
+
+func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{})
+	if err != nil {
+		t.Fatalf("newAgentRuntime() error = %v", err)
+	}
+	grants, err := agentgrant.NewManager(nil)
+	if err != nil {
+		t.Fatalf("agentgrant.NewManager() error = %v", err)
+	}
+	runGrant, err := grants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "system:agent-runtime-test",
+		Connections: []agentgrant.ConnectionBinding{
+			{Connection: "vertex"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Mint() error = %v", err)
+	}
+	expiresAt := time.Now().Add(time.Hour).UTC()
+	connectionRuntime := invocation.ConnectionRuntimeMap{
+		"simple": {
+			"vertex": {
+				ConnectionID: "vertex-kimi-k2-6",
+				Mode:         core.ConnectionModePlatform,
+				TokenSource: staticRuntimeCredentialSource{
+					credential: invocation.ConnectionRuntimeCredential{
+						Token:     "vertex-token",
+						ExpiresAt: &expiresAt,
+					},
+				},
+				Params: map[string]string{"endpoint": "https://vertex.example.invalid"},
+			},
+		},
+	}
+	runtime.SetRunGrants(grants)
+	runtime.SetInvoker(invocation.NewBroker(nil, nil, nil, invocation.WithConnectionRuntime(connectionRuntime.Resolve)))
+	runtime.PublishProvider("simple", &turnLookupAgentProvider{turn: &coreagent.Turn{
+		ID:        "turn-1",
+		SessionID: "session-1",
+		Status:    coreagent.ExecutionStatusRunning,
+	}})
+
+	got, err := runtime.ResolveConnection(context.Background(), coreagent.ResolveConnectionRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		Connection:   "vertex",
+		RunGrant:     runGrant,
+	})
+	if err != nil {
+		t.Fatalf("ResolveConnection() error = %v", err)
+	}
+	if got.ConnectionID != "vertex-kimi-k2-6" {
+		t.Fatalf("ConnectionID = %q, want vertex-kimi-k2-6", got.ConnectionID)
+	}
+	if got.Connection != "vertex" {
+		t.Fatalf("Connection = %q, want vertex", got.Connection)
+	}
+	if got.Mode != core.ConnectionModePlatform {
+		t.Fatalf("Mode = %q, want %q", got.Mode, core.ConnectionModePlatform)
+	}
+	if got.Headers["Authorization"] != core.BearerScheme+"vertex-token" {
+		t.Fatalf("Authorization header = %q, want bearer token", got.Headers["Authorization"])
+	}
+	if got.Params["endpoint"] != "https://vertex.example.invalid" {
+		t.Fatalf("endpoint param = %q, want default endpoint", got.Params["endpoint"])
+	}
+	if got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("ExpiresAt = %v, want %v", got.ExpiresAt, expiresAt)
+	}
+}
+
 type listSessionsAgentProvider struct {
 	coreagent.UnimplementedProvider
 	sessions []*coreagent.Session
@@ -379,7 +477,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	}
 	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
+	agentRuntime.SetRunGrants(newTestAgentRunGrants(t))
 	deps := Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
@@ -519,7 +617,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	}
 	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetToolGrants(newTestAgentToolGrants(t))
+	agentRuntime.SetRunGrants(newTestAgentRunGrants(t))
 	deps := Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
@@ -1412,8 +1510,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	invoker := &recordingAgentRuntimeInvoker{}
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetInvoker(invoker)
-	toolGrants := newTestAgentToolGrants(t)
-	agentRuntime.SetToolGrants(toolGrants)
+	runGrants := newTestAgentRunGrants(t)
+	agentRuntime.SetRunGrants(runGrants)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -1425,9 +1523,9 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		}}},
 	})
 	agentRuntime.SetToolSearcher(agentmanager.New(agentmanager.Config{
-		Providers:  providers,
-		ToolGrants: toolGrants,
-		Invoker:    invoker,
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
 	}))
 	capturingRuntime := newCapturingPluginRuntime()
 
@@ -1698,7 +1796,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 
 	hidden := false
 	invoker := &recordingAgentRuntimeInvoker{}
-	toolGrants := newTestAgentToolGrants(t)
+	runGrants := newTestAgentRunGrants(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
 		ConnMode: core.ConnectionModeNone,
@@ -1715,9 +1813,9 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  providers,
-		ToolGrants: toolGrants,
-		Invoker:    invoker,
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -1734,10 +1832,10 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetToolGrants(toolGrants)
+	runtime.SetRunGrants(runGrants)
 	runtime.SetToolSearcher(manager)
 
-	modeGrant, err := toolGrants.Mint(agentgrant.Grant{
+	modeGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -1757,12 +1855,12 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
 			Plugin:         "slack",
 			Operation:      "chat.postMessage",
 			CredentialMode: core.ConnectionModeNone,
 		}),
-		ToolGrant: modeGrant,
+		RunGrant:  modeGrant,
 		Arguments: map[string]any{"text": "hello"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -1787,7 +1885,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	if len(exactTools) != 1 || !exactTools[0].Hidden {
 		t.Fatalf("ResolveTools exact hidden = %#v, want one hidden tool", exactTools)
 	}
-	exactGrant, err := toolGrants.Mint(agentgrant.Grant{
+	exactGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -1813,7 +1911,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		TurnID:       "turn-1",
 		ToolCallID:   "call-1",
 		ToolID:       exactTools[0].ID,
-		ToolGrant:    exactGrant,
+		RunGrant:     exactGrant,
 		Arguments:    map[string]any{"eventId": "evt-1"},
 	})
 	if err != nil {
@@ -1840,7 +1938,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	toolGrants := newTestAgentToolGrants(t)
+	runGrants := newTestAgentRunGrants(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -1850,9 +1948,9 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		}}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  providers,
-		ToolGrants: toolGrants,
-		Invoker:    invoker,
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -1869,10 +1967,10 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetToolGrants(toolGrants)
+	runtime.SetRunGrants(runGrants)
 	runtime.SetToolSearcher(manager)
 
-	grant, err := toolGrants.Mint(agentgrant.Grant{
+	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -1892,11 +1990,11 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, toolGrants, coreagent.ToolTarget{
+		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
 			Plugin:    "roadmap",
 			Operation: "sync",
 		}),
-		ToolGrant: grant,
+		RunGrant:  grant,
 		Arguments: map[string]any{"taskId": "task-123"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -1911,7 +2009,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	toolGrants := newTestAgentToolGrants(t)
+	runGrants := newTestAgentRunGrants(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -1921,9 +2019,9 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		}}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  providers,
-		ToolGrants: toolGrants,
-		Invoker:    invoker,
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -1944,10 +2042,10 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetToolGrants(toolGrants)
+	runtime.SetRunGrants(runGrants)
 	runtime.SetToolSearcher(manager)
 
-	grant, err := toolGrants.Mint(agentgrant.Grant{
+	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "requested-turn-1",
@@ -1968,7 +2066,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
 		PageSize:     5,
-		ToolGrant:    grant,
+		RunGrant:     grant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with provider-owned turn ID: %v", err)
@@ -1981,7 +2079,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
 		ToolID:       listResp.Tools[0].ToolID,
-		ToolGrant:    grant,
+		RunGrant:     grant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
@@ -1991,7 +2089,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		t.Fatalf("ExecuteTool response = %#v, want accepted task body", resp)
 	}
 
-	wrongGrant, err := toolGrants.Mint(agentgrant.Grant{
+	wrongGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "other-requested-turn",
@@ -2012,7 +2110,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
 		PageSize:     5,
-		ToolGrant:    wrongGrant,
+		RunGrant:     wrongGrant,
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("ListTools wrong execution ref error = %v, want ErrAuthorizationDenied", err)
@@ -2023,7 +2121,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	toolGrants := newTestAgentToolGrants(t)
+	runGrants := newTestAgentRunGrants(t)
 	readOnly := true
 	roadmapProvider := &coretesting.StubIntegration{
 		N:        "roadmap",
@@ -2078,9 +2176,9 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	}
 	providers := testutil.NewProviderRegistry(t, roadmapProvider, docsProvider)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  providers,
-		ToolGrants: toolGrants,
-		Invoker:    invoker,
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -2097,10 +2195,10 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetToolGrants(toolGrants)
+	runtime.SetRunGrants(runGrants)
 	runtime.SetToolSearcher(manager)
 
-	grant, err := toolGrants.Mint(agentgrant.Grant{
+	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2126,7 +2224,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		ToolGrant:    grant,
+		RunGrant:     grant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -2153,7 +2251,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		t.Fatalf("listed tool schema/annotations = %#v", tool)
 	}
 
-	emptyGrant, err := toolGrants.Mint(agentgrant.Grant{
+	emptyGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2173,7 +2271,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		ToolGrant:    emptyGrant,
+		RunGrant:     emptyGrant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with empty mcp catalog grant: %v", err)
@@ -2182,7 +2280,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		t.Fatalf("ListTools empty grant = %#v, want no tools", emptyListResp)
 	}
 
-	manyDocsGrant, err := toolGrants.Mint(agentgrant.Grant{
+	manyDocsGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2203,7 +2301,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     5,
-		ToolGrant:    manyDocsGrant,
+		RunGrant:     manyDocsGrant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with small page size: %v", err)
@@ -2222,7 +2320,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		TurnID:       "turn-1",
 		PageSize:     10000,
 		PageToken:    pagedDocs.NextPageToken,
-		ToolGrant:    manyDocsGrant,
+		RunGrant:     manyDocsGrant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools final large page: %v", err)
@@ -2241,14 +2339,14 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       tool.ToolID,
-		ToolGrant:    emptyGrant,
+		RunGrant:     emptyGrant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("ExecuteTool with empty mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
 	}
 
-	broadGrant, err := toolGrants.Mint(agentgrant.Grant{
+	broadGrant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2269,7 +2367,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		ToolGrant:    broadGrant,
+		RunGrant:     broadGrant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with broad mcp catalog grant: %v", err)
@@ -2283,7 +2381,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       tool.ToolID,
-		ToolGrant:    grant,
+		RunGrant:     grant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
@@ -2298,7 +2396,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       broadListResp.Tools[0].ToolID,
-		ToolGrant:    broadGrant,
+		RunGrant:     broadGrant,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
@@ -2384,7 +2482,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 
 	runtimeState := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	runtimeState.SetToolGrants(newTestAgentToolGrants(t))
+	runtimeState.SetRunGrants(newTestAgentRunGrants(t))
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,

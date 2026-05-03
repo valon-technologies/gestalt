@@ -7,7 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 )
 
-func newTestAgentToolGrants(t testing.TB) *agentgrant.Manager {
+func newTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
 	t.Helper()
 	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {

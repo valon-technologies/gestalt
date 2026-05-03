@@ -110,7 +110,7 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 }
 
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`apiVersion: gestaltd.config/v4
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v5
 server:
   public:
     port: 8080
@@ -145,7 +145,7 @@ plugins:
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`apiVersion: gestaltd.config/v4
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v5
 server:
   public:
     port: 8080

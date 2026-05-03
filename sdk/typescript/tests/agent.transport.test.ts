@@ -17,6 +17,8 @@ import {
   ListAgentToolsRequestSchema,
   ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
+  ResolveAgentConnectionRequestSchema,
+  ResolvedAgentConnectionSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
   AgentHost,
@@ -199,7 +201,13 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     turnId: string;
     pageSize: number;
     pageToken: string;
-    toolGrant: string;
+    runGrant: string;
+  }> = [];
+  const connections: Array<{
+    turnId: string;
+    connection: string;
+    instance: string;
+    runGrant: string;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -228,7 +236,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             pageSize: input.pageSize,
             pageToken: input.pageToken,
-            toolGrant: input.toolGrant,
+            runGrant: input.runGrant,
           });
           return create(ListAgentToolsResponseSchema, {
             tools: [
@@ -245,6 +253,26 @@ test("AgentHost executes tools through the configured unix socket", async () => 
               },
             ],
             nextPageToken: "next-1",
+          });
+        },
+        async resolveConnection(input) {
+          connections.push({
+            turnId: input.turnId,
+            connection: input.connection,
+            instance: input.instance,
+            runGrant: input.runGrant,
+          });
+          return create(ResolvedAgentConnectionSchema, {
+            connectionId: "vertex-ai",
+            connection: input.connection,
+            instance: input.instance,
+            mode: "platform",
+            headers: {
+              authorization: "Bearer token",
+            },
+            params: {
+              endpoint: "vertex-endpoint",
+            },
           });
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
@@ -300,7 +328,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         pageSize: 10,
         pageToken: "page-0",
-        toolGrant: "grant-token",
+        runGrant: "grant-token",
       }),
     );
 
@@ -312,7 +340,29 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         pageSize: 10,
         pageToken: "page-0",
-        toolGrant: "grant-token",
+        runGrant: "grant-token",
+      },
+    ]);
+
+    const resolvedConnection = await host.resolveConnection(
+      create(ResolveAgentConnectionRequestSchema, {
+        sessionId: "session-123",
+        turnId: "turn-123",
+        connection: "model",
+        instance: "default",
+        runGrant: "grant-token",
+      }),
+    );
+
+    expect(resolvedConnection.connectionId).toBe("vertex-ai");
+    expect(resolvedConnection.headers.authorization).toBe("Bearer token");
+    expect(resolvedConnection.params.endpoint).toBe("vertex-endpoint");
+    expect(connections).toEqual([
+      {
+        turnId: "turn-123",
+        connection: "model",
+        instance: "default",
+        runGrant: "grant-token",
       },
     ]);
   } finally {

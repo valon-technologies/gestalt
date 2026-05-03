@@ -22,7 +22,7 @@ func (*wrappedNotFoundExternalCredentialProvider) RestoreCredential(context.Cont
 	return nil
 }
 
-func (*wrappedNotFoundExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+func (*wrappedNotFoundExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
 	return nil, fmt.Errorf("lookup failed: %w", core.ErrNotFound)
 }
 
@@ -30,11 +30,7 @@ func (*wrappedNotFoundExternalCredentialProvider) ListCredentials(context.Contex
 	return nil, nil
 }
 
-func (*wrappedNotFoundExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*wrappedNotFoundExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+func (*wrappedNotFoundExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -50,7 +46,7 @@ func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T)
 	})
 	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
 
-	_, err := remote.GetCredential(context.Background(), "user:test", "github", "default", "")
+	_, err := remote.GetCredential(context.Background(), "user:test", "github:default", "")
 	if !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetCredential error = %v, want core.ErrNotFound", err)
 	}
@@ -82,7 +78,7 @@ func (p *restoreTrackingExternalCredentialProvider) RestoreCredential(_ context.
 	return nil
 }
 
-func (p *restoreTrackingExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+func (p *restoreTrackingExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
 	if p.stored == nil {
 		return nil, core.ErrNotFound
 	}
@@ -94,11 +90,7 @@ func (*restoreTrackingExternalCredentialProvider) ListCredentials(context.Contex
 	return nil, nil
 }
 
-func (*restoreTrackingExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+func (*restoreTrackingExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -118,13 +110,14 @@ func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *te
 	createdAt := time.Unix(1_700_000_000, 0).UTC()
 	updatedAt := time.Unix(1_700_000_001, 0).UTC()
 	credential := &core.ExternalCredential{
-		ID:          "cred-1",
-		SubjectID:   "user:test",
-		Integration: "github",
-		Connection:  "default",
-		Instance:    "org",
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
+		ID:           "cred-1",
+		SubjectID:    "user:test",
+		ConnectionID: "github:default",
+		Integration:  "github",
+		Connection:   "default",
+		Instance:     "org",
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
 	}
 
 	if err := remote.RestoreCredential(context.Background(), credential); err != nil {

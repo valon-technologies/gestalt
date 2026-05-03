@@ -37,7 +37,7 @@ func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context,
 	if err != nil {
 		return nil, externalCredentialToGRPCError("upsert external credential", err)
 	}
-	stored, err := s.provider.GetCredential(ctx, credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
+	stored, err := s.provider.GetCredential(ctx, credential.SubjectID, credential.ConnectionID, credential.Instance)
 	if err != nil {
 		return nil, externalCredentialToGRPCError("read stored external credential", err)
 	}
@@ -49,7 +49,7 @@ func (s *externalCredentialProviderServer) GetCredential(ctx context.Context, re
 		return nil, status.Error(codes.InvalidArgument, "lookup is required")
 	}
 	lookup := req.GetLookup()
-	credential, err := s.provider.GetCredential(ctx, lookup.GetSubjectId(), lookup.GetIntegration(), lookup.GetConnection(), lookup.GetInstance())
+	credential, err := s.provider.GetCredential(ctx, lookup.GetSubjectId(), lookup.GetConnectionId(), lookup.GetInstance())
 	if err != nil {
 		return nil, externalCredentialToGRPCError("get external credential", err)
 	}
@@ -70,10 +70,8 @@ func (s *externalCredentialProviderServer) ListCredentials(ctx context.Context, 
 		err         error
 	)
 	switch {
-	case req.GetIntegration() != "" && req.GetConnection() != "":
-		credentials, err = s.provider.ListCredentialsForConnection(ctx, subjectID, req.GetIntegration(), req.GetConnection())
-	case req.GetIntegration() != "":
-		credentials, err = s.provider.ListCredentialsForProvider(ctx, subjectID, req.GetIntegration())
+	case req.GetConnectionId() != "":
+		credentials, err = s.provider.ListCredentialsForConnection(ctx, subjectID, req.GetConnectionId())
 	default:
 		credentials, err = s.provider.ListCredentials(ctx, subjectID)
 	}
@@ -86,10 +84,7 @@ func (s *externalCredentialProviderServer) ListCredentials(ctx context.Context, 
 		if credential == nil {
 			continue
 		}
-		if req.GetIntegration() != "" && credential.Integration != req.GetIntegration() {
-			continue
-		}
-		if req.GetConnection() != "" && credential.Connection != req.GetConnection() {
+		if req.GetConnectionId() != "" && credential.ConnectionID != req.GetConnectionId() {
 			continue
 		}
 		if req.GetInstance() != "" && credential.Instance != req.GetInstance() {

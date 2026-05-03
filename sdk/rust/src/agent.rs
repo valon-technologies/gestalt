@@ -85,6 +85,14 @@ impl AgentHost {
     ) -> std::result::Result<pb::ListAgentToolsResponse, AgentHostError> {
         Ok(self.client.list_tools(request).await?.into_inner())
     }
+
+    /// Resolves a configured agent connection for the current turn.
+    pub async fn resolve_connection(
+        &mut self,
+        request: pb::ResolveAgentConnectionRequest,
+    ) -> std::result::Result<pb::ResolvedAgentConnection, AgentHostError> {
+        Ok(self.client.resolve_connection(request).await?.into_inner())
+    }
 }
 
 async fn connect_unix(

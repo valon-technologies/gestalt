@@ -2066,7 +2066,7 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 		agent.Messages = slices.Clone(agent.Messages)
 		agent.ToolRefs = slices.Clone(agent.ToolRefs)
 		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.ProviderOptions = maps.Clone(agent.ProviderOptions)
+		agent.ModelOptions = maps.Clone(agent.ModelOptions)
 		agent.Metadata = maps.Clone(agent.Metadata)
 		out.Agent = &agent
 	}
@@ -3845,14 +3845,14 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
-	toolGrants := newTestAgentToolGrants(t)
-	agentRuntime.SetToolGrants(toolGrants)
+	runGrants := newTestAgentRunGrants(t)
+	agentRuntime.SetRunGrants(runGrants)
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  &pluginProviders.Providers,
-		Agent:      agentRuntime,
-		ToolGrants: toolGrants,
-		Invoker:    broker,
+		Providers: &pluginProviders.Providers,
+		Agent:     agentRuntime,
+		RunGrants: runGrants,
+		Invoker:   broker,
 		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
 			"echoext": {{
 				Plugin:    "roadmap",

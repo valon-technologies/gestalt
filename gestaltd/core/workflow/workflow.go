@@ -45,16 +45,16 @@ type PluginTarget struct {
 }
 
 type AgentTarget struct {
-	ProviderName    string
-	Model           string
-	Prompt          string
-	Messages        []coreagent.Message
-	ToolRefs        []coreagent.ToolRef
-	ResponseSchema  map[string]any
-	ProviderOptions map[string]any
-	Metadata        map[string]any
-	TimeoutSeconds  int
-	OutputDelivery  *OutputDelivery
+	ProviderName   string
+	Model          string
+	Prompt         string
+	Messages       []coreagent.Message
+	ToolRefs       []coreagent.ToolRef
+	ResponseSchema map[string]any
+	ModelOptions   map[string]any
+	Metadata       map[string]any
+	TimeoutSeconds int
+	OutputDelivery *OutputDelivery
 }
 
 type OutputDelivery struct {
@@ -365,8 +365,8 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		if len(agentTarget.ResponseSchema) == 0 {
 			agentTarget.ResponseSchema = nil
 		}
-		if len(agentTarget.ProviderOptions) == 0 {
-			agentTarget.ProviderOptions = nil
+		if len(agentTarget.ModelOptions) == 0 {
+			agentTarget.ModelOptions = nil
 		}
 		if len(agentTarget.Metadata) == 0 {
 			agentTarget.Metadata = nil

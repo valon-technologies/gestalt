@@ -358,9 +358,9 @@ func (r *recordingExternalCredentialProvider) RestoreCredential(ctx context.Cont
 	return r.inner.RestoreCredential(ctx, credential)
 }
 
-func (r *recordingExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+func (r *recordingExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, connectionID, instance string) (*core.ExternalCredential, error) {
 	r.getCredentialCalls.Add(1)
-	return r.inner.GetCredential(ctx, subjectID, integration, connection, instance)
+	return r.inner.GetCredential(ctx, subjectID, connectionID, instance)
 }
 
 func (r *recordingExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) ([]*core.ExternalCredential, error) {
@@ -368,19 +368,28 @@ func (r *recordingExternalCredentialProvider) ListCredentials(ctx context.Contex
 	return r.inner.ListCredentials(ctx, subjectID)
 }
 
-func (r *recordingExternalCredentialProvider) ListCredentialsForProvider(ctx context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
-	r.listForProviderCalls.Add(1)
-	return r.inner.ListCredentialsForProvider(ctx, subjectID, integration)
-}
-
-func (r *recordingExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+func (r *recordingExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
 	r.listForConnectionCalls.Add(1)
-	return r.inner.ListCredentialsForConnection(ctx, subjectID, integration, connection)
+	return r.inner.ListCredentialsForConnection(ctx, subjectID, connectionID)
 }
 
 func (r *recordingExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) error {
 	r.deleteCredentialCalls.Add(1)
 	return r.inner.DeleteCredential(ctx, id)
+}
+
+func listTestCredentialsForProvider(ctx context.Context, provider core.ExternalCredentialProvider, subjectID, integration string) ([]*core.ExternalCredential, error) {
+	tokens, err := provider.ListCredentials(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*core.ExternalCredential, 0, len(tokens))
+	for _, token := range tokens {
+		if token != nil && token.Integration == integration {
+			out = append(out, token)
+		}
+	}
+	return out, nil
 }
 
 func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
@@ -2214,13 +2223,18 @@ func seedUserRecord(t *testing.T, svc *coredata.Services, id, email string, crea
 
 func seedSubjectToken(t *testing.T, svc *coredata.Services, subjectID, integration, connection, instance, accessToken string) {
 	t.Helper()
+	resolvedConnection := config.ResolveConnectionAlias(connection)
+	if resolvedConnection == "" {
+		resolvedConnection = config.PluginConnectionName
+	}
 	seedToken(t, svc, &core.ExternalCredential{
-		ID:          integration + "-" + connection + "-" + instance,
-		SubjectID:   subjectID,
-		Integration: integration,
-		Connection:  connection,
-		Instance:    instance,
-		AccessToken: accessToken,
+		ID:           integration + "-" + connection + "-" + instance,
+		SubjectID:    subjectID,
+		ConnectionID: integration + ":" + resolvedConnection,
+		Integration:  integration,
+		Connection:   connection,
+		Instance:     instance,
+		AccessToken:  accessToken,
 	})
 }
 
@@ -2308,6 +2322,24 @@ func seedToken(t *testing.T, svc *coredata.Services, tok *core.ExternalCredentia
 	if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
 		t.Fatalf("seedToken: %v", err)
 	}
+}
+
+func testPluginDefsForConnections(plugin string, connections ...string) map[string]*config.ProviderEntry {
+	entry := &config.ProviderEntry{}
+	for _, connection := range connections {
+		connection = config.ResolveConnectionAlias(connection)
+		if connection == "" || connection == config.PluginConnectionName {
+			continue
+		}
+		if entry.Connections == nil {
+			entry.Connections = map[string]*config.ConnectionDef{}
+		}
+		entry.Connections[connection] = &config.ConnectionDef{
+			ConnectionID: plugin + ":" + connection,
+			Mode:         providermanifestv1.ConnectionModeUser,
+		}
+	}
+	return map[string]*config.ProviderEntry{plugin: entry}
 }
 
 func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
@@ -5024,7 +5056,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	if connectResp.Status != "connected" || connectResp.Integration != "manual-svc" {
 		t.Fatalf("manual connect response = %+v", connectResp)
 	}
-	managedCredentials, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "manual-svc")
+	managedCredentials, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, created.SubjectID, "manual-svc")
 	if err != nil {
 		t.Fatalf("list managed subject manual credentials: %v", err)
 	}
@@ -5090,7 +5122,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("managed subject discovery select status = %d, want 303: %s", resp.StatusCode, body)
 	}
 	_ = resp.Body.Close()
-	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "discover-manual-svc")
+	managedCredentials, err = listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, created.SubjectID, "discover-manual-svc")
 	if err != nil {
 		t.Fatalf("list managed subject discovery credentials: %v", err)
 	}
@@ -5168,7 +5200,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("managed subject oauth callback status = %d, want 303: %s", resp.StatusCode, body)
 	}
 	_ = resp.Body.Close()
-	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "oauth-svc")
+	managedCredentials, err = listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, created.SubjectID, "oauth-svc")
 	if err != nil {
 		t.Fatalf("list managed subject oauth credentials: %v", err)
 	}
@@ -5185,7 +5217,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("managed subject disconnect status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	_ = resp.Body.Close()
-	managedCredentials, err = svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), created.SubjectID, "manual-svc")
+	managedCredentials, err = listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, created.SubjectID, "manual-svc")
 	if err != nil {
 		t.Fatalf("list managed subject manual credentials after disconnect: %v", err)
 	}
@@ -8878,6 +8910,20 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 		ops:             []core.Operation{{Name: "peek", Method: http.MethodGet}},
 	}
 	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, mcpOnlyProvider, secretProvider)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"svc": {
+			AuthorizationPolicy: "subject_policy",
+			Connections: map[string]*config.ConnectionDef{
+				"workspace": {
+					ConnectionID: "svc:workspace",
+					Mode:         providermanifestv1.ConnectionModeUser,
+				},
+			},
+		},
+		"weather":  {AuthorizationPolicy: "subject_policy"},
+		"mcp-only": {AuthorizationPolicy: "subject_policy"},
+		"secret":   {AuthorizationPolicy: "secret_policy"},
+	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"subject_policy": {
@@ -8889,18 +8935,14 @@ func TestSubjectAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t 
 			},
 			"secret_policy": {},
 		},
-	}, map[string]*config.ProviderEntry{
-		"svc":      {AuthorizationPolicy: "subject_policy"},
-		"weather":  {AuthorizationPolicy: "subject_policy"},
-		"mcp-only": {AuthorizationPolicy: "subject_policy"},
-		"secret":   {AuthorizationPolicy: "secret_policy"},
-	})
+	}, pluginDefs)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.PluginDefs = map[string]*config.ProviderEntry{"svc": pluginDefs["svc"]}
 		cfg.DefaultConnection = map[string]string{"svc": "workspace"}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -9132,13 +9174,14 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.ExternalCredential{
-		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-		Connection: "default", Instance: "default", AccessToken: "test-token",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:default",
+		Integration: "slack", Connection: "default", Instance: "default", AccessToken: "test-token",
 	})
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = testPluginDefsForConnections("slack", "default")
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -9190,6 +9233,22 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 		&coretesting.StubIntegration{N: "platform-missing", DN: "Platform Missing", ConnMode: core.ConnectionModePlatform},
 	)
 	pluginDefs := map[string]*config.ProviderEntry{
+		"manual-connected": {
+			Connections: map[string]*config.ConnectionDef{
+				testDefaultConnection: {
+					ConnectionID: "manual-connected:" + testDefaultConnection,
+					Mode:         providermanifestv1.ConnectionModeUser,
+				},
+			},
+		},
+		"manual-multi": {
+			Connections: map[string]*config.ConnectionDef{
+				testDefaultConnection: {
+					ConnectionID: "manual-multi:" + testDefaultConnection,
+					Mode:         providermanifestv1.ConnectionModeUser,
+				},
+			},
+		},
 		"platform-bearer": {
 			ConnectionMode: providermanifestv1.ConnectionModePlatform,
 			Auth: &config.ConnectionAuthDef{
@@ -10442,8 +10501,8 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	u := seedUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.ExternalCredential{
-		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-		Connection: "default", Instance: "default", AccessToken: "test-token",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:default",
+		Integration: "slack", Connection: "default", Instance: "default", AccessToken: "test-token",
 	})
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
@@ -10459,6 +10518,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 			},
 		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
+		cfg.PluginDefs = testPluginDefsForConnections("slack", "default")
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -10623,8 +10683,8 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "", Instance: "default", AccessToken: "test-token",
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.PluginConnectionName,
+			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
 		modelID, err := authz.ManagedModelID(context.Background())
@@ -10648,6 +10708,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = testPluginDefsForConnections("slack")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -10665,14 +10726,14 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 0 {
 			t.Fatalf("expected 0 tokens after disconnect, got %d", len(tokens))
 		}
-		if recordingCreds.listForProviderCalls.Load() == 0 {
+		if recordingCreds.listCredentialsCalls.Load() == 0 {
 			t.Fatal("expected disconnect to list credentials through ExternalCredentialProvider")
 		}
 		if recordingCreds.deleteCredentialCalls.Load() == 0 {
@@ -10706,13 +10767,13 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "workspace", Instance: "team-a", AccessToken: "test-token-a",
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
+			Integration: "slack", Connection: "workspace", Instance: "team-a", AccessToken: "test-token-a",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-2", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "workspace", Instance: "team-b", AccessToken: "test-token-b",
+			ID: "tok-2", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
+			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token-b",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
 		modelID, err := authz.ManagedModelID(context.Background())
@@ -10736,6 +10797,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -10753,7 +10815,7 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
@@ -10791,8 +10853,8 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "", Instance: "default", AccessToken: "test-token",
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:" + config.PluginConnectionName,
+			Integration: "slack", Connection: "", Instance: "default", AccessToken: "test-token",
 			MetadataJSON: `{"team_id":"T123","user_id":"U456","gestalt.external_identity.type":"slack_identity","gestalt.external_identity.id":"team:T123:user:U456"}`,
 		})
 		modelID, err := authz.ManagedModelID(context.Background())
@@ -10812,7 +10874,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("WriteRelationships seed slack identity: %v", err)
 		}
-		originalTokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		originalTokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider before disconnect: %v", err)
 		}
@@ -10826,6 +10888,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = testPluginDefsForConnections("slack")
 			cfg.Services = svc
 			cfg.Authorizer = authz
 			cfg.AuthorizationProvider = authzProvider
@@ -10843,7 +10906,7 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 500, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := listTestCredentialsForProvider(context.Background(), svc.ExternalCredentials, principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
@@ -10877,16 +10940,17 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
-			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:mcp",
+			Integration: "notion", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
-			Connection: "default", Instance: "default", AccessToken: "test-token-2",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:default",
+			Integration: "notion", Connection: "default", Instance: "default", AccessToken: "test-token-2",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
+			cfg.PluginDefs = testPluginDefsForConnections("notion", "mcp", "default")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -10910,12 +10974,13 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "workspace", Instance: "team-b", AccessToken: "test-token",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
+			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -10939,12 +11004,13 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
-			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "notion:mcp",
+			Integration: "notion", Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
+			cfg.PluginDefs = testPluginDefsForConnections("notion", "mcp")
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -10976,16 +11042,17 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "workspace", Instance: "team-a", AccessToken: "test-token",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
+			Integration: "slack", Connection: "workspace", Instance: "team-a", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.ExternalCredential{
-			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
-			Connection: "workspace", Instance: "team-b", AccessToken: "test-token-2",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), ConnectionID: "slack:workspace",
+			Integration: "slack", Connection: "workspace", Instance: "team-b", AccessToken: "test-token-2",
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+			cfg.PluginDefs = testPluginDefsForConnections("slack", "workspace")
 			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
@@ -18386,7 +18453,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 				t.Fatalf("expected 200, got %d", resp.StatusCode)
 			}
 
-			stored, err := svc.ExternalCredentials.GetCredential(context.Background(), principal.UserSubjectID(u.ID), "fake", "default", "default")
+			stored, err := svc.ExternalCredentials.GetCredential(context.Background(), principal.UserSubjectID(u.ID), "fake:default", "default")
 			if err != nil {
 				t.Fatalf("Token: %v", err)
 			}
@@ -21098,7 +21165,7 @@ func TestMCPEndpoint_ServiceAccountAuthorizationAndAudit(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
-	seedSubjectToken(t, svc, "service_account:triage-bot", "clickhouse", "default", "default", "identity-token")
+	seedSubjectToken(t, svc, "service_account:triage-bot", "clickhouse", "", "default", "identity-token")
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{

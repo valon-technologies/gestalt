@@ -139,7 +139,8 @@ export class Cache {
       ...(transportOptions.nodeOptions
         ? {
             nodeOptions: {
-              createConnection: () => connect(transportOptions.nodeOptions!.path),
+              createConnection: () =>
+                connect({ path: transportOptions.nodeOptions!.path }),
             },
           }
         : {}),

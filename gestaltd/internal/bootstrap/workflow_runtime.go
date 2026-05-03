@@ -348,11 +348,10 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	metadata["workflow"] = workflowInvocationContext(req)
 	session, err := agentManager.CreateSession(runCtx, principalValue, coreagent.ManagerCreateSessionRequest{
-		ProviderName:    agentTarget.ProviderName,
-		Model:           agentTarget.Model,
-		Metadata:        metadata,
-		ProviderOptions: maps.Clone(agentTarget.ProviderOptions),
-		IdempotencyKey:  workflowAgentIdempotencyKey(req, "session"),
+		ProviderName:   agentTarget.ProviderName,
+		Model:          agentTarget.Model,
+		Metadata:       metadata,
+		IdempotencyKey: workflowAgentIdempotencyKey(req, "session"),
 	})
 	if err != nil {
 		return nil, err
@@ -372,7 +371,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		ToolRefs:         append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
 		ResponseSchema:   maps.Clone(agentTarget.ResponseSchema),
 		Metadata:         metadata,
-		ProviderOptions:  maps.Clone(agentTarget.ProviderOptions),
+		ModelOptions:     maps.Clone(agentTarget.ModelOptions),
 		IdempotencyKey:   workflowAgentTurnIdempotencyKey(req),
 	})
 	if err != nil {

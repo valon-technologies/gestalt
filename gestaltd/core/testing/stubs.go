@@ -37,14 +37,14 @@ func (p *StubExternalCredentialProvider) RestoreCredential(_ context.Context, cr
 	return p.storeCredential(credential, true)
 }
 
-func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subjectID, connectionID, instance string) (*core.ExternalCredential, error) {
 	if p != nil && p.GetErr != nil {
 		return nil, p.GetErr
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, credential := range p.credentials {
-		if credential.SubjectID == subjectID && credential.Integration == integration && credential.Connection == connection && credential.Instance == instance {
+		if credential.SubjectID == subjectID && credential.ConnectionID == connectionID && credential.Instance == instance {
 			return cloneExternalCredential(credential), nil
 		}
 	}
@@ -52,15 +52,11 @@ func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subjec
 }
 
 func (p *StubExternalCredentialProvider) ListCredentials(_ context.Context, subjectID string) ([]*core.ExternalCredential, error) {
-	return p.listCredentials(subjectID, "", "")
+	return p.listCredentials(subjectID, "")
 }
 
-func (p *StubExternalCredentialProvider) ListCredentialsForProvider(_ context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
-	return p.listCredentials(subjectID, integration, "")
-}
-
-func (p *StubExternalCredentialProvider) ListCredentialsForConnection(_ context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
-	return p.listCredentials(subjectID, integration, connection)
+func (p *StubExternalCredentialProvider) ListCredentialsForConnection(_ context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
+	return p.listCredentials(subjectID, connectionID)
 }
 
 func (p *StubExternalCredentialProvider) DeleteCredential(_ context.Context, id string) error {
@@ -81,8 +77,15 @@ func (p *StubExternalCredentialProvider) storeCredential(credential *core.Extern
 	defer p.mu.Unlock()
 
 	cloned := *credential
+	if cloned.ConnectionID == "" {
+		connection := cloned.Connection
+		if connection == "" {
+			connection = core.PluginConnectionName
+		}
+		cloned.ConnectionID = cloned.Integration + ":" + connection
+	}
 	for _, existing := range p.credentials {
-		if existing.SubjectID == cloned.SubjectID && existing.Integration == cloned.Integration && existing.Connection == cloned.Connection && existing.Instance == cloned.Instance {
+		if existing.SubjectID == cloned.SubjectID && existing.ConnectionID == cloned.ConnectionID && existing.Instance == cloned.Instance {
 			cloned.ID = existing.ID
 			cloned.CreatedAt = existing.CreatedAt
 			break
@@ -106,7 +109,7 @@ func (p *StubExternalCredentialProvider) storeCredential(credential *core.Extern
 	return nil
 }
 
-func (p *StubExternalCredentialProvider) listCredentials(subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+func (p *StubExternalCredentialProvider) listCredentials(subjectID, connectionID string) ([]*core.ExternalCredential, error) {
 	if p != nil && p.ListErr != nil {
 		return nil, p.ListErr
 	}
@@ -117,10 +120,7 @@ func (p *StubExternalCredentialProvider) listCredentials(subjectID, integration,
 		if credential.SubjectID != subjectID {
 			continue
 		}
-		if integration != "" && credential.Integration != integration {
-			continue
-		}
-		if connection != "" && credential.Connection != connection {
+		if connectionID != "" && credential.ConnectionID != connectionID {
 			continue
 		}
 		out = append(out, cloneExternalCredential(credential))

@@ -264,16 +264,16 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		})
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:    strings.TrimSpace(agent.Provider),
-		Model:           strings.TrimSpace(agent.Model),
-		Prompt:          strings.TrimSpace(agent.Prompt),
-		Messages:        messages,
-		ToolRefs:        tools,
-		OutputDelivery:  workflowConfigOutputDelivery(agent.OutputDelivery),
-		ResponseSchema:  maps.Clone(agent.ResponseSchema),
-		Metadata:        maps.Clone(agent.Metadata),
-		ProviderOptions: maps.Clone(agent.ProviderOptions),
-		TimeoutSeconds:  timeoutSeconds,
+		ProviderName:   strings.TrimSpace(agent.Provider),
+		Model:          strings.TrimSpace(agent.Model),
+		Prompt:         strings.TrimSpace(agent.Prompt),
+		Messages:       messages,
+		ToolRefs:       tools,
+		OutputDelivery: workflowConfigOutputDelivery(agent.OutputDelivery),
+		ResponseSchema: maps.Clone(agent.ResponseSchema),
+		Metadata:       maps.Clone(agent.Metadata),
+		ModelOptions:   maps.Clone(agent.ModelOptions),
+		TimeoutSeconds: timeoutSeconds,
 	}
 }
 

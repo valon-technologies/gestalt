@@ -117,25 +117,25 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent metadata: %w", err)
 	}
-	providerOptions, err := structFromMap(target.ProviderOptions)
+	modelOptions, err := structFromMap(target.ModelOptions)
 	if err != nil {
-		return nil, fmt.Errorf("workflow agent provider_options: %w", err)
+		return nil, fmt.Errorf("workflow agent model_options: %w", err)
 	}
 	outputDelivery, err := workflowOutputDeliveryToProto(target.OutputDelivery)
 	if err != nil {
 		return nil, err
 	}
 	return &proto.BoundWorkflowAgentTarget{
-		ProviderName:    target.ProviderName,
-		Model:           target.Model,
-		Prompt:          target.Prompt,
-		Messages:        messages,
-		ToolRefs:        agentwire.ToolRefsToProto(target.ToolRefs),
-		ResponseSchema:  responseSchema,
-		Metadata:        metadata,
-		ProviderOptions: providerOptions,
-		TimeoutSeconds:  int32(target.TimeoutSeconds),
-		OutputDelivery:  outputDelivery,
+		ProviderName:   target.ProviderName,
+		Model:          target.Model,
+		Prompt:         target.Prompt,
+		Messages:       messages,
+		ToolRefs:       agentwire.ToolRefsToProto(target.ToolRefs),
+		ResponseSchema: responseSchema,
+		Metadata:       metadata,
+		ModelOptions:   modelOptions,
+		TimeoutSeconds: int32(target.TimeoutSeconds),
+		OutputDelivery: outputDelivery,
 	}, nil
 }
 
@@ -144,16 +144,16 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		return nil
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:    strings.TrimSpace(target.GetProviderName()),
-		Model:           strings.TrimSpace(target.GetModel()),
-		Prompt:          target.GetPrompt(),
-		Messages:        agentwire.MessagesFromProto(target.GetMessages()),
-		ToolRefs:        agentwire.ToolRefsFromProto(target.GetToolRefs()),
-		ResponseSchema:  mapFromStruct(target.GetResponseSchema()),
-		Metadata:        mapFromStruct(target.GetMetadata()),
-		ProviderOptions: mapFromStruct(target.GetProviderOptions()),
-		TimeoutSeconds:  int(target.GetTimeoutSeconds()),
-		OutputDelivery:  workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+		ProviderName:   strings.TrimSpace(target.GetProviderName()),
+		Model:          strings.TrimSpace(target.GetModel()),
+		Prompt:         target.GetPrompt(),
+		Messages:       agentwire.MessagesFromProto(target.GetMessages()),
+		ToolRefs:       agentwire.ToolRefsFromProto(target.GetToolRefs()),
+		ResponseSchema: mapFromStruct(target.GetResponseSchema()),
+		Metadata:       mapFromStruct(target.GetMetadata()),
+		ModelOptions:   mapFromStruct(target.GetModelOptions()),
+		TimeoutSeconds: int(target.GetTimeoutSeconds()),
+		OutputDelivery: workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
 	}
 }
 
