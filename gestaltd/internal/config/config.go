@@ -358,6 +358,7 @@ type ProviderEntry struct {
 	// Plugin-specific runtime fields populated from the canonical ui object.
 	MountPath         string                        `yaml:"-"`
 	UI                string                        `yaml:"-"`
+	UIPublic          bool                          `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
@@ -408,11 +409,13 @@ type providerEntryMarshalYAML struct {
 type uiEntryYAML struct {
 	providerEntryYAML `yaml:",inline"`
 	Path              string `yaml:"path,omitempty"`
+	Public            bool   `yaml:"public,omitempty"`
 }
 
 type uiEntryMarshalYAML struct {
 	providerEntryMarshalYAML `yaml:",inline"`
 	Path                     string `yaml:"path,omitempty"`
+	Public                   bool   `yaml:"public,omitempty"`
 }
 
 func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
@@ -438,6 +441,7 @@ func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 		if uiBinding.Path != "" {
 			decoded.MountPath = uiBinding.Path
 		}
+		decoded.UIPublic = uiBinding.Public
 	}
 	*e = decoded
 	return nil
@@ -452,6 +456,7 @@ func (e ProviderEntry) MarshalYAML() (any, error) {
 		raw.UI = &pluginUIBindingConfig{
 			Bundle: strings.TrimSpace(e.UI),
 			Path:   strings.TrimSpace(e.MountPath),
+			Public: e.UIPublic,
 		}
 	}
 	return raw, nil
@@ -476,6 +481,7 @@ type HostIndexedDBBindingConfig struct {
 type pluginUIBindingConfig struct {
 	Path   string `yaml:"path,omitempty"`
 	Bundle string `yaml:"bundle,omitempty"`
+	Public bool   `yaml:"public,omitempty"`
 }
 
 type ProviderEgressConfig struct {
@@ -709,6 +715,7 @@ type ProviderMCPSurfaceOverride struct {
 type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
+	Public        bool   `yaml:"public,omitempty"`
 	OwnerPlugin   string `yaml:"-"`
 }
 
@@ -724,6 +731,7 @@ func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
 	*e = UIEntry{
 		ProviderEntry: decoded,
 		Path:          raw.Path,
+		Public:        raw.Public,
 	}
 	return nil
 }
@@ -740,6 +748,7 @@ func (e UIEntry) MarshalYAML() (any, error) {
 	return uiEntryMarshalYAML{
 		providerEntryMarshalYAML: entry,
 		Path:                     e.Path,
+		Public:                   e.Public,
 	}, nil
 }
 
@@ -1399,9 +1408,10 @@ type ManagementListenerConfig struct {
 }
 
 type AdminConfig struct {
-	AuthorizationPolicy string   `yaml:"authorizationPolicy,omitempty"`
-	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
-	UI                  string   `yaml:"ui,omitempty"`
+	AuthorizationPolicy  string   `yaml:"authorizationPolicy,omitempty"`
+	AllowedRoles         []string `yaml:"allowedRoles,omitempty"`
+	UI                   string   `yaml:"ui,omitempty"`
+	AllowUnauthenticated bool     `yaml:"allowUnauthenticated,omitempty"`
 }
 
 type ServerConfig struct {
@@ -2791,6 +2801,9 @@ func normalizeAdminConfig(cfg *Config) error {
 	admin := cfg.Server.Admin
 	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
 	admin.UI = strings.TrimSpace(admin.UI)
+	if admin.AuthorizationPolicy != "" && admin.AllowUnauthenticated {
+		return fmt.Errorf("normalize admin config: server.admin.allowUnauthenticated cannot be combined with server.admin.authorizationPolicy")
+	}
 	if len(admin.AllowedRoles) == 0 {
 		if admin.AuthorizationPolicy != "" {
 			admin.AllowedRoles = []string{"admin"}
@@ -2850,6 +2863,9 @@ func applyPluginMountBindings(cfg *Config) error {
 		if err := validateAuthorizationPolicyReference(cfg, "plugin", pluginName, plugin.AuthorizationPolicy); err != nil {
 			return err
 		}
+		if plugin.AuthorizationPolicy != "" && plugin.UIPublic {
+			return fmt.Errorf("config validation: plugins.%s.ui.public cannot be combined with plugins.%s.authorizationPolicy", pluginName, pluginName)
+		}
 		if plugin.UI == "" {
 			continue
 		}
@@ -2863,6 +2879,9 @@ func applyPluginMountBindings(cfg *Config) error {
 		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != plugin.AuthorizationPolicy {
 			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, plugin.UI, plugin.UI)
 		}
+		if ui.Public && !plugin.UIPublic {
+			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.public", pluginName, plugin.UI, plugin.UI)
+		}
 		if current := strings.TrimSpace(ui.Path); current != "" && current != plugin.MountPath {
 			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.path", pluginName, plugin.UI, plugin.UI)
 		}
@@ -2870,6 +2889,7 @@ func applyPluginMountBindings(cfg *Config) error {
 			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s owner", pluginName, plugin.UI, plugin.UI)
 		}
 		ui.AuthorizationPolicy = plugin.AuthorizationPolicy
+		ui.Public = ui.Public || plugin.UIPublic
 		ui.Path = plugin.MountPath
 		ui.OwnerPlugin = pluginName
 		seenUIs[plugin.UI] = pluginName

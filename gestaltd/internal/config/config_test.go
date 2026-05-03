@@ -1289,6 +1289,7 @@ providers:
   ui:
     dashboard:
       path: /dashboard
+      public: true
       source: ./providers/ui/dashboard/manifest.yaml
 plugins:
 `)
@@ -1705,6 +1706,7 @@ providers:
       source:
         path: ./ui/default/provider.yaml
       path: /create-customer-roadmap-review
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1776,6 +1778,7 @@ providers:
       source:
         path: ./web/roadmap/manifest.yaml
       path: /create-customer-roadmap-review/
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1866,10 +1869,12 @@ providers:
       source:
         path: ./web/docs/manifest.yaml
       path: /docs
+      public: true
     admin:
       source:
         path: ./web/docs-admin/manifest.yaml
       path: /docs/admin
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1902,6 +1907,7 @@ providers:
       source:
         path: ./web/api/manifest.yaml
       path: /api
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1931,6 +1937,7 @@ providers:
       source:
         path: ./web/metrics/manifest.yaml
       path: /metrics/dashboard
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1960,11 +1967,13 @@ plugins:
       path: ./plugin/manifest.yaml
     ui:
       path: /api
+      public: true
 providers:
   ui:
     roadmap:
       source:
         path: ./web/roadmap/manifest.yaml
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -1994,12 +2003,14 @@ plugins:
       path: ./plugin/manifest.yaml
     ui:
       path: /api
+      public: true
 providers:
   ui:
     roadmap:
       source:
         path: ./web/roadmap/manifest.yaml
       path: /roadmap
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -2029,6 +2040,7 @@ providers:
       source:
         path: ./web/docs/manifest.yaml
       path: /tools
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -2039,6 +2051,7 @@ plugins:
       path: ./plugin/manifest.yaml
     ui:
       path: /tools/admin
+      public: true
 server:
   providers:
     indexeddb: sqlite
@@ -2064,6 +2077,7 @@ providers:
       source:
         path: ./web/root/manifest.yaml
       path: /
+      public: true
   indexeddb:
     sqlite:
       source:
@@ -2092,6 +2106,7 @@ providers:
     roadmap:
       source: stdout
       path: /create-customer-roadmap-review
+      public: true
   indexeddb:
     sqlite:
       source:

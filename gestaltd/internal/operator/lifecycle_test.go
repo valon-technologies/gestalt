@@ -1184,6 +1184,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 		uiKey        string
 		wantPath     string
 		wantPolicy   string
+		wantPublic   bool
 		ownedUIPath  string
 		uiManifest   string
 		wantErr      string
@@ -1298,6 +1299,25 @@ plugins:
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
+			ownedUIPath: "../ui/manifest.yaml",
+		},
+		{
+			name: "plugin owned public ui with same-name ui overlay",
+			uiConfigYAML: `  ui:
+    roadmap:
+      source:
+        path: ./ui/manifest.yaml
+plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      ui:
+        path: /create-customer-roadmap-review
+        public: true
+`,
+			uiKey:       "roadmap",
+			wantPath:    "/create-customer-roadmap-review",
+			wantPublic:  true,
 			ownedUIPath: "../ui/manifest.yaml",
 		},
 	}
@@ -1428,7 +1448,10 @@ plugins:
 			if got := entry.AuthorizationPolicy; got != tc.wantPolicy {
 				t.Fatalf("AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 			}
-			if tc.wantPolicy != "" {
+			if got := entry.Public; got != tc.wantPublic {
+				t.Fatalf("Public = %t, want %t", got, tc.wantPublic)
+			}
+			if tc.wantPolicy != "" || tc.wantPublic {
 				if got := entry.OwnerPlugin; got != "roadmap" {
 					t.Fatalf("OwnerPlugin = %q, want %q", got, "roadmap")
 				}

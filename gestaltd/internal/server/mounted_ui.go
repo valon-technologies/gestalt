@@ -34,6 +34,9 @@ type protectedUILoginRedirect func(http.ResponseWriter, *http.Request) error
 
 func normalizeAdminRouteConfig(admin AdminRouteConfig) (AdminRouteConfig, error) {
 	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+	if admin.AuthorizationPolicy != "" && admin.AllowUnauthenticated {
+		return AdminRouteConfig{}, fmt.Errorf("admin AllowUnauthenticated cannot be combined with AuthorizationPolicy")
+	}
 	if admin.AuthorizationPolicy == "" {
 		if len(admin.AllowedRoles) > 0 {
 			return AdminRouteConfig{}, fmt.Errorf("admin allowedRoles requires AuthorizationPolicy")
@@ -138,6 +141,7 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 			Path:                entry.Path,
 			PluginName:          entry.OwnerPlugin,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
+			Public:              entry.Public,
 			Routes:              routes,
 			Handler:             handler,
 		})
@@ -244,6 +248,20 @@ func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {
 			return nil, fmt.Errorf("normalize mounted ui %q routes: %w", name, err)
 		}
 		normalized[i].Routes = routes
+		if normalized[i].AuthorizationPolicy != "" && normalized[i].Public {
+			name := normalized[i].Name
+			if name == "" {
+				name = normalized[i].Path
+			}
+			return nil, fmt.Errorf("normalize mounted ui %q: Public cannot be combined with AuthorizationPolicy", name)
+		}
+		if normalized[i].AuthorizationPolicy == "" && !normalized[i].Public {
+			name := normalized[i].Name
+			if name == "" {
+				name = normalized[i].Path
+			}
+			return nil, fmt.Errorf("normalize mounted ui %q: AuthorizationPolicy or Public is required", name)
+		}
 		if err := validatePolicyBoundMountedUIRoutes(normalized[i]); err != nil {
 			name := normalized[i].Name
 			if name == "" {
@@ -408,6 +426,7 @@ func (s *Server) adminMountedUI() MountedUI {
 		Name:                "builtin_admin",
 		Path:                "/admin",
 		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
+		Public:              s.adminRoute.AllowUnauthenticated,
 		builtInAdmin:        true,
 		Routes: []MountedUIRoute{{
 			Path:         "/*",
@@ -419,7 +438,12 @@ func (s *Server) adminMountedUI() MountedUI {
 
 func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
 	if mounted.AuthorizationPolicy == "" {
-		return inner
+		if mounted.Public {
+			return inner
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusInternalServerError, "ui authorization is not configured")
+		})
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

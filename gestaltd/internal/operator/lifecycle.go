@@ -2373,6 +2373,7 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 		}
 		entry.Path = strings.TrimSpace(plugin.MountPath)
 		entry.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
+		entry.Public = plugin.UIPublic
 		entry.OwnerPlugin = pluginName
 		if existing := cfg.Providers.UI[pluginName]; existing != nil {
 			if err := validateSynthesizedPluginUIEntry(pluginName, existing, entry); err != nil {
@@ -2383,6 +2384,7 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 			}
 			existing.Path = cmp.Or(existing.Path, entry.Path)
 			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
+			existing.Public = existing.Public || entry.Public
 			existing.OwnerPlugin = cmp.Or(existing.OwnerPlugin, entry.OwnerPlugin)
 			continue
 		}
@@ -2428,6 +2430,9 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 	}
 	if current := strings.TrimSpace(existing.AuthorizationPolicy); current != "" && current != expected.AuthorizationPolicy {
 		return fmt.Errorf("config validation: plugins.%s.authorizationPolicy conflicts with providers.ui.%s.authorizationPolicy", pluginName, pluginName)
+	}
+	if existing.Public && !expected.Public {
+		return fmt.Errorf("config validation: plugins.%s.ui.public conflicts with providers.ui.%s.public", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.OwnerPlugin); current != "" && current != expected.OwnerPlugin {
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s owner", pluginName, pluginName)

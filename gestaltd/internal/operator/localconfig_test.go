@@ -36,6 +36,18 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	if got := rootUI.Path; got != "/" {
 		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
 	}
+	if !rootUI.Public {
+		t.Fatal(`Providers.UI["root"].Public = false, want true`)
+	}
+	if !cfg.Server.Admin.AllowUnauthenticated {
+		t.Fatal("Server.Admin.AllowUnauthenticated = false, want true")
+	}
+	if got := cfg.Server.Management.Host; got != "127.0.0.1" {
+		t.Fatalf("Server.Management.Host = %q, want 127.0.0.1", got)
+	}
+	if got := cfg.Server.Management.Port; got != 8081 {
+		t.Fatalf("Server.Management.Port = %d, want 8081", got)
+	}
 
 	indexedDB := cfg.Providers.IndexedDB["main"]
 	if indexedDB == nil {
@@ -76,6 +88,18 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 	}
 	if got := rootUI.Path; got != "/" {
 		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
+	}
+	if !rootUI.Public {
+		t.Fatal(`Providers.UI["root"].Public = false, want true`)
+	}
+	if !cfg.Server.Admin.AllowUnauthenticated {
+		t.Fatal("Server.Admin.AllowUnauthenticated = false, want true")
+	}
+	if got := cfg.Server.Management.Host; got != "127.0.0.1" {
+		t.Fatalf("Server.Management.Host = %q, want 127.0.0.1", got)
+	}
+	if got := cfg.Server.Management.Port; got != 8081 {
+		t.Fatalf("Server.Management.Port = %d, want 8081", got)
 	}
 
 	externalCredentials := cfg.Providers.ExternalCredentials[config.DefaultProviderInstance]

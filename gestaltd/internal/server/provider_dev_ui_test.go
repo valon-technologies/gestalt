@@ -78,6 +78,7 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 		Name:       "roadmap",
 		Path:       "/roadmap",
 		PluginName: "roadmap",
+		Public:     true,
 		Handler:    fallback,
 	})
 	req := httptest.NewRequest(http.MethodGet, "/roadmap/sync?tab=preview", nil)
@@ -201,6 +202,7 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 		Name:       "roadmap",
 		Path:       "/roadmap",
 		PluginName: "roadmap",
+		Public:     true,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("remote fallback"))
 		}),
@@ -292,6 +294,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 		Name:       "roadmap",
 		Path:       "/roadmap",
 		PluginName: "roadmap",
+		Public:     true,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("remote fallback"))
 		}),

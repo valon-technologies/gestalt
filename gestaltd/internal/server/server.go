@@ -51,6 +51,7 @@ type MountedUI struct {
 	Path                string
 	PluginName          string
 	AuthorizationPolicy string
+	Public              bool
 	Routes              []MountedUIRoute
 	Handler             http.Handler
 	builtInAdmin        bool
@@ -70,8 +71,9 @@ type MountedHTTPBinding struct {
 }
 
 type AdminRouteConfig struct {
-	AuthorizationPolicy string
-	AllowedRoles        []string
+	AuthorizationPolicy  string
+	AllowedRoles         []string
+	AllowUnauthenticated bool
 }
 
 type BuiltinAdminUIOptions struct {

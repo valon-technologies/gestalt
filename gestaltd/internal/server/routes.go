@@ -91,9 +91,7 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 	r.Route("/admin/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(60 * time.Second))
-		if s.adminRoute.AuthorizationPolicy != "" {
-			r.Use(s.adminAPIAuthMiddleware)
-		}
+		r.Use(s.adminAPIAuthMiddleware)
 		s.mountAdminRuntimeRoutes(r)
 		s.mountAdminAuthorizationRoutes(r)
 	})

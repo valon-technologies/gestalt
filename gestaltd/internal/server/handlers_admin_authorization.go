@@ -65,7 +65,12 @@ func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 
 func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 	if s.adminRoute.AuthorizationPolicy == "" {
-		return next
+		if s.adminRoute.AllowUnauthenticated {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusInternalServerError, "admin authorization is not configured")
+		})
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
