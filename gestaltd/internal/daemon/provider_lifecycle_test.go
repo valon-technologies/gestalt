@@ -26,7 +26,7 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v4\nplugins:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
 	runGestaltd(t, "provider", "repo", "add", "local", indexURL, "--config", cfgPath)
@@ -149,7 +149,7 @@ func TestE2EProviderAddExactSourceAndRejectsRepeatedConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "gestalt.yaml")
 	otherCfgPath := filepath.Join(dir, "other.yaml")
-	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v4\nplugins:\n")
+	writeProviderLifecycleTestFile(t, cfgPath, "apiVersion: gestaltd.config/v5\nplugins:\n")
 	writeProviderLifecycleTestFile(t, otherCfgPath, "apiVersion: gestaltd.config/v5\n")
 	indexURL := writeProviderLifecycleIndex(t, dir)
 
