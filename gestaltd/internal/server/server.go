@@ -270,8 +270,8 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("services are required")
 	}
 	users := cfg.Services.Users
-	externalCredentials := coredata.EffectiveExternalCredentialProvider(cfg.Services)
-	if coredata.ExternalCredentialProviderMissing(externalCredentials) {
+	externalCredentials := cfg.Services.ExternalCredentials
+	if core.ExternalCredentialProviderMissing(externalCredentials) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	apiTokens := cfg.Services.APITokens

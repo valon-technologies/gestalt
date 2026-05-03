@@ -7,7 +7,6 @@ import (
 
 // ExternalCredentialProvider manages subject-scoped third-party credentials
 // used to invoke integrations on behalf of users or other canonical subjects.
-// subjects.
 type ExternalCredentialProvider interface {
 	PutCredential(ctx context.Context, credential *ExternalCredential) error
 	RestoreCredential(ctx context.Context, credential *ExternalCredential) error

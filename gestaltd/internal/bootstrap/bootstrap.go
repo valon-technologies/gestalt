@@ -1067,7 +1067,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
@@ -1414,7 +1414,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
-	if coredata.ExternalCredentialProviderMissing(provider) {
+	if core.ExternalCredentialProviderMissing(provider) {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q returned nil", logicalName)
 	}
 	return observability.InstrumentExternalCredentialProvider(logicalName, provider), nil
@@ -1474,7 +1474,7 @@ func externalCredentialsIndexedDBHostService(envVar, providerName string, ds ind
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
-				AllowedStores: []string{"external_credentials", "external_credentials_v2"},
+				AllowedStores: []string{"external_credentials"},
 			}))
 		},
 	}
@@ -1518,7 +1518,7 @@ func closeAuthorizationProvider(provider core.AuthorizationProvider) error {
 }
 
 func closeExternalCredentialProviderCandidate(services *coredata.Services) error {
-	if services == nil || coredata.ExternalCredentialProviderMissing(services.ExternalCredentials) {
+	if services == nil || core.ExternalCredentialProviderMissing(services.ExternalCredentials) {
 		return nil
 	}
 	return closeExternalCredentialProvider(services.ExternalCredentials)
