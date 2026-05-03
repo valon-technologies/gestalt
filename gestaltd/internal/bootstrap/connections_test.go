@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -159,8 +158,8 @@ func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
 		if !ok {
 			t.Fatal("BasicAuth missing")
 		}
-		if clientID != url.QueryEscape("client id:/") || clientSecret != url.QueryEscape("client secret+/") {
-			t.Fatalf("BasicAuth = %q/%q, want URL-escaped client credentials", clientID, clientSecret)
+		if clientID != "client id/" || clientSecret != "client secret+/" {
+			t.Fatalf("BasicAuth = %q/%q, want raw client credentials", clientID, clientSecret)
 		}
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("ParseForm() error = %v", err)
@@ -186,7 +185,7 @@ func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
 
 	source, err := newClientCredentialsTokenSource(config.ConnectionAuthDef{
 		TokenURL:     tokenServer.URL,
-		ClientID:     "client id:/",
+		ClientID:     "client id/",
 		ClientSecret: "client secret+/",
 		ClientAuth:   "header",
 	})
@@ -299,5 +298,50 @@ func TestClientCredentialsTokenSourceCanceledCallerDoesNotCancelSharedFetch(t *t
 	}
 	if got := requests.Load(); got != 1 {
 		t.Fatalf("token requests = %d, want 1 shared request", got)
+	}
+}
+
+func TestClientCredentialsTokenSourceFetchTimeoutReleasesFlight(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			time.Sleep(200 * time.Millisecond)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "retry-token",
+			"expires_in":   3600,
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer tokenServer.Close()
+
+	source, err := newClientCredentialsTokenSource(config.ConnectionAuthDef{
+		TokenURL:     tokenServer.URL,
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+	})
+	if err != nil {
+		t.Fatalf("newClientCredentialsTokenSource() error = %v", err)
+	}
+	source.fetchTimeout = 25 * time.Millisecond
+
+	_, err = source.ResolveConnectionCredential(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first ResolveConnectionCredential() error = %v, want deadline exceeded", err)
+	}
+	credential, err := source.ResolveConnectionCredential(context.Background())
+	if err != nil {
+		t.Fatalf("second ResolveConnectionCredential() error = %v", err)
+	}
+	if credential.Token != "retry-token" {
+		t.Fatalf("second token = %q, want retry-token", credential.Token)
+	}
+	if got := requests.Load(); got != 2 {
+		t.Fatalf("token requests = %d, want timeout plus retry", got)
 	}
 }

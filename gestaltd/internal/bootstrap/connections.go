@@ -214,13 +214,16 @@ func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[st
 }
 
 type clientCredentialsTokenSource struct {
-	auth config.ConnectionAuthDef
-	now  func() time.Time
+	auth         config.ConnectionAuthDef
+	now          func() time.Time
+	fetchTimeout time.Duration
 
 	mu     sync.Mutex
 	cached invocation.ConnectionRuntimeCredential
 	group  singleflight.Group
 }
+
+const clientCredentialsTokenFetchTimeout = 30 * time.Second
 
 func newClientCredentialsTokenSource(auth config.ConnectionAuthDef) (*clientCredentialsTokenSource, error) {
 	if strings.TrimSpace(auth.TokenURL) == "" {
@@ -232,7 +235,7 @@ func newClientCredentialsTokenSource(auth config.ConnectionAuthDef) (*clientCred
 	if strings.TrimSpace(auth.ClientSecret) == "" {
 		return nil, fmt.Errorf("auth.clientSecret is required")
 	}
-	return &clientCredentialsTokenSource{auth: auth, now: time.Now}, nil
+	return &clientCredentialsTokenSource{auth: auth, now: time.Now, fetchTimeout: clientCredentialsTokenFetchTimeout}, nil
 }
 
 func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
@@ -255,7 +258,13 @@ func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.C
 			return cached, nil
 		}
 		s.mu.Unlock()
-		credential, err := s.fetch(context.WithoutCancel(ctx))
+		timeout := s.fetchTimeout
+		if timeout <= 0 {
+			timeout = clientCredentialsTokenFetchTimeout
+		}
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		defer cancel()
+		credential, err := s.fetch(fetchCtx)
 		if err != nil {
 			return invocation.ConnectionRuntimeCredential{}, err
 		}
@@ -310,7 +319,7 @@ func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (invocation.Co
 		req.Header.Set("Accept", s.auth.AcceptHeader)
 	}
 	if clientAuth == "header" {
-		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
+		req.SetBasicAuth(clientID, clientSecret)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
