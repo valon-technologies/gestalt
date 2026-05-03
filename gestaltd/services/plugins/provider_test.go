@@ -414,8 +414,8 @@ func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
 	t.Parallel()
 
 	p := principalFromProto(&proto.SubjectContext{
-		Id:          "workload:github_app_installation:127579767:repo:valon-technologies/gestalt",
-		Kind:        "workload",
+		Id:          "service_account:github-app-installation-127579767",
+		Kind:        "service_account",
 		DisplayName: "GitHub App installation 127579767",
 		AuthSource:  "github_app_webhook",
 	})
@@ -425,8 +425,8 @@ func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
 	if p.AuthSource() != "github_app_webhook" {
 		t.Fatalf("auth source = %q, want github_app_webhook", p.AuthSource())
 	}
-	if p.Kind != principal.Kind("workload") {
-		t.Fatalf("kind = %q, want workload", p.Kind)
+	if p.Kind != principal.Kind("service_account") {
+		t.Fatalf("kind = %q, want service_account", p.Kind)
 	}
 }
 

@@ -217,7 +217,7 @@ runtime:
 
 `server.runtime.defaultHostedProvider` supplies the default runtime name for
 plugins that set `execution.mode: hosted` without an explicit
-`execution.runtime.provider`. The legacy `server.runtime.provider` field is no longer accepted.
+`execution.runtime.provider`.
 
 | Field | Description |
 | --- | --- |
@@ -555,8 +555,7 @@ executable plugins. When `providers.agent.<name>.execution.mode` is `hosted`,
 `gestaltd` starts the agent provider inside the selected hosted runtime instead
 of launching it directly on the `gestaltd` host. Tool callbacks still route
 back through the host agent socket, and `egress.allowedHosts` remains the
-operator-facing egress policy. Legacy `providers.agent.<name>.runtime` is no
-longer accepted; use `providers.agent.<name>.execution.runtime`.
+operator-facing egress policy.
 
 | Field | Description |
 | --- | --- |
