@@ -747,6 +747,9 @@
             "json"
           ]
         },
+        "tokenPrefix": {
+          "type": "string"
+        },
         "accessTokenPath": {
           "type": "string"
         },

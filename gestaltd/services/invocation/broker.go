@@ -117,29 +117,32 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 	return m[provider]
 }
 
-// OAuthRefresher is the subset of OAuthHandler that the broker needs for
+// TokenRefresher is the subset of auth handlers that the broker needs for
 // token refresh. Defined here to avoid importing the bootstrap package.
-type OAuthRefresher interface {
+type TokenRefresher interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
 	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
 	TokenURL() string
 }
 
+type OAuthRefresher = TokenRefresher
+
 // RefresherResolver returns the connection auth map, blocking until providers
 // finish loading if needed.
-type RefresherResolver func() map[string]map[string]OAuthRefresher
+type RefresherResolver func() map[string]map[string]TokenRefresher
 
 type Broker struct {
-	providers         *registry.ProviderMap[core.Provider]
-	users             UserStore
-	externalCreds     core.ExternalCredentialProvider
-	authorizer        authorization.RuntimeAuthorizer
-	connMapper        ConnectionMapper
-	mcpMapper         ConnectionMapper
-	connectionAuth    RefresherResolver
-	connectionRuntime ConnectionRuntimeResolver
-	providerOverrides ProviderOverrideResolver
-	refreshGroup      singleflight.Group
+	providers            *registry.ProviderMap[core.Provider]
+	users                UserStore
+	externalCreds        core.ExternalCredentialProvider
+	authorizer           authorization.RuntimeAuthorizer
+	connMapper           ConnectionMapper
+	mcpMapper            ConnectionMapper
+	connectionAuth       RefresherResolver
+	manualConnectionAuth RefresherResolver
+	connectionRuntime    ConnectionRuntimeResolver
+	providerOverrides    ProviderOverrideResolver
+	refreshGroup         singleflight.Group
 }
 
 type BrokerOption func(*Broker)
@@ -154,6 +157,10 @@ func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
+}
+
+func WithManualConnectionAuth(r RefresherResolver) BrokerOption {
+	return func(b *Broker) { b.manualConnectionAuth = r }
 }
 
 func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
@@ -947,7 +954,7 @@ func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.Exte
 		return token.AccessToken, nil
 	}
 
-	refresher := b.resolveRefresher(providerName, connection)
+	refresher, authMethod := b.resolveRefresher(providerName, connection)
 	if refresher == nil {
 		return token.AccessToken, nil
 	}
@@ -961,7 +968,7 @@ func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.Exte
 		refreshCtx := context.WithoutCancel(ctx)
 		startedAt := time.Now()
 		resp, err := b.refreshOAuth(refreshCtx, refresher, token.RefreshToken)
-		metricutil.RecordConnectionAuthMetrics(refreshCtx, startedAt, providerName, "oauth", "refresh", connectionMode, err != nil)
+		metricutil.RecordConnectionAuthMetrics(refreshCtx, startedAt, providerName, authMethod, "refresh", connectionMode, err != nil)
 		return resp, err
 	})
 	if err != nil {
@@ -1002,18 +1009,28 @@ func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.Exte
 	return token.AccessToken, nil
 }
 
-func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher {
-	if b.connectionAuth == nil {
+func (b *Broker) resolveRefresher(integration, connection string) (TokenRefresher, string) {
+	if refresher := lookupRefresher(b.manualConnectionAuth, integration, connection); refresher != nil {
+		return refresher, "manual"
+	}
+	if refresher := lookupRefresher(b.connectionAuth, integration, connection); refresher != nil {
+		return refresher, "oauth"
+	}
+	return nil, ""
+}
+
+func lookupRefresher(resolver RefresherResolver, integration, connection string) TokenRefresher {
+	if resolver == nil {
 		return nil
 	}
-	m := b.connectionAuth()
+	m := resolver()
 	if m == nil {
 		return nil
 	}
 	return m[integration][connection]
 }
 
-func (b *Broker) refreshOAuth(ctx context.Context, refresher OAuthRefresher, refreshToken string) (*core.TokenResponse, error) {
+func (b *Broker) refreshOAuth(ctx context.Context, refresher TokenRefresher, refreshToken string) (*core.TokenResponse, error) {
 	if cp := core.ConnectionParams(ctx); cp != nil {
 		raw := refresher.TokenURL()
 		resolved := paraminterp.Interpolate(raw, cp)

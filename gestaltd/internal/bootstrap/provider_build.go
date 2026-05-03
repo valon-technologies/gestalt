@@ -68,9 +68,9 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	return nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
-	providers, ready, connAuthResolver, _, err := buildProvidersAsync(ctx, cfg, factories, deps, buildProvider)
-	return providers, ready, connAuthResolver, err
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() map[string]map[string]ManualTokenExchanger, error) {
+	providers, ready, connAuthResolver, manualConnAuthResolver, _, err := buildProvidersAsync(ctx, cfg, factories, deps, buildProvider)
+	return providers, ready, connAuthResolver, manualConnAuthResolver, err
 }
 
 func buildProvidersAsync(
@@ -79,20 +79,21 @@ func buildProvidersAsync(
 	factories *FactoryRegistry,
 	deps Deps,
 	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
-) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() []error, error) {
+) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() map[string]map[string]ManualTokenExchanger, func() []error, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
+	manualConnAuth := make(map[string]map[string]ManualTokenExchanger)
 	var buildErrs []error
 	var connMu sync.Mutex
 
 	for _, builtin := range factories.Builtins {
 		if err := validateProviderConnectionMode(builtin.Name(), builtin.ConnectionMode()); err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("bootstrap: builtin provider %q: %w", builtin.Name(), err)
+			return nil, nil, nil, nil, nil, fmt.Errorf("bootstrap: builtin provider %q: %w", builtin.Name(), err)
 		}
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, nil, nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
@@ -100,7 +101,11 @@ func buildProvidersAsync(
 	ready := make(chan struct{})
 	if len(cfg.Plugins) == 0 {
 		close(ready)
-		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, func() []error { return nil }, nil
+		return &reg.Providers, ready,
+			func() map[string]map[string]OAuthHandler { return connAuth },
+			func() map[string]map[string]ManualTokenExchanger { return manualConnAuth },
+			func() []error { return nil },
+			nil
 	}
 
 	var wg sync.WaitGroup
@@ -177,6 +182,11 @@ func buildProvidersAsync(
 				connAuth[name] = result.ConnectionAuth
 				connMu.Unlock()
 			}
+			if len(result.ManualConnectionAuth) > 0 {
+				connMu.Lock()
+				manualConnAuth[name] = result.ManualConnectionAuth
+				connMu.Unlock()
+			}
 			slog.Info("loaded provider", "provider", name, "operations", catalogOperationCount(result.Provider.Catalog()))
 		}(name, intgDef, proxy)
 	}
@@ -190,13 +200,17 @@ func buildProvidersAsync(
 		<-ready
 		return connAuth
 	}
+	manualResolver := func() map[string]map[string]ManualTokenExchanger {
+		<-ready
+		return manualConnAuth
+	}
 	errResolver := func() []error {
 		<-ready
 		errMu.Lock()
 		defer errMu.Unlock()
 		return append([]error(nil), buildErrs...)
 	}
-	return &reg.Providers, ready, resolver, errResolver, nil
+	return &reg.Providers, ready, resolver, manualResolver, errResolver, nil
 }
 
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
@@ -527,6 +541,11 @@ func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *
 	result := &ProviderBuildResult{Provider: prov}
 	var err error
 	result.ConnectionAuth, err = buildConnectionAuthMap(name, entry, manifest, pluginConfig, authFallback, deps)
+	if err != nil {
+		closeIfPossible(prov)
+		return nil, err
+	}
+	result.ManualConnectionAuth, err = buildManualConnectionAuthMap(name, entry, manifest, authFallback)
 	if err != nil {
 		closeIfPossible(prov)
 		return nil, err
@@ -2831,14 +2850,9 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 		return nil, fmt.Errorf("clientId and clientSecret are required for oauth2 auth")
 	}
 
-	var tokenExchange oauth.TokenExchangeFormat
-	switch auth.TokenExchange {
-	case "", "form":
-		tokenExchange = oauth.TokenExchangeForm
-	case "json":
-		tokenExchange = oauth.TokenExchangeJSON
-	default:
-		return nil, fmt.Errorf("unknown tokenExchange %q", auth.TokenExchange)
+	tokenExchange, err := oauth.ParseTokenExchangeFormat(auth.TokenExchange)
+	if err != nil {
+		return nil, err
 	}
 
 	oauthCfg := oauth.UpstreamConfig{
@@ -2909,24 +2923,40 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoau
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {
+	return lazyTokenRefreshers(ready, resolver)
+}
+
+func lazyManualRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]ManualTokenExchanger) invocation.RefresherResolver {
+	return lazyTokenRefreshers(ready, resolver)
+}
+
+func lazyTokenRefreshers[T invocation.TokenRefresher](ready <-chan struct{}, resolver func() map[string]map[string]T) invocation.RefresherResolver {
 	var once sync.Once
-	var result map[string]map[string]invocation.OAuthRefresher
-	return func() map[string]map[string]invocation.OAuthRefresher {
+	var result map[string]map[string]invocation.TokenRefresher
+	return func() map[string]map[string]invocation.TokenRefresher {
 		once.Do(func() {
 			<-ready
-			result = connectionAuthToRefreshers(resolver())
+			result = tokenRefreshers(resolver())
 		})
 		return result
 	}
 }
 
-func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string]map[string]invocation.OAuthRefresher {
+func connectionAuthToRefreshers(m map[string]map[string]OAuthHandler) map[string]map[string]invocation.TokenRefresher {
+	return tokenRefreshers(m)
+}
+
+func manualConnectionAuthToRefreshers(m map[string]map[string]ManualTokenExchanger) map[string]map[string]invocation.TokenRefresher {
+	return tokenRefreshers(m)
+}
+
+func tokenRefreshers[T invocation.TokenRefresher](m map[string]map[string]T) map[string]map[string]invocation.TokenRefresher {
 	if len(m) == 0 {
 		return nil
 	}
-	out := make(map[string]map[string]invocation.OAuthRefresher, len(m))
+	out := make(map[string]map[string]invocation.TokenRefresher, len(m))
 	for intg, conns := range m {
-		inner := make(map[string]invocation.OAuthRefresher, len(conns))
+		inner := make(map[string]invocation.TokenRefresher, len(conns))
 		for conn, handler := range conns {
 			inner[conn] = handler
 		}

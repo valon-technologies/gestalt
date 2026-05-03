@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -486,4 +487,75 @@ func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConf
 	default:
 		return nil, nil
 	}
+}
+
+func buildManualConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, authFallback *specAuthFallback) (map[string]ManualTokenExchanger, error) {
+	manifestPlugin := (*providermanifestv1.Spec)(nil)
+	if manifest != nil {
+		manifestPlugin = manifest.Spec
+	}
+	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
+	if err != nil {
+		return nil, fmt.Errorf("resolve manual token connections for %q: %w", name, err)
+	}
+
+	specAuthForConnection := func(connectionName string) *declarative.Definition {
+		return authFallback.definitionFor(connectionName)
+	}
+
+	handlers := make(map[string]ManualTokenExchanger)
+	if handler, err := buildManualConnectionHandler(plan.PluginConnection(), specAuthForConnection(config.PluginConnectionName)); err != nil {
+		return nil, fmt.Errorf("build plugin manual token auth for %q: %w", name, err)
+	} else if handler != nil {
+		handlers[config.PluginConnectionName] = handler
+	}
+
+	for _, resolvedName := range plan.NamedConnectionNames() {
+		conn, _ := plan.NamedConnectionDef(resolvedName)
+		handler, err := buildManualConnectionHandler(conn, specAuthForConnection(resolvedName))
+		if err != nil {
+			return nil, fmt.Errorf("build named manual token auth for %q/%q: %w", name, resolvedName, err)
+		}
+		if handler != nil {
+			handlers[resolvedName] = handler
+		}
+	}
+
+	if len(handlers) == 0 {
+		return nil, nil
+	}
+	return handlers, nil
+}
+
+func buildManualConnectionHandler(conn config.ConnectionDef, specDef *declarative.Definition) (ManualTokenExchanger, error) {
+	auth := conn.Auth
+	if auth.Type == "" && specDef != nil && specDef.Auth.Type != "" {
+		auth = config.ConnectionAuthDef{
+			Type:            providermanifestv1.AuthType(specDef.Auth.Type),
+			TokenURL:        specDef.Auth.TokenURL,
+			TokenExchange:   specDef.Auth.TokenExchange,
+			TokenParams:     specDef.Auth.TokenParams,
+			AcceptHeader:    specDef.Auth.AcceptHeader,
+			AccessTokenPath: specDef.Auth.AccessTokenPath,
+			Credentials:     append([]config.CredentialFieldDef(nil), specDef.CredentialFields...),
+		}
+	}
+	if auth.Type != providermanifestv1.AuthTypeManual || strings.TrimSpace(auth.TokenURL) == "" {
+		return nil, nil
+	}
+	return buildManualTokenExchangerFromAuth(auth)
+}
+
+func buildManualTokenExchangerFromAuth(auth config.ConnectionAuthDef) (ManualTokenExchanger, error) {
+	tokenExchange, err := oauth.ParseTokenExchangeFormat(auth.TokenExchange)
+	if err != nil {
+		return nil, err
+	}
+	return oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{
+		TokenURL:        auth.TokenURL,
+		TokenParams:     auth.TokenParams,
+		TokenExchange:   tokenExchange,
+		AcceptHeader:    auth.AcceptHeader,
+		AccessTokenPath: auth.AccessTokenPath,
+	}), nil
 }

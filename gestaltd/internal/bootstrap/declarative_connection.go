@@ -28,6 +28,7 @@ func declarativeConnectionAuthDef(auth config.ConnectionAuthDef) declarative.Con
 		RedirectURL:         auth.RedirectURL,
 		ClientAuth:          auth.ClientAuth,
 		TokenExchange:       auth.TokenExchange,
+		TokenPrefix:         auth.TokenPrefix,
 		Scopes:              slices.Clone(auth.Scopes),
 		ScopeParam:          auth.ScopeParam,
 		ScopeSeparator:      auth.ScopeSeparator,

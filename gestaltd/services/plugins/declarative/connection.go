@@ -28,6 +28,7 @@ type ConnectionAuthDef struct {
 	RedirectURL         string
 	ClientAuth          string
 	TokenExchange       string
+	TokenPrefix         string
 	Scopes              []string
 	ScopeParam          string
 	ScopeSeparator      string

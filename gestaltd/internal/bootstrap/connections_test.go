@@ -89,6 +89,37 @@ func TestBuildConnectionRuntimePlatformManualDirectAuthMapping(t *testing.T) {
 	}
 }
 
+func TestBuildManualConnectionAuthMapIsSeparateFromOAuthHandlers(t *testing.T) {
+	t.Parallel()
+
+	entry := &config.ProviderEntry{
+		Auth: &config.ConnectionAuthDef{
+			Type:     providermanifestv1.AuthTypeManual,
+			TokenURL: "https://looker.example.com/api/4.0/login",
+			Credentials: []config.CredentialFieldDef{
+				{Name: "client_id"},
+				{Name: "client_secret"},
+			},
+		},
+	}
+
+	oauthHandlers, err := buildConnectionAuthMap("looker", entry, nil, nil, nil, Deps{})
+	if err != nil {
+		t.Fatalf("buildConnectionAuthMap: %v", err)
+	}
+	if len(oauthHandlers) != 0 {
+		t.Fatalf("OAuth handlers = %+v, want none", oauthHandlers)
+	}
+
+	manualHandlers, err := buildManualConnectionAuthMap("looker", entry, nil, nil)
+	if err != nil {
+		t.Fatalf("buildManualConnectionAuthMap: %v", err)
+	}
+	if manualHandlers[config.PluginConnectionName] == nil {
+		t.Fatalf("manual token exchanger for plugin connection not built: %+v", manualHandlers)
+	}
+}
+
 func TestBuildConnectionRuntimePlatformManualCredentialRefsRequireToken(t *testing.T) {
 	t.Parallel()
 

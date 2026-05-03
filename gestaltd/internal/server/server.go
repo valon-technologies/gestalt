@@ -104,6 +104,7 @@ type Server struct {
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	pluginDefs             map[string]*config.ProviderEntry
 	authorizer             authorization.RuntimeAuthorizer
 	noAuth                 bool
@@ -161,6 +162,7 @@ type Config struct {
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
+	ManualConnectionAuth  func() map[string]map[string]bootstrap.ManualTokenExchanger
 	PluginDefs            map[string]*config.ProviderEntry
 	ProviderUIs           map[string]*config.UIEntry
 	Authorizer            authorization.RuntimeAuthorizer
@@ -341,6 +343,7 @@ func New(cfg Config) (*Server, error) {
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
 		connectionAuth:         cfg.ConnectionAuth,
+		manualConnectionAuth:   cfg.ManualConnectionAuth,
 		pluginDefs:             cfg.PluginDefs,
 		authorizer:             cfg.Authorizer,
 		noAuth:                 noAuth,

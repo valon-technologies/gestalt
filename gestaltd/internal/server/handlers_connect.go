@@ -12,10 +12,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
+	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
 )
 
 type connectManualRequest struct {
@@ -91,7 +95,14 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	auditTarget = connectionAuditTarget(req.Integration, manualConnection, manualInstance)
 
-	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth)
+	manualExchanger, exchangerErr := s.manualTokenExchanger(auth, req.Integration, manualConnection)
+	if exchangerErr != nil {
+		auditErr = errors.New("manual token exchange is not configured")
+		writeError(w, http.StatusBadGateway, "manual token exchange is not configured")
+		return
+	}
+
+	effectiveCredential, credErr := buildEffectiveManualCredential(req, manualCredentialAuth(auth, prov, manualExchanger != nil), manualExchanger != nil)
 	if credErr != nil {
 		auditErr = credErr
 		writeError(w, http.StatusBadRequest, credErr.Error())
@@ -109,7 +120,15 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, nil)
+	tokenResp, exchangeErr := s.exchangeManualToken(r.Context(), manualExchanger, effectiveCredential, connParams)
+	if exchangeErr != nil {
+		auditErr = errors.New("token exchange failed")
+		slog.ErrorContext(r.Context(), "manual token exchange failed", "provider", req.Integration, "error", exchangeErr)
+		writeError(w, http.StatusBadGateway, "token exchange failed")
+		return
+	}
+
+	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
 	if metaErr != nil {
 		auditErr = errors.New(metaErr.Error())
 		writeError(w, http.StatusBadRequest, metaErr.Error())
@@ -130,6 +149,14 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		AccessToken:  effectiveCredential,
 		MetadataJSON: manualMeta,
 	}
+	if tokenResp != nil {
+		tm.AccessToken = tokenResp.AccessToken
+		tm.RefreshToken = effectiveCredential
+		if tokenResp.ExpiresIn > 0 {
+			t := s.now().UTC().Truncate(time.Second).Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+			tm.TokenExpiresAt = &t
+		}
+	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
@@ -143,6 +170,62 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, result)
+}
+
+func manualCredentialAuth(auth config.ConnectionAuthDef, prov core.Provider, tokenExchange bool) config.ConnectionAuthDef {
+	if !tokenExchange || len(auth.Credentials) > 0 {
+		return auth
+	}
+	for _, field := range prov.CredentialFields() {
+		auth.Credentials = append(auth.Credentials, config.CredentialFieldDef{
+			Name:        field.Name,
+			Label:       field.Label,
+			Description: field.Description,
+		})
+	}
+	return auth
+}
+
+func (s *Server) exchangeManualToken(ctx context.Context, exchanger bootstrap.ManualTokenExchanger, credential string, connParams map[string]string) (*core.TokenResponse, error) {
+	if exchanger == nil {
+		return nil, nil
+	}
+
+	tokenURL := exchanger.TokenURL()
+	if len(connParams) > 0 {
+		resolved := paraminterp.Interpolate(tokenURL, connParams)
+		if resolved != tokenURL {
+			return exchanger.ExchangeCredentialsWithURL(ctx, credential, resolved)
+		}
+	}
+	return exchanger.ExchangeCredentials(ctx, credential)
+}
+
+func (s *Server) manualTokenExchanger(auth config.ConnectionAuthDef, integration, connection string) (bootstrap.ManualTokenExchanger, error) {
+	if auth.Type != providermanifestv1.AuthTypeManual && auth.Type != "" {
+		return nil, nil
+	}
+	if s.manualConnectionAuth != nil {
+		if connMap := s.manualConnectionAuth()[integration]; connMap != nil {
+			if exchanger := connMap[connection]; exchanger != nil {
+				return exchanger, nil
+			}
+		}
+	}
+	if strings.TrimSpace(auth.TokenURL) == "" {
+		return nil, nil
+	}
+	tokenExchange, err := oauth.ParseTokenExchangeFormat(auth.TokenExchange)
+	if err != nil {
+		return nil, err
+	}
+	return oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{
+		TokenURL:        auth.TokenURL,
+		TokenParams:     auth.TokenParams,
+		TokenExchange:   tokenExchange,
+		AcceptHeader:    auth.AcceptHeader,
+		AccessTokenPath: auth.AccessTokenPath,
+	}), nil
 }
 
 func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, requestedConnection string) (core.Provider, string, error) {
@@ -552,7 +635,17 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 	return out
 }
 
-func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef) (string, error) {
+func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef, tokenExchange bool) (string, error) {
+	if tokenExchange {
+		if req.Credential != "" {
+			return "", errors.New("manual token exchange requires named credentials")
+		}
+		if len(auth.Credentials) == 0 {
+			return "", errors.New("manual token exchange requires declared credentials")
+		}
+		return marshalDeclaredManualCredentials(req.Credentials, auth.Credentials)
+	}
+
 	if len(req.Credentials) > 0 {
 		return marshalManualCredentials(req.Credentials)
 	}
@@ -569,6 +662,32 @@ func buildEffectiveManualCredential(req connectManualRequest, auth config.Connec
 		return "", errors.New("manual connection requires named credentials")
 	}
 	return "", nil
+}
+
+func marshalDeclaredManualCredentials(provided map[string]string, fields []config.CredentialFieldDef) (string, error) {
+	declared := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		if field.Name != "" {
+			declared[field.Name] = struct{}{}
+		}
+	}
+	if len(declared) == 0 {
+		return "", errors.New("manual token exchange requires declared credentials")
+	}
+	for name := range provided {
+		if _, ok := declared[name]; !ok {
+			return "", fmt.Errorf("unknown credential: %s", name)
+		}
+	}
+	for _, field := range fields {
+		if field.Name == "" {
+			continue
+		}
+		if _, ok := provided[field.Name]; !ok {
+			return "", fmt.Errorf("missing required credential: %s", field.Name)
+		}
+	}
+	return marshalManualCredentials(provided)
 }
 
 func marshalManualCredentials(creds map[string]string) (string, error) {

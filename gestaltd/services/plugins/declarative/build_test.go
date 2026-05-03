@@ -443,6 +443,51 @@ func TestBuildOAuthConnectionOverrideClearsOpenAPIManualAuth(t *testing.T) {
 	}
 }
 
+func TestBuildManualConnectionOverrideAppliesTokenPrefix(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"authorization": r.Header.Get("Authorization"),
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	def := &Definition{
+		Provider:    "prefixed_manual",
+		DisplayName: "Prefixed Manual API",
+		BaseURL:     srv.URL,
+		Auth:        AuthDef{Type: "manual"},
+		Operations: map[string]OperationDef{
+			"list": {Description: "List items", Method: http.MethodGet, Path: "/items"},
+		},
+	}
+
+	prov, err := Build(def, ConnectionDef{
+		Auth: ConnectionAuthDef{
+			Type:        providermanifestv1.AuthTypeManual,
+			TokenPrefix: "token ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "list", nil, "manual-access-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if resp["authorization"] != "token manual-access-token" {
+		t.Errorf("Authorization = %v, want token manual-access-token", resp["authorization"])
+	}
+}
+
 func TestBuildAuthMapping(t *testing.T) {
 	t.Parallel()
 
