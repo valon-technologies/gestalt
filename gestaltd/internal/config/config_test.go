@@ -1666,6 +1666,41 @@ plugins:
 			t.Fatalf("telemetry path = %q, want empty", cfg.Providers.Telemetry["default"].Source.Path)
 		}
 	})
+
+	t.Run("apiVersion preserves package host provider sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v5
+server:
+  encryptionKey: server-key
+providers:
+  secrets:
+    default:
+      source:
+        repo: valon
+        package: github.com/valon-technologies/gestalt-providers/secrets/google
+        version: 0.0.1-alpha.2
+      config:
+        project: test-project
+plugins:
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		source := cfg.Providers.Secrets["default"].Source
+		if source.Builtin != "" {
+			t.Fatalf("secrets builtin = %q, want empty", source.Builtin)
+		}
+		if !source.IsPackage() {
+			t.Fatalf("secrets source should remain package-backed: %#v", source)
+		}
+		if got := source.PackageAddress(); got != "github.com/valon-technologies/gestalt-providers/secrets/google" {
+			t.Fatalf("secrets package = %q, want google secrets package", got)
+		}
+	})
 }
 
 func TestLoadConfigUIEntries(t *testing.T) {

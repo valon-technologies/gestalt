@@ -3083,6 +3083,26 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 	}
 }
 
+func TestResolveSecretsProviderMetadataSkipsResolverWithoutMetadataDependencies(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	lc := NewLifecycle().WithConfigSecretResolver(func(context.Context, *config.Config) error {
+		called = true
+		return fmt.Errorf("resolver should not be called")
+	})
+	provider := &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-secrets/v0.0.1-alpha.1/provider-release.yaml"),
+	}
+
+	if err := lc.resolveSecretsProviderMetadata(context.Background(), "secrets", provider, nil); err != nil {
+		t.Fatalf("resolveSecretsProviderMetadata: %v", err)
+	}
+	if called {
+		t.Fatal("config secret resolver was called for provider metadata without secret dependencies")
+	}
+}
+
 func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	t.Parallel()
 
