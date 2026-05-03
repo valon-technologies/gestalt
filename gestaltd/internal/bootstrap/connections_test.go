@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 func TestBuildConnectionRuntimePlatformManualDirectAuthMapping(t *testing.T) {
@@ -179,15 +178,13 @@ func TestBuildConnectionRuntimeRejectsProviderNamespaceCollision(t *testing.T) {
 	}
 }
 
-func TestBuildConnectionRuntimeClientCredentialsTokenSourceUsesProviderEgress(t *testing.T) {
+func TestBuildConnectionRuntimeClientCredentialsAuthConfig(t *testing.T) {
 	t.Parallel()
 
-	var requests atomic.Int32
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "blocked-token",
+			"access_token": "client-token",
 			"expires_in":   3600,
 		}); err != nil {
 			t.Fatalf("Encode() error = %v", err)
@@ -223,15 +220,14 @@ func TestBuildConnectionRuntimeClientCredentialsTokenSourceUsesProviderEgress(t 
 	if !ok {
 		t.Fatal("runtime.Resolve(sample, default) not found")
 	}
-	if info.TokenSource == nil {
-		t.Fatal("TokenSource = nil")
+	if info.TokenSource != nil {
+		t.Fatal("TokenSource != nil; client credentials should be resolved by ExternalCredentialProvider")
 	}
-	_, err = info.TokenSource.ResolveConnectionCredential(context.Background())
-	if !errors.Is(err, egress.ErrEgressDenied) {
-		t.Fatalf("ResolveConnectionCredential() error = %v, want egress denied", err)
+	if info.AuthConfig.TokenURL != tokenServer.URL {
+		t.Fatalf("AuthConfig.TokenURL = %q, want %q", info.AuthConfig.TokenURL, tokenServer.URL)
 	}
-	if got := requests.Load(); got != 0 {
-		t.Fatalf("token endpoint requests = %d, want 0 after egress denial", got)
+	if info.AuthConfig.ClientID != "client-id" || info.AuthConfig.ClientSecret != "client-secret" {
+		t.Fatalf("AuthConfig client credentials = %q/%q", info.AuthConfig.ClientID, info.AuthConfig.ClientSecret)
 	}
 }
 

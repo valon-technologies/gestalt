@@ -69,3 +69,41 @@ func (s *externalCredentialServer) DeleteCredential(ctx context.Context, req *pr
 	}
 	return &emptypb.Empty{}, nil
 }
+
+func (s *externalCredentialServer) ValidateCredentialConfig(ctx context.Context, req *proto.ValidateExternalCredentialConfigRequest) (*emptypb.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if err := s.provider.ValidateCredentialConfig(ctx, req); err != nil {
+		return nil, providerRPCError("validate external credential config", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *externalCredentialServer) ResolveCredential(ctx context.Context, req *proto.ResolveExternalCredentialRequest) (*proto.ResolveExternalCredentialResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.ResolveCredential(ctx, req)
+	if err != nil {
+		return nil, providerRPCError("resolve external credential", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "external credential provider returned nil response")
+	}
+	return resp, nil
+}
+
+func (s *externalCredentialServer) ExchangeCredential(ctx context.Context, req *proto.ExchangeExternalCredentialRequest) (*proto.ExchangeExternalCredentialResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.ExchangeCredential(ctx, req)
+	if err != nil {
+		return nil, providerRPCError("exchange external credential", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "external credential provider returned nil response")
+	}
+	return resp, nil
+}

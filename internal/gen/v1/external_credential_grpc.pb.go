@@ -20,10 +20,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ExternalCredentialProvider_UpsertCredential_FullMethodName = "/gestalt.provider.v1.ExternalCredentialProvider/UpsertCredential"
-	ExternalCredentialProvider_GetCredential_FullMethodName    = "/gestalt.provider.v1.ExternalCredentialProvider/GetCredential"
-	ExternalCredentialProvider_ListCredentials_FullMethodName  = "/gestalt.provider.v1.ExternalCredentialProvider/ListCredentials"
-	ExternalCredentialProvider_DeleteCredential_FullMethodName = "/gestalt.provider.v1.ExternalCredentialProvider/DeleteCredential"
+	ExternalCredentialProvider_UpsertCredential_FullMethodName         = "/gestalt.provider.v1.ExternalCredentialProvider/UpsertCredential"
+	ExternalCredentialProvider_GetCredential_FullMethodName            = "/gestalt.provider.v1.ExternalCredentialProvider/GetCredential"
+	ExternalCredentialProvider_ListCredentials_FullMethodName          = "/gestalt.provider.v1.ExternalCredentialProvider/ListCredentials"
+	ExternalCredentialProvider_DeleteCredential_FullMethodName         = "/gestalt.provider.v1.ExternalCredentialProvider/DeleteCredential"
+	ExternalCredentialProvider_ValidateCredentialConfig_FullMethodName = "/gestalt.provider.v1.ExternalCredentialProvider/ValidateCredentialConfig"
+	ExternalCredentialProvider_ResolveCredential_FullMethodName        = "/gestalt.provider.v1.ExternalCredentialProvider/ResolveCredential"
+	ExternalCredentialProvider_ExchangeCredential_FullMethodName       = "/gestalt.provider.v1.ExternalCredentialProvider/ExchangeCredential"
 )
 
 // ExternalCredentialProviderClient is the client API for ExternalCredentialProvider service.
@@ -34,6 +37,9 @@ type ExternalCredentialProviderClient interface {
 	GetCredential(ctx context.Context, in *GetExternalCredentialRequest, opts ...grpc.CallOption) (*ExternalCredential, error)
 	ListCredentials(ctx context.Context, in *ListExternalCredentialsRequest, opts ...grpc.CallOption) (*ListExternalCredentialsResponse, error)
 	DeleteCredential(ctx context.Context, in *DeleteExternalCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ValidateCredentialConfig(ctx context.Context, in *ValidateExternalCredentialConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ResolveCredential(ctx context.Context, in *ResolveExternalCredentialRequest, opts ...grpc.CallOption) (*ResolveExternalCredentialResponse, error)
+	ExchangeCredential(ctx context.Context, in *ExchangeExternalCredentialRequest, opts ...grpc.CallOption) (*ExchangeExternalCredentialResponse, error)
 }
 
 type externalCredentialProviderClient struct {
@@ -84,6 +90,36 @@ func (c *externalCredentialProviderClient) DeleteCredential(ctx context.Context,
 	return out, nil
 }
 
+func (c *externalCredentialProviderClient) ValidateCredentialConfig(ctx context.Context, in *ValidateExternalCredentialConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ExternalCredentialProvider_ValidateCredentialConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *externalCredentialProviderClient) ResolveCredential(ctx context.Context, in *ResolveExternalCredentialRequest, opts ...grpc.CallOption) (*ResolveExternalCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveExternalCredentialResponse)
+	err := c.cc.Invoke(ctx, ExternalCredentialProvider_ResolveCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *externalCredentialProviderClient) ExchangeCredential(ctx context.Context, in *ExchangeExternalCredentialRequest, opts ...grpc.CallOption) (*ExchangeExternalCredentialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExchangeExternalCredentialResponse)
+	err := c.cc.Invoke(ctx, ExternalCredentialProvider_ExchangeCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExternalCredentialProviderServer is the server API for ExternalCredentialProvider service.
 // All implementations must embed UnimplementedExternalCredentialProviderServer
 // for forward compatibility.
@@ -92,6 +128,9 @@ type ExternalCredentialProviderServer interface {
 	GetCredential(context.Context, *GetExternalCredentialRequest) (*ExternalCredential, error)
 	ListCredentials(context.Context, *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error)
 	DeleteCredential(context.Context, *DeleteExternalCredentialRequest) (*emptypb.Empty, error)
+	ValidateCredentialConfig(context.Context, *ValidateExternalCredentialConfigRequest) (*emptypb.Empty, error)
+	ResolveCredential(context.Context, *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
+	ExchangeCredential(context.Context, *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 	mustEmbedUnimplementedExternalCredentialProviderServer()
 }
 
@@ -113,6 +152,15 @@ func (UnimplementedExternalCredentialProviderServer) ListCredentials(context.Con
 }
 func (UnimplementedExternalCredentialProviderServer) DeleteCredential(context.Context, *DeleteExternalCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredential not implemented")
+}
+func (UnimplementedExternalCredentialProviderServer) ValidateCredentialConfig(context.Context, *ValidateExternalCredentialConfigRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ValidateCredentialConfig not implemented")
+}
+func (UnimplementedExternalCredentialProviderServer) ResolveCredential(context.Context, *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveCredential not implemented")
+}
+func (UnimplementedExternalCredentialProviderServer) ExchangeCredential(context.Context, *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExchangeCredential not implemented")
 }
 func (UnimplementedExternalCredentialProviderServer) mustEmbedUnimplementedExternalCredentialProviderServer() {
 }
@@ -208,6 +256,60 @@ func _ExternalCredentialProvider_DeleteCredential_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExternalCredentialProvider_ValidateCredentialConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateExternalCredentialConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExternalCredentialProviderServer).ValidateCredentialConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExternalCredentialProvider_ValidateCredentialConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalCredentialProviderServer).ValidateCredentialConfig(ctx, req.(*ValidateExternalCredentialConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExternalCredentialProvider_ResolveCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveExternalCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExternalCredentialProviderServer).ResolveCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExternalCredentialProvider_ResolveCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalCredentialProviderServer).ResolveCredential(ctx, req.(*ResolveExternalCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExternalCredentialProvider_ExchangeCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExchangeExternalCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExternalCredentialProviderServer).ExchangeCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExternalCredentialProvider_ExchangeCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalCredentialProviderServer).ExchangeCredential(ctx, req.(*ExchangeExternalCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ExternalCredentialProvider_ServiceDesc is the grpc.ServiceDesc for ExternalCredentialProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -230,6 +332,18 @@ var ExternalCredentialProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCredential",
 			Handler:    _ExternalCredentialProvider_DeleteCredential_Handler,
+		},
+		{
+			MethodName: "ValidateCredentialConfig",
+			Handler:    _ExternalCredentialProvider_ValidateCredentialConfig_Handler,
+		},
+		{
+			MethodName: "ResolveCredential",
+			Handler:    _ExternalCredentialProvider_ResolveCredential_Handler,
+		},
+		{
+			MethodName: "ExchangeCredential",
+			Handler:    _ExternalCredentialProvider_ExchangeCredential_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

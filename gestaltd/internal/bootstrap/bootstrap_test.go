@@ -467,6 +467,18 @@ func (*closableExternalCredentialProvider) DeleteCredential(context.Context, str
 	return nil
 }
 
+func (*closableExternalCredentialProvider) ValidateCredentialConfig(context.Context, *core.ValidateExternalCredentialConfigRequest) error {
+	return nil
+}
+
+func (*closableExternalCredentialProvider) ResolveCredential(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	return nil, core.ErrNotFound
+}
+
+func (*closableExternalCredentialProvider) ExchangeCredential(context.Context, *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	return &core.ExchangeExternalCredentialResponse{}, nil
+}
+
 func (p *closableExternalCredentialProvider) Close() error {
 	if p != nil && p.closed != nil {
 		p.closed.Add(1)

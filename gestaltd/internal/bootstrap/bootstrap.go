@@ -1043,6 +1043,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
+	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return nil, err
+	}
 	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Plugins))
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
@@ -1071,8 +1075,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
-		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
-		invocation.WithManualConnectionAuth(lazyManualRefreshers(providersReady, manualConnAuthResolver)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
 	)

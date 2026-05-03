@@ -38,6 +38,18 @@ func (*wrappedNotFoundExternalCredentialProvider) DeleteCredential(context.Conte
 	return fmt.Errorf("delete failed: %w", core.ErrNotFound)
 }
 
+func (*wrappedNotFoundExternalCredentialProvider) ValidateCredentialConfig(context.Context, *core.ValidateExternalCredentialConfigRequest) error {
+	return nil
+}
+
+func (*wrappedNotFoundExternalCredentialProvider) ResolveCredential(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	return nil, fmt.Errorf("lookup failed: %w", core.ErrNotFound)
+}
+
+func (*wrappedNotFoundExternalCredentialProvider) ExchangeCredential(context.Context, *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	return nil, fmt.Errorf("lookup failed: %w", core.ErrNotFound)
+}
+
 func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -96,6 +108,22 @@ func (*restoreTrackingExternalCredentialProvider) ListCredentialsForConnection(c
 
 func (*restoreTrackingExternalCredentialProvider) DeleteCredential(context.Context, string) error {
 	return nil
+}
+
+func (*restoreTrackingExternalCredentialProvider) ValidateCredentialConfig(context.Context, *core.ValidateExternalCredentialConfigRequest) error {
+	return nil
+}
+
+func (p *restoreTrackingExternalCredentialProvider) ResolveCredential(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	if p.stored == nil {
+		return nil, core.ErrNotFound
+	}
+	copy := *p.stored
+	return &core.ResolveExternalCredentialResponse{Token: copy.AccessToken, Credential: &copy}, nil
+}
+
+func (*restoreTrackingExternalCredentialProvider) ExchangeCredential(context.Context, *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	return &core.ExchangeExternalCredentialResponse{}, nil
 }
 
 func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *testing.T) {

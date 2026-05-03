@@ -18,8 +18,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
 )
 
 type connectManualRequest struct {
@@ -95,14 +93,9 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	auditTarget = connectionAuditTarget(req.Integration, manualConnection, manualInstance)
 
-	manualExchanger, exchangerErr := s.manualTokenExchanger(auth, req.Integration, manualConnection)
-	if exchangerErr != nil {
-		auditErr = errors.New("manual token exchange is not configured")
-		writeError(w, http.StatusBadGateway, "manual token exchange is not configured")
-		return
-	}
+	tokenExchange := manualTokenExchangeConfigured(auth)
 
-	effectiveCredential, credErr := buildEffectiveManualCredential(req, manualCredentialAuth(auth, prov, manualExchanger != nil), manualExchanger != nil)
+	effectiveCredential, credErr := buildEffectiveManualCredential(req, manualCredentialAuth(auth, prov, tokenExchange), tokenExchange)
 	if credErr != nil {
 		auditErr = credErr
 		writeError(w, http.StatusBadRequest, credErr.Error())
@@ -120,7 +113,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenResp, exchangeErr := s.exchangeManualToken(r.Context(), manualExchanger, effectiveCredential, connParams)
+	tokenResp, exchangeErr := s.exchangeManualCredential(r.Context(), req, manualConnection, conn.ConnectionID, subjectID, manualInstance, auth, effectiveCredential, connParams, tokenExchange)
 	if exchangeErr != nil {
 		auditErr = errors.New("token exchange failed")
 		slog.ErrorContext(r.Context(), "manual token exchange failed", "provider", req.Integration, "error", exchangeErr)
@@ -151,7 +144,10 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	if tokenResp != nil {
 		tm.AccessToken = tokenResp.AccessToken
-		tm.RefreshToken = effectiveCredential
+		tm.RefreshToken = tokenResp.RefreshToken
+		if tokenResp.RefreshToken == "" {
+			tm.RefreshToken = effectiveCredential
+		}
 		if tokenResp.ExpiresIn > 0 {
 			t := s.now().UTC().Truncate(time.Second).Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 			tm.TokenExpiresAt = &t
@@ -186,46 +182,42 @@ func manualCredentialAuth(auth config.ConnectionAuthDef, prov core.Provider, tok
 	return auth
 }
 
-func (s *Server) exchangeManualToken(ctx context.Context, exchanger bootstrap.ManualTokenExchanger, credential string, connParams map[string]string) (*core.TokenResponse, error) {
-	if exchanger == nil {
-		return nil, nil
-	}
-
-	tokenURL := exchanger.TokenURL()
-	if len(connParams) > 0 {
-		resolved := paraminterp.Interpolate(tokenURL, connParams)
-		if resolved != tokenURL {
-			return exchanger.ExchangeCredentialsWithURL(ctx, credential, resolved)
-		}
-	}
-	return exchanger.ExchangeCredentials(ctx, credential)
+func manualTokenExchangeConfigured(auth config.ConnectionAuthDef) bool {
+	return (auth.Type == "" || auth.Type == providermanifestv1.AuthTypeManual) && strings.TrimSpace(auth.TokenURL) != ""
 }
 
-func (s *Server) manualTokenExchanger(auth config.ConnectionAuthDef, integration, connection string) (bootstrap.ManualTokenExchanger, error) {
-	if auth.Type != providermanifestv1.AuthTypeManual && auth.Type != "" {
+func (s *Server) exchangeManualCredential(ctx context.Context, req connectManualRequest, connection, connectionID, subjectID, instance string, auth config.ConnectionAuthDef, credential string, connParams map[string]string, tokenExchange bool) (*core.TokenResponse, error) {
+	if !tokenExchange {
 		return nil, nil
 	}
-	if s.manualConnectionAuth != nil {
-		if connMap := s.manualConnectionAuth()[integration]; connMap != nil {
-			if exchanger := connMap[connection]; exchanger != nil {
-				return exchanger, nil
-			}
-		}
-	}
-	if strings.TrimSpace(auth.TokenURL) == "" {
-		return nil, nil
-	}
-	tokenExchange, err := oauth.ParseTokenExchangeFormat(auth.TokenExchange)
+	resp, err := s.externalCredentials.ExchangeCredential(ctx, &core.ExchangeExternalCredentialRequest{
+		Provider:            req.Integration,
+		Connection:          connection,
+		ConnectionID:        connectionID,
+		CredentialSubjectID: subjectID,
+		Instance:            instance,
+		Auth:                bootstrap.ExternalCredentialAuthConfig(auth),
+		CredentialJSON:      credential,
+		ConnectionParams:    connParams,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{
-		TokenURL:        auth.TokenURL,
-		TokenParams:     auth.TokenParams,
-		TokenExchange:   tokenExchange,
-		AcceptHeader:    auth.AcceptHeader,
-		AccessTokenPath: auth.AccessTokenPath,
-	}), nil
+	if resp == nil || resp.TokenResponse == nil {
+		return nil, errors.New("external credential provider returned no token response")
+	}
+	tokenResp := resp.TokenResponse
+	refreshToken := tokenResp.RefreshSource
+	if refreshToken == "" {
+		refreshToken = tokenResp.RefreshToken
+	}
+	return &core.TokenResponse{
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    tokenResp.ExpiresIn,
+		TokenType:    tokenResp.TokenType,
+		Extra:        tokenResp.Extra,
+	}, nil
 }
 
 func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, requestedConnection string) (core.Provider, string, error) {

@@ -27,6 +27,22 @@ type ListExternalCredentialsResponse = proto.ListExternalCredentialsResponse
 // DeleteExternalCredentialRequest is the request for deleting one credential.
 type DeleteExternalCredentialRequest = proto.DeleteExternalCredentialRequest
 
+type ExternalCredentialTokenExchangeDriver = proto.ExternalCredentialTokenExchangeDriver
+
+type ExternalCredentialAuthConfig = proto.ExternalCredentialAuthConfig
+
+type ValidateExternalCredentialConfigRequest = proto.ValidateExternalCredentialConfigRequest
+
+type ResolveExternalCredentialRequest = proto.ResolveExternalCredentialRequest
+
+type ResolveExternalCredentialResponse = proto.ResolveExternalCredentialResponse
+
+type ExternalCredentialTokenResponse = proto.ExternalCredentialTokenResponse
+
+type ExchangeExternalCredentialRequest = proto.ExchangeExternalCredentialRequest
+
+type ExchangeExternalCredentialResponse = proto.ExchangeExternalCredentialResponse
+
 // ExternalCredentialProvider serves CRUD operations for host-managed external
 // credentials.
 type ExternalCredentialProvider interface {
@@ -35,4 +51,7 @@ type ExternalCredentialProvider interface {
 	GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error)
 	ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error)
 	DeleteCredential(ctx context.Context, req *DeleteExternalCredentialRequest) error
+	ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error
+	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)
+	ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error)
 }

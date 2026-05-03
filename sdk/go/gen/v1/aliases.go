@@ -89,7 +89,12 @@ type (
 	DeleteWorkflowProviderScheduleRequest     = internal.DeleteWorkflowProviderScheduleRequest
 	ExecuteAgentToolRequest                   = internal.ExecuteAgentToolRequest
 	ExternalCredential                        = internal.ExternalCredential
+	ExternalCredentialAuthConfig              = internal.ExternalCredentialAuthConfig
 	ExternalCredentialLookup                  = internal.ExternalCredentialLookup
+	ExternalCredentialTokenExchangeDriver     = internal.ExternalCredentialTokenExchangeDriver
+	ExternalCredentialTokenResponse           = internal.ExternalCredentialTokenResponse
+	ExchangeExternalCredentialRequest         = internal.ExchangeExternalCredentialRequest
+	ExchangeExternalCredentialResponse        = internal.ExchangeExternalCredentialResponse
 	GetAgentProviderCapabilitiesRequest       = internal.GetAgentProviderCapabilitiesRequest
 	GetAgentProviderInteractionRequest        = internal.GetAgentProviderInteractionRequest
 	GetAgentProviderSessionRequest            = internal.GetAgentProviderSessionRequest
@@ -150,6 +155,8 @@ type (
 	Relationship                              = internal.Relationship
 	RelationshipKey                           = internal.RelationshipKey
 	ResolveAgentProviderInteractionRequest    = internal.ResolveAgentProviderInteractionRequest
+	ResolveExternalCredentialRequest          = internal.ResolveExternalCredentialRequest
+	ResolveExternalCredentialResponse         = internal.ResolveExternalCredentialResponse
 	ResolvedAgentTool                         = internal.ResolvedAgentTool
 	Resource                                  = internal.Resource
 	ResourceSearchRequest                     = internal.ResourceSearchRequest
@@ -212,6 +219,7 @@ type (
 	UpsertExternalCredentialRequest           = internal.UpsertExternalCredentialRequest
 	UpsertWorkflowProviderEventTriggerRequest = internal.UpsertWorkflowProviderEventTriggerRequest
 	UpsertWorkflowProviderScheduleRequest     = internal.UpsertWorkflowProviderScheduleRequest
+	ValidateExternalCredentialConfigRequest   = internal.ValidateExternalCredentialConfigRequest
 	WorkflowAccessPermission                  = internal.WorkflowAccessPermission
 	WorkflowActor                             = internal.WorkflowActor
 	WorkflowEvent                             = internal.WorkflowEvent

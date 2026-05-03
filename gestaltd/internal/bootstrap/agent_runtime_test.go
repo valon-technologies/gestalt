@@ -150,15 +150,6 @@ func (p *turnLookupAgentProvider) GetTurn(context.Context, coreagent.GetTurnRequ
 	return p.turn, nil
 }
 
-type staticRuntimeCredentialSource struct {
-	credential invocation.ConnectionRuntimeCredential
-	err        error
-}
-
-func (s staticRuntimeCredentialSource) ResolveConnectionCredential(context.Context) (invocation.ConnectionRuntimeCredential, error) {
-	return s.credential, s.err
-}
-
 func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	t.Parallel()
 
@@ -188,18 +179,20 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 			"vertex": {
 				ConnectionID: "vertex-kimi-k2-6",
 				Mode:         core.ConnectionModePlatform,
-				TokenSource: staticRuntimeCredentialSource{
-					credential: invocation.ConnectionRuntimeCredential{
-						Token:     "vertex-token",
-						ExpiresAt: &expiresAt,
-					},
-				},
-				Params: map[string]string{"endpoint": "https://vertex.example.invalid"},
+				AuthConfig:   core.ExternalCredentialAuthConfig{Type: "bearer", Token: "vertex-token"},
+				Params:       map[string]string{"endpoint": "https://vertex.example.invalid"},
 			},
 		},
 	}
+	externalCredentials := coretesting.NewStubExternalCredentialProvider()
+	externalCredentials.ResolveCredentialFunc = func(_ context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+		return &core.ResolveExternalCredentialResponse{
+			Token:     req.Auth.Token,
+			ExpiresAt: &expiresAt,
+		}, nil
+	}
 	runtime.SetRunGrants(grants)
-	runtime.SetInvoker(invocation.NewBroker(nil, nil, nil, invocation.WithConnectionRuntime(connectionRuntime.Resolve)))
+	runtime.SetInvoker(invocation.NewBroker(nil, nil, externalCredentials, invocation.WithConnectionRuntime(connectionRuntime.Resolve)))
 	runtime.PublishProvider("simple", &turnLookupAgentProvider{turn: &coreagent.Turn{
 		ID:        "turn-1",
 		SessionID: "session-1",

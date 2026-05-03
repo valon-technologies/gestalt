@@ -452,26 +452,36 @@ const (
 )
 
 type ProviderAuth struct {
-	Type                AuthType          `json:"type" yaml:"type"`
-	AuthorizationURL    string            `json:"authorizationUrl,omitempty" yaml:"authorizationUrl,omitempty"`
-	TokenURL            string            `json:"tokenUrl,omitempty" yaml:"tokenUrl,omitempty"`
-	ClientID            string            `json:"clientId,omitempty" yaml:"clientId,omitempty"`
-	ClientSecret        string            `json:"clientSecret,omitempty" yaml:"clientSecret,omitempty"`
-	Scopes              []string          `json:"scopes,omitempty" yaml:"scopes,omitempty"`
-	PKCE                bool              `json:"pkce,omitempty" yaml:"pkce,omitempty"`
-	ClientAuth          string            `json:"clientAuth,omitempty" yaml:"clientAuth,omitempty"`
-	TokenExchange       string            `json:"tokenExchange,omitempty" yaml:"tokenExchange,omitempty"`
-	TokenPrefix         string            `json:"tokenPrefix,omitempty" yaml:"tokenPrefix,omitempty"`
-	AccessTokenPath     string            `json:"accessTokenPath,omitempty" yaml:"accessTokenPath,omitempty"`
-	ScopeParam          string            `json:"scopeParam,omitempty" yaml:"scopeParam,omitempty"`
-	ScopeSeparator      string            `json:"scopeSeparator,omitempty" yaml:"scopeSeparator,omitempty"`
-	AuthorizationParams map[string]string `json:"authorizationParams,omitempty" yaml:"authorizationParams,omitempty"`
-	TokenParams         map[string]string `json:"tokenParams,omitempty" yaml:"tokenParams,omitempty"`
-	RefreshParams       map[string]string `json:"refreshParams,omitempty" yaml:"refreshParams,omitempty"`
-	AcceptHeader        string            `json:"acceptHeader,omitempty" yaml:"acceptHeader,omitempty"`
-	TokenMetadata       []string          `json:"tokenMetadata,omitempty" yaml:"tokenMetadata,omitempty"`
-	Credentials         []CredentialField `json:"credentials,omitempty" yaml:"credentials,omitempty"`
-	AuthMapping         *AuthMapping      `json:"authMapping,omitempty" yaml:"authMapping,omitempty"`
+	Type                 AuthType              `json:"type" yaml:"type"`
+	AuthorizationURL     string                `json:"authorizationUrl,omitempty" yaml:"authorizationUrl,omitempty"`
+	TokenURL             string                `json:"tokenUrl,omitempty" yaml:"tokenUrl,omitempty"`
+	ClientID             string                `json:"clientId,omitempty" yaml:"clientId,omitempty"`
+	ClientSecret         string                `json:"clientSecret,omitempty" yaml:"clientSecret,omitempty"`
+	Scopes               []string              `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+	PKCE                 bool                  `json:"pkce,omitempty" yaml:"pkce,omitempty"`
+	ClientAuth           string                `json:"clientAuth,omitempty" yaml:"clientAuth,omitempty"`
+	TokenExchange        string                `json:"tokenExchange,omitempty" yaml:"tokenExchange,omitempty"`
+	TokenPrefix          string                `json:"tokenPrefix,omitempty" yaml:"tokenPrefix,omitempty"`
+	AccessTokenPath      string                `json:"accessTokenPath,omitempty" yaml:"accessTokenPath,omitempty"`
+	ScopeParam           string                `json:"scopeParam,omitempty" yaml:"scopeParam,omitempty"`
+	ScopeSeparator       string                `json:"scopeSeparator,omitempty" yaml:"scopeSeparator,omitempty"`
+	AuthorizationParams  map[string]string     `json:"authorizationParams,omitempty" yaml:"authorizationParams,omitempty"`
+	TokenParams          map[string]string     `json:"tokenParams,omitempty" yaml:"tokenParams,omitempty"`
+	RefreshParams        map[string]string     `json:"refreshParams,omitempty" yaml:"refreshParams,omitempty"`
+	AcceptHeader         string                `json:"acceptHeader,omitempty" yaml:"acceptHeader,omitempty"`
+	TokenMetadata        []string              `json:"tokenMetadata,omitempty" yaml:"tokenMetadata,omitempty"`
+	TokenExchangeDrivers []TokenExchangeDriver `json:"tokenExchangeDrivers,omitempty" yaml:"tokenExchangeDrivers,omitempty"`
+	Credentials          []CredentialField     `json:"credentials,omitempty" yaml:"credentials,omitempty"`
+	AuthMapping          *AuthMapping          `json:"authMapping,omitempty" yaml:"authMapping,omitempty"`
+}
+
+type TokenExchangeDriver struct {
+	Type            string            `json:"type" yaml:"type"`
+	TargetPrincipal string            `json:"targetPrincipal,omitempty" yaml:"targetPrincipal,omitempty"`
+	Scopes          []string          `json:"scopes,omitempty" yaml:"scopes,omitempty"`
+	LifetimeSeconds int               `json:"lifetimeSeconds,omitempty" yaml:"lifetimeSeconds,omitempty"`
+	Endpoint        string            `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	Params          map[string]string `json:"params,omitempty" yaml:"params,omitempty"`
 }
 
 type CredentialField struct {

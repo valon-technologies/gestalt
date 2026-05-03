@@ -37,7 +37,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, providersReady, connAuthResolver, manualConnAuthResolver, errResolver, err := buildProvidersAsync(
+	providers, providersReady, _, _, errResolver, err := buildProvidersAsync(
 		ctx,
 		cfg,
 		factories,
@@ -61,6 +61,10 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
+	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return warnings, err
+	}
 	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
@@ -75,12 +79,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
-		invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
-			return connectionAuthToRefreshers(connAuthResolver())
-		}),
-		invocation.WithManualConnectionAuth(func() map[string]map[string]invocation.TokenRefresher {
-			return manualConnectionAuthToRefreshers(manualConnAuthResolver())
-		}),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)

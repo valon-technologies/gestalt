@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/external_credential.proto.
  */
 export const file_v1_external_credential: GenFile = /*@__PURE__*/
-  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIroDChJFeHRlcm5hbENyZWRlbnRpYWwSCgoCaWQYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRIQCghpbnN0YW5jZRgFIAEoCRIUCgxhY2Nlc3NfdG9rZW4YBiABKAkSFQoNcmVmcmVzaF90b2tlbhgHIAEoCRIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSFQoNbWV0YWRhdGFfanNvbhgMIAEoCRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1jb25uZWN0aW9uX2lkGA8gASgJSgQIAxAESgQIBBAFUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ8ChhFeHRlcm5hbENyZWRlbnRpYWxMb29rdXASEgoKc3ViamVjdF9pZBgBIAEoCRIQCghpbnN0YW5jZRgEIAEoCRIVCg1jb25uZWN0aW9uX2lkGAUgASgJSgQIAhADSgQIAxAEUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ7Ch9VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EjsKCmNyZWRlbnRpYWwYASABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbBIbChNwcmVzZXJ2ZV90aW1lc3RhbXBzGAIgASgIIl0KHEdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSPQoGbG9va3VwGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxMb29rdXAiggEKHkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhAKCGluc3RhbmNlGAQgASgJEhUKDWNvbm5lY3Rpb25faWQYBSABKAlKBAgCEANKBAgDEARSC2ludGVncmF0aW9uUgpjb25uZWN0aW9uIl8KH0xpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2USPAoLY3JlZGVudGlhbHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbCItCh9EZWxldGVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EgoKAmlkGAEgASgJMtwDChpFeHRlcm5hbENyZWRlbnRpYWxQcm92aWRlchJxChBVcHNlcnRDcmVkZW50aWFsEjQuZ2VzdGFsdC5wcm92aWRlci52MS5VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwSawoNR2V0Q3JlZGVudGlhbBIxLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0RXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsEnwKD0xpc3RDcmVkZW50aWFscxIzLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXF1ZXN0GjQuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1Jlc3BvbnNlEmAKEERlbGV0ZUNyZWRlbnRpYWwSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHlCPVo7Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9pbnRlcm5hbC9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIroDChJFeHRlcm5hbENyZWRlbnRpYWwSCgoCaWQYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRIQCghpbnN0YW5jZRgFIAEoCRIUCgxhY2Nlc3NfdG9rZW4YBiABKAkSFQoNcmVmcmVzaF90b2tlbhgHIAEoCRIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSFQoNbWV0YWRhdGFfanNvbhgMIAEoCRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1jb25uZWN0aW9uX2lkGA8gASgJSgQIAxAESgQIBBAFUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ8ChhFeHRlcm5hbENyZWRlbnRpYWxMb29rdXASEgoKc3ViamVjdF9pZBgBIAEoCRIQCghpbnN0YW5jZRgEIAEoCRIVCg1jb25uZWN0aW9uX2lkGAUgASgJSgQIAhADSgQIAxAEUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ7Ch9VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EjsKCmNyZWRlbnRpYWwYASABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbBIbChNwcmVzZXJ2ZV90aW1lc3RhbXBzGAIgASgIIl0KHEdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSPQoGbG9va3VwGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxMb29rdXAiggEKHkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhAKCGluc3RhbmNlGAQgASgJEhUKDWNvbm5lY3Rpb25faWQYBSABKAlKBAgCEANKBAgDEARSC2ludGVncmF0aW9uUgpjb25uZWN0aW9uIl8KH0xpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2USPAoLY3JlZGVudGlhbHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbCItCh9EZWxldGVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EgoKAmlkGAEgASgJIpICCiVFeHRlcm5hbENyZWRlbnRpYWxUb2tlbkV4Y2hhbmdlRHJpdmVyEgwKBHR5cGUYASABKAkSGAoQdGFyZ2V0X3ByaW5jaXBhbBgCIAEoCRIOCgZzY29wZXMYAyADKAkSGAoQbGlmZXRpbWVfc2Vjb25kcxgEIAEoBRIQCghlbmRwb2ludBgFIAEoCRJWCgZwYXJhbXMYBiADKAsyRi5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbFRva2VuRXhjaGFuZ2VEcml2ZXIuUGFyYW1zRW50cnkaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASK9BQocRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxIMCgR0eXBlGAEgASgJEg0KBXRva2VuGAIgASgJEhQKDHRva2VuX3ByZWZpeBgDIAEoCRISCgpncmFudF90eXBlGAQgASgJEhEKCXRva2VuX3VybBgFIAEoCRIRCgljbGllbnRfaWQYBiABKAkSFQoNY2xpZW50X3NlY3JldBgHIAEoCRITCgtjbGllbnRfYXV0aBgIIAEoCRIWCg50b2tlbl9leGNoYW5nZRgJIAEoCRIOCgZzY29wZXMYCiADKAkSEwoLc2NvcGVfcGFyYW0YCyABKAkSFwoPc2NvcGVfc2VwYXJhdG9yGAwgASgJElgKDHRva2VuX3BhcmFtcxgNIAMoCzJCLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZy5Ub2tlblBhcmFtc0VudHJ5ElwKDnJlZnJlc2hfcGFyYW1zGA4gAygLMkQuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxBdXRoQ29uZmlnLlJlZnJlc2hQYXJhbXNFbnRyeRIVCg1hY2NlcHRfaGVhZGVyGA8gASgJEhkKEWFjY2Vzc190b2tlbl9wYXRoGBAgASgJEloKFnRva2VuX2V4Y2hhbmdlX2RyaXZlcnMYESADKAsyOi5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbFRva2VuRXhjaGFuZ2VEcml2ZXIaMgoQVG9rZW5QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjQKElJlZnJlc2hQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIt0CCidWYWxpZGF0ZUV4dGVybmFsQ3JlZGVudGlhbENvbmZpZ1JlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkSEgoKY29ubmVjdGlvbhgCIAEoCRIVCg1jb25uZWN0aW9uX2lkGAMgASgJEgwKBG1vZGUYBCABKAkSPwoEYXV0aBgFIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxJtChFjb25uZWN0aW9uX3BhcmFtcxgGIAMoCzJSLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbENyZWRlbnRpYWxDb25maWdSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKaAwogUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkSEgoKY29ubmVjdGlvbhgCIAEoCRIVCg1jb25uZWN0aW9uX2lkGAMgASgJEgwKBG1vZGUYBCABKAkSHQoVY3JlZGVudGlhbF9zdWJqZWN0X2lkGAUgASgJEhgKEGFjdG9yX3N1YmplY3RfaWQYBiABKAkSEAoIaW5zdGFuY2UYByABKAkSPwoEYXV0aBgIIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxJmChFjb25uZWN0aW9uX3BhcmFtcxgJIAMoCzJLLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5GjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIrkCCiFSZXNvbHZlRXh0ZXJuYWxDcmVkZW50aWFsUmVzcG9uc2USDQoFdG9rZW4YASABKAkSLgoKZXhwaXJlc19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFQoNbWV0YWRhdGFfanNvbhgDIAEoCRJSCgZwYXJhbXMYBCADKAsyQi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVFeHRlcm5hbENyZWRlbnRpYWxSZXNwb25zZS5QYXJhbXNFbnRyeRI7CgpjcmVkZW50aWFsGAUgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKiAQofRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRISCgpleHBpcmVzX2luGAMgASgFEhIKCnRva2VuX3R5cGUYBCABKAkSEgoKZXh0cmFfanNvbhgFIAEoCRIWCg5yZWZyZXNoX3NvdXJjZRgGIAEoCSKnAwohRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEhIKCmNvbm5lY3Rpb24YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIdChVjcmVkZW50aWFsX3N1YmplY3RfaWQYBCABKAkSGAoQYWN0b3Jfc3ViamVjdF9pZBgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRI/CgRhdXRoGAcgASgLMjEuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxBdXRoQ29uZmlnEhcKD2NyZWRlbnRpYWxfanNvbhgIIAEoCRJnChFjb25uZWN0aW9uX3BhcmFtcxgJIAMoCzJMLmdlc3RhbHQucHJvdmlkZXIudjEuRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJyCiJFeGNoYW5nZUV4dGVybmFsQ3JlZGVudGlhbFJlc3BvbnNlEkwKDnRva2VuX3Jlc3BvbnNlGAEgASgLMjQuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxUb2tlblJlc3BvbnNlMtsGChpFeHRlcm5hbENyZWRlbnRpYWxQcm92aWRlchJxChBVcHNlcnRDcmVkZW50aWFsEjQuZ2VzdGFsdC5wcm92aWRlci52MS5VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwSawoNR2V0Q3JlZGVudGlhbBIxLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0RXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsEnwKD0xpc3RDcmVkZW50aWFscxIzLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXF1ZXN0GjQuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1Jlc3BvbnNlEmAKEERlbGV0ZUNyZWRlbnRpYWwSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkScAoYVmFsaWRhdGVDcmVkZW50aWFsQ29uZmlnEjwuZ2VzdGFsdC5wcm92aWRlci52MS5WYWxpZGF0ZUV4dGVybmFsQ3JlZGVudGlhbENvbmZpZ1JlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSggEKEVJlc29sdmVDcmVkZW50aWFsEjUuZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBo2Lmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlc3BvbnNlEoUBChJFeGNoYW5nZUNyZWRlbnRpYWwSNi5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4Y2hhbmdlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBo3Lmdlc3RhbHQucHJvdmlkZXIudjEuRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXNwb25zZUI9WjtnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L2ludGVybmFsL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredential
@@ -219,6 +219,397 @@ export const DeleteExternalCredentialRequestSchema: GenMessage<DeleteExternalCre
   messageDesc(file_v1_external_credential, 6);
 
 /**
+ * @generated from message gestalt.provider.v1.ExternalCredentialTokenExchangeDriver
+ */
+export type ExternalCredentialTokenExchangeDriver = Message<"gestalt.provider.v1.ExternalCredentialTokenExchangeDriver"> & {
+  /**
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * @generated from field: string target_principal = 2;
+   */
+  targetPrincipal: string;
+
+  /**
+   * @generated from field: repeated string scopes = 3;
+   */
+  scopes: string[];
+
+  /**
+   * @generated from field: int32 lifetime_seconds = 4;
+   */
+  lifetimeSeconds: number;
+
+  /**
+   * @generated from field: string endpoint = 5;
+   */
+  endpoint: string;
+
+  /**
+   * @generated from field: map<string, string> params = 6;
+   */
+  params: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.
+ * Use `create(ExternalCredentialTokenExchangeDriverSchema)` to create a new message.
+ */
+export const ExternalCredentialTokenExchangeDriverSchema: GenMessage<ExternalCredentialTokenExchangeDriver> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 7);
+
+/**
+ * @generated from message gestalt.provider.v1.ExternalCredentialAuthConfig
+ */
+export type ExternalCredentialAuthConfig = Message<"gestalt.provider.v1.ExternalCredentialAuthConfig"> & {
+  /**
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * @generated from field: string token = 2;
+   */
+  token: string;
+
+  /**
+   * @generated from field: string token_prefix = 3;
+   */
+  tokenPrefix: string;
+
+  /**
+   * @generated from field: string grant_type = 4;
+   */
+  grantType: string;
+
+  /**
+   * @generated from field: string token_url = 5;
+   */
+  tokenUrl: string;
+
+  /**
+   * @generated from field: string client_id = 6;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: string client_secret = 7;
+   */
+  clientSecret: string;
+
+  /**
+   * @generated from field: string client_auth = 8;
+   */
+  clientAuth: string;
+
+  /**
+   * @generated from field: string token_exchange = 9;
+   */
+  tokenExchange: string;
+
+  /**
+   * @generated from field: repeated string scopes = 10;
+   */
+  scopes: string[];
+
+  /**
+   * @generated from field: string scope_param = 11;
+   */
+  scopeParam: string;
+
+  /**
+   * @generated from field: string scope_separator = 12;
+   */
+  scopeSeparator: string;
+
+  /**
+   * @generated from field: map<string, string> token_params = 13;
+   */
+  tokenParams: { [key: string]: string };
+
+  /**
+   * @generated from field: map<string, string> refresh_params = 14;
+   */
+  refreshParams: { [key: string]: string };
+
+  /**
+   * @generated from field: string accept_header = 15;
+   */
+  acceptHeader: string;
+
+  /**
+   * @generated from field: string access_token_path = 16;
+   */
+  accessTokenPath: string;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.ExternalCredentialTokenExchangeDriver token_exchange_drivers = 17;
+   */
+  tokenExchangeDrivers: ExternalCredentialTokenExchangeDriver[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialAuthConfig.
+ * Use `create(ExternalCredentialAuthConfigSchema)` to create a new message.
+ */
+export const ExternalCredentialAuthConfigSchema: GenMessage<ExternalCredentialAuthConfig> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 8);
+
+/**
+ * @generated from message gestalt.provider.v1.ValidateExternalCredentialConfigRequest
+ */
+export type ValidateExternalCredentialConfigRequest = Message<"gestalt.provider.v1.ValidateExternalCredentialConfigRequest"> & {
+  /**
+   * @generated from field: string provider = 1;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: string connection = 2;
+   */
+  connection: string;
+
+  /**
+   * @generated from field: string connection_id = 3;
+   */
+  connectionId: string;
+
+  /**
+   * @generated from field: string mode = 4;
+   */
+  mode: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.ExternalCredentialAuthConfig auth = 5;
+   */
+  auth?: ExternalCredentialAuthConfig | undefined;
+
+  /**
+   * @generated from field: map<string, string> connection_params = 6;
+   */
+  connectionParams: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ValidateExternalCredentialConfigRequest.
+ * Use `create(ValidateExternalCredentialConfigRequestSchema)` to create a new message.
+ */
+export const ValidateExternalCredentialConfigRequestSchema: GenMessage<ValidateExternalCredentialConfigRequest> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 9);
+
+/**
+ * @generated from message gestalt.provider.v1.ResolveExternalCredentialRequest
+ */
+export type ResolveExternalCredentialRequest = Message<"gestalt.provider.v1.ResolveExternalCredentialRequest"> & {
+  /**
+   * @generated from field: string provider = 1;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: string connection = 2;
+   */
+  connection: string;
+
+  /**
+   * @generated from field: string connection_id = 3;
+   */
+  connectionId: string;
+
+  /**
+   * @generated from field: string mode = 4;
+   */
+  mode: string;
+
+  /**
+   * @generated from field: string credential_subject_id = 5;
+   */
+  credentialSubjectId: string;
+
+  /**
+   * @generated from field: string actor_subject_id = 6;
+   */
+  actorSubjectId: string;
+
+  /**
+   * @generated from field: string instance = 7;
+   */
+  instance: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.ExternalCredentialAuthConfig auth = 8;
+   */
+  auth?: ExternalCredentialAuthConfig | undefined;
+
+  /**
+   * @generated from field: map<string, string> connection_params = 9;
+   */
+  connectionParams: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ResolveExternalCredentialRequest.
+ * Use `create(ResolveExternalCredentialRequestSchema)` to create a new message.
+ */
+export const ResolveExternalCredentialRequestSchema: GenMessage<ResolveExternalCredentialRequest> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 10);
+
+/**
+ * @generated from message gestalt.provider.v1.ResolveExternalCredentialResponse
+ */
+export type ResolveExternalCredentialResponse = Message<"gestalt.provider.v1.ResolveExternalCredentialResponse"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 2;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string metadata_json = 3;
+   */
+  metadataJson: string;
+
+  /**
+   * @generated from field: map<string, string> params = 4;
+   */
+  params: { [key: string]: string };
+
+  /**
+   * @generated from field: gestalt.provider.v1.ExternalCredential credential = 5;
+   */
+  credential?: ExternalCredential | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ResolveExternalCredentialResponse.
+ * Use `create(ResolveExternalCredentialResponseSchema)` to create a new message.
+ */
+export const ResolveExternalCredentialResponseSchema: GenMessage<ResolveExternalCredentialResponse> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 11);
+
+/**
+ * @generated from message gestalt.provider.v1.ExternalCredentialTokenResponse
+ */
+export type ExternalCredentialTokenResponse = Message<"gestalt.provider.v1.ExternalCredentialTokenResponse"> & {
+  /**
+   * @generated from field: string access_token = 1;
+   */
+  accessToken: string;
+
+  /**
+   * @generated from field: string refresh_token = 2;
+   */
+  refreshToken: string;
+
+  /**
+   * @generated from field: int32 expires_in = 3;
+   */
+  expiresIn: number;
+
+  /**
+   * @generated from field: string token_type = 4;
+   */
+  tokenType: string;
+
+  /**
+   * @generated from field: string extra_json = 5;
+   */
+  extraJson: string;
+
+  /**
+   * @generated from field: string refresh_source = 6;
+   */
+  refreshSource: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialTokenResponse.
+ * Use `create(ExternalCredentialTokenResponseSchema)` to create a new message.
+ */
+export const ExternalCredentialTokenResponseSchema: GenMessage<ExternalCredentialTokenResponse> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 12);
+
+/**
+ * @generated from message gestalt.provider.v1.ExchangeExternalCredentialRequest
+ */
+export type ExchangeExternalCredentialRequest = Message<"gestalt.provider.v1.ExchangeExternalCredentialRequest"> & {
+  /**
+   * @generated from field: string provider = 1;
+   */
+  provider: string;
+
+  /**
+   * @generated from field: string connection = 2;
+   */
+  connection: string;
+
+  /**
+   * @generated from field: string connection_id = 3;
+   */
+  connectionId: string;
+
+  /**
+   * @generated from field: string credential_subject_id = 4;
+   */
+  credentialSubjectId: string;
+
+  /**
+   * @generated from field: string actor_subject_id = 5;
+   */
+  actorSubjectId: string;
+
+  /**
+   * @generated from field: string instance = 6;
+   */
+  instance: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.ExternalCredentialAuthConfig auth = 7;
+   */
+  auth?: ExternalCredentialAuthConfig | undefined;
+
+  /**
+   * @generated from field: string credential_json = 8;
+   */
+  credentialJson: string;
+
+  /**
+   * @generated from field: map<string, string> connection_params = 9;
+   */
+  connectionParams: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExchangeExternalCredentialRequest.
+ * Use `create(ExchangeExternalCredentialRequestSchema)` to create a new message.
+ */
+export const ExchangeExternalCredentialRequestSchema: GenMessage<ExchangeExternalCredentialRequest> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 13);
+
+/**
+ * @generated from message gestalt.provider.v1.ExchangeExternalCredentialResponse
+ */
+export type ExchangeExternalCredentialResponse = Message<"gestalt.provider.v1.ExchangeExternalCredentialResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.ExternalCredentialTokenResponse token_response = 1;
+   */
+  tokenResponse?: ExternalCredentialTokenResponse | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExchangeExternalCredentialResponse.
+ * Use `create(ExchangeExternalCredentialResponseSchema)` to create a new message.
+ */
+export const ExchangeExternalCredentialResponseSchema: GenMessage<ExchangeExternalCredentialResponse> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 14);
+
+/**
  * @generated from service gestalt.provider.v1.ExternalCredentialProvider
  */
 export const ExternalCredentialProvider: GenService<{
@@ -253,6 +644,30 @@ export const ExternalCredentialProvider: GenService<{
     methodKind: "unary";
     input: typeof DeleteExternalCredentialRequestSchema;
     output: typeof EmptySchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.ExternalCredentialProvider.ValidateCredentialConfig
+   */
+  validateCredentialConfig: {
+    methodKind: "unary";
+    input: typeof ValidateExternalCredentialConfigRequestSchema;
+    output: typeof EmptySchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.ExternalCredentialProvider.ResolveCredential
+   */
+  resolveCredential: {
+    methodKind: "unary";
+    input: typeof ResolveExternalCredentialRequestSchema;
+    output: typeof ResolveExternalCredentialResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.ExternalCredentialProvider.ExchangeCredential
+   */
+  exchangeCredential: {
+    methodKind: "unary";
+    input: typeof ExchangeExternalCredentialRequestSchema;
+    output: typeof ExchangeExternalCredentialResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_external_credential, 0);

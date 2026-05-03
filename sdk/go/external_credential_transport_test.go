@@ -128,6 +128,33 @@ func (p *stubExternalCredentialProvider) DeleteCredential(_ context.Context, req
 	return nil
 }
 
+func (p *stubExternalCredentialProvider) ValidateCredentialConfig(context.Context, *proto.ValidateExternalCredentialConfigRequest) error {
+	return nil
+}
+
+func (p *stubExternalCredentialProvider) ResolveCredential(ctx context.Context, req *proto.ResolveExternalCredentialRequest) (*proto.ResolveExternalCredentialResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+	credential, err := p.GetCredential(ctx, &proto.GetExternalCredentialRequest{Lookup: &proto.ExternalCredentialLookup{
+		SubjectId:    req.GetCredentialSubjectId(),
+		ConnectionId: req.GetConnectionId(),
+		Instance:     req.GetInstance(),
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ResolveExternalCredentialResponse{
+		Token:      credential.GetAccessToken(),
+		ExpiresAt:  credential.GetExpiresAt(),
+		Credential: credential,
+	}, nil
+}
+
+func (*stubExternalCredentialProvider) ExchangeCredential(context.Context, *proto.ExchangeExternalCredentialRequest) (*proto.ExchangeExternalCredentialResponse, error) {
+	return &proto.ExchangeExternalCredentialResponse{}, nil
+}
+
 type externalCredentialTransportHarness struct {
 	proto.UnimplementedExternalCredentialProviderServer
 

@@ -786,6 +786,12 @@
             "type": "string"
           }
         },
+        "tokenExchangeDrivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tokenExchangeDriver"
+          }
+        },
         "credentials": {
           "type": "array",
           "items": {
@@ -830,6 +836,41 @@
           }
         }
       ]
+    },
+    "tokenExchangeDriver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targetPrincipal": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lifetimeSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
     },
     "providerOperation": {
       "type": "object",

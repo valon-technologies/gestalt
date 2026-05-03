@@ -581,6 +581,17 @@ func validateTopLevelConnections(cfg *Config) error {
 		default:
 			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
 		}
+		if len(conn.Auth.TokenExchangeDrivers) > 0 {
+			if mode != core.ConnectionModePlatform {
+				return fmt.Errorf("config validation: connections.%s tokenExchangeDrivers requires mode platform", id)
+			}
+			for i, driver := range conn.Auth.TokenExchangeDrivers {
+				if strings.TrimSpace(driver.Type) == "" {
+					return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers[%d].type is required", id, i)
+				}
+			}
+			continue
+		}
 		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
 			if mode != core.ConnectionModePlatform {
 				return fmt.Errorf("config validation: connections.%s oauth2 client_credentials requires mode platform", id)
