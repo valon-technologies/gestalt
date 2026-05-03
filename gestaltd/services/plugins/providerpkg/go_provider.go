@@ -123,7 +123,7 @@ func SourceComponentExecutionEnv(root, kind, goos, goarch string) (map[string]st
 	if sourceKind != sourceProviderKindPython {
 		return nil, nil
 	}
-	return pythonBackendEnvMap(), nil
+	return pythonBackendEnvMap()
 }
 
 func ValidateSourceComponentRelease(root, kind, goos, goarch string) error {

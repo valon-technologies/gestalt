@@ -82,7 +82,7 @@ func SourceProviderExecutionEnv(root, goos, goarch string) (map[string]string, e
 	if kind != sourceProviderKindPython {
 		return nil, nil
 	}
-	return pythonBackendEnvMap(), nil
+	return pythonBackendEnvMap()
 }
 
 func ValidateSourceProviderRelease(root, goos, goarch string) error {

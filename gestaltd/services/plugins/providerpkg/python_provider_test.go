@@ -189,30 +189,86 @@ func TestPythonRuntimeKind_Cache(t *testing.T) {
 	}
 }
 
-func TestSourceProviderExecutionEnv_PythonUsesLocalSDK(t *testing.T) {
-	t.Parallel()
-
+func TestSourceProviderExecutionEnv_PythonClearsPythonPathByDefault(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 provider = "provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
+	t.Setenv(pythonSDKDirEnvVar, "")
+	t.Setenv("PYTHONPATH", filepath.Join(t.TempDir(), "ambient-sdk"))
 
 	env, err := SourceProviderExecutionEnv(root, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("SourceProviderExecutionEnv: %v", err)
 	}
-	if len(env) == 0 {
-		t.Fatal("SourceProviderExecutionEnv returned no environment overrides")
+	if got, ok := env["PYTHONPATH"]; !ok {
+		t.Fatal("SourceProviderExecutionEnv did not clear PYTHONPATH")
+	} else if got != "" {
+		t.Fatalf("PYTHONPATH = %q, want empty", got)
 	}
-	want := localPythonSDKPath()
-	if want == "" {
-		t.Fatal("localPythonSDKPath returned empty path")
+}
+
+func TestSourceProviderExecutionEnv_PythonUsesExplicitSDKDir(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+provider = "provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
-	if got := env["PYTHONPATH"]; !strings.Contains(got, want) {
-		t.Fatalf("PYTHONPATH = %q, want to contain %q", got, want)
+	sdkDir := writePythonSDKDir(t)
+	inheritedPath := filepath.Join(t.TempDir(), "ambient-pythonpath")
+	t.Setenv(pythonSDKDirEnvVar, sdkDir)
+	t.Setenv("PYTHONPATH", inheritedPath)
+
+	env, err := SourceProviderExecutionEnv(root, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("SourceProviderExecutionEnv: %v", err)
 	}
+	parts := filepath.SplitList(env["PYTHONPATH"])
+	if len(parts) != 2 {
+		t.Fatalf("PYTHONPATH = %q, want explicit SDK plus inherited path", env["PYTHONPATH"])
+	}
+	if parts[0] != sdkDir {
+		t.Fatalf("PYTHONPATH first entry = %q, want %q", parts[0], sdkDir)
+	}
+	if parts[1] != inheritedPath {
+		t.Fatalf("PYTHONPATH inherited entry = %q, want %q", parts[1], inheritedPath)
+	}
+}
+
+func TestSourceProviderExecutionEnv_PythonRejectsInvalidExplicitSDKDir(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+provider = "provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+	t.Setenv(pythonSDKDirEnvVar, filepath.Join(t.TempDir(), "missing-sdk"))
+
+	_, err := SourceProviderExecutionEnv(root, runtime.GOOS, runtime.GOARCH)
+	if err == nil {
+		t.Fatal("expected invalid explicit SDK dir error")
+	}
+	if !strings.Contains(err.Error(), pythonSDKDirEnvVar) {
+		t.Fatalf("error = %q, want %s", err, pythonSDKDirEnvVar)
+	}
+}
+
+func writePythonSDKDir(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pyproject.toml"), []byte(`[project]
+name = "gestalt-sdk"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "gestalt"), 0o755); err != nil {
+		t.Fatalf("Mkdir(gestalt): %v", err)
+	}
+	return dir
 }
 
 func pythonTestOtherPlatform() (string, string) {

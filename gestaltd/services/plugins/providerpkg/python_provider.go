@@ -21,6 +21,7 @@ const (
 	pythonRuntimeModule = "gestalt._runtime"
 	pythonBuildModule   = "gestalt._build"
 	pythonEnvVarPrefix  = "GESTALT_PYTHON_"
+	pythonSDKDirEnvVar  = "GESTALT_PYTHON_SDK_DIR"
 )
 
 var ErrNoPythonProviderPackage = errors.New("no Python provider package found")
@@ -112,7 +113,11 @@ func BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runti
 
 	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName, runtimeKind, goos, goarch)
 	cmd.Dir = sourceDir
-	cmd.Env = append(os.Environ(), pythonBackendEnv()...)
+	env, err := pythonBackendEnv(os.Environ())
+	if err != nil {
+		return "", fmt.Errorf("prepare Python release build environment: %w", err)
+	}
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -143,39 +148,73 @@ func DetectPythonInterpreter(root, goos, goarch string) (string, error) {
 	return "", fmt.Errorf("detect Python interpreter: %w (set %s or provide a target-specific virtualenv)", exec.ErrNotFound, envVar)
 }
 
-func pythonBackendImportPaths() []string {
-	if sdkPath := localPythonSDKPath(); sdkPath != "" {
-		return []string{sdkPath}
+func pythonBackendEnv(base []string) ([]string, error) {
+	env, err := pythonBackendEnvMap()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	out := make([]string, 0, len(base)+len(env))
+	for _, entry := range base {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok && key == "PYTHONPATH" {
+			continue
+		}
+		out = append(out, entry)
+	}
+	for key, value := range env {
+		out = append(out, key+"="+value)
+	}
+	return out, nil
 }
 
-func pythonBackendEnv() []string {
-	env := pythonBackendEnvMap()
-	if len(env) == 0 {
-		return nil
+func pythonBackendEnvMap() (map[string]string, error) {
+	value, err := pythonBackendPythonPath()
+	if err != nil {
+		return nil, err
 	}
-	return []string{"PYTHONPATH=" + env["PYTHONPATH"]}
+	return map[string]string{"PYTHONPATH": value}, nil
 }
 
-func pythonBackendEnvMap() map[string]string {
-	paths := pythonBackendImportPaths()
-	if len(paths) == 0 {
-		return nil
+func pythonBackendPythonPath() (string, error) {
+	sdkPath, err := explicitPythonSDKPath()
+	if err != nil {
+		return "", err
 	}
-	value := strings.Join(paths, string(os.PathListSeparator))
+	if sdkPath == "" {
+		return "", nil
+	}
+	value := sdkPath
 	if existing := os.Getenv("PYTHONPATH"); existing != "" {
 		value += string(os.PathListSeparator) + existing
 	}
-	return map[string]string{"PYTHONPATH": value}
+	return value, nil
 }
 
-func localPythonSDKPath() string {
-	path := localRepositorySubdir("sdk", "python")
-	if path == "" {
-		return ""
+func explicitPythonSDKPath() (string, error) {
+	raw := strings.TrimSpace(os.Getenv(pythonSDKDirEnvVar))
+	if raw == "" {
+		return "", nil
 	}
-	return path
+	path, err := filepath.Abs(raw)
+	if err != nil {
+		return "", fmt.Errorf("%s %q: resolve absolute path: %w", pythonSDKDirEnvVar, raw, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("%s %q: %w", pythonSDKDirEnvVar, path, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s %q is not a directory", pythonSDKDirEnvVar, path)
+	}
+	if _, err := os.Stat(filepath.Join(path, pythonProjectFile)); err != nil {
+		return "", fmt.Errorf("%s %q: missing %s: %w", pythonSDKDirEnvVar, path, pythonProjectFile, err)
+	}
+	if info, err := os.Stat(filepath.Join(path, "gestalt")); err != nil {
+		return "", fmt.Errorf("%s %q: missing gestalt package: %w", pythonSDKDirEnvVar, path, err)
+	} else if !info.IsDir() {
+		return "", fmt.Errorf("%s %q: gestalt package is not a directory", pythonSDKDirEnvVar, path)
+	}
+	return path, nil
 }
 
 func pythonInterpreterCandidates(root, goos, goarch string) []string {
