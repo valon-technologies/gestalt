@@ -215,6 +215,8 @@ def _decode_int(value: Any) -> int:
         return int(value)
     if isinstance(value, int):
         return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
     if isinstance(value, str):
         return int(value)
     raise TypeError(f"expected int, got {type(value).__name__}")
