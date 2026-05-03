@@ -7,7 +7,7 @@ use tonic::Request;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
-use tonic::transport::{Channel, Endpoint, Uri};
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
@@ -423,6 +423,7 @@ impl IndexedDB {
             }
             IndexedDBTarget::Tls(address) => {
                 Endpoint::from_shared(format!("https://{address}"))?
+                    .tls_config(ClientTlsConfig::new().with_native_roots())?
                     .connect()
                     .await?
             }
