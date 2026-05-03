@@ -368,6 +368,7 @@ func connectionBindingHasCredentialMaterial(conn *ConnectionDef) bool {
 		conn.Auth.RedirectURL != "" ||
 		conn.Auth.ClientAuth != "" ||
 		conn.Auth.TokenExchange != "" ||
+		conn.Auth.TokenPrefix != "" ||
 		len(conn.Auth.Scopes) > 0 ||
 		conn.Auth.ScopeParam != "" ||
 		conn.Auth.ScopeSeparator != "" ||

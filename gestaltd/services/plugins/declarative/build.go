@@ -218,6 +218,7 @@ func ApplyConnectionAuth(def *Definition, conn ConnectionDef) {
 	setStr(&def.Auth.TokenURL, o.TokenURL)
 	setStr(&def.Auth.ClientAuth, o.ClientAuth)
 	setStr(&def.Auth.TokenExchange, o.TokenExchange)
+	setStr(&def.TokenPrefix, o.TokenPrefix)
 	if o.Scopes != nil {
 		def.Auth.Scopes = slices.Clone(o.Scopes)
 	}

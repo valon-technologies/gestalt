@@ -87,6 +87,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		// its own MCP-specific routing below.
 		CatalogConnection:     httpCatalogConnectionMap(connMaps),
 		ConnectionAuth:        result.ConnectionAuth,
+		ManualConnectionAuth:  result.ManualConnectionAuth,
 		PluginDefs:            cfg.Plugins,
 		Authorizer:            result.Authorizer,
 		AuthorizationProvider: result.AuthorizationProvider,

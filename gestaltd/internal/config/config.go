@@ -1548,6 +1548,7 @@ type ConnectionAuthDef struct {
 	RedirectURL         string                      `yaml:"redirectUrl"`
 	ClientAuth          string                      `yaml:"clientAuth"`
 	TokenExchange       string                      `yaml:"tokenExchange"`
+	TokenPrefix         string                      `yaml:"tokenPrefix"`
 	Scopes              []string                    `yaml:"scopes"`
 	ScopeParam          string                      `yaml:"scopeParam"`
 	ScopeSeparator      string                      `yaml:"scopeSeparator"`
@@ -1601,6 +1602,7 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 	setString(&dst.RedirectURL, src.RedirectURL)
 	setString(&dst.ClientAuth, src.ClientAuth)
 	setString(&dst.TokenExchange, src.TokenExchange)
+	setString(&dst.TokenPrefix, src.TokenPrefix)
 	if src.Scopes != nil {
 		dst.Scopes = src.Scopes
 	}
@@ -1720,6 +1722,7 @@ func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) Conn
 		ClientSecret:        auth.ClientSecret,
 		ClientAuth:          auth.ClientAuth,
 		TokenExchange:       auth.TokenExchange,
+		TokenPrefix:         auth.TokenPrefix,
 		Scopes:              slices.Clone(auth.Scopes),
 		ScopeParam:          auth.ScopeParam,
 		ScopeSeparator:      auth.ScopeSeparator,

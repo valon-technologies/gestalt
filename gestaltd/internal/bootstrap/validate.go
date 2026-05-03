@@ -38,7 +38,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, providersReady, connAuthResolver, errResolver, err := buildProvidersAsync(
+	providers, providersReady, connAuthResolver, manualConnAuthResolver, errResolver, err := buildProvidersAsync(
 		ctx,
 		cfg,
 		factories,
@@ -78,6 +78,9 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
 			return connectionAuthToRefreshers(connAuthResolver())
+		}),
+		invocation.WithManualConnectionAuth(func() map[string]map[string]invocation.TokenRefresher {
+			return manualConnectionAuthToRefreshers(manualConnAuthResolver())
 		}),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 	)

@@ -461,6 +461,7 @@ type ProviderAuth struct {
 	PKCE                bool              `json:"pkce,omitempty" yaml:"pkce,omitempty"`
 	ClientAuth          string            `json:"clientAuth,omitempty" yaml:"clientAuth,omitempty"`
 	TokenExchange       string            `json:"tokenExchange,omitempty" yaml:"tokenExchange,omitempty"`
+	TokenPrefix         string            `json:"tokenPrefix,omitempty" yaml:"tokenPrefix,omitempty"`
 	AccessTokenPath     string            `json:"accessTokenPath,omitempty" yaml:"accessTokenPath,omitempty"`
 	ScopeParam          string            `json:"scopeParam,omitempty" yaml:"scopeParam,omitempty"`
 	ScopeSeparator      string            `json:"scopeSeparator,omitempty" yaml:"scopeSeparator,omitempty"`

@@ -37,6 +37,17 @@ const (
 	TokenExchangeJSON TokenExchangeFormat = "json"
 )
 
+func ParseTokenExchangeFormat(raw string) (TokenExchangeFormat, error) {
+	switch raw {
+	case "", string(TokenExchangeForm):
+		return TokenExchangeForm, nil
+	case string(TokenExchangeJSON):
+		return TokenExchangeJSON, nil
+	default:
+		return "", fmt.Errorf("unknown tokenExchange %q", raw)
+	}
+}
+
 type UpstreamConfig struct {
 	ClientID         string
 	ClientSecret     string
@@ -326,6 +337,77 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tok
 		TokenType:    tokenType,
 		Extra:        raw,
 	}, nil
+}
+
+type CredentialExchangeConfig struct {
+	TokenURL        string
+	TokenParams     map[string]string
+	TokenExchange   TokenExchangeFormat
+	AcceptHeader    string
+	AccessTokenPath string
+}
+
+type CredentialExchanger struct {
+	upstream *UpstreamHandler
+}
+
+func NewCredentialExchanger(cfg CredentialExchangeConfig, opts ...Option) *CredentialExchanger {
+	return &CredentialExchanger{
+		upstream: NewUpstream(UpstreamConfig{
+			TokenURL:        cfg.TokenURL,
+			TokenParams:     cfg.TokenParams,
+			TokenExchange:   cfg.TokenExchange,
+			AcceptHeader:    cfg.AcceptHeader,
+			AccessTokenPath: cfg.AccessTokenPath,
+		}, opts...),
+	}
+}
+
+func (h *CredentialExchanger) TokenURL() string {
+	if h == nil || h.upstream == nil {
+		return ""
+	}
+	return h.upstream.TokenURL()
+}
+
+func (h *CredentialExchanger) ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.TokenResponse, error) {
+	return h.ExchangeCredentialsWithURL(ctx, credentialJSON, "")
+}
+
+func (h *CredentialExchanger) ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURLOverride string) (*core.TokenResponse, error) {
+	if h == nil || h.upstream == nil {
+		return nil, fmt.Errorf("credential exchanger is not configured")
+	}
+	var credentials map[string]string
+	if err := json.Unmarshal([]byte(credentialJSON), &credentials); err != nil {
+		return nil, fmt.Errorf("decoding manual credentials: %w", err)
+	}
+	if len(credentials) == 0 {
+		return nil, fmt.Errorf("manual credentials are required")
+	}
+
+	data := url.Values{}
+	for k, v := range h.upstream.cfg.TokenParams {
+		data.Set(k, v)
+	}
+	for k, v := range credentials {
+		data.Set(k, v)
+	}
+
+	resp, err := h.upstream.tokenRequest(ctx, data, tokenURLOverride)
+	if err != nil {
+		return nil, err
+	}
+	resp.RefreshToken = credentialJSON
+	return resp, nil
+}
+
+func (h *CredentialExchanger) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return h.ExchangeCredentials(ctx, refreshToken)
+}
+
+func (h *CredentialExchanger) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+	return h.ExchangeCredentialsWithURL(ctx, refreshToken, tokenURL)
 }
 
 func GenerateVerifier() string {

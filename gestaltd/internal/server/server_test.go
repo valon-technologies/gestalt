@@ -143,6 +143,21 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 			return refreshers
 		}))
 	}
+	if cfg.ManualConnectionAuth != nil {
+		authFn := cfg.ManualConnectionAuth
+		brokerOpts = append(brokerOpts, invocation.WithManualConnectionAuth(func() map[string]map[string]invocation.TokenRefresher {
+			m := authFn()
+			refreshers := make(map[string]map[string]invocation.TokenRefresher, len(m))
+			for intg, conns := range m {
+				inner := make(map[string]invocation.TokenRefresher, len(conns))
+				for conn, h := range conns {
+					inner[conn] = h
+				}
+				refreshers[intg] = inner
+			}
+			return refreshers
+		}))
+	}
 	if cfg.Authorizer != nil {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
 	}
@@ -22350,6 +22365,424 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 				t.Fatalf("token data = %+v, want %+v", tokenData, tc.wantTokenData)
 			}
 		})
+	}
+}
+
+func TestConnectManual_TokenExchange(t *testing.T) {
+	t.Parallel()
+
+	fixedNow := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+
+	t.Run("exchanges declared credentials and stores refresh source", func(t *testing.T) {
+		t.Parallel()
+
+		var seenAccept string
+		var seenContentType string
+		var seenForm url.Values
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/login" {
+				t.Fatalf("token path = %q, want /login", r.URL.Path)
+			}
+			seenAccept = r.Header.Get("Accept")
+			seenContentType = r.Header.Get("Content-Type")
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			seenForm = maps.Clone(r.PostForm)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"manual-access","refresh_token":"ignored-refresh","expires_in":3600,"account":{"id":"acct_123"}}`))
+		}))
+		testutil.CloseOnCleanup(t, tokenSrv)
+
+		svc := testutil.NewStubServices(t)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
+				stubManualProvider: stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "looker-like"},
+				},
+				connectionParams: map[string]core.ConnectionParamDef{
+					"account_id": {From: "token_response", Field: "account.id", Required: true},
+				},
+			})
+			cfg.DefaultConnection = map[string]string{"looker-like": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"looker-like": {
+					Auth: &config.ConnectionAuthDef{
+						Type:          providermanifestv1.AuthTypeManual,
+						TokenURL:      tokenSrv.URL + "/login",
+						TokenExchange: "form",
+						TokenParams:   map[string]string{"audience": "api"},
+						AcceptHeader:  "application/json",
+						Credentials: []config.CredentialFieldDef{
+							{Name: "client_id", Label: "Client ID"},
+							{Name: "client_secret", Label: "Client Secret"},
+						},
+					},
+				},
+			}
+			cfg.Now = func() time.Time { return fixedNow }
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"looker-like","credentials":{"client_id":"id-123","client_secret":"secret-456"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+
+		if seenAccept != "application/json" {
+			t.Fatalf("Accept = %q, want application/json", seenAccept)
+		}
+		if !strings.HasPrefix(seenContentType, "application/x-www-form-urlencoded") {
+			t.Fatalf("Content-Type = %q, want form", seenContentType)
+		}
+		if got := seenForm.Get("client_id"); got != "id-123" {
+			t.Fatalf("client_id = %q", got)
+		}
+		if got := seenForm.Get("client_secret"); got != "secret-456" {
+			t.Fatalf("client_secret = %q", got)
+		}
+		if got := seenForm.Get("audience"); got != "api" {
+			t.Fatalf("audience = %q", got)
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if len(tokens) != 1 {
+			t.Fatalf("stored credentials = %d, want 1", len(tokens))
+		}
+		stored := tokens[0]
+		if stored.AccessToken != "manual-access" {
+			t.Fatalf("access token = %q, want manual-access", stored.AccessToken)
+		}
+		var refreshSource map[string]string
+		if err := json.Unmarshal([]byte(stored.RefreshToken), &refreshSource); err != nil {
+			t.Fatalf("refresh source is not credential JSON: %v", err)
+		}
+		if !reflect.DeepEqual(refreshSource, map[string]string{"client_id": "id-123", "client_secret": "secret-456"}) {
+			t.Fatalf("refresh source = %+v", refreshSource)
+		}
+		if stored.ExpiresAt == nil || !stored.ExpiresAt.Equal(fixedNow.Add(time.Hour)) {
+			t.Fatalf("expires_at = %v, want %v", stored.ExpiresAt, fixedNow.Add(time.Hour))
+		}
+		var metadata map[string]string
+		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
+			t.Fatalf("metadata JSON: %v", err)
+		}
+		if metadata["account_id"] != "acct_123" {
+			t.Fatalf("account_id metadata = %q, want acct_123", metadata["account_id"])
+		}
+	})
+
+	t.Run("supports json exchange and accessTokenPath", func(t *testing.T) {
+		t.Parallel()
+
+		var seen map[string]string
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+				t.Fatalf("Content-Type = %q, want JSON", got)
+			}
+			if err := json.NewDecoder(r.Body).Decode(&seen); err != nil {
+				t.Fatalf("decode token request: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"token":"nested-access"},"expires_in":"120"}`))
+		}))
+		testutil.CloseOnCleanup(t, tokenSrv)
+
+		svc := testutil.NewStubServices(t)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "json-token"},
+			})
+			cfg.DefaultConnection = map[string]string{"json-token": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"json-token": {
+					Auth: &config.ConnectionAuthDef{
+						Type:            providermanifestv1.AuthTypeManual,
+						TokenURL:        tokenSrv.URL,
+						TokenExchange:   "json",
+						AccessTokenPath: "data.token",
+						Credentials: []config.CredentialFieldDef{
+							{Name: "client_id"},
+							{Name: "client_secret"},
+						},
+					},
+				},
+			}
+			cfg.Now = func() time.Time { return fixedNow }
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"json-token","credentials":{"client_id":"json-id","client_secret":"json-secret"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if !reflect.DeepEqual(seen, map[string]string{"client_id": "json-id", "client_secret": "json-secret"}) {
+			t.Fatalf("token request body = %+v", seen)
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if len(tokens) != 1 {
+			t.Fatalf("stored credentials = %d, want 1", len(tokens))
+		}
+		if tokens[0].AccessToken != "nested-access" {
+			t.Fatalf("access token = %q, want nested-access", tokens[0].AccessToken)
+		}
+		if tokens[0].ExpiresAt == nil || !tokens[0].ExpiresAt.Equal(fixedNow.Add(120*time.Second)) {
+			t.Fatalf("expires_at = %v, want %v", tokens[0].ExpiresAt, fixedNow.Add(120*time.Second))
+		}
+	})
+
+	t.Run("uses registered exchanger when connection auth has no token URL", func(t *testing.T) {
+		t.Parallel()
+
+		var calls atomic.Int64
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			if got := r.Form.Get("client_id"); got != "fallback-id" {
+				t.Fatalf("client_id = %q, want fallback-id", got)
+			}
+			if got := r.Form.Get("client_secret"); got != "fallback-secret" {
+				t.Fatalf("client_secret = %q, want fallback-secret", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"fallback-access","expires_in":300}`))
+		}))
+		testutil.CloseOnCleanup(t, tokenSrv)
+
+		svc := testutil.NewStubServices(t)
+		exchanger := oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{TokenURL: tokenSrv.URL})
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
+				stubManualProvider: stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "fallback-token"},
+				},
+				credentialFields: []core.CredentialFieldDef{
+					{Name: "client_id"},
+					{Name: "client_secret"},
+				},
+			})
+			cfg.DefaultConnection = map[string]string{"fallback-token": config.PluginConnectionName}
+			cfg.ManualConnectionAuth = func() map[string]map[string]bootstrap.ManualTokenExchanger {
+				return map[string]map[string]bootstrap.ManualTokenExchanger{
+					"fallback-token": {
+						config.PluginConnectionName: exchanger,
+					},
+				}
+			}
+			cfg.Now = func() time.Time { return fixedNow }
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		rawReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credential":"raw-token"}`))
+		rawReq.Header.Set("Content-Type", "application/json")
+		rawResp, err := http.DefaultClient.Do(rawReq)
+		if err != nil {
+			t.Fatalf("raw request: %v", err)
+		}
+		defer func() { _ = rawResp.Body.Close() }()
+		if rawResp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(rawResp.Body)
+			t.Fatalf("raw status = %d, want 400: %s", rawResp.StatusCode, body)
+		}
+		if calls.Load() != 0 {
+			t.Fatalf("token endpoint calls after raw credential = %d, want 0", calls.Load())
+		}
+
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credentials":{"client_id":"fallback-id","client_secret":"fallback-secret"}}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if calls.Load() != 1 {
+			t.Fatalf("token endpoint calls = %d, want 1", calls.Load())
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if len(tokens) != 1 {
+			t.Fatalf("stored credentials = %d, want 1", len(tokens))
+		}
+		if tokens[0].AccessToken != "fallback-access" {
+			t.Fatalf("access token = %q, want fallback-access", tokens[0].AccessToken)
+		}
+	})
+
+	t.Run("rejects raw missing and unknown credentials before exchange", func(t *testing.T) {
+		t.Parallel()
+
+		var calls atomic.Int64
+		tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+			http.Error(w, "should not be called", http.StatusInternalServerError)
+		}))
+		testutil.CloseOnCleanup(t, tokenSrv)
+
+		cases := []string{
+			`{"integration":"strict-token","credential":"raw-token"}`,
+			`{"integration":"strict-token","credentials":{"client_id":"id-only"}}`,
+			`{"integration":"strict-token","credentials":{"client_id":"id","client_secret":"secret","extra":"nope"}}`,
+		}
+		t.Cleanup(func() {
+			if calls.Load() != 0 {
+				t.Fatalf("token endpoint calls = %d, want 0", calls.Load())
+			}
+		})
+		for _, body := range cases {
+			body := body
+			t.Run(body, func(t *testing.T) {
+				t.Parallel()
+
+				svc := testutil.NewStubServices(t)
+				ts := newTestServer(t, func(cfg *server.Config) {
+					cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+						StubIntegration: coretesting.StubIntegration{N: "strict-token"},
+					})
+					cfg.DefaultConnection = map[string]string{"strict-token": config.PluginConnectionName}
+					cfg.PluginDefs = map[string]*config.ProviderEntry{
+						"strict-token": {
+							Auth: &config.ConnectionAuthDef{
+								Type:     providermanifestv1.AuthTypeManual,
+								TokenURL: tokenSrv.URL,
+								Credentials: []config.CredentialFieldDef{
+									{Name: "client_id"},
+									{Name: "client_secret"},
+								},
+							},
+						},
+					}
+					cfg.Services = svc
+				})
+				testutil.CloseOnCleanup(t, ts)
+
+				req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(body))
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("request: %v", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != http.StatusBadRequest {
+					responseBody, _ := io.ReadAll(resp.Body)
+					t.Fatalf("status = %d, want 400: %s", resp.StatusCode, responseBody)
+				}
+			})
+		}
+	})
+}
+
+func TestRefresh_UsesManualTokenExchangeHandlers(t *testing.T) {
+	t.Parallel()
+
+	sourceCredential := `{"client_id":"id-123","client_secret":"secret-456"}`
+	var seenForm url.Values
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		seenForm = maps.Clone(r.PostForm)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"refreshed-manual","refresh_token":"ignored-by-gestalt","expires_in":3600}`))
+	}))
+	testutil.CloseOnCleanup(t, tokenSrv)
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	expired := time.Now().Add(-1 * time.Hour)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:           "tok-manual",
+		SubjectID:    principal.UserSubjectID(u.ID),
+		Integration:  "manual-refresh",
+		Connection:   "default",
+		Instance:     "default",
+		AccessToken:  "expired-manual",
+		RefreshToken: sourceCredential,
+		ExpiresAt:    &expired,
+	})
+
+	var usedToken string
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "manual-refresh",
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				usedToken = token
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+	}
+
+	exchanger := oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{
+		TokenURL: tokenSrv.URL,
+	})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"manual-refresh": testDefaultConnection}
+		cfg.ManualConnectionAuth = func() map[string]map[string]bootstrap.ManualTokenExchanger {
+			return map[string]map[string]bootstrap.ManualTokenExchanger{
+				"manual-refresh": {
+					testDefaultConnection: exchanger,
+				},
+			}
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/manual-refresh/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if usedToken != "refreshed-manual" {
+		t.Fatalf("used token = %q, want refreshed-manual", usedToken)
+	}
+	if seenForm.Get("client_id") != "id-123" || seenForm.Get("client_secret") != "secret-456" {
+		t.Fatalf("token request form = %+v", seenForm)
+	}
+
+	tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+	if len(tokens) != 1 {
+		t.Fatalf("stored credentials = %d, want 1", len(tokens))
+	}
+	if tokens[0].AccessToken != "refreshed-manual" {
+		t.Fatalf("stored access token = %q, want refreshed-manual", tokens[0].AccessToken)
+	}
+	if tokens[0].RefreshToken != sourceCredential {
+		t.Fatalf("stored refresh source = %q, want original credential JSON", tokens[0].RefreshToken)
 	}
 }
 

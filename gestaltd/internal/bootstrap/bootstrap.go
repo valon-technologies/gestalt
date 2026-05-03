@@ -59,6 +59,14 @@ type OAuthHandler interface {
 	TokenURL() string
 }
 
+type ManualTokenExchanger interface {
+	ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.TokenResponse, error)
+	ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURL string) (*core.TokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	TokenURL() string
+}
+
 // upstreamHandlerAdapter wraps an oauth.UpstreamHandler to satisfy OAuthHandler.
 type upstreamHandlerAdapter struct {
 	*oauth.UpstreamHandler
@@ -100,8 +108,9 @@ func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, c
 // ProviderBuildResult carries the constructed provider and an OAuth handler
 // for each named connection that uses oauth2 or mcp_oauth auth.
 type ProviderBuildResult struct {
-	Provider       core.Provider
-	ConnectionAuth map[string]OAuthHandler
+	Provider             core.Provider
+	ConnectionAuth       map[string]OAuthHandler
+	ManualConnectionAuth map[string]ManualTokenExchanger
 }
 
 type providerMetadata struct {
@@ -228,6 +237,7 @@ type Result struct {
 	ProvidersReady        <-chan struct{}
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
+	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
 	Invoker               invocation.Invoker
 	PluginInvoker         invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
@@ -1011,7 +1021,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.PublicHostServices = publicHostServices
 	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
 
-	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
+	providers, providersReady, connAuthResolver, manualConnAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1062,6 +1072,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
+		invocation.WithManualConnectionAuth(lazyManualRefreshers(providersReady, manualConnAuthResolver)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithProviderOverrides(providerDevSessions),
 	)
@@ -1154,6 +1165,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ProvidersReady:        providersReady,
 		Authorizer:            authz,
 		ConnectionAuth:        connAuthResolver,
+		ManualConnectionAuth:  manualConnAuthResolver,
 		Invoker:               sharedInvoker,
 		PluginInvoker:         pluginInvoker,
 		CapabilityLister:      sharedInvoker,
