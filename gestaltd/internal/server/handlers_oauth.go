@@ -293,11 +293,16 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
+		status := connectionSetupErrorStatus(err)
+		pageMessage := "Gestalt could not finish saving this connection. Start the connection again from Integrations."
+		if errors.Is(err, errDuplicateExternalIdentityCredential) {
+			pageMessage = "This account is already connected. Reconnect the existing instance or disconnect it before adding another."
+		}
 		writeCallbackError(
-			http.StatusBadGateway,
-			"connection setup failed",
+			status,
+			connectionSetupAPIErrorMessage(err),
 			providerName+" connection failed",
-			"Gestalt could not finish saving this connection. Start the connection again from Integrations.",
+			pageMessage,
 		)
 		return
 	}

@@ -159,7 +159,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", req.Integration, "error", err)
-		writeError(w, http.StatusBadGateway, "connection setup failed")
+		writeError(w, connectionSetupErrorStatus(err), connectionSetupAPIErrorMessage(err))
 		return
 	}
 
@@ -432,6 +432,9 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
+	if err := s.ensureNoDuplicateExternalIdentityCredential(ctx, tok); err != nil {
+		return nil, err
+	}
 	if err := s.externalCredentials.PutCredential(ctx, tok); err != nil {
 		return nil, err
 	}
@@ -569,6 +572,20 @@ func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm 
 		return nil, err
 	}
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+}
+
+func connectionSetupErrorStatus(err error) int {
+	if errors.Is(err, errDuplicateExternalIdentityCredential) {
+		return http.StatusConflict
+	}
+	return http.StatusBadGateway
+}
+
+func connectionSetupAPIErrorMessage(err error) string {
+	if errors.Is(err, errDuplicateExternalIdentityCredential) {
+		return err.Error()
+	}
+	return "connection setup failed"
 }
 
 func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provider, tm credentialMaterial) (credentialMaterial, error) {
