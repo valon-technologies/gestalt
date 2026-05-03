@@ -271,6 +271,38 @@ func runProviderInfo(args []string) error {
 	return fmt.Errorf("provider package %q not found", pkg)
 }
 
+func runProviderList(args []string) error {
+	fs := flag.NewFlagSet("gestaltd provider list", flag.ContinueOnError)
+	var configPaths repeatedStringFlag
+	kind := fs.String("kind", "", "provider kind")
+	lockfilePath := fs.String("lockfile", "", "path to lockfile")
+	fs.Var(&configPaths, "config", "path to config file")
+	if err := parseInterspersed(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	paths := operator.ResolveConfigPaths(configPaths)
+	if len(paths) == 0 {
+		return fmt.Errorf("no config file found")
+	}
+	cfg, err := config.LoadPartialAllowMissingEnvPaths(paths)
+	if err != nil {
+		return err
+	}
+	lock, err := readProviderListLockfile(paths[0], *lockfilePath)
+	if err != nil {
+		return err
+	}
+	rows, err := providerLifecycleRows(cfg, paths[0], lock, *kind)
+	if err != nil {
+		return err
+	}
+	printProviderRows(rows)
+	return nil
+}
+
 func runProviderAdd(args []string) error {
 	fs := flag.NewFlagSet("gestaltd provider add", flag.ContinueOnError)
 	var configPaths repeatedStringFlag
@@ -283,6 +315,7 @@ func runProviderAdd(args []string) error {
 	noLock := fs.Bool("no-lock", false, "do not update lockfile")
 	sync := fs.Bool("sync", false, "materialize prepared artifacts after locking")
 	exactSource := fs.Bool("exact-source", false, "write resolved provider-release metadata URL instead of package source")
+	fs.Bool("package-source", false, "accepted for compatibility; package sources are written by default")
 	dryRun := fs.Bool("dry-run", false, "print resolved package without editing")
 	fs.Var(&configPaths, "config", "path to config file")
 	fs.Var(&setFlags, "set", "set shallow entry field, e.g. path=/ui")
@@ -292,15 +325,9 @@ func runProviderAdd(args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("usage: gestaltd provider add PACKAGE")
 	}
-	paths := operator.ResolveConfigPaths(configPaths)
-	primary, err := ensurePrimaryProviderConfig(paths)
+	primary, paths, err := resolveMutableProviderConfig(configPaths)
 	if err != nil {
 		return err
-	}
-	if len(paths) == 0 {
-		paths = []string{primary}
-	} else {
-		paths[0] = primary
 	}
 	cfg, err := config.LoadAllowMissingEnvPaths(paths)
 	if err != nil {
@@ -320,7 +347,7 @@ func runProviderAdd(args []string) error {
 		return err
 	}
 	if *dryRun {
-		fmt.Printf("%s\t%s\t%s\t%s\n", resolved.Package, resolved.Version, resolved.Kind, resolved.MetadataURL)
+		fmt.Printf("Package: %s\nVersion: %s\nKind: %s\nMetadata: %s\n", resolved.Package, resolved.Version, resolved.Kind, resolved.MetadataURL)
 		return nil
 	}
 	apiVersion := config.ConfigAPIVersion
@@ -328,12 +355,18 @@ func runProviderAdd(args []string) error {
 		apiVersion = strings.TrimSpace(cfg.APIVersion)
 	}
 	writePackageSource := !*exactSource
+	if writePackageSource {
+		apiVersion = config.ConfigAPIVersion
+	}
 	entryKind := providermanifestv1.NormalizeKind(*kind)
 	if entryKind == "" {
 		entryKind = resolved.Kind
 	}
 	if entryKind == "telemetry" || entryKind == "audit" {
 		return fmt.Errorf("provider add --kind %s is not supported yet; provider-backed %s is not supported at bootstrap", entryKind, entryKind)
+	}
+	if _, err := requireProviderLifecycleKind(entryKind); err != nil {
+		return err
 	}
 	entryName := strings.TrimSpace(*name)
 	if entryName == "" {
@@ -346,18 +379,32 @@ func runProviderAdd(args []string) error {
 	if entryKind == providermanifestv1.KindUI && strings.TrimSpace(setValues["path"]) == "" {
 		return fmt.Errorf("provider add for kind ui requires --set path=/mount")
 	}
-	if err := editProviderEntry(primary, apiVersion, entryKind, entryName, resolved, *version, *repoName, writePackageSource, setValues); err != nil {
+	if providerEntryExists(cfg, entryKind, entryName) {
+		return fmt.Errorf("provider %q of kind %q already exists", entryName, entryKind)
+	}
+	root, doc, err := readConfigDocument(primary)
+	if err != nil {
 		return err
 	}
-	if *noLock {
-		return nil
+	if err := applyProviderEntry(doc, apiVersion, entryKind, entryName, resolved, *version, *repoName, writePackageSource, setValues); err != nil {
+		return err
 	}
-	state := operator.StatePaths{LockfilePath: *lockfilePath}
-	if err := lockConfigWithStatePaths(configPaths, state, "", false); err != nil {
+	preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, *noLock)
+	if err != nil {
+		return err
+	}
+	result, err := commitProviderConfigMutation(preflight)
+	if err != nil {
 		return err
 	}
 	if *sync {
-		return syncConfigWithStatePaths(configPaths, state, false)
+		if err := syncConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, false); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("Added %s %s\nPackage: %s\nRepository: %s\nVersion: %s\nConfig: %s\n", entryKind, entryName, resolved.Package, resolved.RepositoryName, resolved.Version, result.ConfigPath)
+	if result.LockWritten {
+		fmt.Printf("Lockfile: %s\n", result.LockfilePath)
 	}
 	return nil
 }
@@ -365,7 +412,7 @@ func runProviderAdd(args []string) error {
 func runProviderRemove(args []string) error {
 	fs := flag.NewFlagSet("gestaltd provider remove", flag.ContinueOnError)
 	var configPaths repeatedStringFlag
-	kind := fs.String("kind", "plugin", "provider kind")
+	kind := fs.String("kind", "", "provider kind")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile")
 	noLock := fs.Bool("no-lock", false, "do not update lockfile")
 	fs.Var(&configPaths, "config", "path to config file")
@@ -375,15 +422,30 @@ func runProviderRemove(args []string) error {
 	if fs.NArg() != 1 {
 		return fmt.Errorf("usage: gestaltd provider remove NAME")
 	}
-	paths := operator.ResolveConfigPaths(configPaths)
-	if len(paths) == 0 {
-		return fmt.Errorf("no config file found")
-	}
-	if err := removeProviderEntry(paths[0], providermanifestv1.NormalizeKind(*kind), fs.Arg(0)); err != nil {
+	primary, _, err := resolveMutableProviderConfig(configPaths)
+	if err != nil {
 		return err
 	}
-	if !*noLock {
-		return lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, "", false)
+	root, doc, err := readConfigDocument(primary)
+	if err != nil {
+		return err
+	}
+	targets, err := providerRemoveTargets(doc, normalizeProviderLifecycleKind(*kind), fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	deleteKey(targets[0].node, fs.Arg(0))
+	preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, *noLock)
+	if err != nil {
+		return err
+	}
+	result, err := commitProviderConfigMutation(preflight)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Removed %s %s\nConfig: %s\n", targets[0].kind, fs.Arg(0), result.ConfigPath)
+	if result.LockWritten {
+		fmt.Printf("Lockfile: %s\n", result.LockfilePath)
 	}
 	return nil
 }
@@ -405,15 +467,37 @@ func runProviderUpgrade(args []string) error {
 		return fmt.Errorf("--version requires a provider name")
 	}
 	if *version != "" {
-		paths := operator.ResolveConfigPaths(configPaths)
-		if len(paths) == 0 {
-			return fmt.Errorf("no config file found")
-		}
-		if err := updateProviderVersionConstraint(paths[0], providermanifestv1.NormalizeKind(*kind), fs.Arg(0), *version); err != nil {
+		primary, _, err := resolveMutableProviderConfig(configPaths)
+		if err != nil {
 			return err
 		}
+		root, doc, err := readConfigDocument(primary)
+		if err != nil {
+			return err
+		}
+		targetKind, err := applyProviderVersionConstraint(doc, normalizeProviderLifecycleKind(*kind), fs.Arg(0), *version)
+		if err != nil {
+			return err
+		}
+		preflight, err := preflightProviderConfigMutation(primary, root, *lockfilePath, false)
+		if err != nil {
+			return err
+		}
+		result, err := commitProviderConfigMutation(preflight)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Updated %s %s version constraint to %s\nConfig: %s\n", targetKind, fs.Arg(0), *version, result.ConfigPath)
+		if result.LockWritten {
+			fmt.Printf("Lockfile: %s\n", result.LockfilePath)
+		}
+		return nil
 	}
-	return lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, "", false)
+	if err := lockConfigWithStatePaths(configPaths, operator.StatePaths{LockfilePath: *lockfilePath}, "", false); err != nil {
+		return err
+	}
+	fmt.Println("Refreshed provider lock state")
+	return nil
 }
 
 func loadProviderRepositories(configPaths []string) ([]providerregistry.NamedRepository, error) {
@@ -446,7 +530,8 @@ func loadProviderRepositories(configPaths []string) ([]providerregistry.NamedRep
 				if _, ok := byName[name]; !ok {
 					order = append(order, name)
 				}
-				byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL}
+				existing := byName[name]
+				byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL, Token: existing.Token}
 			}
 		}
 	}
@@ -525,63 +610,29 @@ func removeProjectProviderRepository(path, name string) error {
 	return writeConfigDocument(path, root)
 }
 
-func editProviderEntry(path, apiVersion, kind, name string, resolved *providerregistry.ResolvedPackage, constraint, repoName string, packageSource bool, setValues map[string]string) error {
-	root, doc, err := readConfigDocument(path)
-	if err != nil {
-		return err
-	}
-	setScalar(doc, "apiVersion", apiVersion)
-	entry := map[string]any{}
-	if packageSource {
-		source := map[string]any{"package": resolved.Package}
-		sourceRepoName := ""
-		if repoName != "" {
-			sourceRepoName = repoName
-		} else if resolved.RepositoryName != providerregistry.DefaultRepositoryName {
-			sourceRepoName = resolved.RepositoryName
-		}
-		if sourceRepoName != "" {
-			source["repo"] = sourceRepoName
-			if resolved.RepositoryURL != "" {
-				repos := ensureMapping(doc, "providerRepositories")
-				setNode(repos, sourceRepoName, yamlMapping(map[string]any{"url": resolved.RepositoryURL}))
-			}
-		}
-		if constraint != "" {
-			source["version"] = constraint
-		}
-		entry["source"] = source
-	} else {
-		entry["source"] = resolved.MetadataURL
-	}
-	if kind == providermanifestv1.KindUI {
-		entry["path"] = setValues["path"]
-	}
-	target := providerEntryCollection(doc, kind)
-	setNode(target, name, yamlMapping(entry))
-	return writeConfigDocument(path, root)
-}
-
-func removeProviderEntry(path, kind, name string) error {
-	root, doc, err := readConfigDocument(path)
-	if err != nil {
-		return err
-	}
-	deleteKey(providerEntryCollection(doc, kind), name)
-	return writeConfigDocument(path, root)
-}
-
 func updateProviderVersionConstraint(path, kind, name, version string) error {
 	root, doc, err := readConfigDocument(path)
 	if err != nil {
 		return err
 	}
+	if _, err := applyProviderVersionConstraint(doc, kind, name, version); err != nil {
+		return err
+	}
+	return writeConfigDocument(path, root)
+}
+
+func applyProviderVersionConstraint(doc *yaml.Node, kind, name, version string) (string, error) {
+	if strings.TrimSpace(kind) != "" {
+		if _, err := requireProviderLifecycleKind(kind); err != nil {
+			return "", err
+		}
+	}
 	targets := providerVersionTargets(doc, kind, name)
 	if len(targets) == 0 {
 		if kind != "" {
-			return fmt.Errorf("provider %q of kind %q not found or is not a package source", name, kind)
+			return "", fmt.Errorf("provider %q of kind %q not found or is not a package source", name, kind)
 		}
-		return fmt.Errorf("provider %q not found or is not a package source", name)
+		return "", fmt.Errorf("provider %q not found or is not a package source", name)
 	}
 	if len(targets) > 1 {
 		kinds := make([]string, 0, len(targets))
@@ -589,10 +640,10 @@ func updateProviderVersionConstraint(path, kind, name, version string) error {
 			kinds = append(kinds, target.kind)
 		}
 		slices.Sort(kinds)
-		return fmt.Errorf("provider %q is ambiguous across kinds %s; pass --kind", name, strings.Join(kinds, ", "))
+		return "", fmt.Errorf("provider %q is ambiguous across kinds %s; pass --kind", name, strings.Join(kinds, ", "))
 	}
 	setScalar(targets[0].source, "version", version)
-	return writeConfigDocument(path, root)
+	return targets[0].kind, nil
 }
 
 type providerVersionTarget struct {

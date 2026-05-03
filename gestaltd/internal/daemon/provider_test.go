@@ -398,8 +398,8 @@ func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 		{
 			name:      "root help",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "attach", "release"},
-			notWant:   []string{"\n  install", "\n  inspect", "\n  list", "\n  init", "\n  package"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "attach", "list", "release"},
+			notWant:   []string{"\n  install", "\n  inspect", "\n  init", "\n  package"},
 		},
 		{
 			name:      "attach help",

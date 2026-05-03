@@ -547,7 +547,8 @@ func providerRepositoriesForConfig(cfg *config.Config) ([]providerregistry.Named
 		if _, ok := byName[name]; !ok {
 			order = append(order, name)
 		}
-		byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL}
+		existing := byName[name]
+		byName[name] = providerregistry.NamedRepository{Name: name, URL: repo.URL, Token: existing.Token}
 	}
 	out := make([]providerregistry.NamedRepository, 0, len(order))
 	for _, name := range order {
@@ -1673,7 +1674,14 @@ func lockEntrySourceMatchesProvider(paths lifecyclePaths, provider *config.Provi
 		if strings.TrimSpace(entry.Package) != provider.Source.PackageAddress() {
 			return false
 		}
-		return providerregistry.VersionSatisfiesConstraint(entry.Version, provider.Source.PackageVersionConstraint())
+		if !providerregistry.VersionSatisfiesConstraint(entry.Version, provider.Source.PackageVersionConstraint()) {
+			return false
+		}
+		if resolved := provider.Source.ResolvedPackageMetadataURL(); resolved != "" {
+			return entry.Source == resolved
+		}
+		source := strings.TrimSpace(entry.Source)
+		return source != "" && source != strings.TrimSpace(entry.Package)
 	}
 	return entry.Source == providerSourceLockLocation(provider, paths.configDir)
 }
@@ -1935,6 +1943,19 @@ func lockEntryMetadataMatches(paths lifecyclePaths, kind, name string, providerE
 		return false
 	}
 	return true
+}
+
+// LockEntryMetadataMatchesProvider checks whether a lock entry still matches a
+// provider config entry without inspecting prepared artifact files.
+func LockEntryMetadataMatchesProvider(configPath, kind, name string, providerEntry *config.ProviderEntry, entry LockEntry, found, ui bool) bool {
+	paths := lifecyclePaths{
+		configPath: configPath,
+		configDir:  filepath.Dir(configPath),
+	}
+	if ui {
+		return uiLockEntryMetadataMatches(paths, name, providerEntry, entry, found)
+	}
+	return lockEntryMetadataMatches(paths, kind, name, providerEntry, entry, found)
 }
 
 func uiLockEntryMetadataMatches(paths lifecyclePaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool) bool {
