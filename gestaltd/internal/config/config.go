@@ -36,7 +36,7 @@ const (
 	DefaultIndexedDBProvider           = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion            = "0.0.1-alpha.4"
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/external_credentials/default"
-	DefaultExternalCredentialsVersion  = "0.0.1-alpha.1"
+	DefaultExternalCredentialsVersion  = "0.0.1-alpha.2"
 	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
 	DefaultUIVersion                   = "0.0.1-alpha.18"
 	DefaultProviderInstance            = "default"
@@ -2772,7 +2772,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.IsPackage() || entry.Source.UnsupportedURL() != "" {
 			continue
 		}
 		entry.Source.Builtin = builtin

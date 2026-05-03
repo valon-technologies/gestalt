@@ -989,6 +989,189 @@ packages:
 	}
 }
 
+func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	version := "1.2.3"
+	type release struct {
+		source       string
+		kind         string
+		metadataPath string
+		archivePath  string
+		archiveData  []byte
+		archiveSHA   string
+	}
+	buildRelease := func(name, source, kind string) release {
+		t.Helper()
+		archiveFile := buildExecutableArchive(t, dir, name+"-src", source, version, kind, name, name+"-binary")
+		data, err := os.ReadFile(archiveFile)
+		if err != nil {
+			t.Fatalf("read %s archive: %v", name, err)
+		}
+		sum := sha256.Sum256(data)
+		return release{
+			source:       source,
+			kind:         kind,
+			metadataPath: "/providers/" + name + "/v1.2.3/provider-release.yaml",
+			archivePath:  "/providers/" + name + "/v1.2.3/" + name + ".tar.gz",
+			archiveData:  data,
+			archiveSHA:   hex.EncodeToString(sum[:]),
+		}
+	}
+
+	indexedDBRelease := buildRelease("indexeddb", "github.com/acme/tools/indexeddb", providermanifestv1.KindIndexedDB)
+	s3Release := buildRelease("s3", "github.com/acme/tools/s3", providermanifestv1.KindS3)
+	releases := []release{indexedDBRelease, s3Release}
+
+	var indexCount atomic.Int64
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	indexPath := "/provider-index.yaml"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == indexPath {
+			indexCount.Add(1)
+			var b strings.Builder
+			b.WriteString("schema: gestaltd-provider-index\nschemaVersion: 1\npackages:\n")
+			for _, rel := range releases {
+				b.WriteString("  " + rel.source + ":\n")
+				b.WriteString("    versions:\n")
+				b.WriteString("      " + version + ":\n")
+				b.WriteString("        metadata: " + strings.TrimPrefix(rel.metadataPath, "/") + "\n")
+				b.WriteString("        kind: " + rel.kind + "\n")
+				b.WriteString("        runtime: executable\n")
+				b.WriteString("        platforms:\n")
+				b.WriteString("          - " + providerpkg.CurrentPlatformString() + "\n")
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte(b.String()))
+			return
+		}
+		for _, rel := range releases {
+			switch r.URL.Path {
+			case rel.metadataPath:
+				metadataCount.Add(1)
+				metadata := providerReleaseMetadata{
+					Schema:        providerReleaseSchemaName,
+					SchemaVersion: providerReleaseSchemaVersion,
+					Package:       rel.source,
+					Kind:          rel.kind,
+					Version:       version,
+					Runtime:       providerReleaseRuntimeExecutable,
+					Artifacts: map[string]providerReleaseArtifact{
+						providerpkg.CurrentPlatformString(): {
+							Path:   filepath.Base(rel.archivePath),
+							SHA256: rel.archiveSHA,
+						},
+					},
+				}
+				data, err := yaml.Marshal(metadata)
+				if err != nil {
+					handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+					http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/yaml")
+				_, _ = w.Write(data)
+				return
+			case rel.archivePath:
+				archiveCount.Add(1)
+				w.Header().Set("Content-Type", "application/octet-stream")
+				_, _ = w.Write(rel.archiveData)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersionV5,
+		"providerRepositories:",
+		"  local:",
+		"    url: " + srv.URL + indexPath,
+		"providers:",
+		"  indexeddb:",
+		"    main:",
+		"      source:",
+		"        repo: local",
+		"        package: " + indexedDBRelease.source,
+		"        version: " + version,
+		"      config:",
+		"        path: " + filepath.Join(dir, "data.db"),
+		"  s3:",
+		"    objects:",
+		"      source:",
+		"        repo: local",
+		"        package: " + s3Release.source,
+		"        version: " + version,
+		"server:",
+		"  providers:",
+		"    indexeddb: main",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().PrepareAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	indexedDBEntry, ok := lock.IndexedDBs["main"]
+	if !ok {
+		t.Fatal(`lock.IndexedDBs["main"] not found`)
+	}
+	if indexedDBEntry.Source != srv.URL+indexedDBRelease.metadataPath {
+		t.Fatalf("indexeddb source = %q, want %q", indexedDBEntry.Source, srv.URL+indexedDBRelease.metadataPath)
+	}
+	if indexedDBEntry.Package != indexedDBRelease.source {
+		t.Fatalf("indexeddb package = %q, want %q", indexedDBEntry.Package, indexedDBRelease.source)
+	}
+	s3Entry, ok := lock.S3["objects"]
+	if !ok {
+		t.Fatal(`lock.S3["objects"] not found`)
+	}
+	if s3Entry.Source != srv.URL+s3Release.metadataPath {
+		t.Fatalf("s3 source = %q, want %q", s3Entry.Source, srv.URL+s3Release.metadataPath)
+	}
+	if s3Entry.Package != s3Release.source {
+		t.Fatalf("s3 package = %q, want %q", s3Entry.Package, s3Release.source)
+	}
+	if got := indexCount.Load(); got != int64(len(releases)) {
+		t.Fatalf("index request count = %d, want %d", got, len(releases))
+	}
+	if got := metadataCount.Load(); got != int64(len(releases)) {
+		t.Fatalf("metadata request count = %d, want %d", got, len(releases))
+	}
+	if got := archiveCount.Load(); got != int64(len(releases)) {
+		t.Fatalf("archive request count = %d, want %d", got, len(releases))
+	}
+}
+
 func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
