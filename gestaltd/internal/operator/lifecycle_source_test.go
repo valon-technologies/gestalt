@@ -873,7 +873,7 @@ packages:
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.ConfigAPIVersionV5,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"providerRepositories:",
 		"  local:",
 		"    url: " + srv.URL + indexPath,
@@ -1099,7 +1099,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := strings.Join([]string{
-		"apiVersion: " + config.ConfigAPIVersionV5,
+		"apiVersion: " + config.ConfigAPIVersion,
 		"providerRepositories:",
 		"  local:",
 		"    url: " + srv.URL + indexPath,

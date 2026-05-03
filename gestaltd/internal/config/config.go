@@ -44,9 +44,7 @@ const (
 
 const PluginConnectionName = core.PluginConnectionName
 const PluginConnectionAlias = core.PluginConnectionAlias
-const ConfigAPIVersionV4 = "gestaltd.config/v4"
-const ConfigAPIVersionV5 = "gestaltd.config/v5"
-const ConfigAPIVersion = ConfigAPIVersionV5
+const ConfigAPIVersion = "gestaltd.config/v5"
 
 type Config struct {
 	APIVersion           string                              `yaml:"apiVersion,omitempty"`
@@ -2140,7 +2138,7 @@ func validateConfigRootAPIVersion(root yaml.Node) error {
 	if value == "" {
 		return requiredAPIVersionError()
 	}
-	if value != ConfigAPIVersionV4 && value != ConfigAPIVersionV5 {
+	if value != ConfigAPIVersion {
 		return fmt.Errorf("config validation: unsupported apiVersion %q", value)
 	}
 	return nil
@@ -2664,11 +2662,6 @@ func normalizeProviderSource(kind string, source *ProviderSource) {
 	if source.scalar == "" {
 		return
 	}
-	if kind == providermanifestv1.KindExternalCredentials && source.scalar == "local" {
-		source.Builtin = source.scalar
-		source.scalar = ""
-		return
-	}
 	switch {
 	case isBuiltinScalarSource(kind, source.scalar):
 		source.Builtin = source.scalar
@@ -2930,6 +2923,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 		}{
 			{key: "authentication", kind: providermanifestv1.KindAuthentication},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
+			{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
 			{key: "telemetry", kind: string(HostProviderKindTelemetry)},
 			{key: "audit", kind: string(HostProviderKindAudit)},
@@ -3031,6 +3025,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	for _, entry := range cfg.Providers.Authorization {
 		resolveEntry(entry)
 	}
+	for _, entry := range cfg.Providers.ExternalCredentials {
+		resolveEntry(entry)
+	}
 	for _, entry := range cfg.Providers.Secrets {
 		resolveEntry(entry)
 	}
@@ -3046,6 +3043,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 	for _, entry := range cfg.Providers.IndexedDB {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Cache {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.S3 {
