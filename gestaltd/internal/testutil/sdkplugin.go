@@ -589,6 +589,71 @@ func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExte
 	return nil
 }
 
+func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.ValidateExternalCredentialConfigRequest) error {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.ValidateCredentialConfig(ctx, req)
+	}
+	return nil
+}
+
+func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveExternalCredentialRequest) (*gestalt.ResolveExternalCredentialResponse, error) {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return nil, err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.ResolveCredential(ctx, req)
+	}
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+	if req.GetMode() == "platform" {
+		return &gestalt.ResolveExternalCredentialResponse{Token: req.GetAuth().GetToken()}, nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var credential *gestalt.ExternalCredential
+	for _, value := range p.credentials {
+		if value.GetSubjectId() != req.GetCredentialSubjectId() || value.GetConnectionId() != req.GetConnectionId() {
+			continue
+		}
+		if req.GetInstance() != "" && value.GetInstance() != req.GetInstance() {
+			continue
+		}
+		if credential != nil {
+			return nil, fmt.Errorf("ambiguous external credential")
+		}
+		credential = value
+	}
+	if credential == nil {
+		return nil, gestalt.ErrExternalCredentialNotFound
+	}
+	return &gestalt.ResolveExternalCredentialResponse{
+		Token:        credential.GetAccessToken(),
+		ExpiresAt:    credential.GetExpiresAt(),
+		MetadataJson: credential.GetMetadataJson(),
+		Credential:   cloneExternalCredential(credential),
+	}, nil
+}
+
+func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.ExchangeExternalCredentialRequest) (*gestalt.ExchangeExternalCredentialResponse, error) {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return nil, err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.ExchangeCredential(ctx, req)
+	}
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+	return &gestalt.ExchangeExternalCredentialResponse{TokenResponse: &gestalt.ExternalCredentialTokenResponse{
+		AccessToken:   req.GetCredentialJson(),
+		RefreshSource: req.GetCredentialJson(),
+	}}, nil
+}
+
 func cloneExternalCredential(src *gestalt.ExternalCredential) *gestalt.ExternalCredential {
 	if src == nil {
 		return nil

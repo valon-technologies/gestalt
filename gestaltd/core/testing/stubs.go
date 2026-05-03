@@ -10,13 +10,16 @@ import (
 )
 
 type StubExternalCredentialProvider struct {
-	mu           sync.Mutex
-	credentials  map[string]core.ExternalCredential
-	nextSequence int
-	PutErr       error
-	GetErr       error
-	ListErr      error
-	DeleteErr    error
+	mu                           sync.Mutex
+	credentials                  map[string]core.ExternalCredential
+	nextSequence                 int
+	PutErr                       error
+	GetErr                       error
+	ListErr                      error
+	DeleteErr                    error
+	ValidateCredentialConfigFunc func(context.Context, *core.ValidateExternalCredentialConfigRequest) error
+	ResolveCredentialFunc        func(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error)
+	ExchangeCredentialFunc       func(context.Context, *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error)
 }
 
 func NewStubExternalCredentialProvider() *StubExternalCredentialProvider {
@@ -67,6 +70,69 @@ func (p *StubExternalCredentialProvider) DeleteCredential(_ context.Context, id 
 	defer p.mu.Unlock()
 	delete(p.credentials, id)
 	return nil
+}
+
+func (p *StubExternalCredentialProvider) ValidateCredentialConfig(ctx context.Context, req *core.ValidateExternalCredentialConfigRequest) error {
+	if p != nil && p.ValidateCredentialConfigFunc != nil {
+		return p.ValidateCredentialConfigFunc(ctx, req)
+	}
+	return nil
+}
+
+func (p *StubExternalCredentialProvider) ResolveCredential(ctx context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	if p != nil && p.ResolveCredentialFunc != nil {
+		return p.ResolveCredentialFunc(ctx, req)
+	}
+	if req == nil {
+		return nil, core.ErrNotFound
+	}
+	if req.Mode == core.ConnectionModePlatform {
+		return &core.ResolveExternalCredentialResponse{
+			Token: req.Auth.Token,
+		}, nil
+	}
+	var credential *core.ExternalCredential
+	var err error
+	if req.Instance != "" {
+		credential, err = p.GetCredential(ctx, req.CredentialSubjectID, req.ConnectionID, req.Instance)
+	} else {
+		var credentials []*core.ExternalCredential
+		credentials, err = p.ListCredentialsForConnection(ctx, req.CredentialSubjectID, req.ConnectionID)
+		if err == nil {
+			switch len(credentials) {
+			case 0:
+				err = core.ErrNotFound
+			case 1:
+				credential = credentials[0]
+			default:
+				err = core.ErrAmbiguousCredential
+			}
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &core.ResolveExternalCredentialResponse{
+		Token:        credential.AccessToken,
+		ExpiresAt:    credential.ExpiresAt,
+		MetadataJSON: credential.MetadataJSON,
+		Credential:   cloneExternalCredential(*credential),
+	}, nil
+}
+
+func (p *StubExternalCredentialProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	if p != nil && p.ExchangeCredentialFunc != nil {
+		return p.ExchangeCredentialFunc(ctx, req)
+	}
+	if req == nil {
+		return nil, core.ErrNotFound
+	}
+	return &core.ExchangeExternalCredentialResponse{
+		TokenResponse: &core.ExternalCredentialTokenResponse{
+			AccessToken:   req.CredentialJSON,
+			RefreshSource: req.CredentialJSON,
+		},
+	}, nil
 }
 
 func (p *StubExternalCredentialProvider) storeCredential(credential *core.ExternalCredential, preserve bool) error {

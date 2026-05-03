@@ -63,6 +63,24 @@ func (p *observedExternalCredentialProvider) DeleteCredential(ctx context.Contex
 	return p.delegate.DeleteCredential(ctx, id)
 }
 
+func (p *observedExternalCredentialProvider) ValidateCredentialConfig(ctx context.Context, req *core.ValidateExternalCredentialConfigRequest) (err error) {
+	ctx, end := p.start(ctx, "validate_credential_config", requestConnectionID(req))
+	defer func() { end(err) }()
+	return p.delegate.ValidateCredentialConfig(ctx, req)
+}
+
+func (p *observedExternalCredentialProvider) ResolveCredential(ctx context.Context, req *core.ResolveExternalCredentialRequest) (resp *core.ResolveExternalCredentialResponse, err error) {
+	ctx, end := p.start(ctx, "resolve_credential", resolveRequestConnectionID(req))
+	defer func() { end(err) }()
+	return p.delegate.ResolveCredential(ctx, req)
+}
+
+func (p *observedExternalCredentialProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (resp *core.ExchangeExternalCredentialResponse, err error) {
+	ctx, end := p.start(ctx, "exchange_credential", exchangeRequestConnectionID(req))
+	defer func() { end(err) }()
+	return p.delegate.ExchangeCredential(ctx, req)
+}
+
 func (p *observedExternalCredentialProvider) Close() error {
 	closer, ok := p.delegate.(interface{ Close() error })
 	if !ok {
@@ -95,4 +113,25 @@ func credentialIntegration(credential *core.ExternalCredential) string {
 		return credential.ConnectionID
 	}
 	return credential.Integration
+}
+
+func requestConnectionID(req *core.ValidateExternalCredentialConfigRequest) string {
+	if req == nil {
+		return ""
+	}
+	return req.ConnectionID
+}
+
+func resolveRequestConnectionID(req *core.ResolveExternalCredentialRequest) string {
+	if req == nil {
+		return ""
+	}
+	return req.ConnectionID
+}
+
+func exchangeRequestConnectionID(req *core.ExchangeExternalCredentialRequest) string {
+	if req == nil {
+		return ""
+	}
+	return req.ConnectionID
 }

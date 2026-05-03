@@ -25,6 +25,7 @@ type ConnectionRuntimeInfo struct {
 	Mode         core.ConnectionMode
 	Exposure     core.ConnectionExposure
 	AuthType     providermanifestv1.AuthType
+	AuthConfig   core.ExternalCredentialAuthConfig
 	Token        string
 	TokenSource  ConnectionRuntimeCredentialSource
 	AuthMapping  *providermanifestv1.AuthMapping

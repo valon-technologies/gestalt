@@ -36,7 +36,7 @@ const (
 	DefaultIndexedDBProvider           = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion            = "0.0.1-alpha.4"
 	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/external_credentials/default"
-	DefaultExternalCredentialsVersion  = "0.0.1-alpha.2"
+	DefaultExternalCredentialsVersion  = "0.0.1-alpha.3"
 	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
 	DefaultUIVersion                   = "0.0.1-alpha.18"
 	DefaultProviderInstance            = "default"
@@ -1538,32 +1538,34 @@ type ConnectionDef struct {
 }
 
 type ConnectionAuthDef struct {
-	Type                providermanifestv1.AuthType `yaml:"type"`
-	Token               string                      `yaml:"token"`
-	GrantType           string                      `yaml:"grantType"`
-	AuthorizationURL    string                      `yaml:"authorizationUrl"`
-	TokenURL            string                      `yaml:"tokenUrl"`
-	ClientID            string                      `yaml:"clientId"`
-	ClientSecret        string                      `yaml:"clientSecret"`
-	RedirectURL         string                      `yaml:"redirectUrl"`
-	ClientAuth          string                      `yaml:"clientAuth"`
-	TokenExchange       string                      `yaml:"tokenExchange"`
-	TokenPrefix         string                      `yaml:"tokenPrefix"`
-	Scopes              []string                    `yaml:"scopes"`
-	ScopeParam          string                      `yaml:"scopeParam"`
-	ScopeSeparator      string                      `yaml:"scopeSeparator"`
-	PKCE                bool                        `yaml:"pkce"`
-	AuthorizationParams map[string]string           `yaml:"authorizationParams"`
-	TokenParams         map[string]string           `yaml:"tokenParams"`
-	RefreshParams       map[string]string           `yaml:"refreshParams"`
-	AcceptHeader        string                      `yaml:"acceptHeader"`
-	AccessTokenPath     string                      `yaml:"accessTokenPath"`
-	TokenMetadata       []string                    `yaml:"tokenMetadata"`
-	Credentials         []CredentialFieldDef        `yaml:"credentials"`
-	AuthMapping         *AuthMappingDef             `yaml:"authMapping"`
+	Type                 providermanifestv1.AuthType `yaml:"type"`
+	Token                string                      `yaml:"token"`
+	GrantType            string                      `yaml:"grantType"`
+	AuthorizationURL     string                      `yaml:"authorizationUrl"`
+	TokenURL             string                      `yaml:"tokenUrl"`
+	ClientID             string                      `yaml:"clientId"`
+	ClientSecret         string                      `yaml:"clientSecret"`
+	RedirectURL          string                      `yaml:"redirectUrl"`
+	ClientAuth           string                      `yaml:"clientAuth"`
+	TokenExchange        string                      `yaml:"tokenExchange"`
+	TokenPrefix          string                      `yaml:"tokenPrefix"`
+	Scopes               []string                    `yaml:"scopes"`
+	ScopeParam           string                      `yaml:"scopeParam"`
+	ScopeSeparator       string                      `yaml:"scopeSeparator"`
+	PKCE                 bool                        `yaml:"pkce"`
+	AuthorizationParams  map[string]string           `yaml:"authorizationParams"`
+	TokenParams          map[string]string           `yaml:"tokenParams"`
+	RefreshParams        map[string]string           `yaml:"refreshParams"`
+	AcceptHeader         string                      `yaml:"acceptHeader"`
+	AccessTokenPath      string                      `yaml:"accessTokenPath"`
+	TokenMetadata        []string                    `yaml:"tokenMetadata"`
+	TokenExchangeDrivers []TokenExchangeDriverDef    `yaml:"tokenExchangeDrivers"`
+	Credentials          []CredentialFieldDef        `yaml:"credentials"`
+	AuthMapping          *AuthMappingDef             `yaml:"authMapping"`
 }
 
 type CredentialFieldDef = providermanifestv1.CredentialField
+type TokenExchangeDriverDef = providermanifestv1.TokenExchangeDriver
 type AuthMappingDef = providermanifestv1.AuthMapping
 type BasicAuthMappingDef = providermanifestv1.BasicAuthMapping
 type AuthValueDef = providermanifestv1.AuthValue
@@ -1624,6 +1626,9 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 	setString(&dst.AccessTokenPath, src.AccessTokenPath)
 	if src.TokenMetadata != nil {
 		dst.TokenMetadata = src.TokenMetadata
+	}
+	if src.TokenExchangeDrivers != nil {
+		dst.TokenExchangeDrivers = slices.Clone(src.TokenExchangeDrivers)
 	}
 	if src.Credentials != nil {
 		if len(src.Credentials) == 0 {
@@ -1715,26 +1720,27 @@ func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) Conn
 		return ConnectionAuthDef{}
 	}
 	out := ConnectionAuthDef{
-		Type:                auth.Type,
-		AuthorizationURL:    auth.AuthorizationURL,
-		TokenURL:            auth.TokenURL,
-		ClientID:            auth.ClientID,
-		ClientSecret:        auth.ClientSecret,
-		ClientAuth:          auth.ClientAuth,
-		TokenExchange:       auth.TokenExchange,
-		TokenPrefix:         auth.TokenPrefix,
-		Scopes:              slices.Clone(auth.Scopes),
-		ScopeParam:          auth.ScopeParam,
-		ScopeSeparator:      auth.ScopeSeparator,
-		PKCE:                auth.PKCE,
-		AuthorizationParams: maps.Clone(auth.AuthorizationParams),
-		TokenParams:         maps.Clone(auth.TokenParams),
-		RefreshParams:       maps.Clone(auth.RefreshParams),
-		AcceptHeader:        auth.AcceptHeader,
-		AccessTokenPath:     auth.AccessTokenPath,
-		TokenMetadata:       slices.Clone(auth.TokenMetadata),
-		Credentials:         slices.Clone(auth.Credentials),
-		AuthMapping:         CloneAuthMapping(auth.AuthMapping),
+		Type:                 auth.Type,
+		AuthorizationURL:     auth.AuthorizationURL,
+		TokenURL:             auth.TokenURL,
+		ClientID:             auth.ClientID,
+		ClientSecret:         auth.ClientSecret,
+		ClientAuth:           auth.ClientAuth,
+		TokenExchange:        auth.TokenExchange,
+		TokenPrefix:          auth.TokenPrefix,
+		Scopes:               slices.Clone(auth.Scopes),
+		ScopeParam:           auth.ScopeParam,
+		ScopeSeparator:       auth.ScopeSeparator,
+		PKCE:                 auth.PKCE,
+		AuthorizationParams:  maps.Clone(auth.AuthorizationParams),
+		TokenParams:          maps.Clone(auth.TokenParams),
+		RefreshParams:        maps.Clone(auth.RefreshParams),
+		AcceptHeader:         auth.AcceptHeader,
+		AccessTokenPath:      auth.AccessTokenPath,
+		TokenMetadata:        slices.Clone(auth.TokenMetadata),
+		TokenExchangeDrivers: slices.Clone(auth.TokenExchangeDrivers),
+		Credentials:          slices.Clone(auth.Credentials),
+		AuthMapping:          CloneAuthMapping(auth.AuthMapping),
 	}
 	return out
 }

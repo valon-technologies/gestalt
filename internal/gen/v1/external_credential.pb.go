@@ -467,6 +467,766 @@ func (x *DeleteExternalCredentialRequest) GetId() string {
 	return ""
 }
 
+type ExternalCredentialTokenExchangeDriver struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Type            string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	TargetPrincipal string                 `protobuf:"bytes,2,opt,name=target_principal,json=targetPrincipal,proto3" json:"target_principal,omitempty"`
+	Scopes          []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	LifetimeSeconds int32                  `protobuf:"varint,4,opt,name=lifetime_seconds,json=lifetimeSeconds,proto3" json:"lifetime_seconds,omitempty"`
+	Endpoint        string                 `protobuf:"bytes,5,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Params          map[string]string      `protobuf:"bytes,6,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) Reset() {
+	*x = ExternalCredentialTokenExchangeDriver{}
+	mi := &file_v1_external_credential_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalCredentialTokenExchangeDriver) ProtoMessage() {}
+
+func (x *ExternalCredentialTokenExchangeDriver) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalCredentialTokenExchangeDriver.ProtoReflect.Descriptor instead.
+func (*ExternalCredentialTokenExchangeDriver) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetTargetPrincipal() string {
+	if x != nil {
+		return x.TargetPrincipal
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetLifetimeSeconds() int32 {
+	if x != nil {
+		return x.LifetimeSeconds
+	}
+	return 0
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenExchangeDriver) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+type ExternalCredentialAuthConfig struct {
+	state                protoimpl.MessageState                   `protogen:"open.v1"`
+	Type                 string                                   `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Token                string                                   `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	TokenPrefix          string                                   `protobuf:"bytes,3,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"`
+	GrantType            string                                   `protobuf:"bytes,4,opt,name=grant_type,json=grantType,proto3" json:"grant_type,omitempty"`
+	TokenUrl             string                                   `protobuf:"bytes,5,opt,name=token_url,json=tokenUrl,proto3" json:"token_url,omitempty"`
+	ClientId             string                                   `protobuf:"bytes,6,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientSecret         string                                   `protobuf:"bytes,7,opt,name=client_secret,json=clientSecret,proto3" json:"client_secret,omitempty"`
+	ClientAuth           string                                   `protobuf:"bytes,8,opt,name=client_auth,json=clientAuth,proto3" json:"client_auth,omitempty"`
+	TokenExchange        string                                   `protobuf:"bytes,9,opt,name=token_exchange,json=tokenExchange,proto3" json:"token_exchange,omitempty"`
+	Scopes               []string                                 `protobuf:"bytes,10,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	ScopeParam           string                                   `protobuf:"bytes,11,opt,name=scope_param,json=scopeParam,proto3" json:"scope_param,omitempty"`
+	ScopeSeparator       string                                   `protobuf:"bytes,12,opt,name=scope_separator,json=scopeSeparator,proto3" json:"scope_separator,omitempty"`
+	TokenParams          map[string]string                        `protobuf:"bytes,13,rep,name=token_params,json=tokenParams,proto3" json:"token_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	RefreshParams        map[string]string                        `protobuf:"bytes,14,rep,name=refresh_params,json=refreshParams,proto3" json:"refresh_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	AcceptHeader         string                                   `protobuf:"bytes,15,opt,name=accept_header,json=acceptHeader,proto3" json:"accept_header,omitempty"`
+	AccessTokenPath      string                                   `protobuf:"bytes,16,opt,name=access_token_path,json=accessTokenPath,proto3" json:"access_token_path,omitempty"`
+	TokenExchangeDrivers []*ExternalCredentialTokenExchangeDriver `protobuf:"bytes,17,rep,name=token_exchange_drivers,json=tokenExchangeDrivers,proto3" json:"token_exchange_drivers,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ExternalCredentialAuthConfig) Reset() {
+	*x = ExternalCredentialAuthConfig{}
+	mi := &file_v1_external_credential_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalCredentialAuthConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalCredentialAuthConfig) ProtoMessage() {}
+
+func (x *ExternalCredentialAuthConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalCredentialAuthConfig.ProtoReflect.Descriptor instead.
+func (*ExternalCredentialAuthConfig) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ExternalCredentialAuthConfig) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetTokenPrefix() string {
+	if x != nil {
+		return x.TokenPrefix
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetGrantType() string {
+	if x != nil {
+		return x.GrantType
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetTokenUrl() string {
+	if x != nil {
+		return x.TokenUrl
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetClientSecret() string {
+	if x != nil {
+		return x.ClientSecret
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetClientAuth() string {
+	if x != nil {
+		return x.ClientAuth
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetTokenExchange() string {
+	if x != nil {
+		return x.TokenExchange
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *ExternalCredentialAuthConfig) GetScopeParam() string {
+	if x != nil {
+		return x.ScopeParam
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetScopeSeparator() string {
+	if x != nil {
+		return x.ScopeSeparator
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetTokenParams() map[string]string {
+	if x != nil {
+		return x.TokenParams
+	}
+	return nil
+}
+
+func (x *ExternalCredentialAuthConfig) GetRefreshParams() map[string]string {
+	if x != nil {
+		return x.RefreshParams
+	}
+	return nil
+}
+
+func (x *ExternalCredentialAuthConfig) GetAcceptHeader() string {
+	if x != nil {
+		return x.AcceptHeader
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetAccessTokenPath() string {
+	if x != nil {
+		return x.AccessTokenPath
+	}
+	return ""
+}
+
+func (x *ExternalCredentialAuthConfig) GetTokenExchangeDrivers() []*ExternalCredentialTokenExchangeDriver {
+	if x != nil {
+		return x.TokenExchangeDrivers
+	}
+	return nil
+}
+
+type ValidateExternalCredentialConfigRequest struct {
+	state            protoimpl.MessageState        `protogen:"open.v1"`
+	Provider         string                        `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Connection       string                        `protobuf:"bytes,2,opt,name=connection,proto3" json:"connection,omitempty"`
+	ConnectionId     string                        `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	Mode             string                        `protobuf:"bytes,4,opt,name=mode,proto3" json:"mode,omitempty"`
+	Auth             *ExternalCredentialAuthConfig `protobuf:"bytes,5,opt,name=auth,proto3" json:"auth,omitempty"`
+	ConnectionParams map[string]string             `protobuf:"bytes,6,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ValidateExternalCredentialConfigRequest) Reset() {
+	*x = ValidateExternalCredentialConfigRequest{}
+	mi := &file_v1_external_credential_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateExternalCredentialConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateExternalCredentialConfigRequest) ProtoMessage() {}
+
+func (x *ValidateExternalCredentialConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateExternalCredentialConfigRequest.ProtoReflect.Descriptor instead.
+func (*ValidateExternalCredentialConfigRequest) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetConnection() string {
+	if x != nil {
+		return x.Connection
+	}
+	return ""
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x != nil {
+		return x.Auth
+	}
+	return nil
+}
+
+func (x *ValidateExternalCredentialConfigRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+type ResolveExternalCredentialRequest struct {
+	state               protoimpl.MessageState        `protogen:"open.v1"`
+	Provider            string                        `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Connection          string                        `protobuf:"bytes,2,opt,name=connection,proto3" json:"connection,omitempty"`
+	ConnectionId        string                        `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	Mode                string                        `protobuf:"bytes,4,opt,name=mode,proto3" json:"mode,omitempty"`
+	CredentialSubjectId string                        `protobuf:"bytes,5,opt,name=credential_subject_id,json=credentialSubjectId,proto3" json:"credential_subject_id,omitempty"`
+	ActorSubjectId      string                        `protobuf:"bytes,6,opt,name=actor_subject_id,json=actorSubjectId,proto3" json:"actor_subject_id,omitempty"`
+	Instance            string                        `protobuf:"bytes,7,opt,name=instance,proto3" json:"instance,omitempty"`
+	Auth                *ExternalCredentialAuthConfig `protobuf:"bytes,8,opt,name=auth,proto3" json:"auth,omitempty"`
+	ConnectionParams    map[string]string             `protobuf:"bytes,9,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ResolveExternalCredentialRequest) Reset() {
+	*x = ResolveExternalCredentialRequest{}
+	mi := &file_v1_external_credential_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExternalCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExternalCredentialRequest) ProtoMessage() {}
+
+func (x *ResolveExternalCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExternalCredentialRequest.ProtoReflect.Descriptor instead.
+func (*ResolveExternalCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ResolveExternalCredentialRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetConnection() string {
+	if x != nil {
+		return x.Connection
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetCredentialSubjectId() string {
+	if x != nil {
+		return x.CredentialSubjectId
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetActorSubjectId() string {
+	if x != nil {
+		return x.ActorSubjectId
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetInstance() string {
+	if x != nil {
+		return x.Instance
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x != nil {
+		return x.Auth
+	}
+	return nil
+}
+
+func (x *ResolveExternalCredentialRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+type ResolveExternalCredentialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	MetadataJson  string                 `protobuf:"bytes,3,opt,name=metadata_json,json=metadataJson,proto3" json:"metadata_json,omitempty"`
+	Params        map[string]string      `protobuf:"bytes,4,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Credential    *ExternalCredential    `protobuf:"bytes,5,opt,name=credential,proto3" json:"credential,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveExternalCredentialResponse) Reset() {
+	*x = ResolveExternalCredentialResponse{}
+	mi := &file_v1_external_credential_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveExternalCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveExternalCredentialResponse) ProtoMessage() {}
+
+func (x *ResolveExternalCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveExternalCredentialResponse.ProtoReflect.Descriptor instead.
+func (*ResolveExternalCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ResolveExternalCredentialResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *ResolveExternalCredentialResponse) GetMetadataJson() string {
+	if x != nil {
+		return x.MetadataJson
+	}
+	return ""
+}
+
+func (x *ResolveExternalCredentialResponse) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *ResolveExternalCredentialResponse) GetCredential() *ExternalCredential {
+	if x != nil {
+		return x.Credential
+	}
+	return nil
+}
+
+type ExternalCredentialTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   string                 `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken  string                 `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	ExpiresIn     int32                  `protobuf:"varint,3,opt,name=expires_in,json=expiresIn,proto3" json:"expires_in,omitempty"`
+	TokenType     string                 `protobuf:"bytes,4,opt,name=token_type,json=tokenType,proto3" json:"token_type,omitempty"`
+	ExtraJson     string                 `protobuf:"bytes,5,opt,name=extra_json,json=extraJson,proto3" json:"extra_json,omitempty"`
+	RefreshSource string                 `protobuf:"bytes,6,opt,name=refresh_source,json=refreshSource,proto3" json:"refresh_source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExternalCredentialTokenResponse) Reset() {
+	*x = ExternalCredentialTokenResponse{}
+	mi := &file_v1_external_credential_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalCredentialTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalCredentialTokenResponse) ProtoMessage() {}
+
+func (x *ExternalCredentialTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalCredentialTokenResponse.ProtoReflect.Descriptor instead.
+func (*ExternalCredentialTokenResponse) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExternalCredentialTokenResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenResponse) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenResponse) GetExpiresIn() int32 {
+	if x != nil {
+		return x.ExpiresIn
+	}
+	return 0
+}
+
+func (x *ExternalCredentialTokenResponse) GetTokenType() string {
+	if x != nil {
+		return x.TokenType
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenResponse) GetExtraJson() string {
+	if x != nil {
+		return x.ExtraJson
+	}
+	return ""
+}
+
+func (x *ExternalCredentialTokenResponse) GetRefreshSource() string {
+	if x != nil {
+		return x.RefreshSource
+	}
+	return ""
+}
+
+type ExchangeExternalCredentialRequest struct {
+	state               protoimpl.MessageState        `protogen:"open.v1"`
+	Provider            string                        `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Connection          string                        `protobuf:"bytes,2,opt,name=connection,proto3" json:"connection,omitempty"`
+	ConnectionId        string                        `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	CredentialSubjectId string                        `protobuf:"bytes,4,opt,name=credential_subject_id,json=credentialSubjectId,proto3" json:"credential_subject_id,omitempty"`
+	ActorSubjectId      string                        `protobuf:"bytes,5,opt,name=actor_subject_id,json=actorSubjectId,proto3" json:"actor_subject_id,omitempty"`
+	Instance            string                        `protobuf:"bytes,6,opt,name=instance,proto3" json:"instance,omitempty"`
+	Auth                *ExternalCredentialAuthConfig `protobuf:"bytes,7,opt,name=auth,proto3" json:"auth,omitempty"`
+	CredentialJson      string                        `protobuf:"bytes,8,opt,name=credential_json,json=credentialJson,proto3" json:"credential_json,omitempty"`
+	ConnectionParams    map[string]string             `protobuf:"bytes,9,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ExchangeExternalCredentialRequest) Reset() {
+	*x = ExchangeExternalCredentialRequest{}
+	mi := &file_v1_external_credential_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeExternalCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeExternalCredentialRequest) ProtoMessage() {}
+
+func (x *ExchangeExternalCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeExternalCredentialRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeExternalCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ExchangeExternalCredentialRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetConnection() string {
+	if x != nil {
+		return x.Connection
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetCredentialSubjectId() string {
+	if x != nil {
+		return x.CredentialSubjectId
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetActorSubjectId() string {
+	if x != nil {
+		return x.ActorSubjectId
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetInstance() string {
+	if x != nil {
+		return x.Instance
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x != nil {
+		return x.Auth
+	}
+	return nil
+}
+
+func (x *ExchangeExternalCredentialRequest) GetCredentialJson() string {
+	if x != nil {
+		return x.CredentialJson
+	}
+	return ""
+}
+
+func (x *ExchangeExternalCredentialRequest) GetConnectionParams() map[string]string {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+type ExchangeExternalCredentialResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	TokenResponse *ExternalCredentialTokenResponse `protobuf:"bytes,1,opt,name=token_response,json=tokenResponse,proto3" json:"token_response,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeExternalCredentialResponse) Reset() {
+	*x = ExchangeExternalCredentialResponse{}
+	mi := &file_v1_external_credential_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeExternalCredentialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeExternalCredentialResponse) ProtoMessage() {}
+
+func (x *ExchangeExternalCredentialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_external_credential_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeExternalCredentialResponse.ProtoReflect.Descriptor instead.
+func (*ExchangeExternalCredentialResponse) Descriptor() ([]byte, []int) {
+	return file_v1_external_credential_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ExchangeExternalCredentialResponse) GetTokenResponse() *ExternalCredentialTokenResponse {
+	if x != nil {
+		return x.TokenResponse
+	}
+	return nil
+}
+
 var File_v1_external_credential_proto protoreflect.FileDescriptor
 
 const file_v1_external_credential_proto_rawDesc = "" +
@@ -514,12 +1274,119 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x1fListExternalCredentialsResponse\x12I\n" +
 	"\vcredentials\x18\x01 \x03(\v2'.gestalt.provider.v1.ExternalCredentialR\vcredentials\"1\n" +
 	"\x1fDeleteExternalCredentialRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id2\xdc\x03\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xe0\x02\n" +
+	"%ExternalCredentialTokenExchangeDriver\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12)\n" +
+	"\x10target_principal\x18\x02 \x01(\tR\x0ftargetPrincipal\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12)\n" +
+	"\x10lifetime_seconds\x18\x04 \x01(\x05R\x0flifetimeSeconds\x12\x1a\n" +
+	"\bendpoint\x18\x05 \x01(\tR\bendpoint\x12^\n" +
+	"\x06params\x18\x06 \x03(\v2F.gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xac\a\n" +
+	"\x1cExternalCredentialAuthConfig\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12!\n" +
+	"\ftoken_prefix\x18\x03 \x01(\tR\vtokenPrefix\x12\x1d\n" +
+	"\n" +
+	"grant_type\x18\x04 \x01(\tR\tgrantType\x12\x1b\n" +
+	"\ttoken_url\x18\x05 \x01(\tR\btokenUrl\x12\x1b\n" +
+	"\tclient_id\x18\x06 \x01(\tR\bclientId\x12#\n" +
+	"\rclient_secret\x18\a \x01(\tR\fclientSecret\x12\x1f\n" +
+	"\vclient_auth\x18\b \x01(\tR\n" +
+	"clientAuth\x12%\n" +
+	"\x0etoken_exchange\x18\t \x01(\tR\rtokenExchange\x12\x16\n" +
+	"\x06scopes\x18\n" +
+	" \x03(\tR\x06scopes\x12\x1f\n" +
+	"\vscope_param\x18\v \x01(\tR\n" +
+	"scopeParam\x12'\n" +
+	"\x0fscope_separator\x18\f \x01(\tR\x0escopeSeparator\x12e\n" +
+	"\ftoken_params\x18\r \x03(\v2B.gestalt.provider.v1.ExternalCredentialAuthConfig.TokenParamsEntryR\vtokenParams\x12k\n" +
+	"\x0erefresh_params\x18\x0e \x03(\v2D.gestalt.provider.v1.ExternalCredentialAuthConfig.RefreshParamsEntryR\rrefreshParams\x12#\n" +
+	"\raccept_header\x18\x0f \x01(\tR\facceptHeader\x12*\n" +
+	"\x11access_token_path\x18\x10 \x01(\tR\x0faccessTokenPath\x12p\n" +
+	"\x16token_exchange_drivers\x18\x11 \x03(\v2:.gestalt.provider.v1.ExternalCredentialTokenExchangeDriverR\x14tokenExchangeDrivers\x1a>\n" +
+	"\x10TokenParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +
+	"\x12RefreshParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xab\x03\n" +
+	"'ValidateExternalCredentialConfigRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x02 \x01(\tR\n" +
+	"connection\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x12\x12\n" +
+	"\x04mode\x18\x04 \x01(\tR\x04mode\x12E\n" +
+	"\x04auth\x18\x05 \x01(\v21.gestalt.provider.v1.ExternalCredentialAuthConfigR\x04auth\x12\x7f\n" +
+	"\x11connection_params\x18\x06 \x03(\v2R.gestalt.provider.v1.ValidateExternalCredentialConfigRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x04\n" +
+	" ResolveExternalCredentialRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x02 \x01(\tR\n" +
+	"connection\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x12\x12\n" +
+	"\x04mode\x18\x04 \x01(\tR\x04mode\x122\n" +
+	"\x15credential_subject_id\x18\x05 \x01(\tR\x13credentialSubjectId\x12(\n" +
+	"\x10actor_subject_id\x18\x06 \x01(\tR\x0eactorSubjectId\x12\x1a\n" +
+	"\binstance\x18\a \x01(\tR\binstance\x12E\n" +
+	"\x04auth\x18\b \x01(\v21.gestalt.provider.v1.ExternalCredentialAuthConfigR\x04auth\x12x\n" +
+	"\x11connection_params\x18\t \x03(\v2K.gestalt.provider.v1.ResolveExternalCredentialRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf9\x02\n" +
+	"!ResolveExternalCredentialResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12#\n" +
+	"\rmetadata_json\x18\x03 \x01(\tR\fmetadataJson\x12Z\n" +
+	"\x06params\x18\x04 \x03(\v2B.gestalt.provider.v1.ResolveExternalCredentialResponse.ParamsEntryR\x06params\x12G\n" +
+	"\n" +
+	"credential\x18\x05 \x01(\v2'.gestalt.provider.v1.ExternalCredentialR\n" +
+	"credential\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x01\n" +
+	"\x1fExternalCredentialTokenResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12#\n" +
+	"\rrefresh_token\x18\x02 \x01(\tR\frefreshToken\x12\x1d\n" +
+	"\n" +
+	"expires_in\x18\x03 \x01(\x05R\texpiresIn\x12\x1d\n" +
+	"\n" +
+	"token_type\x18\x04 \x01(\tR\ttokenType\x12\x1d\n" +
+	"\n" +
+	"extra_json\x18\x05 \x01(\tR\textraJson\x12%\n" +
+	"\x0erefresh_source\x18\x06 \x01(\tR\rrefreshSource\"\xae\x04\n" +
+	"!ExchangeExternalCredentialRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x02 \x01(\tR\n" +
+	"connection\x12#\n" +
+	"\rconnection_id\x18\x03 \x01(\tR\fconnectionId\x122\n" +
+	"\x15credential_subject_id\x18\x04 \x01(\tR\x13credentialSubjectId\x12(\n" +
+	"\x10actor_subject_id\x18\x05 \x01(\tR\x0eactorSubjectId\x12\x1a\n" +
+	"\binstance\x18\x06 \x01(\tR\binstance\x12E\n" +
+	"\x04auth\x18\a \x01(\v21.gestalt.provider.v1.ExternalCredentialAuthConfigR\x04auth\x12'\n" +
+	"\x0fcredential_json\x18\b \x01(\tR\x0ecredentialJson\x12y\n" +
+	"\x11connection_params\x18\t \x03(\v2L.gestalt.provider.v1.ExchangeExternalCredentialRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
+	"\x15ConnectionParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
+	"\"ExchangeExternalCredentialResponse\x12[\n" +
+	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse2\xdb\x06\n" +
 	"\x1aExternalCredentialProvider\x12q\n" +
 	"\x10UpsertCredential\x124.gestalt.provider.v1.UpsertExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12k\n" +
 	"\rGetCredential\x121.gestalt.provider.v1.GetExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12|\n" +
 	"\x0fListCredentials\x123.gestalt.provider.v1.ListExternalCredentialsRequest\x1a4.gestalt.provider.v1.ListExternalCredentialsResponse\x12`\n" +
-	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.EmptyB\xdd\x01\n" +
+	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.Empty\x12p\n" +
+	"\x18ValidateCredentialConfig\x12<.gestalt.provider.v1.ValidateExternalCredentialConfigRequest\x1a\x16.google.protobuf.Empty\x12\x82\x01\n" +
+	"\x11ResolveCredential\x125.gestalt.provider.v1.ResolveExternalCredentialRequest\x1a6.gestalt.provider.v1.ResolveExternalCredentialResponse\x12\x85\x01\n" +
+	"\x12ExchangeCredential\x126.gestalt.provider.v1.ExchangeExternalCredentialRequest\x1a7.gestalt.provider.v1.ExchangeExternalCredentialResponseB\xdd\x01\n" +
 	"\x17com.gestalt.provider.v1B\x17ExternalCredentialProtoP\x01Z;github.com/valon-technologies/gestalt/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -534,39 +1401,74 @@ func file_v1_external_credential_proto_rawDescGZIP() []byte {
 	return file_v1_external_credential_proto_rawDescData
 }
 
-var file_v1_external_credential_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_v1_external_credential_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_v1_external_credential_proto_goTypes = []any{
-	(*ExternalCredential)(nil),              // 0: gestalt.provider.v1.ExternalCredential
-	(*ExternalCredentialLookup)(nil),        // 1: gestalt.provider.v1.ExternalCredentialLookup
-	(*UpsertExternalCredentialRequest)(nil), // 2: gestalt.provider.v1.UpsertExternalCredentialRequest
-	(*GetExternalCredentialRequest)(nil),    // 3: gestalt.provider.v1.GetExternalCredentialRequest
-	(*ListExternalCredentialsRequest)(nil),  // 4: gestalt.provider.v1.ListExternalCredentialsRequest
-	(*ListExternalCredentialsResponse)(nil), // 5: gestalt.provider.v1.ListExternalCredentialsResponse
-	(*DeleteExternalCredentialRequest)(nil), // 6: gestalt.provider.v1.DeleteExternalCredentialRequest
-	(*timestamppb.Timestamp)(nil),           // 7: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                   // 8: google.protobuf.Empty
+	(*ExternalCredential)(nil),                      // 0: gestalt.provider.v1.ExternalCredential
+	(*ExternalCredentialLookup)(nil),                // 1: gestalt.provider.v1.ExternalCredentialLookup
+	(*UpsertExternalCredentialRequest)(nil),         // 2: gestalt.provider.v1.UpsertExternalCredentialRequest
+	(*GetExternalCredentialRequest)(nil),            // 3: gestalt.provider.v1.GetExternalCredentialRequest
+	(*ListExternalCredentialsRequest)(nil),          // 4: gestalt.provider.v1.ListExternalCredentialsRequest
+	(*ListExternalCredentialsResponse)(nil),         // 5: gestalt.provider.v1.ListExternalCredentialsResponse
+	(*DeleteExternalCredentialRequest)(nil),         // 6: gestalt.provider.v1.DeleteExternalCredentialRequest
+	(*ExternalCredentialTokenExchangeDriver)(nil),   // 7: gestalt.provider.v1.ExternalCredentialTokenExchangeDriver
+	(*ExternalCredentialAuthConfig)(nil),            // 8: gestalt.provider.v1.ExternalCredentialAuthConfig
+	(*ValidateExternalCredentialConfigRequest)(nil), // 9: gestalt.provider.v1.ValidateExternalCredentialConfigRequest
+	(*ResolveExternalCredentialRequest)(nil),        // 10: gestalt.provider.v1.ResolveExternalCredentialRequest
+	(*ResolveExternalCredentialResponse)(nil),       // 11: gestalt.provider.v1.ResolveExternalCredentialResponse
+	(*ExternalCredentialTokenResponse)(nil),         // 12: gestalt.provider.v1.ExternalCredentialTokenResponse
+	(*ExchangeExternalCredentialRequest)(nil),       // 13: gestalt.provider.v1.ExchangeExternalCredentialRequest
+	(*ExchangeExternalCredentialResponse)(nil),      // 14: gestalt.provider.v1.ExchangeExternalCredentialResponse
+	nil,                           // 15: gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.ParamsEntry
+	nil,                           // 16: gestalt.provider.v1.ExternalCredentialAuthConfig.TokenParamsEntry
+	nil,                           // 17: gestalt.provider.v1.ExternalCredentialAuthConfig.RefreshParamsEntry
+	nil,                           // 18: gestalt.provider.v1.ValidateExternalCredentialConfigRequest.ConnectionParamsEntry
+	nil,                           // 19: gestalt.provider.v1.ResolveExternalCredentialRequest.ConnectionParamsEntry
+	nil,                           // 20: gestalt.provider.v1.ResolveExternalCredentialResponse.ParamsEntry
+	nil,                           // 21: gestalt.provider.v1.ExchangeExternalCredentialRequest.ConnectionParamsEntry
+	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 23: google.protobuf.Empty
 }
 var file_v1_external_credential_proto_depIdxs = []int32{
-	7,  // 0: gestalt.provider.v1.ExternalCredential.expires_at:type_name -> google.protobuf.Timestamp
-	7,  // 1: gestalt.provider.v1.ExternalCredential.last_refreshed_at:type_name -> google.protobuf.Timestamp
-	7,  // 2: gestalt.provider.v1.ExternalCredential.created_at:type_name -> google.protobuf.Timestamp
-	7,  // 3: gestalt.provider.v1.ExternalCredential.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 0: gestalt.provider.v1.ExternalCredential.expires_at:type_name -> google.protobuf.Timestamp
+	22, // 1: gestalt.provider.v1.ExternalCredential.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	22, // 2: gestalt.provider.v1.ExternalCredential.created_at:type_name -> google.protobuf.Timestamp
+	22, // 3: gestalt.provider.v1.ExternalCredential.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 4: gestalt.provider.v1.UpsertExternalCredentialRequest.credential:type_name -> gestalt.provider.v1.ExternalCredential
 	1,  // 5: gestalt.provider.v1.GetExternalCredentialRequest.lookup:type_name -> gestalt.provider.v1.ExternalCredentialLookup
 	0,  // 6: gestalt.provider.v1.ListExternalCredentialsResponse.credentials:type_name -> gestalt.provider.v1.ExternalCredential
-	2,  // 7: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:input_type -> gestalt.provider.v1.UpsertExternalCredentialRequest
-	3,  // 8: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:input_type -> gestalt.provider.v1.GetExternalCredentialRequest
-	4,  // 9: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:input_type -> gestalt.provider.v1.ListExternalCredentialsRequest
-	6,  // 10: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:input_type -> gestalt.provider.v1.DeleteExternalCredentialRequest
-	0,  // 11: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:output_type -> gestalt.provider.v1.ExternalCredential
-	0,  // 12: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:output_type -> gestalt.provider.v1.ExternalCredential
-	5,  // 13: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:output_type -> gestalt.provider.v1.ListExternalCredentialsResponse
-	8,  // 14: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:output_type -> google.protobuf.Empty
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	15, // 7: gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.params:type_name -> gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.ParamsEntry
+	16, // 8: gestalt.provider.v1.ExternalCredentialAuthConfig.token_params:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig.TokenParamsEntry
+	17, // 9: gestalt.provider.v1.ExternalCredentialAuthConfig.refresh_params:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig.RefreshParamsEntry
+	7,  // 10: gestalt.provider.v1.ExternalCredentialAuthConfig.token_exchange_drivers:type_name -> gestalt.provider.v1.ExternalCredentialTokenExchangeDriver
+	8,  // 11: gestalt.provider.v1.ValidateExternalCredentialConfigRequest.auth:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig
+	18, // 12: gestalt.provider.v1.ValidateExternalCredentialConfigRequest.connection_params:type_name -> gestalt.provider.v1.ValidateExternalCredentialConfigRequest.ConnectionParamsEntry
+	8,  // 13: gestalt.provider.v1.ResolveExternalCredentialRequest.auth:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig
+	19, // 14: gestalt.provider.v1.ResolveExternalCredentialRequest.connection_params:type_name -> gestalt.provider.v1.ResolveExternalCredentialRequest.ConnectionParamsEntry
+	22, // 15: gestalt.provider.v1.ResolveExternalCredentialResponse.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 16: gestalt.provider.v1.ResolveExternalCredentialResponse.params:type_name -> gestalt.provider.v1.ResolveExternalCredentialResponse.ParamsEntry
+	0,  // 17: gestalt.provider.v1.ResolveExternalCredentialResponse.credential:type_name -> gestalt.provider.v1.ExternalCredential
+	8,  // 18: gestalt.provider.v1.ExchangeExternalCredentialRequest.auth:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig
+	21, // 19: gestalt.provider.v1.ExchangeExternalCredentialRequest.connection_params:type_name -> gestalt.provider.v1.ExchangeExternalCredentialRequest.ConnectionParamsEntry
+	12, // 20: gestalt.provider.v1.ExchangeExternalCredentialResponse.token_response:type_name -> gestalt.provider.v1.ExternalCredentialTokenResponse
+	2,  // 21: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:input_type -> gestalt.provider.v1.UpsertExternalCredentialRequest
+	3,  // 22: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:input_type -> gestalt.provider.v1.GetExternalCredentialRequest
+	4,  // 23: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:input_type -> gestalt.provider.v1.ListExternalCredentialsRequest
+	6,  // 24: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:input_type -> gestalt.provider.v1.DeleteExternalCredentialRequest
+	9,  // 25: gestalt.provider.v1.ExternalCredentialProvider.ValidateCredentialConfig:input_type -> gestalt.provider.v1.ValidateExternalCredentialConfigRequest
+	10, // 26: gestalt.provider.v1.ExternalCredentialProvider.ResolveCredential:input_type -> gestalt.provider.v1.ResolveExternalCredentialRequest
+	13, // 27: gestalt.provider.v1.ExternalCredentialProvider.ExchangeCredential:input_type -> gestalt.provider.v1.ExchangeExternalCredentialRequest
+	0,  // 28: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:output_type -> gestalt.provider.v1.ExternalCredential
+	0,  // 29: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:output_type -> gestalt.provider.v1.ExternalCredential
+	5,  // 30: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:output_type -> gestalt.provider.v1.ListExternalCredentialsResponse
+	23, // 31: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:output_type -> google.protobuf.Empty
+	23, // 32: gestalt.provider.v1.ExternalCredentialProvider.ValidateCredentialConfig:output_type -> google.protobuf.Empty
+	11, // 33: gestalt.provider.v1.ExternalCredentialProvider.ResolveCredential:output_type -> gestalt.provider.v1.ResolveExternalCredentialResponse
+	14, // 34: gestalt.provider.v1.ExternalCredentialProvider.ExchangeCredential:output_type -> gestalt.provider.v1.ExchangeExternalCredentialResponse
+	28, // [28:35] is the sub-list for method output_type
+	21, // [21:28] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_v1_external_credential_proto_init() }
@@ -580,7 +1482,7 @@ func file_v1_external_credential_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_external_credential_proto_rawDesc), len(file_v1_external_credential_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

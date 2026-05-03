@@ -105,12 +105,92 @@ func (s *externalCredentialProviderServer) DeleteCredential(ctx context.Context,
 	return &emptypb.Empty{}, nil
 }
 
+func (s *externalCredentialProviderServer) ValidateCredentialConfig(ctx context.Context, req *proto.ValidateExternalCredentialConfigRequest) (*emptypb.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	err := s.provider.ValidateCredentialConfig(ctx, &core.ValidateExternalCredentialConfigRequest{
+		Provider:         strings.TrimSpace(req.GetProvider()),
+		Connection:       strings.TrimSpace(req.GetConnection()),
+		ConnectionID:     strings.TrimSpace(req.GetConnectionId()),
+		Mode:             core.ConnectionMode(req.GetMode()),
+		Auth:             externalCredentialAuthConfigFromProto(req.GetAuth()),
+		ConnectionParams: cloneStringMap(req.GetConnectionParams()),
+	})
+	if err != nil {
+		return nil, externalCredentialToGRPCError("validate external credential config", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *externalCredentialProviderServer) ResolveCredential(ctx context.Context, req *proto.ResolveExternalCredentialRequest) (*proto.ResolveExternalCredentialResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.ResolveCredential(ctx, &core.ResolveExternalCredentialRequest{
+		Provider:            strings.TrimSpace(req.GetProvider()),
+		Connection:          strings.TrimSpace(req.GetConnection()),
+		ConnectionID:        strings.TrimSpace(req.GetConnectionId()),
+		Mode:                core.ConnectionMode(req.GetMode()),
+		CredentialSubjectID: strings.TrimSpace(req.GetCredentialSubjectId()),
+		ActorSubjectID:      strings.TrimSpace(req.GetActorSubjectId()),
+		Instance:            strings.TrimSpace(req.GetInstance()),
+		Auth:                externalCredentialAuthConfigFromProto(req.GetAuth()),
+		ConnectionParams:    cloneStringMap(req.GetConnectionParams()),
+	})
+	if err != nil {
+		return nil, externalCredentialToGRPCError("resolve external credential", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "provider returned nil response")
+	}
+	return &proto.ResolveExternalCredentialResponse{
+		Token:        resp.Token,
+		ExpiresAt:    timeToProto(resp.ExpiresAt),
+		MetadataJson: resp.MetadataJSON,
+		Params:       cloneStringMap(resp.Params),
+		Credential:   externalCredentialToProto(resp.Credential),
+	}, nil
+}
+
+func (s *externalCredentialProviderServer) ExchangeCredential(ctx context.Context, req *proto.ExchangeExternalCredentialRequest) (*proto.ExchangeExternalCredentialResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	resp, err := s.provider.ExchangeCredential(ctx, &core.ExchangeExternalCredentialRequest{
+		Provider:            strings.TrimSpace(req.GetProvider()),
+		Connection:          strings.TrimSpace(req.GetConnection()),
+		ConnectionID:        strings.TrimSpace(req.GetConnectionId()),
+		CredentialSubjectID: strings.TrimSpace(req.GetCredentialSubjectId()),
+		ActorSubjectID:      strings.TrimSpace(req.GetActorSubjectId()),
+		Instance:            strings.TrimSpace(req.GetInstance()),
+		Auth:                externalCredentialAuthConfigFromProto(req.GetAuth()),
+		CredentialJSON:      req.GetCredentialJson(),
+		ConnectionParams:    cloneStringMap(req.GetConnectionParams()),
+	})
+	if err != nil {
+		return nil, externalCredentialToGRPCError("exchange external credential", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "provider returned nil response")
+	}
+	return &proto.ExchangeExternalCredentialResponse{
+		TokenResponse: externalCredentialTokenResponseToProto(resp.TokenResponse),
+	}, nil
+}
+
 func externalCredentialToGRPCError(operation string, err error) error {
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, core.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
+	}
+	if errors.Is(err, core.ErrAmbiguousCredential) {
+		return status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if errors.Is(err, core.ErrReconnectRequired) {
+		return status.Error(codes.Unauthenticated, err.Error())
 	}
 	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
 }

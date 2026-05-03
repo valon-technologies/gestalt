@@ -90,3 +90,34 @@ func (c *ExternalCredentialClient) DeleteCredential(ctx context.Context, req *De
 	_, err := c.client.DeleteCredential(ctx, req)
 	return err
 }
+
+func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("external credentials: client is not initialized")
+	}
+	if req == nil {
+		return fmt.Errorf("external credentials: request is required")
+	}
+	_, err := c.client.ValidateCredentialConfig(ctx, req)
+	return err
+}
+
+func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("external credentials: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("external credentials: request is required")
+	}
+	return c.client.ResolveCredential(ctx, req)
+}
+
+func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("external credentials: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("external credentials: request is required")
+	}
+	return c.client.ExchangeCredential(ctx, req)
+}

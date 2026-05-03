@@ -18,20 +18,17 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/singleflight"
 )
 
 const (
-	tokenRefreshThreshold = 5 * time.Minute
-	tracerName            = "gestaltd"
-	graphQLOperationID    = "graphql"
-	platformSubjectID     = "system:platform-config"
+	tracerName         = "gestaltd"
+	graphQLOperationID = "graphql"
+	platformSubjectID  = "system:platform-config"
 
 	attrProvider       = metricutil.AttrProvider
 	attrOperation      = metricutil.AttrOperation
@@ -117,32 +114,15 @@ func (m ConnectionMap) ConnectionForProvider(provider string) string {
 	return m[provider]
 }
 
-// TokenRefresher is the subset of auth handlers that the broker needs for
-// token refresh. Defined here to avoid importing the bootstrap package.
-type TokenRefresher interface {
-	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
-	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
-	TokenURL() string
-}
-
-type OAuthRefresher = TokenRefresher
-
-// RefresherResolver returns the connection auth map, blocking until providers
-// finish loading if needed.
-type RefresherResolver func() map[string]map[string]TokenRefresher
-
 type Broker struct {
-	providers            *registry.ProviderMap[core.Provider]
-	users                UserStore
-	externalCreds        core.ExternalCredentialProvider
-	authorizer           authorization.RuntimeAuthorizer
-	connMapper           ConnectionMapper
-	mcpMapper            ConnectionMapper
-	connectionAuth       RefresherResolver
-	manualConnectionAuth RefresherResolver
-	connectionRuntime    ConnectionRuntimeResolver
-	providerOverrides    ProviderOverrideResolver
-	refreshGroup         singleflight.Group
+	providers         *registry.ProviderMap[core.Provider]
+	users             UserStore
+	externalCreds     core.ExternalCredentialProvider
+	authorizer        authorization.RuntimeAuthorizer
+	connMapper        ConnectionMapper
+	mcpMapper         ConnectionMapper
+	connectionRuntime ConnectionRuntimeResolver
+	providerOverrides ProviderOverrideResolver
 }
 
 type BrokerOption func(*Broker)
@@ -153,14 +133,6 @@ func WithConnectionMapper(m ConnectionMapper) BrokerOption {
 
 func WithMCPConnectionMapper(m ConnectionMapper) BrokerOption {
 	return func(b *Broker) { b.mcpMapper = m }
-}
-
-func WithConnectionAuth(r RefresherResolver) BrokerOption {
-	return func(b *Broker) { b.connectionAuth = r }
-}
-
-func WithManualConnectionAuth(r RefresherResolver) BrokerOption {
-	return func(b *Broker) { b.manualConnectionAuth = r }
 }
 
 func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
@@ -816,13 +788,27 @@ func (b *Broker) resolvePlatformRuntimeCredential(ctx context.Context, providerN
 	}
 	token := strings.TrimSpace(info.Token)
 	var expiresAt *time.Time
-	if info.TokenSource != nil {
-		credential, err := info.TokenSource.ResolveConnectionCredential(ctx)
+	if !core.ExternalCredentialProviderMissing(b.externalCreds) {
+		auth := info.AuthConfig
+		if auth.Token == "" && token != "" {
+			auth.Token = token
+		}
+		credential, err := b.externalCreds.ResolveCredential(ctx, &core.ResolveExternalCredentialRequest{
+			Provider:         providerName,
+			Connection:       connection,
+			ConnectionID:     info.ConnectionID,
+			Mode:             core.ConnectionModePlatform,
+			Instance:         instance,
+			Auth:             auth,
+			ConnectionParams: info.Params,
+		})
 		if err != nil {
 			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving deployment credential for integration %q connection %q: %v", ErrNoCredential, providerName, connection, err)
 		}
-		token = strings.TrimSpace(credential.Token)
-		expiresAt = credential.ExpiresAt
+		if credential != nil && strings.TrimSpace(credential.Token) != "" {
+			token = strings.TrimSpace(credential.Token)
+			expiresAt = credential.ExpiresAt
+		}
 	}
 	if token == "" {
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
@@ -875,38 +861,42 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 
-	var storedCredential *core.ExternalCredential
-	var err error
-
 	connectionID := b.connectionID(providerName, connection)
-	if instance != "" {
-		storedCredential, err = b.externalCreds.GetCredential(ctx, subjectID, connectionID, instance)
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
-			}
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: retrieving external credential: %v", ErrInternal, err)
-		}
-	} else {
-		tokens, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, connectionID)
-		if listErr != nil {
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
-		}
-		switch len(tokens) {
-		case 0:
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
-		case 1:
-			storedCredential = tokens[0]
-		default:
-			instances := make([]string, len(tokens))
-			for i, t := range tokens {
-				instances[i] = t.Instance
-			}
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use with the %q parameter",
-				ErrAmbiguousInstance, providerName, len(tokens), instances, "_instance")
-		}
+	runtimeInfo := ConnectionRuntimeInfo{}
+	if b.connectionRuntime != nil {
+		runtimeInfo, _ = b.connectionRuntime(providerName, connection)
 	}
 
+	resp, err := b.externalCreds.ResolveCredential(ctx, &core.ResolveExternalCredentialRequest{
+		Provider:            providerName,
+		Connection:          connection,
+		ConnectionID:        connectionID,
+		Mode:                credentialMode,
+		CredentialSubjectID: subjectID,
+		Instance:            instance,
+		Auth:                runtimeInfo.AuthConfig,
+		ConnectionParams:    runtimeInfo.Params,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			if instance != "" {
+				return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
+			}
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
+		case errors.Is(err, core.ErrAmbiguousCredential):
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: integration %q has multiple connections; specify which instance to use with the %q parameter",
+				ErrAmbiguousInstance, providerName, "_instance")
+		case errors.Is(err, core.ErrReconnectRequired):
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving external credential: %v", ErrReconnectRequired, err)
+		default:
+			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("resolving external credential: %w", err)
+		}
+	}
+	if resp == nil {
+		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: external credentials provider returned nil resolution", ErrInternal)
+	}
+	storedCredential := resp.Credential
 	if storedCredential == nil {
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 	}
@@ -925,17 +915,31 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		Instance:   storedCredential.Instance,
 	})
 
-	if storedCredential.MetadataJSON != "" {
+	metadataJSON := storedCredential.MetadataJSON
+	if resp.MetadataJSON != "" {
+		metadataJSON = resp.MetadataJSON
+	}
+	if metadataJSON != "" {
 		var connParams map[string]string
-		if err := json.Unmarshal([]byte(storedCredential.MetadataJSON), &connParams); err != nil {
+		if err := json.Unmarshal([]byte(metadataJSON), &connParams); err != nil {
 			slog.WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
 		} else if len(connParams) > 0 {
 			ctx = core.WithConnectionParams(ctx, connParams)
 		}
 	}
+	if len(resp.Params) > 0 {
+		ctx = core.WithConnectionParams(ctx, resp.Params)
+	}
 
-	accessToken, err := b.refreshCredentialIfNeeded(ctx, storedCredential, providerName, connection, metricutil.NormalizeConnectionMode(credentialMode))
-	return ctx, ConnectionRuntimeCredential{Token: accessToken, ExpiresAt: storedCredential.ExpiresAt}, err
+	expiresAt := resp.ExpiresAt
+	if expiresAt == nil {
+		expiresAt = storedCredential.ExpiresAt
+	}
+	token := strings.TrimSpace(resp.Token)
+	if token == "" {
+		token = storedCredential.AccessToken
+	}
+	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
 }
 
 // ResolveSubjectToken exposes the broker's refresh-aware token lookup for
@@ -947,99 +951,4 @@ func (b *Broker) ResolveSubjectToken(ctx context.Context, prov core.Provider, su
 		return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 	}
 	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
-}
-
-func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.ExternalCredential, providerName, connection, connectionMode string) (string, error) {
-	if token.RefreshToken == "" || token.ExpiresAt == nil {
-		return token.AccessToken, nil
-	}
-	if time.Until(*token.ExpiresAt) > tokenRefreshThreshold {
-		return token.AccessToken, nil
-	}
-
-	refresher, authMethod := b.resolveRefresher(providerName, connection)
-	if refresher == nil {
-		return token.AccessToken, nil
-	}
-
-	connectionID := token.ConnectionID
-	if connectionID == "" {
-		connectionID = b.connectionID(providerName, connection)
-	}
-	key := token.SubjectID + ":" + connectionID + ":" + token.Instance
-	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
-		refreshCtx := context.WithoutCancel(ctx)
-		startedAt := time.Now()
-		resp, err := b.refreshOAuth(refreshCtx, refresher, token.RefreshToken)
-		metricutil.RecordConnectionAuthMetrics(refreshCtx, startedAt, providerName, authMethod, "refresh", connectionMode, err != nil)
-		return resp, err
-	})
-	if err != nil {
-		fresh, fetchErr := b.externalCreds.GetCredential(ctx, token.SubjectID, connectionID, token.Instance)
-		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
-			return fresh.AccessToken, nil
-		}
-		token.RefreshErrorCount++
-		token.UpdatedAt = time.Now()
-		if storeErr := b.externalCreds.PutCredential(ctx, token); storeErr != nil {
-			slog.WarnContext(ctx, "failed to persist refresh error count", "provider", providerName, "error", storeErr)
-		}
-		if time.Now().Before(*token.ExpiresAt) {
-			return token.AccessToken, nil
-		}
-		return "", fmt.Errorf("%w: token expired and refresh failed: %w", ErrReconnectRequired, err)
-	}
-
-	resp := v.(*core.TokenResponse)
-	now := time.Now()
-	token.AccessToken = resp.AccessToken
-	if resp.RefreshToken != "" {
-		token.RefreshToken = resp.RefreshToken
-	}
-	if resp.ExpiresIn > 0 {
-		t := now.Add(time.Duration(resp.ExpiresIn) * time.Second)
-		token.ExpiresAt = &t
-	} else {
-		token.ExpiresAt = nil
-	}
-	token.LastRefreshedAt = &now
-	token.RefreshErrorCount = 0
-	token.UpdatedAt = now
-
-	if err := b.externalCreds.PutCredential(ctx, token); err != nil {
-		return "", fmt.Errorf("persisting refreshed token: %w", err)
-	}
-	return token.AccessToken, nil
-}
-
-func (b *Broker) resolveRefresher(integration, connection string) (TokenRefresher, string) {
-	if refresher := lookupRefresher(b.manualConnectionAuth, integration, connection); refresher != nil {
-		return refresher, "manual"
-	}
-	if refresher := lookupRefresher(b.connectionAuth, integration, connection); refresher != nil {
-		return refresher, "oauth"
-	}
-	return nil, ""
-}
-
-func lookupRefresher(resolver RefresherResolver, integration, connection string) TokenRefresher {
-	if resolver == nil {
-		return nil
-	}
-	m := resolver()
-	if m == nil {
-		return nil
-	}
-	return m[integration][connection]
-}
-
-func (b *Broker) refreshOAuth(ctx context.Context, refresher TokenRefresher, refreshToken string) (*core.TokenResponse, error) {
-	if cp := core.ConnectionParams(ctx); cp != nil {
-		raw := refresher.TokenURL()
-		resolved := paraminterp.Interpolate(raw, cp)
-		if resolved != raw {
-			return refresher.RefreshTokenWithURL(ctx, refreshToken, resolved)
-		}
-	}
-	return refresher.RefreshToken(ctx, refreshToken)
 }

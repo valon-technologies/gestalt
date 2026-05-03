@@ -55,6 +55,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
@@ -62,6 +63,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/plugins/mcp"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
+	"github.com/valon-technologies/gestalt/server/services/plugins/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -119,6 +121,7 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	installTestExternalCredentialResolver(&cfg)
 	brokerOpts := []invocation.BrokerOption{}
 	if cfg.DefaultConnection != nil {
 		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
@@ -127,36 +130,6 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 		brokerOpts = append(brokerOpts,
 			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.CatalogConnection)),
 		)
-	}
-	if cfg.ConnectionAuth != nil {
-		authFn := cfg.ConnectionAuth
-		brokerOpts = append(brokerOpts, invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
-			m := authFn()
-			refreshers := make(map[string]map[string]invocation.OAuthRefresher, len(m))
-			for intg, conns := range m {
-				inner := make(map[string]invocation.OAuthRefresher, len(conns))
-				for conn, h := range conns {
-					inner[conn] = h
-				}
-				refreshers[intg] = inner
-			}
-			return refreshers
-		}))
-	}
-	if cfg.ManualConnectionAuth != nil {
-		authFn := cfg.ManualConnectionAuth
-		brokerOpts = append(brokerOpts, invocation.WithManualConnectionAuth(func() map[string]map[string]invocation.TokenRefresher {
-			m := authFn()
-			refreshers := make(map[string]map[string]invocation.TokenRefresher, len(m))
-			for intg, conns := range m {
-				inner := make(map[string]invocation.TokenRefresher, len(conns))
-				for conn, h := range conns {
-					inner[conn] = h
-				}
-				refreshers[intg] = inner
-			}
-			return refreshers
-		}))
 	}
 	if cfg.Authorizer != nil {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
@@ -172,15 +145,174 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	return srv
 }
 
+func installTestExternalCredentialResolver(cfg *server.Config) {
+	if cfg == nil || cfg.Services == nil {
+		return
+	}
+	provider := cfg.Services.ExternalCredentials
+	if recording, ok := provider.(*recordingExternalCredentialProvider); ok {
+		provider = recording.inner
+	}
+	stub, ok := provider.(*coretesting.StubExternalCredentialProvider)
+	if !ok || stub == nil {
+		return
+	}
+	if stub.ResolveCredentialFunc == nil {
+		stub.ResolveCredentialFunc = func(ctx context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+			credential, err := resolveStoredTestCredential(ctx, stub, req)
+			if err != nil {
+				return nil, err
+			}
+			if credential.RefreshToken != "" && credential.ExpiresAt != nil && time.Until(*credential.ExpiresAt) <= 5*time.Minute {
+				if resp, ok, refreshErr := refreshTestCredential(ctx, cfg, req, credential); refreshErr != nil {
+					fresh, fetchErr := stub.GetCredential(ctx, credential.SubjectID, credential.ConnectionID, credential.Instance)
+					if fetchErr == nil && fresh != nil && fresh.AccessToken != credential.AccessToken {
+						return &core.ResolveExternalCredentialResponse{Token: fresh.AccessToken, ExpiresAt: fresh.ExpiresAt, MetadataJSON: fresh.MetadataJSON, Credential: fresh}, nil
+					}
+					if time.Now().Before(*credential.ExpiresAt) {
+						return &core.ResolveExternalCredentialResponse{Token: credential.AccessToken, ExpiresAt: credential.ExpiresAt, MetadataJSON: credential.MetadataJSON, Credential: credential}, nil
+					}
+					return nil, fmt.Errorf("%w: token expired and refresh failed: %v", core.ErrReconnectRequired, refreshErr)
+				} else if ok {
+					now := time.Now().UTC()
+					credential.AccessToken = resp.AccessToken
+					if resp.RefreshToken != "" {
+						credential.RefreshToken = resp.RefreshToken
+					}
+					if resp.ExpiresIn > 0 {
+						expiresAt := now.Add(time.Duration(resp.ExpiresIn) * time.Second)
+						credential.ExpiresAt = &expiresAt
+					} else {
+						credential.ExpiresAt = nil
+					}
+					credential.LastRefreshedAt = &now
+					credential.RefreshErrorCount = 0
+					credential.UpdatedAt = now
+					if err := stub.PutCredential(ctx, credential); err != nil {
+						return nil, err
+					}
+				}
+			}
+			return &core.ResolveExternalCredentialResponse{
+				Token:        credential.AccessToken,
+				ExpiresAt:    credential.ExpiresAt,
+				MetadataJSON: credential.MetadataJSON,
+				Credential:   credential,
+			}, nil
+		}
+	}
+	if stub.ExchangeCredentialFunc == nil {
+		stub.ExchangeCredentialFunc = func(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+			if req == nil || strings.TrimSpace(req.Auth.TokenURL) == "" {
+				return &core.ExchangeExternalCredentialResponse{}, nil
+			}
+			tokenExchange, err := oauth.ParseTokenExchangeFormat(req.Auth.TokenExchange)
+			if err != nil {
+				return nil, err
+			}
+			exchanger := oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{
+				TokenURL:        req.Auth.TokenURL,
+				TokenParams:     req.Auth.TokenParams,
+				TokenExchange:   tokenExchange,
+				AcceptHeader:    req.Auth.AcceptHeader,
+				AccessTokenPath: req.Auth.AccessTokenPath,
+			})
+			tokenURL := exchanger.TokenURL()
+			if len(req.ConnectionParams) > 0 {
+				tokenURL = paraminterp.Interpolate(tokenURL, req.ConnectionParams)
+			}
+			resp, err := exchanger.ExchangeCredentialsWithURL(ctx, req.CredentialJSON, tokenURL)
+			if err != nil {
+				return nil, err
+			}
+			return &core.ExchangeExternalCredentialResponse{TokenResponse: &core.ExternalCredentialTokenResponse{
+				AccessToken:   resp.AccessToken,
+				RefreshToken:  resp.RefreshToken,
+				RefreshSource: req.CredentialJSON,
+				ExpiresIn:     resp.ExpiresIn,
+				TokenType:     resp.TokenType,
+				Extra:         resp.Extra,
+			}}, nil
+		}
+	}
+}
+
+func resolveStoredTestCredential(ctx context.Context, stub *coretesting.StubExternalCredentialProvider, req *core.ResolveExternalCredentialRequest) (*core.ExternalCredential, error) {
+	if req == nil {
+		return nil, core.ErrNotFound
+	}
+	if req.Mode == core.ConnectionModePlatform {
+		return &core.ExternalCredential{AccessToken: req.Auth.Token}, nil
+	}
+	if req.Instance != "" {
+		return stub.GetCredential(ctx, req.CredentialSubjectID, req.ConnectionID, req.Instance)
+	}
+	credentials, err := stub.ListCredentialsForConnection(ctx, req.CredentialSubjectID, req.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	switch len(credentials) {
+	case 0:
+		return nil, core.ErrNotFound
+	case 1:
+		return credentials[0], nil
+	default:
+		return nil, core.ErrAmbiguousCredential
+	}
+}
+
+func refreshTestCredential(ctx context.Context, cfg *server.Config, req *core.ResolveExternalCredentialRequest, credential *core.ExternalCredential) (*core.TokenResponse, bool, error) {
+	if cfg == nil || req == nil || credential == nil {
+		return nil, false, nil
+	}
+	if cfg.ConnectionAuth != nil {
+		if connMap := cfg.ConnectionAuth()[req.Provider]; connMap != nil {
+			if refresher := connMap[req.Connection]; refresher != nil {
+				tokenURL := refresher.TokenURL()
+				if credential.MetadataJSON != "" {
+					var params map[string]string
+					if err := json.Unmarshal([]byte(credential.MetadataJSON), &params); err == nil && len(params) > 0 {
+						tokenURL = paraminterp.Interpolate(tokenURL, params)
+					}
+				}
+				startedAt := time.Now()
+				connectionMode := metricutil.NormalizeConnectionMode(req.Mode)
+				if tokenURL != refresher.TokenURL() {
+					resp, err := refresher.RefreshTokenWithURL(ctx, credential.RefreshToken, tokenURL)
+					metricutil.RecordConnectionAuthMetrics(ctx, startedAt, req.Provider, "oauth", "refresh", connectionMode, err != nil)
+					return resp, true, err
+				}
+				resp, err := refresher.RefreshToken(ctx, credential.RefreshToken)
+				metricutil.RecordConnectionAuthMetrics(ctx, startedAt, req.Provider, "oauth", "refresh", connectionMode, err != nil)
+				return resp, true, err
+			}
+		}
+	}
+	if cfg.ManualConnectionAuth != nil {
+		if connMap := cfg.ManualConnectionAuth()[req.Provider]; connMap != nil {
+			if refresher := connMap[req.Connection]; refresher != nil {
+				startedAt := time.Now()
+				resp, err := refresher.RefreshToken(ctx, credential.RefreshToken)
+				metricutil.RecordConnectionAuthMetrics(ctx, startedAt, req.Provider, "manual", "refresh", metricutil.NormalizeConnectionMode(req.Mode), err != nil)
+				return resp, true, err
+			}
+		}
+	}
+	return nil, false, nil
+}
+
 type recordingExternalCredentialProvider struct {
-	inner                  core.ExternalCredentialProvider
-	getCredentialCalls     atomic.Int64
-	listCredentialsCalls   atomic.Int64
-	listForProviderCalls   atomic.Int64
-	listForConnectionCalls atomic.Int64
-	putCredentialCalls     atomic.Int64
-	restoreCredentialCalls atomic.Int64
-	deleteCredentialCalls  atomic.Int64
+	inner                   core.ExternalCredentialProvider
+	getCredentialCalls      atomic.Int64
+	listCredentialsCalls    atomic.Int64
+	listForProviderCalls    atomic.Int64
+	listForConnectionCalls  atomic.Int64
+	putCredentialCalls      atomic.Int64
+	restoreCredentialCalls  atomic.Int64
+	deleteCredentialCalls   atomic.Int64
+	validateConfigCalls     atomic.Int64
+	resolveCredentialCalls  atomic.Int64
+	exchangeCredentialCalls atomic.Int64
 }
 
 func TestS3ObjectAccessURLUploadsAndDownloadsPluginScopedObject(t *testing.T) {
@@ -393,6 +525,21 @@ func (r *recordingExternalCredentialProvider) DeleteCredential(ctx context.Conte
 	return r.inner.DeleteCredential(ctx, id)
 }
 
+func (r *recordingExternalCredentialProvider) ValidateCredentialConfig(ctx context.Context, req *core.ValidateExternalCredentialConfigRequest) error {
+	r.validateConfigCalls.Add(1)
+	return r.inner.ValidateCredentialConfig(ctx, req)
+}
+
+func (r *recordingExternalCredentialProvider) ResolveCredential(ctx context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	r.resolveCredentialCalls.Add(1)
+	return r.inner.ResolveCredential(ctx, req)
+}
+
+func (r *recordingExternalCredentialProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	r.exchangeCredentialCalls.Add(1)
+	return r.inner.ExchangeCredential(ctx, req)
+}
+
 func listTestCredentialsForProvider(ctx context.Context, provider core.ExternalCredentialProvider, subjectID, integration string) ([]*core.ExternalCredential, error) {
 	tokens, err := provider.ListCredentials(ctx, subjectID)
 	if err != nil {
@@ -408,7 +555,7 @@ func listTestCredentialsForProvider(ctx context.Context, provider core.ExternalC
 }
 
 func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
-	return r.getCredentialCalls.Load() + r.listCredentialsCalls.Load() + r.listForProviderCalls.Load() + r.listForConnectionCalls.Load()
+	return r.getCredentialCalls.Load() + r.listCredentialsCalls.Load() + r.listForProviderCalls.Load() + r.listForConnectionCalls.Load() + r.resolveCredentialCalls.Load()
 }
 
 type staticRuntimeInspector struct {
@@ -22571,7 +22718,6 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 		testutil.CloseOnCleanup(t, tokenSrv)
 
 		svc := testutil.NewStubServices(t)
-		exchanger := oauth.NewCredentialExchanger(oauth.CredentialExchangeConfig{TokenURL: tokenSrv.URL})
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
 				stubManualProvider: stubManualProvider{
@@ -22583,12 +22729,17 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 				},
 			})
 			cfg.DefaultConnection = map[string]string{"fallback-token": config.PluginConnectionName}
-			cfg.ManualConnectionAuth = func() map[string]map[string]bootstrap.ManualTokenExchanger {
-				return map[string]map[string]bootstrap.ManualTokenExchanger{
-					"fallback-token": {
-						config.PluginConnectionName: exchanger,
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"fallback-token": {
+					Auth: &config.ConnectionAuthDef{
+						Type:     providermanifestv1.AuthTypeManual,
+						TokenURL: tokenSrv.URL,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "client_id"},
+							{Name: "client_secret"},
+						},
 					},
-				}
+				},
 			}
 			cfg.Now = func() time.Time { return fixedNow }
 			cfg.Services = svc

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -144,6 +146,28 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	return runtime, nil
 }
 
+func ValidateConnectionRuntimeCredentials(ctx context.Context, provider core.ExternalCredentialProvider, runtime invocation.ConnectionRuntimeMap) error {
+	if len(runtime) == 0 || core.ExternalCredentialProviderMissing(provider) {
+		return nil
+	}
+	for providerName, connections := range runtime {
+		for connectionName := range connections {
+			info := connections[connectionName]
+			if err := provider.ValidateCredentialConfig(ctx, &core.ValidateExternalCredentialConfigRequest{
+				Provider:         providerName,
+				Connection:       connectionName,
+				ConnectionID:     info.ConnectionID,
+				Mode:             info.Mode,
+				Auth:             info.AuthConfig,
+				ConnectionParams: info.Params,
+			}); err != nil {
+				return fmt.Errorf("validate credential config for %s/%s: %w", providerName, connectionName, err)
+			}
+		}
+	}
+	return nil
+}
+
 func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef, policy egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
 	return staticConnectionRuntimeInfo(integration, connection, *conn, policy)
 }
@@ -154,13 +178,14 @@ func StaticConnectionRuntimeInfo(integration, connection string, conn config.Con
 	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow})
 }
 
-func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, policy egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
+func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, _ egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
 	info := invocation.ConnectionRuntimeInfo{
 		ConnectionID: conn.ConnectionID,
 		Mode:         mode,
 		Exposure:     config.ConnectionExposureForConnection(conn),
 		AuthType:     conn.Auth.Type,
+		AuthConfig:   ExternalCredentialAuthConfig(conn.Auth),
 		AuthMapping:  config.CloneAuthMapping(conn.Auth.AuthMapping),
 		Params:       connectionParamDefaults(conn.ConnectionParams),
 	}
@@ -169,6 +194,9 @@ func staticConnectionRuntimeInfo(integration, connection string, conn config.Con
 	}
 	if len(conn.Auth.Credentials) > 0 {
 		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform does not support user credential fields", integration, connection)
+	}
+	if len(conn.Auth.TokenExchangeDrivers) > 0 {
+		return info, nil
 	}
 	switch conn.Auth.Type {
 	case providermanifestv1.AuthTypeBearer:
@@ -194,14 +222,51 @@ func staticConnectionRuntimeInfo(integration, connection string, conn config.Con
 		if strings.TrimSpace(conn.Auth.GrantType) != "client_credentials" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials", integration, connection)
 		}
-		source, err := newClientCredentialsTokenSource(conn.Auth, policy)
-		if err != nil {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: %w", integration, connection, err)
+		if strings.TrimSpace(conn.Auth.TokenURL) == "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.tokenUrl is required", integration, connection)
 		}
-		info.TokenSource = source
+		if strings.TrimSpace(conn.Auth.ClientID) == "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientId is required", integration, connection)
+		}
+		if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientSecret is required", integration, connection)
+		}
 		return info, nil
 	default:
 		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials", integration, connection)
+	}
+}
+
+func ExternalCredentialAuthConfig(auth config.ConnectionAuthDef) core.ExternalCredentialAuthConfig {
+	drivers := make([]core.ExternalCredentialTokenExchangeDriver, 0, len(auth.TokenExchangeDrivers))
+	for _, driver := range auth.TokenExchangeDrivers {
+		drivers = append(drivers, core.ExternalCredentialTokenExchangeDriver{
+			Type:            strings.TrimSpace(driver.Type),
+			TargetPrincipal: strings.TrimSpace(driver.TargetPrincipal),
+			Scopes:          slices.Clone(driver.Scopes),
+			LifetimeSeconds: driver.LifetimeSeconds,
+			Endpoint:        strings.TrimSpace(driver.Endpoint),
+			Params:          maps.Clone(driver.Params),
+		})
+	}
+	return core.ExternalCredentialAuthConfig{
+		Type:                 string(auth.Type),
+		Token:                auth.Token,
+		TokenPrefix:          auth.TokenPrefix,
+		GrantType:            auth.GrantType,
+		TokenURL:             auth.TokenURL,
+		ClientID:             auth.ClientID,
+		ClientSecret:         auth.ClientSecret,
+		ClientAuth:           auth.ClientAuth,
+		TokenExchange:        auth.TokenExchange,
+		Scopes:               slices.Clone(auth.Scopes),
+		ScopeParam:           auth.ScopeParam,
+		ScopeSeparator:       auth.ScopeSeparator,
+		TokenParams:          maps.Clone(auth.TokenParams),
+		RefreshParams:        maps.Clone(auth.RefreshParams),
+		AcceptHeader:         auth.AcceptHeader,
+		AccessTokenPath:      auth.AccessTokenPath,
+		TokenExchangeDrivers: drivers,
 	}
 }
 

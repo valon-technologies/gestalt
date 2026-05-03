@@ -192,6 +192,43 @@ func TestBrokerResolveToken_PlatformConnectionAppliesRuntimeParams(t *testing.T)
 	}
 }
 
+func TestBrokerResolveToken_PlatformConnectionUsesStaticTokenWithoutExternalProvider(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "looker",
+			ConnMode: core.ConnectionModePlatform,
+		}),
+		svc.Users,
+		nil,
+		WithConnectionRuntime(ConnectionRuntimeMap{
+			"looker": {
+				core.PluginConnectionName: {
+					Mode:  core.ConnectionModePlatform,
+					Token: "static-platform-token",
+				},
+			},
+		}.Resolve),
+	)
+
+	ctx, token, err := broker.ResolveToken(context.Background(), &principal.Principal{
+		SubjectID: "service_account:workflow-config",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	}, "looker", "", "")
+	if err != nil {
+		t.Fatalf("ResolveToken: %v", err)
+	}
+	if token != "static-platform-token" {
+		t.Fatalf("token = %q, want static-platform-token", token)
+	}
+	if cred := CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.SubjectID != platformSubjectID {
+		t.Fatalf("credential context = %#v, want platform static credential", cred)
+	}
+}
+
 func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
 	t.Parallel()
 
