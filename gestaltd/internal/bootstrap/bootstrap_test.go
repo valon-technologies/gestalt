@@ -2636,6 +2636,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		IdempotencyKey: "global-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it without explicit tools"}},
+		ToolRefsSet:    true,
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(global search): %v", err)

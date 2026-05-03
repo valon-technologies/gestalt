@@ -583,6 +583,10 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) > 0 {
 		toolSource = coreagent.ToolSourceModeMCPCatalog
 	}
+	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !req.ToolRefsSet && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
+		toolSource = coreagent.ToolSourceModeMCPCatalog
+		toolRefs = []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}
+	}
 	var tools []coreagent.Tool
 	if toolSource == coreagent.ToolSourceModeMCPCatalog {
 		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
@@ -2249,6 +2253,20 @@ func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.
 	default:
 		return "", fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, source)
 	}
+}
+
+func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider) coreagent.ToolSourceMode {
+	if provider == nil {
+		return coreagent.ToolSourceModeUnspecified
+	}
+	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return coreagent.ToolSourceModeUnspecified
+	}
+	if agentProviderCapabilitiesSupportToolSource(caps, coreagent.ToolSourceModeMCPCatalog) {
+		return coreagent.ToolSourceModeMCPCatalog
+	}
+	return coreagent.ToolSourceModeUnspecified
 }
 
 func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) []core.AccessPermission {

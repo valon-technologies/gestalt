@@ -392,6 +392,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		SessionID:       strings.TrimSpace(sessionID),
 		Messages:        agentMessagesFromRequest(req.Messages),
 		ToolRefs:        agentToolRefsForCreateTurn(req),
+		ToolRefsSet:     req.toolRefsSet,
 		ToolSource:      toolSource,
 		ResponseSchema:  maps.Clone(req.ResponseSchema),
 		Metadata:        maps.Clone(req.Metadata),

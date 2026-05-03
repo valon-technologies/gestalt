@@ -456,6 +456,7 @@ type ManagerCreateTurnRequest struct {
 	SessionID        string
 	Messages         []Message
 	ToolRefs         []ToolRef
+	ToolRefsSet      bool
 	ToolSource       ToolSourceMode
 	ResponseSchema   map[string]any
 	Metadata         map[string]any
