@@ -123,6 +123,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	tm := credentialMaterial{
 		SubjectID:    subjectID,
 		AuthSource:   authSource,
+		ConnectionID: conn.ConnectionID,
 		Integration:  req.Integration,
 		Connection:   manualConnection,
 		Instance:     manualInstance,
@@ -251,6 +252,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 type credentialMaterial struct {
 	SubjectID       string
 	AuthSource      string
+	ConnectionID    string
 	Integration     string
 	Connection      string
 	Instance        string
@@ -329,7 +331,11 @@ type discoveryCandidateInfo struct {
 
 func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialMaterial) (*core.ExternalCredential, error) {
 	now := s.now().UTC().Truncate(time.Second)
-	previous, err := s.externalCredentials.GetCredential(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
+	connectionID := strings.TrimSpace(tm.ConnectionID)
+	if connectionID == "" {
+		connectionID = tm.Integration + ":" + tm.Connection
+	}
+	previous, err := s.externalCredentials.GetCredential(ctx, tm.SubjectID, connectionID, tm.Instance)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
 		return nil, err
 	}
@@ -339,6 +345,7 @@ func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialM
 	tok := &core.ExternalCredential{
 		ID:              uuid.NewString(),
 		SubjectID:       tm.SubjectID,
+		ConnectionID:    connectionID,
 		Integration:     tm.Integration,
 		Connection:      tm.Connection,
 		Instance:        tm.Instance,

@@ -431,7 +431,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			t.Fatalf("PutCredential: %v", err)
 		}
 
-		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
+		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc:default", "inst-1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -456,7 +456,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 
-		_, err := svc.ExternalCredentials.GetCredential(context.Background(), "no-user", "no-svc", "no-conn", "no-inst")
+		_, err := svc.ExternalCredentials.GetCredential(context.Background(), "no-user", "no-svc:no-conn", "no-inst")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token = %v, want ErrNotFound", err)
 		}
@@ -505,7 +505,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(ctx, principal.UserSubjectID(user.ID), "svc-a")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc-a:default")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
@@ -530,7 +530,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "conn-a")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc:conn-a")
 		if err != nil {
 			t.Fatalf("ListCredentialsForConnection: %v", err)
 		}
@@ -558,7 +558,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			t.Fatalf("DeleteCredential: %v", err)
 		}
 
-		_, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
+		_, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc:default", "i1")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
 		}
@@ -594,7 +594,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			t.Fatalf("second PutCredential: %v", err)
 		}
 
-		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
+		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc:default", "i1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -605,7 +605,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "updated")
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc:default")
 		if err != nil {
 			t.Fatalf("ListCredentialsForConnection: %v", err)
 		}

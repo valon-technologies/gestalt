@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -28,7 +29,7 @@ type agentRuntime struct {
 	providers           map[string]coreagent.Provider
 	invoker             invocation.Invoker
 	systemTools         agentSystemToolExecutor
-	toolGrants          *agentgrant.Manager
+	runGrants           *agentgrant.Manager
 	toolSearcher        agentToolResolver
 }
 
@@ -111,13 +112,13 @@ func (r *agentRuntime) SetInvoker(invoker invocation.Invoker) {
 	r.invoker = invoker
 }
 
-func (r *agentRuntime) SetToolGrants(grants *agentgrant.Manager) {
+func (r *agentRuntime) SetRunGrants(grants *agentgrant.Manager) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.toolGrants = grants
+	r.runGrants = grants
 }
 
 func (r *agentRuntime) SetToolSearcher(searcher agentToolResolver) {
@@ -255,22 +256,22 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	r.mu.RLock()
 	invoker := r.invoker
 	systemTools := r.systemTools
-	grants := r.toolGrants
+	grants := r.runGrants
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	grant, err := resolveAgentToolGrant(grants, strings.TrimSpace(req.ToolGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateAgentToolGrantTurn(ctx, grant, requestedTurnID); err != nil {
+	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
 	}
 	toolTarget, err := grants.ResolveToolID(req.ToolID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent tool id is invalid", invocation.ErrAuthorizationDenied)
 	}
-	principalValue := agentToolGrantPrincipal(grant)
+	principalValue := agentRunGrantPrincipal(grant)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
@@ -340,21 +341,21 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 		return nil, fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
-	grants := r.toolGrants
+	grants := r.runGrants
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
 	if searcher == nil {
 		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
 	}
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	grant, err := resolveAgentToolGrant(grants, strings.TrimSpace(req.ToolGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateAgentToolGrantTurn(ctx, grant, requestedTurnID); err != nil {
+	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
 	}
-	principalValue := agentToolGrantPrincipal(grant)
+	principalValue := agentRunGrantPrincipal(grant)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
@@ -392,41 +393,123 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	}, nil
 }
 
-func resolveAgentToolGrant(grants *agentgrant.Manager, token, providerName, sessionID, turnID string) (agentgrant.Grant, error) {
+func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.ResolveConnectionRequest) (*coreagent.ResolvedConnection, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	grants := r.runGrants
+	invoker := r.invoker
+	r.mu.RUnlock()
+	requestedTurnID := strings.TrimSpace(req.TurnID)
+	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
+		return nil, err
+	}
+	connection := config.ResolveConnectionAlias(req.Connection)
+	if connection == "" {
+		connection = config.PluginConnectionName
+	}
+	if !agentRunGrantAllowsConnection(grant, connection) {
+		return nil, fmt.Errorf("%w: agent connection %q is outside the run scope", invocation.ErrAuthorizationDenied, connection)
+	}
+	credentialResolver, ok := invoker.(invocation.RuntimeCredentialResolver)
+	if !ok || credentialResolver == nil {
+		return nil, fmt.Errorf("%w: agent connection credential resolver is not configured", invocation.ErrInternal)
+	}
+	principalValue := agentRunGrantPrincipal(grant)
+	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	providerName := strings.TrimSpace(grant.ProviderName)
+	_, credential, info, err := credentialResolver.ResolveRuntimeConnectionCredential(invocation.WithInternalConnectionAccess(ctx), principalValue, providerName, connection, strings.TrimSpace(req.Instance))
+	if err != nil {
+		return nil, err
+	}
+	headers, err := materializeAgentConnectionHeaders(credential.Token, info)
+	if err != nil {
+		return nil, err
+	}
+	return &coreagent.ResolvedConnection{
+		ConnectionID: strings.TrimSpace(info.ConnectionID),
+		Connection:   connection,
+		Instance:     strings.TrimSpace(req.Instance),
+		Mode:         info.Mode,
+		Headers:      headers,
+		Params:       maps.Clone(info.Params),
+		ExpiresAt:    credential.ExpiresAt,
+	}, nil
+}
+
+func agentRunGrantAllowsConnection(grant agentgrant.Grant, connection string) bool {
+	connection = config.ResolveConnectionAlias(connection)
+	for _, binding := range grant.Connections {
+		if config.ResolveConnectionAlias(binding.Connection) == connection {
+			return true
+		}
+	}
+	return false
+}
+
+func materializeAgentConnectionHeaders(token string, info invocation.ConnectionRuntimeInfo) (map[string]string, error) {
+	token = strings.TrimSpace(token)
+	if info.AuthMapping != nil {
+		authToken, headers, err := declarative.MappedCredentialParser(info.AuthMapping)(token)
+		if err != nil {
+			return nil, err
+		}
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		if strings.TrimSpace(authToken) != "" {
+			headers["Authorization"] = authToken
+		}
+		return headers, nil
+	}
+	if token == "" || info.Mode == core.ConnectionModeNone {
+		return nil, nil
+	}
+	return map[string]string{"Authorization": core.BearerScheme + token}, nil
+}
+
+func resolveAgentRunGrant(grants *agentgrant.Manager, token, providerName, sessionID, turnID string) (agentgrant.Grant, error) {
 	if grants == nil {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grants are not configured", invocation.ErrInternal)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
 	grant, err := grants.Resolve(token)
 	if err != nil {
 		return agentgrant.Grant{}, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
 	if strings.TrimSpace(grant.ProviderName) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grant has no provider", invocation.ErrAuthorizationDenied)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no provider", invocation.ErrAuthorizationDenied)
 	}
 	if providerName != "" && strings.TrimSpace(grant.ProviderName) != providerName {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grant is not valid for provider %q", invocation.ErrAuthorizationDenied, providerName)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant is not valid for provider %q", invocation.ErrAuthorizationDenied, providerName)
 	}
 	if strings.TrimSpace(grant.SessionID) == "" || strings.TrimSpace(grant.SessionID) != sessionID {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grant is not valid for session %q", invocation.ErrAuthorizationDenied, sessionID)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant is not valid for session %q", invocation.ErrAuthorizationDenied, sessionID)
 	}
 	if strings.TrimSpace(turnID) == "" {
 		return agentgrant.Grant{}, fmt.Errorf("%w: agent turn is required", invocation.ErrAuthorizationDenied)
 	}
 	if strings.TrimSpace(grant.TurnID) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grant has no turn", invocation.ErrAuthorizationDenied)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no turn", invocation.ErrAuthorizationDenied)
 	}
 	if strings.TrimSpace(grant.SubjectID) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent tool grant has no subject", invocation.ErrAuthorizationDenied)
+		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no subject", invocation.ErrAuthorizationDenied)
 	}
 	return grant, nil
 }
 
-func (r *agentRuntime) validateAgentToolGrantTurn(ctx context.Context, grant agentgrant.Grant, turnID string) error {
+func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agentgrant.Grant, turnID string) error {
 	r.mu.RLock()
 	provider := r.providers[strings.TrimSpace(grant.ProviderName)]
 	r.mu.RUnlock()
 	if provider == nil {
-		return fmt.Errorf("%w: agent provider %q is not available for tool grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+		return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
 	}
 	turnID = strings.TrimSpace(turnID)
 	turn, err := provider.GetTurn(ctx, coreagent.GetTurnRequest{
@@ -452,11 +535,11 @@ func (r *agentRuntime) validateAgentToolGrantTurn(ctx context.Context, grant age
 		return fmt.Errorf("%w: agent provider returned turn %q for requested turn %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(turn.ID), turnID)
 	}
 	if strings.TrimSpace(turn.SessionID) != strings.TrimSpace(grant.SessionID) {
-		return fmt.Errorf("%w: agent tool grant is not valid for session %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.SessionID))
+		return fmt.Errorf("%w: agent run grant is not valid for session %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.SessionID))
 	}
 	grantTurnID := strings.TrimSpace(grant.TurnID)
 	if grantTurnID != turnID && grantTurnID != strings.TrimSpace(turn.ExecutionRef) {
-		return fmt.Errorf("%w: agent tool grant is not valid for turn %q", invocation.ErrAuthorizationDenied, turnID)
+		return fmt.Errorf("%w: agent run grant is not valid for turn %q", invocation.ErrAuthorizationDenied, turnID)
 	}
 	if !coreagent.ExecutionStatusIsLive(turn.Status) {
 		return fmt.Errorf("%w: agent turn %q is not active", invocation.ErrAuthorizationDenied, turnID)
@@ -464,7 +547,7 @@ func (r *agentRuntime) validateAgentToolGrantTurn(ctx context.Context, grant age
 	return nil
 }
 
-func agentToolGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
+func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
 	compiled := principal.CompilePermissions(grant.Permissions)
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(grant.SubjectID),

@@ -53,13 +53,15 @@ Providers can call back into Gestalt through the host service:
 | --- | --- |
 | `ListTools` | Page through MCP catalog tools available to the current turn |
 | `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a turn |
+| `ResolveConnection` | Resolve a connection bound to the current turn into headers, params, and expiry metadata |
 
 These callbacks work the same way when the provider runs directly on the
 `gestaltd` host or inside a hosted runtime.
 
-The host passes a `tool_grant` to `CreateTurn` when tools are available. Pass
-that grant back to `ListTools` or `ExecuteTool`; it is the scoped authority
-for resolving or executing tools during that turn.
+The host passes a `run_grant` to `CreateTurn` when tools or connection bindings
+are available. Pass that grant back to `ListTools`, `ExecuteTool`, or
+`ResolveConnection`; it is the scoped authority for resolving tools and
+connections during that turn.
 
 Providers that support limited or summary list requests must advertise bounded
 list hydration from `GetCapabilities`. When Gestalt asks for `limit` or
@@ -651,7 +653,7 @@ events.
             turnId: request.turnId,
             toolCallId: "call-1",
             toolId: request.tools[0].id,
-            toolGrant: request.toolGrant,
+            runGrant: request.runGrant,
             arguments: { taskId: "task-123" },
           });
           outputText = response.body;

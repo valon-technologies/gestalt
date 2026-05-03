@@ -37,25 +37,29 @@ type ResolvedConnectionSource struct {
 }
 
 type ResolvedConnectionDef struct {
-	Provider    string
-	Name        string
-	DisplayName string
-	Mode        providermanifestv1.ConnectionMode
-	Exposure    providermanifestv1.ConnectionExposure
-	Auth        ConnectionAuthDef
-	Params      map[string]ConnectionParamDef
-	Discovery   *providermanifestv1.ProviderDiscovery
-	Source      ResolvedConnectionSource
+	Provider     string
+	Name         string
+	Ref          string
+	ConnectionID string
+	DisplayName  string
+	Mode         providermanifestv1.ConnectionMode
+	Exposure     providermanifestv1.ConnectionExposure
+	Auth         ConnectionAuthDef
+	Params       map[string]ConnectionParamDef
+	Discovery    *providermanifestv1.ProviderDiscovery
+	Source       ResolvedConnectionSource
 }
 
 func (r ResolvedConnectionDef) ConnectionDef() ConnectionDef {
 	return ConnectionDef{
+		Ref:              r.Ref,
 		DisplayName:      r.DisplayName,
 		Mode:             r.Mode,
 		Exposure:         r.Exposure,
 		Auth:             r.Auth,
 		ConnectionParams: r.Params,
 		Discovery:        r.Discovery,
+		ConnectionID:     r.ConnectionID,
 	}
 }
 
@@ -614,14 +618,16 @@ func ResolveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *providerma
 
 func resolvedConnectionDef(name string, conn ConnectionDef, source ResolvedConnectionSource) ResolvedConnectionDef {
 	return ResolvedConnectionDef{
-		Name:        name,
-		DisplayName: conn.DisplayName,
-		Mode:        conn.Mode,
-		Exposure:    conn.Exposure,
-		Auth:        conn.Auth,
-		Params:      conn.ConnectionParams,
-		Discovery:   conn.Discovery,
-		Source:      source,
+		Name:         name,
+		Ref:          conn.Ref,
+		ConnectionID: conn.ConnectionID,
+		DisplayName:  conn.DisplayName,
+		Mode:         conn.Mode,
+		Exposure:     conn.Exposure,
+		Auth:         conn.Auth,
+		Params:       conn.ConnectionParams,
+		Discovery:    conn.Discovery,
+		Source:       source,
 	}
 }
 

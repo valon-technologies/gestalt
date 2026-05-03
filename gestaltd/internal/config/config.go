@@ -44,12 +44,13 @@ const (
 
 const PluginConnectionName = core.PluginConnectionName
 const PluginConnectionAlias = core.PluginConnectionAlias
-const ConfigAPIVersion = "gestaltd.config/v4"
+const ConfigAPIVersion = "gestaltd.config/v5"
 
 type Config struct {
 	APIVersion    string                    `yaml:"apiVersion,omitempty"`
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
+	Connections   map[string]*ConnectionDef `yaml:"connections,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
 	Runtime       RuntimeConfig             `yaml:"runtime,omitempty"`
 	Workflows     WorkflowsConfig           `yaml:"workflows,omitempty"`
@@ -624,16 +625,16 @@ type WorkflowPluginTargetConfig struct {
 }
 
 type WorkflowAgentConfig struct {
-	Provider        string                        `yaml:"provider,omitempty"`
-	Model           string                        `yaml:"model,omitempty"`
-	Prompt          string                        `yaml:"prompt,omitempty"`
-	Messages        []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools           []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery  *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	ResponseSchema  map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata        map[string]any                `yaml:"metadata,omitempty"`
-	ProviderOptions map[string]any                `yaml:"providerOptions,omitempty"`
-	Timeout         string                        `yaml:"timeout,omitempty"`
+	Provider       string                        `yaml:"provider,omitempty"`
+	Model          string                        `yaml:"model,omitempty"`
+	Prompt         string                        `yaml:"prompt,omitempty"`
+	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
+	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
+	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
+	Metadata       map[string]any                `yaml:"metadata,omitempty"`
+	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
+	Timeout        string                        `yaml:"timeout,omitempty"`
 }
 
 type WorkflowOutputDeliveryConfig struct {
@@ -1469,17 +1470,21 @@ func (s ServerConfig) ManagementBaseURL() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection.
 type ConnectionDef struct {
+	Ref              string                                `yaml:"ref,omitempty"`
 	DisplayName      string                                `yaml:"displayName,omitempty"`
 	Mode             providermanifestv1.ConnectionMode     `yaml:"mode"`
 	Exposure         providermanifestv1.ConnectionExposure `yaml:"exposure,omitempty"`
 	Auth             ConnectionAuthDef                     `yaml:"auth"`
 	ConnectionParams map[string]ConnectionParamDef         `yaml:"params"`
 	Discovery        *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ConnectionID     string                                `yaml:"-"`
+	BindingResolved  bool                                  `yaml:"-"`
 }
 
 type ConnectionAuthDef struct {
 	Type                providermanifestv1.AuthType `yaml:"type"`
 	Token               string                      `yaml:"token"`
+	GrantType           string                      `yaml:"grantType"`
 	AuthorizationURL    string                      `yaml:"authorizationUrl"`
 	TokenURL            string                      `yaml:"tokenUrl"`
 	ClientID            string                      `yaml:"clientId"`
@@ -1532,6 +1537,7 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 		dst.Type = src.Type
 	}
 	setString(&dst.Token, src.Token)
+	setString(&dst.GrantType, src.GrantType)
 	setString(&dst.AuthorizationURL, src.AuthorizationURL)
 	setString(&dst.TokenURL, src.TokenURL)
 	setString(&dst.ClientID, src.ClientID)
@@ -1619,6 +1625,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if dst == nil || src == nil {
 		return
 	}
+	if src.Ref != "" {
+		dst.Ref = src.Ref
+	}
 	if src.DisplayName != "" {
 		dst.DisplayName = src.DisplayName
 	}
@@ -1634,6 +1643,12 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	}
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery
+	}
+	if src.ConnectionID != "" {
+		dst.ConnectionID = src.ConnectionID
+	}
+	if src.BindingResolved {
+		dst.BindingResolved = true
 	}
 }
 
@@ -2531,6 +2546,9 @@ func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), pres
 func applyDefaults(cfg *Config) {
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
+	}
+	if cfg.Connections == nil {
+		cfg.Connections = map[string]*ConnectionDef{}
 	}
 	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
 	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)

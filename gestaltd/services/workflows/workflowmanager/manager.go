@@ -1067,7 +1067,7 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 		return coreworkflow.Target{}, fmt.Errorf("workflow agent target timeout_seconds must not be negative")
 	}
 	target.ResponseSchema = maps.Clone(target.ResponseSchema)
-	target.ProviderOptions = maps.Clone(target.ProviderOptions)
+	target.ModelOptions = maps.Clone(target.ModelOptions)
 	target.Metadata = maps.Clone(target.Metadata)
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)

@@ -228,10 +228,10 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mut
 		cfg.Providers = providers
 		cfg.Invoker = broker
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: agentProvider},
-			Providers:  providers,
-			ToolGrants: newServerTestAgentToolGrants(t),
-			Invoker:    broker,
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: agentProvider},
+			Providers: providers,
+			RunGrants: newServerTestAgentRunGrants(t),
+			Invoker:   broker,
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)

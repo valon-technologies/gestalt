@@ -634,8 +634,6 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "6")]
-    pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "7")]
     pub created_by: ::core::option::Option<AgentActor>,
     #[prost(message, optional, tag = "8")]
@@ -759,8 +757,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "9")]
-    pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "10")]
     pub created_by: ::core::option::Option<AgentActor>,
     #[prost(string, tag = "11")]
@@ -771,8 +767,10 @@ pub struct CreateAgentProviderTurnRequest {
     pub tool_source: i32,
     #[prost(message, optional, tag = "14")]
     pub subject: ::core::option::Option<AgentSubjectContext>,
-    #[prost(string, tag = "15")]
-    pub tool_grant: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "16")]
+    pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "17")]
+    pub run_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
@@ -892,10 +890,10 @@ pub struct ExecuteAgentToolRequest {
     pub tool_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub arguments: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "6")]
-    pub tool_grant: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub run_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
@@ -933,8 +931,8 @@ pub struct ListAgentToolsRequest {
     pub page_size: i32,
     #[prost(string, tag = "4")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub tool_grant: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub run_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsResponse {
@@ -942,6 +940,42 @@ pub struct ListAgentToolsResponse {
     pub tools: ::prost::alloc::vec::Vec<ListedAgentTool>,
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResolveAgentConnectionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub run_grant: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResolvedAgentConnection {
+    #[prost(string, tag = "1")]
+    pub connection_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub mode: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(btree_map = "string, string", tag = "6")]
+    pub params: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "7")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerCreateSessionRequest {
@@ -953,8 +987,6 @@ pub struct AgentManagerCreateSessionRequest {
     pub client_ref: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "6")]
-    pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
@@ -1016,12 +1048,12 @@ pub struct AgentManagerCreateTurnRequest {
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "9")]
-    pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "10")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "12")]
+    pub model_options: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerGetTurnRequest {
@@ -2665,12 +2697,12 @@ pub struct BoundWorkflowAgentTarget {
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "9")]
-    pub provider_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(int32, tag = "10")]
     pub timeout_seconds: i32,
     #[prost(message, optional, tag = "11")]
     pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
+    #[prost(message, optional, tag = "12")]
+    pub model_options: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowOutputDelivery {

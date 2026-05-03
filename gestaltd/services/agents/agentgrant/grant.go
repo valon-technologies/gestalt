@@ -17,10 +17,14 @@ import (
 const (
 	issuer                      = "gestaltd"
 	audience                    = "gestalt-agent-host"
-	toolGrantTTL                = 24 * time.Hour
+	runGrantTTL                 = 24 * time.Hour
 	revokedTurnRetention        = 24 * time.Hour
 	maxRevokedTurnTombstoneKeys = 20_000
 )
+
+type ConnectionBinding struct {
+	Connection string `json:"connection"`
+}
 
 type Manager struct {
 	mu      sync.Mutex
@@ -43,6 +47,7 @@ type Grant struct {
 	ToolRefs            []coreagent.ToolRef
 	Tools               []coreagent.Tool
 	ToolSource          coreagent.ToolSourceMode
+	Connections         []ConnectionBinding
 }
 
 type claims struct {
@@ -59,16 +64,17 @@ type claims struct {
 }
 
 type toolScope struct {
-	ToolRefs   []coreagent.ToolRef      `json:"tool_refs,omitempty"`
-	Tools      []coreagent.Tool         `json:"tools,omitempty"`
-	ToolSource coreagent.ToolSourceMode `json:"tool_source,omitempty"`
+	ToolRefs    []coreagent.ToolRef      `json:"tool_refs,omitempty"`
+	Tools       []coreagent.Tool         `json:"tools,omitempty"`
+	ToolSource  coreagent.ToolSourceMode `json:"tool_source,omitempty"`
+	Connections []ConnectionBinding      `json:"connections,omitempty"`
 }
 
 func NewManager(secret []byte) (*Manager, error) {
 	if len(secret) == 0 {
 		secret = make([]byte, 32)
 		if _, err := rand.Read(secret); err != nil {
-			return nil, fmt.Errorf("generate agent tool grant secret: %w", err)
+			return nil, fmt.Errorf("generate agent run grant secret: %w", err)
 		}
 	}
 	return &Manager{
@@ -80,7 +86,7 @@ func NewManager(secret []byte) (*Manager, error) {
 
 func (m *Manager) Mint(grant Grant) (string, error) {
 	if m == nil {
-		return "", fmt.Errorf("agent tool grants are not available")
+		return "", fmt.Errorf("agent run grants are not available")
 	}
 	now := m.now()
 	grant.ID = strings.TrimSpace(grant.ID)
@@ -95,7 +101,7 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 			Audience:  jwt.ClaimStrings{audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(toolGrantTTL)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(runGrantTTL)),
 		},
 		ProviderName:        strings.TrimSpace(grant.ProviderName),
 		SessionID:           strings.TrimSpace(grant.SessionID),
@@ -107,9 +113,10 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
 	}
 	scope, err := m.sealValue(sealPurposeToolScope, toolScope{
-		ToolRefs:   append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-		Tools:      append([]coreagent.Tool(nil), grant.Tools...),
-		ToolSource: grant.ToolSource,
+		ToolRefs:    append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		Tools:       append([]coreagent.Tool(nil), grant.Tools...),
+		ToolSource:  grant.ToolSource,
+		Connections: append([]ConnectionBinding(nil), grant.Connections...),
 	})
 	if err != nil {
 		return "", err
@@ -121,11 +128,11 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 
 func (m *Manager) Resolve(token string) (Grant, error) {
 	if m == nil {
-		return Grant{}, fmt.Errorf("agent tool grants are not available")
+		return Grant{}, fmt.Errorf("agent run grants are not available")
 	}
 	token = strings.TrimSpace(token)
 	if token == "" {
-		return Grant{}, fmt.Errorf("agent tool grant is required")
+		return Grant{}, fmt.Errorf("agent run grant is required")
 	}
 	parsed, err := jwt.ParseWithClaims(token, &claims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -134,15 +141,15 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		return m.secret, nil
 	}, jwt.WithAudience(audience), jwt.WithIssuer(issuer), jwt.WithTimeFunc(m.now))
 	if err != nil {
-		return Grant{}, fmt.Errorf("agent tool grant is invalid or expired")
+		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	decoded, ok := parsed.Claims.(*claims)
 	if !ok || !parsed.Valid {
-		return Grant{}, fmt.Errorf("agent tool grant is invalid or expired")
+		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	var scope toolScope
 	if err := m.openValue(sealPurposeToolScope, strings.TrimSpace(decoded.ToolScope), &scope); err != nil {
-		return Grant{}, fmt.Errorf("agent tool grant is invalid or expired")
+		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	grant := Grant{
 		ID:                  strings.TrimSpace(decoded.ID),
@@ -158,9 +165,10 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
 		ToolSource:          scope.ToolSource,
+		Connections:         append([]ConnectionBinding(nil), scope.Connections...),
 	}
 	if m.revokedTurn(grant) {
-		return Grant{}, fmt.Errorf("agent tool grant is revoked")
+		return Grant{}, fmt.Errorf("agent run grant is revoked")
 	}
 	return grant, nil
 }

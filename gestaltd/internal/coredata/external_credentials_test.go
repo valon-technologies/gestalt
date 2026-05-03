@@ -17,7 +17,7 @@ func (*testExternalCredentialProvider) RestoreCredential(context.Context, *core.
 	return nil
 }
 
-func (*testExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+func (*testExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
 	return nil, core.ErrNotFound
 }
 
@@ -25,11 +25,7 @@ func (*testExternalCredentialProvider) ListCredentials(context.Context, string) 
 	return nil, nil
 }
 
-func (*testExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*testExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+func (*testExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 

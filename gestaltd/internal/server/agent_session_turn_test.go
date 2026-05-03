@@ -29,7 +29,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability"
 )
 
-func newServerTestAgentToolGrants(t testing.TB) *agentgrant.Manager {
+func newServerTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
 	t.Helper()
 	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
@@ -119,7 +119,7 @@ func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      agentControl,
 			Authorizer: authz,
-			ToolGrants: newServerTestAgentToolGrants(t),
+			RunGrants:  newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -167,7 +167,7 @@ func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      agentControl,
 			Authorizer: authz,
-			ToolGrants: newServerTestAgentToolGrants(t),
+			RunGrants:  newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -233,8 +233,8 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Agent:     agentControl,
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -714,7 +714,7 @@ func cloneCreateTurnRequest(src coreagent.CreateTurnRequest) coreagent.CreateTur
 	dst.Tools = append([]coreagent.Tool(nil), src.Tools...)
 	dst.ResponseSchema = cloneMap(src.ResponseSchema)
 	dst.Metadata = cloneMap(src.Metadata)
-	dst.ProviderOptions = cloneMap(src.ProviderOptions)
+	dst.ModelOptions = cloneMap(src.ModelOptions)
 	return dst
 }
 
@@ -813,7 +813,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 					ReadOnly: true,
 				}}},
 			}),
-			ToolGrants: newServerTestAgentToolGrants(t),
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1078,7 +1078,7 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmpty(t *testing.T) {
 					ReadOnly: true,
 				}}},
 			}),
-			ToolGrants: newServerTestAgentToolGrants(t),
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1146,8 +1146,8 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1242,9 +1242,9 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			Providers:  testutil.NewProviderRegistry(t),
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Providers: testutil.NewProviderRegistry(t),
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1303,8 +1303,8 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1361,8 +1361,8 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)

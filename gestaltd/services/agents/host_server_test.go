@@ -147,7 +147,7 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 		TurnId:    "turn-1",
 		PageSize:  10,
 		PageToken: " 0 ",
-		ToolGrant: " grant-token ",
+		RunGrant:  " grant-token ",
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -155,7 +155,7 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 	if captured.ProviderName != "agent-provider" || captured.SessionID != "session-1" || captured.TurnID != "turn-1" {
 		t.Fatalf("captured request = %#v", captured)
 	}
-	if captured.PageSize != 10 || captured.PageToken != "0" || captured.ToolGrant != "grant-token" {
+	if captured.PageSize != 10 || captured.PageToken != "0" || captured.RunGrant != "grant-token" {
 		t.Fatalf("captured paging/grant = %#v", captured)
 	}
 	if resp.GetNextPageToken() != "10" || len(resp.GetTools()) != 1 {

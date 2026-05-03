@@ -61,12 +61,11 @@ func (s *ManagerServer) CreateSession(ctx context.Context, req *proto.AgentManag
 		return nil, err
 	}
 	session, err := s.manager.CreateSession(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateSessionRequest{
-		IdempotencyKey:  strings.TrimSpace(req.GetIdempotencyKey()),
-		ProviderName:    strings.TrimSpace(req.GetProviderName()),
-		Model:           strings.TrimSpace(req.GetModel()),
-		ClientRef:       strings.TrimSpace(req.GetClientRef()),
-		Metadata:        mapFromStruct(req.GetMetadata()),
-		ProviderOptions: mapFromStruct(req.GetProviderOptions()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		Model:          strings.TrimSpace(req.GetModel()),
+		ClientRef:      strings.TrimSpace(req.GetClientRef()),
+		Metadata:       mapFromStruct(req.GetMetadata()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -178,7 +177,7 @@ func (s *ManagerServer) CreateTurn(ctx context.Context, req *proto.AgentManagerC
 		ToolSource:       agentToolSourceModeFromProto(req.GetToolSource()),
 		ResponseSchema:   mapFromStruct(req.GetResponseSchema()),
 		Metadata:         mapFromStruct(req.GetMetadata()),
-		ProviderOptions:  mapFromStruct(req.GetProviderOptions()),
+		ModelOptions:     mapFromStruct(req.GetModelOptions()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)

@@ -497,7 +497,7 @@ func cloneWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
 		agent.Messages = slices.Clone(agent.Messages)
 		agent.ToolRefs = slices.Clone(agent.ToolRefs)
 		agent.ResponseSchema = cloneMap(agent.ResponseSchema)
-		agent.ProviderOptions = cloneMap(agent.ProviderOptions)
+		agent.ModelOptions = cloneMap(agent.ModelOptions)
 		agent.Metadata = cloneMap(agent.Metadata)
 		cloned.Agent = &agent
 	}
@@ -849,10 +849,10 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 		})
 		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Providers:  cfg.Providers,
-			Agent:      cfg.Agent,
-			Invoker:    cfg.Invoker,
-			ToolGrants: newServerTestAgentToolGrants(t),
+			Providers: cfg.Providers,
+			Agent:     cfg.Agent,
+			Invoker:   cfg.Invoker,
+			RunGrants: newServerTestAgentRunGrants(t),
 		})
 		cfg.Workflow = &stubWorkflowControl{
 			defaultProviderName: "basic",

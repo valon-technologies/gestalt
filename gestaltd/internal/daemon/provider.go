@@ -619,7 +619,7 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
 	writeUsageLine(w, "Run from the provider source directory.")
-	writeUsageLine(w, "For apiVersion v4 local deploy configs, point source.path at dist/provider-release.yaml.")
+	writeUsageLine(w, "For apiVersion v5 local deploy configs, point source.path at dist/provider-release.yaml.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")

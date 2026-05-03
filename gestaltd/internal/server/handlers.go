@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -250,12 +251,74 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 	}
 	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
-		m[tok.Integration] = append(m[tok.Integration], instanceInfo{
-			Name:       tok.Instance,
-			Connection: userFacingConnectionName(tok.Connection),
-		})
+		if tok == nil {
+			continue
+		}
+		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
+			m[binding.Plugin] = append(m[binding.Plugin], instanceInfo{
+				Name:       tok.Instance,
+				Connection: userFacingConnectionName(binding.Connection),
+			})
+		}
 	}
 	return m, nil
+}
+
+type pluginConnectionBinding struct {
+	Plugin     string
+	Connection string
+}
+
+func (s *Server) pluginConnectionBindingsForCredentialID(connectionID string) []pluginConnectionBinding {
+	connectionID = strings.TrimSpace(connectionID)
+	if connectionID == "" || len(s.pluginDefs) == 0 {
+		return nil
+	}
+	bindings := make([]pluginConnectionBinding, 0, 1)
+	for pluginName, entry := range s.pluginDefs {
+		if entry == nil {
+			continue
+		}
+		var manifestSpec *providermanifestv1.Spec
+		if entry.ResolvedManifest != nil {
+			manifestSpec = entry.ResolvedManifest.Spec
+		}
+		plan, err := config.BuildStaticConnectionPlan(entry, manifestSpec)
+		if err != nil {
+			continue
+		}
+		add := func(connection string, conn config.ConnectionDef) {
+			if serverCredentialConnectionID(pluginName, connection, conn) != connectionID {
+				return
+			}
+			bindings = append(bindings, pluginConnectionBinding{Plugin: pluginName, Connection: connection})
+		}
+		add(config.PluginConnectionName, plan.PluginConnection())
+		for _, connection := range plan.NamedConnectionNames() {
+			conn, ok := plan.NamedConnectionDef(connection)
+			if ok {
+				add(connection, conn)
+			}
+		}
+	}
+	sort.Slice(bindings, func(i, j int) bool {
+		if bindings[i].Plugin != bindings[j].Plugin {
+			return bindings[i].Plugin < bindings[j].Plugin
+		}
+		return bindings[i].Connection < bindings[j].Connection
+	})
+	return bindings
+}
+
+func serverCredentialConnectionID(pluginName, connection string, conn config.ConnectionDef) string {
+	if connectionID := strings.TrimSpace(conn.ConnectionID); connectionID != "" {
+		return connectionID
+	}
+	connection = strings.TrimSpace(connection)
+	if connection == "" {
+		connection = config.PluginConnectionName
+	}
+	return strings.TrimSpace(pluginName) + ":" + connection
 }
 
 func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
@@ -310,7 +373,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditTarget = connectionAuditTarget(name, requestedConnection, requestedInstance)
 	}
 
-	tokens, err := s.externalCredentials.ListCredentialsForProvider(r.Context(), subjectID, name)
+	tokens, err := s.externalCredentials.ListCredentials(r.Context(), subjectID)
 	if err != nil {
 		auditErr = errors.New("failed to list external credentials")
 		writeError(w, http.StatusInternalServerError, "failed to list external credentials")
@@ -319,10 +382,21 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	var matched []*core.ExternalCredential
 	for _, tok := range tokens {
-		if requestedConnection != "" && tok.Connection != requestedConnection {
+		if tok == nil {
 			continue
 		}
-		matched = append(matched, tok)
+		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
+			if binding.Plugin != name {
+				continue
+			}
+			if requestedConnection != "" && binding.Connection != requestedConnection {
+				continue
+			}
+			credential := *tok
+			credential.Integration = name
+			credential.Connection = binding.Connection
+			matched = append(matched, &credential)
+		}
 	}
 
 	if len(matched) == 0 {

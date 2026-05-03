@@ -107,7 +107,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentPr
 		req.GetMetadata(),
 		req.GetCreatedBy(),
 		strings.TrimSpace(req.GetExecutionRef()),
-		strings.TrimSpace(req.GetToolGrant()),
+		strings.TrimSpace(req.GetRunGrant()),
 	)
 	return turn, err
 }
@@ -253,7 +253,7 @@ func (p *agentProvider) startTurn(
 	metadata *structpb.Struct,
 	createdBy *proto.AgentActor,
 	executionRef string,
-	toolGrant string,
+	runGrant string,
 ) (*proto.AgentTurn, *proto.AgentInteraction, error) {
 	if turnID == "" {
 		turnID = "agent-turn-1"
@@ -316,7 +316,7 @@ func (p *agentProvider) startTurn(
 				ToolCallId:     "call-1",
 				ToolId:         tools[0].GetId(),
 				Arguments:      arguments,
-				ToolGrant:      toolGrant,
+				RunGrant:       runGrant,
 				IdempotencyKey: " tool-call-key-1 ",
 			})
 			if err != nil {

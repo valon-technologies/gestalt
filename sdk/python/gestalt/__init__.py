@@ -101,6 +101,8 @@ _AGENT_PROTOCOL_EXPORTS = (
     "ListAgentProviderTurnsResponse",
     "ListAgentToolsRequest",
     "ListAgentToolsResponse",
+    "ResolvedAgentConnection",
+    "ResolveAgentConnectionRequest",
     "ResolveAgentProviderInteractionRequest",
     "UpdateAgentProviderSessionRequest",
 )

@@ -20,6 +20,7 @@ type ConnectionDef struct {
 type ConnectionAuthDef struct {
 	Type                providermanifestv1.AuthType
 	Token               string
+	GrantType           string
 	AuthorizationURL    string
 	TokenURL            string
 	ClientID            string

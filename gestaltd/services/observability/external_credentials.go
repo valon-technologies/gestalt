@@ -39,10 +39,10 @@ func (p *observedExternalCredentialProvider) RestoreCredential(ctx context.Conte
 	return p.delegate.RestoreCredential(ctx, credential)
 }
 
-func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, integration, connection, instance string) (credential *core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "get_credential", integration)
+func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, connectionID, instance string) (credential *core.ExternalCredential, err error) {
+	ctx, end := p.start(ctx, "get_credential", connectionID)
 	defer func() { end(err) }()
-	return p.delegate.GetCredential(ctx, subjectID, integration, connection, instance)
+	return p.delegate.GetCredential(ctx, subjectID, connectionID, instance)
 }
 
 func (p *observedExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) (credentials []*core.ExternalCredential, err error) {
@@ -51,16 +51,10 @@ func (p *observedExternalCredentialProvider) ListCredentials(ctx context.Context
 	return p.delegate.ListCredentials(ctx, subjectID)
 }
 
-func (p *observedExternalCredentialProvider) ListCredentialsForProvider(ctx context.Context, subjectID, integration string) (credentials []*core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "list_credentials_for_provider", integration)
+func (p *observedExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) (credentials []*core.ExternalCredential, err error) {
+	ctx, end := p.start(ctx, "list_credentials_for_connection", connectionID)
 	defer func() { end(err) }()
-	return p.delegate.ListCredentialsForProvider(ctx, subjectID, integration)
-}
-
-func (p *observedExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, integration, connection string) (credentials []*core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "list_credentials_for_connection", integration)
-	defer func() { end(err) }()
-	return p.delegate.ListCredentialsForConnection(ctx, subjectID, integration, connection)
+	return p.delegate.ListCredentialsForConnection(ctx, subjectID, connectionID)
 }
 
 func (p *observedExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) (err error) {
@@ -96,6 +90,9 @@ func (p *observedExternalCredentialProvider) start(ctx context.Context, operatio
 func credentialIntegration(credential *core.ExternalCredential) string {
 	if credential == nil {
 		return ""
+	}
+	if credential.ConnectionID != "" {
+		return credential.ConnectionID
 	}
 	return credential.Integration
 }

@@ -25,7 +25,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
-	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -43,7 +43,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 		TurnID:       "turn-1",
 		ToolCallID:   "call-1",
 		ToolID:       workflowTool.ID,
-		ToolGrant:    toolGrant,
+		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
@@ -137,7 +137,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
-	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -153,7 +153,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
-		ToolGrant:    toolGrant,
+		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
 			"target": map[string]any{
@@ -177,7 +177,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
-	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
 			Plugin:     "roadmap",
 			Operations: []string{"sync"},
@@ -234,7 +234,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 			SessionID:    "session-1",
 			TurnID:       "turn-1",
 			ToolID:       workflowTool.ID,
-			ToolGrant:    toolGrant,
+			RunGrant:     runGrant,
 			Arguments:    tc.arguments,
 		})
 		if err == nil {
@@ -251,7 +251,7 @@ func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesList)
-	toolGrant := mustMintWorkflowSystemToolGrant(t, runtime, workflowSystemToolGrantScope{
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		ToolRefs: []coreagent.ToolRef{{
 			System:    coreagent.SystemToolWorkflow,
 			Operation: workflowSystemToolSchedulesList,
@@ -264,7 +264,7 @@ func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       workflowTool.ID,
-		ToolGrant:    toolGrant,
+		RunGrant:     runGrant,
 	})
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
@@ -332,7 +332,7 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		Agent:        runtime,
 		AgentManager: agentManager,
 	})
-	runtime.SetToolGrants(newTestAgentToolGrants(t))
+	runtime.SetRunGrants(newTestAgentRunGrants(t))
 	runtime.SetToolSearcher(workflowSystemToolResolver{})
 	runtime.SetSystemToolExecutor(newWorkflowSystemTools(workflowManager, workflowRuntime))
 	return runtime, workflowProvider
@@ -475,16 +475,16 @@ func (p *workflowSystemToolRecordingProvider) ListExecutionReferences(_ context.
 func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { return nil }
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
-type workflowSystemToolGrantScope struct {
+type workflowSystemRunGrantScope struct {
 	Permissions []core.AccessPermission
 	ToolRefs    []coreagent.ToolRef
 	Tools       []coreagent.Tool
 }
 
-func mustMintWorkflowSystemToolGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemToolGrantScope) string {
+func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemRunGrantScope) string {
 	t.Helper()
 
-	grants := workflowSystemToolGrants(t, runtime)
+	grants := workflowSystemRunGrants(t, runtime)
 	grant, err := grants.Mint(agentgrant.Grant{
 		ProviderName:        "managed",
 		SessionID:           "session-1",
@@ -497,19 +497,19 @@ func mustMintWorkflowSystemToolGrant(t *testing.T, runtime *agentRuntime, scope 
 		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
 	})
 	if err != nil {
-		t.Fatalf("Mint workflow system tool grant: %v", err)
+		t.Fatalf("Mint workflow system run grant: %v", err)
 	}
 	return grant
 }
 
-func workflowSystemToolGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Manager {
+func workflowSystemRunGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Manager {
 	t.Helper()
 
 	runtime.mu.RLock()
-	grants := runtime.toolGrants
+	grants := runtime.runGrants
 	runtime.mu.RUnlock()
 	if grants == nil {
-		t.Fatal("runtime tool grants are not configured")
+		t.Fatal("runtime run grants are not configured")
 	}
 	return grants
 }
@@ -524,6 +524,6 @@ func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation strin
 	if err != nil {
 		t.Fatalf("workflowSystemToolFromRef: %v", err)
 	}
-	tool.ID = mustMintAgentToolID(t, workflowSystemToolGrants(t, runtime), tool.Target)
+	tool.ID = mustMintAgentToolID(t, workflowSystemRunGrants(t, runtime), tool.Target)
 	return tool
 }

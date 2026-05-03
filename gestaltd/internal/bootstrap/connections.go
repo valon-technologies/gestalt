@@ -1,20 +1,54 @@
 package bootstrap
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"golang.org/x/sync/singleflight"
 )
 
 type ConnectionMaps struct {
 	DefaultConnection map[string]string
 	APIConnection     map[string]string
 	MCPConnection     map[string]string
+}
+
+func agentConnectionBindings(cfg *config.Config) map[string][]string {
+	if cfg == nil || len(cfg.Providers.Agent) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(cfg.Providers.Agent))
+	for providerName, entry := range cfg.Providers.Agent {
+		if entry == nil || len(entry.Connections) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(entry.Connections))
+		for name := range entry.Connections {
+			name = config.ResolveConnectionAlias(name)
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+		if len(names) > 0 {
+			out[providerName] = names
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
@@ -53,13 +87,20 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		return runtime, nil
 	}
 
-	for name, entry := range cfg.Plugins {
+	addProviderRuntime := func(kind, name string, entry *config.ProviderEntry) error {
 		if entry == nil {
-			continue
+			return nil
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("%s connection runtime name is empty", kind)
+		}
+		if _, exists := runtime[name]; exists {
+			return fmt.Errorf("%s %q conflicts with another provider connection namespace", kind, name)
 		}
 		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
 		if err != nil {
-			return nil, fmt.Errorf("integration %q: %w", name, err)
+			return fmt.Errorf("%s %q: %w", kind, name, err)
 		}
 		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
 			info, err := connectionRuntimeInfo(name, connName, conn)
@@ -75,13 +116,25 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 
 		pluginConn := plan.PluginConnection()
 		if err := addRuntimeInfo(config.PluginConnectionName, &pluginConn); err != nil {
-			return nil, err
+			return err
 		}
 		for _, connName := range plan.NamedConnectionNames() {
 			conn, _ := plan.NamedConnectionDef(connName)
 			if err := addRuntimeInfo(connName, &conn); err != nil {
-				return nil, err
+				return err
 			}
+		}
+		return nil
+	}
+
+	for name, entry := range cfg.Plugins {
+		if err := addProviderRuntime("integration", name, entry); err != nil {
+			return nil, err
+		}
+	}
+	for name, entry := range cfg.Providers.Agent {
+		if err := addProviderRuntime("agent provider", name, entry); err != nil {
+			return nil, err
 		}
 	}
 	return runtime, nil
@@ -96,8 +149,12 @@ func connectionRuntimeInfo(integration, connection string, conn *config.Connecti
 func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
 	info := invocation.ConnectionRuntimeInfo{
-		Mode:     mode,
-		Exposure: config.ConnectionExposureForConnection(conn),
+		ConnectionID: conn.ConnectionID,
+		Mode:         mode,
+		Exposure:     config.ConnectionExposureForConnection(conn),
+		AuthType:     conn.Auth.Type,
+		AuthMapping:  config.CloneAuthMapping(conn.Auth.AuthMapping),
+		Params:       connectionParamDefaults(conn.ConnectionParams),
 	}
 	if mode != core.ConnectionModePlatform {
 		return info, nil
@@ -125,9 +182,165 @@ func StaticConnectionRuntimeInfo(integration, connection string, conn config.Con
 		}
 		info.Token = token
 		return info, nil
+	case providermanifestv1.AuthTypeOAuth2:
+		if strings.TrimSpace(conn.Auth.GrantType) != "client_credentials" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials", integration, connection)
+		}
+		source, err := newClientCredentialsTokenSource(conn.Auth)
+		if err != nil {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: %w", integration, connection, err)
+		}
+		info.TokenSource = source
+		return info, nil
 	default:
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer or manual", integration, connection)
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials", integration, connection)
 	}
+}
+
+func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[string]string {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(params))
+	for name, param := range params {
+		if strings.TrimSpace(param.Default) != "" {
+			out[name] = param.Default
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type clientCredentialsTokenSource struct {
+	auth config.ConnectionAuthDef
+	now  func() time.Time
+
+	mu     sync.Mutex
+	cached invocation.ConnectionRuntimeCredential
+	group  singleflight.Group
+}
+
+func newClientCredentialsTokenSource(auth config.ConnectionAuthDef) (*clientCredentialsTokenSource, error) {
+	if strings.TrimSpace(auth.TokenURL) == "" {
+		return nil, fmt.Errorf("auth.tokenUrl is required")
+	}
+	if strings.TrimSpace(auth.ClientID) == "" {
+		return nil, fmt.Errorf("auth.clientId is required")
+	}
+	if strings.TrimSpace(auth.ClientSecret) == "" {
+		return nil, fmt.Errorf("auth.clientSecret is required")
+	}
+	return &clientCredentialsTokenSource{auth: auth, now: time.Now}, nil
+}
+
+func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
+	if s == nil {
+		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token source is not configured")
+	}
+	s.mu.Lock()
+	if s.cached.Token != "" && s.cached.ExpiresAt != nil && s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
+		cached := s.cached
+		s.mu.Unlock()
+		return cached, nil
+	}
+	s.mu.Unlock()
+
+	resultCh := s.group.DoChan("token", func() (any, error) {
+		s.mu.Lock()
+		if s.cached.Token != "" && s.cached.ExpiresAt != nil && s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
+			cached := s.cached
+			s.mu.Unlock()
+			return cached, nil
+		}
+		s.mu.Unlock()
+		credential, err := s.fetch(context.WithoutCancel(ctx))
+		if err != nil {
+			return invocation.ConnectionRuntimeCredential{}, err
+		}
+		s.mu.Lock()
+		s.cached = credential
+		s.mu.Unlock()
+		return credential, nil
+	})
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			return invocation.ConnectionRuntimeCredential{}, result.Err
+		}
+		return result.Val.(invocation.ConnectionRuntimeCredential), nil
+	case <-ctx.Done():
+		return invocation.ConnectionRuntimeCredential{}, ctx.Err()
+	}
+}
+
+func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	clientID := strings.TrimSpace(s.auth.ClientID)
+	clientSecret := strings.TrimSpace(s.auth.ClientSecret)
+	clientAuth := strings.TrimSpace(s.auth.ClientAuth)
+	if clientAuth != "header" {
+		form.Set("client_id", clientID)
+		form.Set("client_secret", clientSecret)
+	}
+	if len(s.auth.Scopes) > 0 {
+		sep := strings.TrimSpace(s.auth.ScopeSeparator)
+		if sep == "" {
+			sep = " "
+		}
+		scopeParam := strings.TrimSpace(s.auth.ScopeParam)
+		if scopeParam == "" {
+			scopeParam = "scope"
+		}
+		form.Set(scopeParam, strings.Join(s.auth.Scopes, sep))
+	}
+	for k, v := range s.auth.TokenParams {
+		if strings.TrimSpace(k) != "" {
+			form.Set(k, v)
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(s.auth.TokenURL), strings.NewReader(form.Encode()))
+	if err != nil {
+		return invocation.ConnectionRuntimeCredential{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if s.auth.AcceptHeader != "" {
+		req.Header.Set("Accept", s.auth.AcceptHeader)
+	}
+	if clientAuth == "header" {
+		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return invocation.ConnectionRuntimeCredential{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return invocation.ConnectionRuntimeCredential{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token endpoint returned %s", resp.Status)
+	}
+	var decoded struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int64  `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("decode token response: %w", err)
+	}
+	token := strings.TrimSpace(decoded.AccessToken)
+	if token == "" {
+		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token response missing access_token")
+	}
+	var expiresAt *time.Time
+	if decoded.ExpiresIn > 0 {
+		t := s.now().Add(time.Duration(decoded.ExpiresIn) * time.Second)
+		expiresAt = &t
+	}
+	return invocation.ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
 }
 
 func authMappingNeedsToken(mapping *config.AuthMappingDef) bool {
@@ -201,6 +414,9 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *declarative.Definition, deps Deps) (OAuthHandler, error) {
 	switch conn.Auth.Type {
 	case "", providermanifestv1.AuthTypeOAuth2:
+		if strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
+			return nil, nil
+		}
 		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
 		if err != nil || handler != nil || conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 {
 			return handler, err

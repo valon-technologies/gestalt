@@ -399,10 +399,10 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 	if _, err := invocation.ResolveCatalog(ctx, prov, "metric-api", resolver, p, "default", "default"); err != nil {
 		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "static_op", nil, ""); err != nil {
+	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "static_op", []string{"default"}, ""); err != nil {
 		t.Fatalf("ResolveOperation: %v", err)
 	}
-	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "raw-user-op", nil, ""); !errors.Is(err, invocation.ErrOperationNotFound) {
+	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "raw-user-op", []string{"default"}, ""); !errors.Is(err, invocation.ErrOperationNotFound) {
 		t.Fatalf("ResolveOperation(raw-user-op) error = %v, want ErrOperationNotFound", err)
 	}
 

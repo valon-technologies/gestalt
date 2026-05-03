@@ -19,12 +19,14 @@ import (
 
 type ExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
 type ListToolsFunc func(context.Context, coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
+type ResolveConnectionFunc func(context.Context, coreagent.ResolveConnectionRequest) (*coreagent.ResolvedConnection, error)
 
 type HostServer struct {
 	proto.UnimplementedAgentHostServer
-	providerName string
-	listTools    ListToolsFunc
-	executeTool  ExecuteToolFunc
+	providerName      string
+	listTools         ListToolsFunc
+	executeTool       ExecuteToolFunc
+	resolveConnection ResolveConnectionFunc
 }
 
 func NewHostServer(providerName string, listTools ListToolsFunc, executeTool ExecuteToolFunc) *HostServer {
@@ -33,6 +35,12 @@ func NewHostServer(providerName string, listTools ListToolsFunc, executeTool Exe
 		listTools:    listTools,
 		executeTool:  executeTool,
 	}
+}
+
+func NewHostServerWithConnections(providerName string, listTools ListToolsFunc, executeTool ExecuteToolFunc, resolveConnection ResolveConnectionFunc) *HostServer {
+	server := NewHostServer(providerName, listTools, executeTool)
+	server.resolveConnection = resolveConnection
+	return server
 }
 
 func (s *HostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {
@@ -56,7 +64,7 @@ func (s *HostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsReq
 		TurnID:       turnID,
 		PageSize:     int(req.GetPageSize()),
 		PageToken:    strings.TrimSpace(req.GetPageToken()),
-		ToolGrant:    strings.TrimSpace(req.GetToolGrant()),
+		RunGrant:     strings.TrimSpace(req.GetRunGrant()),
 	})
 	if err != nil {
 		return nil, status.Errorf(agentHostErrorCode(err), "agent list tools: %v", err)
@@ -122,7 +130,7 @@ func (s *HostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToo
 		ToolCallID:     toolCallID,
 		ToolID:         toolID,
 		Arguments:      mapFromStruct(req.GetArguments()),
-		ToolGrant:      strings.TrimSpace(req.GetToolGrant()),
+		RunGrant:       strings.TrimSpace(req.GetRunGrant()),
 		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
@@ -134,6 +142,50 @@ func (s *HostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToo
 	return &proto.ExecuteAgentToolResponse{
 		Status: int32(resp.Status),
 		Body:   resp.Body,
+	}, nil
+}
+
+func (s *HostServer) ResolveConnection(ctx context.Context, req *proto.ResolveAgentConnectionRequest) (*proto.ResolvedAgentConnection, error) {
+	if s == nil || s.resolveConnection == nil {
+		return nil, status.Error(codes.FailedPrecondition, "agent host connection resolution is not configured")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if turnID == "" {
+		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
+	}
+	connection := strings.TrimSpace(req.GetConnection())
+	if connection == "" {
+		return nil, status.Error(codes.InvalidArgument, "connection is required")
+	}
+	resp, err := s.resolveConnection(ctx, coreagent.ResolveConnectionRequest{
+		ProviderName: strings.TrimSpace(s.providerName),
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		Connection:   connection,
+		Instance:     strings.TrimSpace(req.GetInstance()),
+		RunGrant:     strings.TrimSpace(req.GetRunGrant()),
+	})
+	if err != nil {
+		return nil, status.Errorf(agentHostErrorCode(err), "agent resolve connection: %v", err)
+	}
+	if resp == nil {
+		return &proto.ResolvedAgentConnection{}, nil
+	}
+	return &proto.ResolvedAgentConnection{
+		ConnectionId: resp.ConnectionID,
+		Connection:   resp.Connection,
+		Instance:     resp.Instance,
+		Mode:         string(resp.Mode),
+		Headers:      resp.Headers,
+		Params:       resp.Params,
+		ExpiresAt:    timeToProto(resp.ExpiresAt),
 	}, nil
 }
 

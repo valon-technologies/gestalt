@@ -1,6 +1,11 @@
 package bootstrap
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -113,5 +118,85 @@ func TestBuildConnectionRuntimePlatformManualCredentialRefsRequireToken(t *testi
 	}
 	if !strings.Contains(err.Error(), "manual auth with credential refs requires auth.token") {
 		t.Fatalf("BuildConnectionRuntime() error = %v, want credential ref token error", err)
+	}
+}
+
+func TestBuildConnectionRuntimeRejectsProviderNamespaceCollision(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"shared": {},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"shared": {},
+			},
+		},
+	}
+
+	_, err := BuildConnectionRuntime(cfg)
+	if err == nil {
+		t.Fatal("BuildConnectionRuntime() error = nil, want namespace collision error")
+	}
+	if !strings.Contains(err.Error(), "conflicts with another provider connection namespace") {
+		t.Fatalf("BuildConnectionRuntime() error = %v, want namespace collision error", err)
+	}
+}
+
+func TestClientCredentialsTokenSourceHeaderAuth(t *testing.T) {
+	t.Parallel()
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		clientID, clientSecret, ok := r.BasicAuth()
+		if !ok {
+			t.Fatal("BasicAuth missing")
+		}
+		if clientID != url.QueryEscape("client id:/") || clientSecret != url.QueryEscape("client secret+/") {
+			t.Fatalf("BasicAuth = %q/%q, want URL-escaped client credentials", clientID, clientSecret)
+		}
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("ParseForm() error = %v", err)
+		}
+		if got := r.Form.Get("client_id"); got != "" {
+			t.Fatalf("client_id form field = %q, want empty when clientAuth=header", got)
+		}
+		if got := r.Form.Get("client_secret"); got != "" {
+			t.Fatalf("client_secret form field = %q, want empty when clientAuth=header", got)
+		}
+		if got := r.Form.Get("grant_type"); got != "client_credentials" {
+			t.Fatalf("grant_type = %q, want client_credentials", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "header-token",
+			"expires_in":   3600,
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer tokenServer.Close()
+
+	source, err := newClientCredentialsTokenSource(config.ConnectionAuthDef{
+		TokenURL:     tokenServer.URL,
+		ClientID:     "client id:/",
+		ClientSecret: "client secret+/",
+		ClientAuth:   "header",
+	})
+	if err != nil {
+		t.Fatalf("newClientCredentialsTokenSource() error = %v", err)
+	}
+	credential, err := source.ResolveConnectionCredential(context.Background())
+	if err != nil {
+		t.Fatalf("ResolveConnectionCredential() error = %v", err)
+	}
+	if credential.Token != "header-token" {
+		t.Fatalf("Token = %q, want header-token", credential.Token)
+	}
+	if credential.ExpiresAt == nil {
+		t.Fatal("ExpiresAt = nil, want expiry from token endpoint")
 	}
 }

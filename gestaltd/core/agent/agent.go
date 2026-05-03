@@ -196,14 +196,13 @@ type Session struct {
 }
 
 type CreateSessionRequest struct {
-	SessionID       string
-	IdempotencyKey  string
-	Model           string
-	ClientRef       string
-	Metadata        map[string]any
-	ProviderOptions map[string]any
-	CreatedBy       Actor
-	Subject         SubjectContext
+	SessionID      string
+	IdempotencyKey string
+	Model          string
+	ClientRef      string
+	Metadata       map[string]any
+	CreatedBy      Actor
+	Subject        SubjectContext
 }
 
 type GetSessionRequest struct {
@@ -250,21 +249,21 @@ type Turn struct {
 }
 
 type CreateTurnRequest struct {
-	TurnID          string
-	SessionID       string
-	IdempotencyKey  string
-	Model           string
-	Messages        []Message
-	ToolRefs        []ToolRef
-	ToolSource      ToolSourceMode
-	Tools           []Tool
-	ResponseSchema  map[string]any
-	Metadata        map[string]any
-	ProviderOptions map[string]any
-	CreatedBy       Actor
-	ExecutionRef    string
-	Subject         SubjectContext
-	ToolGrant       string
+	TurnID         string
+	SessionID      string
+	IdempotencyKey string
+	Model          string
+	Messages       []Message
+	ToolRefs       []ToolRef
+	ToolSource     ToolSourceMode
+	Tools          []Tool
+	ResponseSchema map[string]any
+	Metadata       map[string]any
+	ModelOptions   map[string]any
+	CreatedBy      Actor
+	ExecutionRef   string
+	Subject        SubjectContext
+	RunGrant       string
 }
 
 type GetTurnRequest struct {
@@ -365,7 +364,7 @@ type ExecuteToolRequest struct {
 	ToolCallID     string
 	ToolID         string
 	Arguments      map[string]any
-	ToolGrant      string
+	RunGrant       string
 	IdempotencyKey string
 }
 
@@ -395,12 +394,31 @@ type ListToolsRequest struct {
 	PageToken    string
 	ToolRefs     []ToolRef
 	ToolSource   ToolSourceMode
-	ToolGrant    string
+	RunGrant     string
 }
 
 type ListToolsResponse struct {
 	Tools         []ListedTool
 	NextPageToken string
+}
+
+type ResolveConnectionRequest struct {
+	ProviderName string
+	SessionID    string
+	TurnID       string
+	Connection   string
+	Instance     string
+	RunGrant     string
+}
+
+type ResolvedConnection struct {
+	ConnectionID string
+	Connection   string
+	Instance     string
+	Mode         core.ConnectionMode
+	Headers      map[string]string
+	Params       map[string]string
+	ExpiresAt    *time.Time
 }
 
 type InteractionType string
@@ -434,12 +452,11 @@ type Interaction struct {
 }
 
 type ManagerCreateSessionRequest struct {
-	IdempotencyKey  string
-	ProviderName    string
-	Model           string
-	ClientRef       string
-	Metadata        map[string]any
-	ProviderOptions map[string]any
+	IdempotencyKey string
+	ProviderName   string
+	Model          string
+	ClientRef      string
+	Metadata       map[string]any
 }
 
 type ManagerUpdateSessionRequest struct {
@@ -460,7 +477,7 @@ type ManagerCreateTurnRequest struct {
 	ToolSource       ToolSourceMode
 	ResponseSchema   map[string]any
 	Metadata         map[string]any
-	ProviderOptions  map[string]any
+	ModelOptions     map[string]any
 }
 
 type ManagerListSessionsRequest struct {

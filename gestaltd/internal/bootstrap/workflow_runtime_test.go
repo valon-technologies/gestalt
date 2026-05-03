@@ -135,7 +135,7 @@ func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 		agent.Messages = slices.Clone(agent.Messages)
 		agent.ToolRefs = slices.Clone(agent.ToolRefs)
 		agent.ResponseSchema = cloneMapAny(agent.ResponseSchema)
-		agent.ProviderOptions = cloneMapAny(agent.ProviderOptions)
+		agent.ModelOptions = cloneMapAny(agent.ModelOptions)
 		agent.Metadata = cloneMapAny(agent.Metadata)
 		if agent.OutputDelivery != nil {
 			delivery := *agent.OutputDelivery
@@ -515,12 +515,12 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		defaultProviderName: "managed",
 		providers:           map[string]coreagent.Provider{"managed": agentProvider},
 	}
-	toolGrants := newTestAgentToolGrants(t)
-	agentRuntime.SetToolGrants(toolGrants)
+	runGrants := newTestAgentRunGrants(t)
+	agentRuntime.SetRunGrants(runGrants)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:  &reg.Providers,
-		Agent:      agentRuntime,
-		ToolGrants: toolGrants,
+		Providers: &reg.Providers,
+		Agent:     agentRuntime,
+		RunGrants: runGrants,
 	})
 	runtime := &workflowRuntime{
 		providers: map[string]coreworkflow.Provider{},

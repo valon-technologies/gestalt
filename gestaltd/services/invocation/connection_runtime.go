@@ -1,17 +1,34 @@
 package invocation
 
 import (
+	"context"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
+
+type ConnectionRuntimeCredential struct {
+	Token     string
+	ExpiresAt *time.Time
+}
+
+type ConnectionRuntimeCredentialSource interface {
+	ResolveConnectionCredential(context.Context) (ConnectionRuntimeCredential, error)
+}
 
 // ConnectionRuntimeInfo describes deployment-owned connection material that is
 // resolved after an operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
-	Mode     core.ConnectionMode
-	Exposure core.ConnectionExposure
-	Token    string
+	ConnectionID string
+	Mode         core.ConnectionMode
+	Exposure     core.ConnectionExposure
+	AuthType     providermanifestv1.AuthType
+	Token        string
+	TokenSource  ConnectionRuntimeCredentialSource
+	AuthMapping  *providermanifestv1.AuthMapping
+	Params       map[string]string
 }
 
 // ConnectionRuntimeResolver resolves runtime metadata for a provider

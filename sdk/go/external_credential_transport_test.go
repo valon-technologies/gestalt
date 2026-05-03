@@ -49,10 +49,9 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 	defer p.mu.Unlock()
 
 	key := externalCredentialLookupKey(&proto.ExternalCredentialLookup{
-		SubjectId:   value.GetSubjectId(),
-		Integration: value.GetIntegration(),
-		Connection:  value.GetConnection(),
-		Instance:    value.GetInstance(),
+		SubjectId:    value.GetSubjectId(),
+		ConnectionId: value.GetConnectionId(),
+		Instance:     value.GetInstance(),
 	})
 	existing := p.credentials[key]
 	now := timestamppb.Now()
@@ -61,7 +60,7 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 		value.CreatedAt = existing.GetCreatedAt()
 	} else {
 		if value.GetId() == "" {
-			value.Id = "cred-" + value.GetIntegration() + "-" + value.GetConnection() + "-" + value.GetInstance()
+			value.Id = "cred-" + value.GetConnectionId() + "-" + value.GetInstance()
 		}
 		if value.GetCreatedAt() == nil {
 			value.CreatedAt = now
@@ -99,10 +98,7 @@ func (p *stubExternalCredentialProvider) ListCredentials(_ context.Context, req 
 		if req.GetSubjectId() != "" && credential.GetSubjectId() != req.GetSubjectId() {
 			continue
 		}
-		if req.GetIntegration() != "" && credential.GetIntegration() != req.GetIntegration() {
-			continue
-		}
-		if req.GetConnection() != "" && credential.GetConnection() != req.GetConnection() {
+		if req.GetConnectionId() != "" && credential.GetConnectionId() != req.GetConnectionId() {
 			continue
 		}
 		if req.GetInstance() != "" && credential.GetInstance() != req.GetInstance() {
@@ -194,19 +190,17 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 	}
 
 	lookup := &proto.ExternalCredentialLookup{
-		SubjectId:   "user:user-123",
-		Integration: "slack",
-		Connection:  "default",
-		Instance:    "workspace-1",
+		SubjectId:    "user:user-123",
+		ConnectionId: "slack:default",
+		Instance:     "workspace-1",
 	}
 	upserted, err := client.UpsertCredential(rpcCtx, &proto.UpsertExternalCredentialRequest{
 		Credential: &proto.ExternalCredential{
-			SubjectId:   lookup.GetSubjectId(),
-			Integration: lookup.GetIntegration(),
-			Connection:  lookup.GetConnection(),
-			Instance:    lookup.GetInstance(),
-			AccessToken: "xoxb-123",
-			Scopes:      "channels:read chat:write",
+			SubjectId:    lookup.GetSubjectId(),
+			ConnectionId: lookup.GetConnectionId(),
+			Instance:     lookup.GetInstance(),
+			AccessToken:  "xoxb-123",
+			Scopes:       "channels:read chat:write",
 		},
 	}, grpc.WaitForReady(true))
 	if err != nil {
@@ -228,9 +222,8 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 	}
 
 	listed, err := client.ListCredentials(rpcCtx, &proto.ListExternalCredentialsRequest{
-		SubjectId:   lookup.GetSubjectId(),
-		Integration: lookup.GetIntegration(),
-		Connection:  lookup.GetConnection(),
+		SubjectId:    lookup.GetSubjectId(),
+		ConnectionId: lookup.GetConnectionId(),
 	}, grpc.WaitForReady(true))
 	if err != nil {
 		t.Fatalf("ListCredentials: %v", err)
@@ -279,11 +272,10 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 
 	credential, err := client.UpsertCredential(context.Background(), &proto.UpsertExternalCredentialRequest{
 		Credential: &proto.ExternalCredential{
-			SubjectId:   "user:user-123",
-			Integration: "slack",
-			Connection:  "default",
-			Instance:    "workspace-1",
-			AccessToken: "xoxb-123",
+			SubjectId:    "user:user-123",
+			ConnectionId: "slack:default",
+			Instance:     "workspace-1",
+			AccessToken:  "xoxb-123",
 		},
 	})
 	if err != nil {
@@ -305,8 +297,8 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	if got.GetSubjectId() != "user:user-123" {
 		t.Fatalf("subject id = %q, want %q", got.GetSubjectId(), "user:user-123")
 	}
-	if got.GetIntegration() != "slack" || got.GetConnection() != "default" || got.GetInstance() != "workspace-1" {
-		t.Fatalf("credential = %+v, want integration=slack connection=default instance=workspace-1", got)
+	if got.GetConnectionId() != "slack:default" || got.GetInstance() != "workspace-1" {
+		t.Fatalf("credential = %+v, want connection_id=slack:default instance=workspace-1", got)
 	}
 }
 
@@ -314,5 +306,5 @@ func externalCredentialLookupKey(lookup *proto.ExternalCredentialLookup) string 
 	if lookup == nil {
 		return ""
 	}
-	return lookup.GetSubjectId() + "\x00" + lookup.GetIntegration() + "\x00" + lookup.GetConnection() + "\x00" + lookup.GetInstance()
+	return lookup.GetSubjectId() + "\x00" + lookup.GetConnectionId() + "\x00" + lookup.GetInstance()
 }

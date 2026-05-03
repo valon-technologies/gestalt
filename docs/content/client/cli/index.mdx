@@ -224,7 +224,7 @@ gestalt agent turns cancel <turn-id> --reason "operator requested"
 gestalt agent turns events list <turn-id> --after 0 --limit 100
 gestalt agent turns events stream <turn-id> --after 100
 
-# advanced fields such as responseSchema, metadata, or providerOptions
+# advanced fields such as responseSchema, metadata, or modelOptions
 # go through --input, which also accepts "-" for stdin:
 cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
 {

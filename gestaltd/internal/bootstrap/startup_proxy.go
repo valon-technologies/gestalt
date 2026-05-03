@@ -740,7 +740,7 @@ func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target 
 		agent.ToolRefs = slices.Clone(agent.ToolRefs)
 		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
 		agent.Metadata = maps.Clone(agent.Metadata)
-		agent.ProviderOptions = maps.Clone(agent.ProviderOptions)
+		agent.ModelOptions = maps.Clone(agent.ModelOptions)
 		clone.Agent = &agent
 	}
 	return clone

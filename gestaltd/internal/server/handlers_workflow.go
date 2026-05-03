@@ -34,16 +34,16 @@ type workflowPluginTargetRequest struct {
 }
 
 type workflowAgentTargetRequest struct {
-	ProviderName    string                         `json:"provider,omitempty"`
-	Model           string                         `json:"model,omitempty"`
-	Prompt          string                         `json:"prompt,omitempty"`
-	Messages        []agentMessageRequest          `json:"messages,omitempty"`
-	ToolRefs        []agentToolRefRequest          `json:"toolRefs,omitempty"`
-	OutputDelivery  *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
-	ResponseSchema  map[string]any                 `json:"responseSchema,omitempty"`
-	Metadata        map[string]any                 `json:"metadata,omitempty"`
-	ProviderOptions map[string]any                 `json:"providerOptions,omitempty"`
-	TimeoutSeconds  int                            `json:"timeoutSeconds,omitempty"`
+	ProviderName   string                         `json:"provider,omitempty"`
+	Model          string                         `json:"model,omitempty"`
+	Prompt         string                         `json:"prompt,omitempty"`
+	Messages       []agentMessageRequest          `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest          `json:"toolRefs,omitempty"`
+	OutputDelivery *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any                 `json:"responseSchema,omitempty"`
+	Metadata       map[string]any                 `json:"metadata,omitempty"`
+	ModelOptions   map[string]any                 `json:"modelOptions,omitempty"`
+	TimeoutSeconds int                            `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryRequest struct {
@@ -86,16 +86,16 @@ type workflowPluginTargetInfo struct {
 }
 
 type workflowAgentTargetInfo struct {
-	ProviderName    string                      `json:"provider,omitempty"`
-	Model           string                      `json:"model,omitempty"`
-	Prompt          string                      `json:"prompt,omitempty"`
-	Messages        []agentMessageRequest       `json:"messages,omitempty"`
-	ToolRefs        []agentToolRefRequest       `json:"toolRefs,omitempty"`
-	OutputDelivery  *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	ResponseSchema  map[string]any              `json:"responseSchema,omitempty"`
-	Metadata        map[string]any              `json:"metadata,omitempty"`
-	ProviderOptions map[string]any              `json:"providerOptions,omitempty"`
-	TimeoutSeconds  int                         `json:"timeoutSeconds,omitempty"`
+	ProviderName   string                      `json:"provider,omitempty"`
+	Model          string                      `json:"model,omitempty"`
+	Prompt         string                      `json:"prompt,omitempty"`
+	Messages       []agentMessageRequest       `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest       `json:"toolRefs,omitempty"`
+	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any              `json:"responseSchema,omitempty"`
+	Metadata       map[string]any              `json:"metadata,omitempty"`
+	ModelOptions   map[string]any              `json:"modelOptions,omitempty"`
+	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryInfo struct {
@@ -316,16 +316,16 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		return coreworkflow.AgentTarget{}
 	}
 	return coreworkflow.AgentTarget{
-		ProviderName:    strings.TrimSpace(target.ProviderName),
-		Model:           strings.TrimSpace(target.Model),
-		Prompt:          strings.TrimSpace(target.Prompt),
-		Messages:        agentMessagesFromRequest(target.Messages),
-		ToolRefs:        agentToolRefsFromRequest(target.ToolRefs),
-		OutputDelivery:  workflowOutputDeliveryFromRequest(target.OutputDelivery),
-		ResponseSchema:  maps.Clone(target.ResponseSchema),
-		Metadata:        maps.Clone(target.Metadata),
-		ProviderOptions: maps.Clone(target.ProviderOptions),
-		TimeoutSeconds:  target.TimeoutSeconds,
+		ProviderName:   strings.TrimSpace(target.ProviderName),
+		Model:          strings.TrimSpace(target.Model),
+		Prompt:         strings.TrimSpace(target.Prompt),
+		Messages:       agentMessagesFromRequest(target.Messages),
+		ToolRefs:       agentToolRefsFromRequest(target.ToolRefs),
+		OutputDelivery: workflowOutputDeliveryFromRequest(target.OutputDelivery),
+		ResponseSchema: maps.Clone(target.ResponseSchema),
+		Metadata:       maps.Clone(target.Metadata),
+		ModelOptions:   maps.Clone(target.ModelOptions),
+		TimeoutSeconds: target.TimeoutSeconds,
 	}
 }
 
@@ -415,16 +415,16 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 		agentTarget := *target.Agent
 		return workflowScheduleTargetInfo{
 			Agent: &workflowAgentTargetInfo{
-				ProviderName:    agentTarget.ProviderName,
-				Model:           agentTarget.Model,
-				Prompt:          agentTarget.Prompt,
-				Messages:        agentMessageInfoFromCore(agentTarget.Messages),
-				ToolRefs:        agentToolRefsToRequest(agentTarget.ToolRefs),
-				OutputDelivery:  workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
-				ResponseSchema:  maps.Clone(agentTarget.ResponseSchema),
-				Metadata:        maps.Clone(agentTarget.Metadata),
-				ProviderOptions: maps.Clone(agentTarget.ProviderOptions),
-				TimeoutSeconds:  agentTarget.TimeoutSeconds,
+				ProviderName:   agentTarget.ProviderName,
+				Model:          agentTarget.Model,
+				Prompt:         agentTarget.Prompt,
+				Messages:       agentMessageInfoFromCore(agentTarget.Messages),
+				ToolRefs:       agentToolRefsToRequest(agentTarget.ToolRefs),
+				OutputDelivery: workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
+				ResponseSchema: maps.Clone(agentTarget.ResponseSchema),
+				Metadata:       maps.Clone(agentTarget.Metadata),
+				ModelOptions:   maps.Clone(agentTarget.ModelOptions),
+				TimeoutSeconds: agentTarget.TimeoutSeconds,
 			},
 		}
 	}

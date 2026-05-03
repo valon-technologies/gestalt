@@ -173,12 +173,14 @@ message AgentSession {
 }
 
 message CreateAgentProviderSessionRequest {
+  reserved 6;
+  reserved "provider_options";
+
   string session_id = 1;
   string idempotency_key = 2;
   string model = 3;
   string client_ref = 4;
   google.protobuf.Struct metadata = 5;
-  google.protobuf.Struct provider_options = 6;
   AgentActor created_by = 7;
   AgentSubjectContext subject = 8;
 }
@@ -245,6 +247,9 @@ message AgentTurnDisplay {
 }
 
 message CreateAgentProviderTurnRequest {
+  reserved 9, 15;
+  reserved "provider_options", "tool_grant";
+
   string turn_id = 1;
   string session_id = 2;
   string idempotency_key = 3;
@@ -253,13 +258,13 @@ message CreateAgentProviderTurnRequest {
   repeated ResolvedAgentTool tools = 6;
   google.protobuf.Struct response_schema = 7;
   google.protobuf.Struct metadata = 8;
-  google.protobuf.Struct provider_options = 9;
   AgentActor created_by = 10;
   string execution_ref = 11;
   repeated AgentToolRef tool_refs = 12;
   AgentToolSourceMode tool_source = 13;
   AgentSubjectContext subject = 14;
-  string tool_grant = 15;
+  google.protobuf.Struct model_options = 16;
+  string run_grant = 17;
 }
 
 message GetAgentProviderTurnRequest {
@@ -335,13 +340,16 @@ message ResolveAgentProviderInteractionRequest {
 }
 
 message ExecuteAgentToolRequest {
+  reserved 6;
+  reserved "tool_grant";
+
   string session_id = 1;
   string turn_id = 2;
   string tool_call_id = 3;
   string tool_id = 4;
   google.protobuf.Struct arguments = 5;
-  string tool_grant = 6;
   string idempotency_key = 7;
+  string run_grant = 8;
 }
 
 message ExecuteAgentToolResponse {
@@ -361,11 +369,14 @@ message ListedAgentTool {
 }
 
 message ListAgentToolsRequest {
+  reserved 5;
+  reserved "tool_grant";
+
   string session_id = 1;
   string turn_id = 2;
   int32 page_size = 3;
   string page_token = 4;
-  string tool_grant = 5;
+  string run_grant = 6;
 }
 
 message ListAgentToolsResponse {
@@ -373,14 +384,31 @@ message ListAgentToolsResponse {
   string next_page_token = 2;
 }
 
+message ResolveAgentConnectionRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  string connection = 3;
+  string instance = 4;
+  string run_grant = 5;
+}
+
+message ResolvedAgentConnection {
+  string connection_id = 1;
+  string connection = 2;
+  string instance = 3;
+  string mode = 4;
+  map<string, string> headers = 5;
+  map<string, string> params = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
 message AgentManagerCreateSessionRequest {
-  reserved 1;
-  reserved "request_handle";
+  reserved 1, 6;
+  reserved "request_handle", "provider_options";
   string provider_name = 2;
   string model = 3;
   string client_ref = 4;
   google.protobuf.Struct metadata = 5;
-  google.protobuf.Struct provider_options = 6;
   string idempotency_key = 7;
   string invocation_token = 8;
 }
@@ -419,8 +447,8 @@ message AgentManagerUpdateSessionRequest {
 }
 
 message AgentManagerCreateTurnRequest {
-  reserved 1;
-  reserved "request_handle";
+  reserved 1, 9;
+  reserved "request_handle", "provider_options";
   string session_id = 2;
   string model = 3;
   repeated AgentMessage messages = 4;
@@ -428,9 +456,9 @@ message AgentManagerCreateTurnRequest {
   AgentToolSourceMode tool_source = 6;
   google.protobuf.Struct response_schema = 7;
   google.protobuf.Struct metadata = 8;
-  google.protobuf.Struct provider_options = 9;
   string idempotency_key = 10;
   string invocation_token = 11;
+  google.protobuf.Struct model_options = 12;
 }
 
 message AgentManagerGetTurnRequest {
@@ -517,6 +545,7 @@ service AgentProvider {
 service AgentHost {
   rpc ListTools(ListAgentToolsRequest) returns (ListAgentToolsResponse);
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
+  rpc ResolveConnection(ResolveAgentConnectionRequest) returns (ResolvedAgentConnection);
 }
 
 service AgentManagerHost {

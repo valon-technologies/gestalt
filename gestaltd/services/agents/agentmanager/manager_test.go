@@ -27,7 +27,7 @@ func (p *catalogCountingProvider) Catalog() *catalog.Catalog {
 	return p.CatalogVal
 }
 
-func newAgentManagerTestToolGrants(t testing.TB) *agentgrant.Manager {
+func newAgentManagerTestRunGrants(t testing.TB) *agentgrant.Manager {
 	t.Helper()
 	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
@@ -38,8 +38,8 @@ func newAgentManagerTestToolGrants(t testing.TB) *agentgrant.Manager {
 
 func newTestManager(t testing.TB, cfg Config) *Manager {
 	t.Helper()
-	if cfg.ToolGrants == nil {
-		cfg.ToolGrants = newAgentManagerTestToolGrants(t)
+	if cfg.RunGrants == nil {
+		cfg.RunGrants = newAgentManagerTestRunGrants(t)
 	}
 	return New(cfg)
 }
@@ -303,7 +303,7 @@ func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
 				"beta":  beta,
 			},
 		},
-		ToolGrants: newAgentManagerTestToolGrants(t),
+		RunGrants: newAgentManagerTestRunGrants(t),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -361,7 +361,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 				"alpha": alpha,
 			},
 		},
-		ToolGrants: newAgentManagerTestToolGrants(t),
+		RunGrants: newAgentManagerTestRunGrants(t),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -409,7 +409,7 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 				"unbounded": provider,
 			},
 		},
-		ToolGrants: newAgentManagerTestToolGrants(t),
+		RunGrants: newAgentManagerTestRunGrants(t),
 	})
 
 	_, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: subjectID}, coreagent.ManagerListSessionsRequest{
@@ -446,7 +446,7 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 				"unbounded": provider,
 			},
 		},
-		ToolGrants: newAgentManagerTestToolGrants(t),
+		RunGrants: newAgentManagerTestRunGrants(t),
 	})
 	p := &principal.Principal{SubjectID: subjectID}
 
@@ -477,7 +477,7 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 				"alpha": alpha,
 			},
 		},
-		ToolGrants: newAgentManagerTestToolGrants(t),
+		RunGrants: newAgentManagerTestRunGrants(t),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -504,8 +504,8 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 	if got := alpha.createTurnReqs[0].Tools; len(got) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", got)
 	}
-	if got := alpha.createTurnReqs[0].ToolGrant; got != "" {
-		t.Fatalf("CreateTurn tool grant = %q, want empty", got)
+	if got := alpha.createTurnReqs[0].RunGrant; got == "" {
+		t.Fatal("CreateTurn run grant is empty")
 	}
 }
 
@@ -513,7 +513,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestToolGrants(t)
+	grants := newAgentManagerTestRunGrants(t)
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -522,7 +522,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 				"alpha": alpha,
 			},
 		},
-		ToolGrants: grants,
+		RunGrants: grants,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -550,12 +550,12 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	if got := req.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want global broad catalog ref", got)
 	}
-	if strings.TrimSpace(req.ToolGrant) == "" {
-		t.Fatal("CreateTurn tool grant is empty")
+	if strings.TrimSpace(req.RunGrant) == "" {
+		t.Fatal("CreateTurn run grant is empty")
 	}
-	grant, err := grants.Resolve(req.ToolGrant)
+	grant, err := grants.Resolve(req.RunGrant)
 	if err != nil {
-		t.Fatalf("Resolve tool grant: %v", err)
+		t.Fatalf("Resolve run grant: %v", err)
 	}
 	if grant.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("grant tool source = %q, want mcp_catalog", grant.ToolSource)
@@ -605,8 +605,8 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 	if got := req.ToolRefs; len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty catalog source", got)
 	}
-	if strings.TrimSpace(req.ToolGrant) == "" {
-		t.Fatal("CreateTurn tool grant is empty")
+	if strings.TrimSpace(req.RunGrant) == "" {
+		t.Fatal("CreateTurn run grant is empty")
 	}
 }
 
@@ -650,16 +650,16 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	if got := req.ToolRefs; len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
 	}
-	if req.ToolGrant != "" {
-		t.Fatalf("CreateTurn tool grant = %q, want empty", req.ToolGrant)
+	if req.RunGrant != "" {
+		t.Fatalf("CreateTurn run grant = %q, want empty", req.RunGrant)
 	}
 }
 
-func TestManagerCancelTurnRevokesToolGrantWithoutBootstrapWrapper(t *testing.T) {
+func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestToolGrants(t)
+	grants := newAgentManagerTestRunGrants(t)
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -668,7 +668,7 @@ func TestManagerCancelTurnRevokesToolGrantWithoutBootstrapWrapper(t *testing.T) 
 				"alpha": alpha,
 			},
 		},
-		ToolGrants: grants,
+		RunGrants: grants,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -715,7 +715,7 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 
 	alpha := newRouteCountingAgentProvider("alpha")
 	alpha.turnIDOverride = "provider-turn-1"
-	grants := newAgentManagerTestToolGrants(t)
+	grants := newAgentManagerTestRunGrants(t)
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -724,7 +724,7 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 				"alpha": alpha,
 			},
 		},
-		ToolGrants: grants,
+		RunGrants: grants,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 

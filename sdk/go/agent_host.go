@@ -57,3 +57,8 @@ func (c *AgentHostClient) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 func (c *AgentHostClient) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {
 	return c.client.ListTools(ctx, req)
 }
+
+// ResolveConnection resolves a configured agent connection for the current turn.
+func (c *AgentHostClient) ResolveConnection(ctx context.Context, req *proto.ResolveAgentConnectionRequest) (*proto.ResolvedAgentConnection, error) {
+	return c.client.ResolveConnection(ctx, req)
+}

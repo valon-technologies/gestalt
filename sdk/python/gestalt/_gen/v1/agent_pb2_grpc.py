@@ -632,6 +632,11 @@ class AgentHostStub(object):
                 request_serializer=v1_dot_agent__pb2.ExecuteAgentToolRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.ExecuteAgentToolResponse.FromString,
                 _registered_method=True)
+        self.ResolveConnection = channel.unary_unary(
+                '/gestalt.provider.v1.AgentHost/ResolveConnection',
+                request_serializer=v1_dot_agent__pb2.ResolveAgentConnectionRequest.SerializeToString,
+                response_deserializer=v1_dot_agent__pb2.ResolvedAgentConnection.FromString,
+                _registered_method=True)
 
 
 class AgentHostServicer(object):
@@ -649,6 +654,12 @@ class AgentHostServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResolveConnection(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -661,6 +672,11 @@ def add_AgentHostServicer_to_server(servicer, server):
                     servicer.ExecuteTool,
                     request_deserializer=v1_dot_agent__pb2.ExecuteAgentToolRequest.FromString,
                     response_serializer=v1_dot_agent__pb2.ExecuteAgentToolResponse.SerializeToString,
+            ),
+            'ResolveConnection': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolveConnection,
+                    request_deserializer=v1_dot_agent__pb2.ResolveAgentConnectionRequest.FromString,
+                    response_serializer=v1_dot_agent__pb2.ResolvedAgentConnection.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -717,6 +733,33 @@ class AgentHost(object):
             '/gestalt.provider.v1.AgentHost/ExecuteTool',
             v1_dot_agent__pb2.ExecuteAgentToolRequest.SerializeToString,
             v1_dot_agent__pb2.ExecuteAgentToolResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolveConnection(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AgentHost/ResolveConnection',
+            v1_dot_agent__pb2.ResolveAgentConnectionRequest.SerializeToString,
+            v1_dot_agent__pb2.ResolvedAgentConnection.FromString,
             options,
             channel_credentials,
             insecure,
