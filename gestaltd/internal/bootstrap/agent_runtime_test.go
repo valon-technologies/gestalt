@@ -106,6 +106,26 @@ func (i *recordingAgentRuntimeInvoker) Calls() []agentRuntimeInvokerCall {
 	return out
 }
 
+type reconnectingAgentRuntimeInvoker struct {
+	recordingAgentRuntimeInvoker
+	tokenErrs map[string]error
+}
+
+func (i *reconnectingAgentRuntimeInvoker) ResolveToken(ctx context.Context, _ *principal.Principal, providerName, _, _ string) (context.Context, string, error) {
+	if err := i.tokenErrs[strings.TrimSpace(providerName)]; err != nil {
+		return ctx, "", err
+	}
+	return ctx, "token", nil
+}
+
+type failingSessionCatalogIntegration struct {
+	coretesting.StubIntegration
+}
+
+func (p *failingSessionCatalogIntegration) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return p.CatalogVal, nil
+}
+
 func cloneAnyMap(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
@@ -2397,6 +2417,171 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	}
 	if broadExecResp == nil || broadExecResp.Status != http.StatusAccepted || broadExecResp.Body != `{"taskId":"task-123"}` {
 		t.Fatalf("ExecuteTool broad response = %#v, want accepted task body", broadExecResp)
+	}
+}
+
+func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing.T) {
+	t.Parallel()
+
+	invoker := &reconnectingAgentRuntimeInvoker{
+		tokenErrs: map[string]error{
+			"linear": fmt.Errorf("%w: token expired and refresh failed", invocation.ErrReconnectRequired),
+		},
+	}
+	runGrants := newTestAgentRunGrants(t)
+	githubProvider := &coretesting.StubIntegration{
+		N:        "github",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:          "issues",
+			Title:       "List GitHub issues",
+			Description: "List issues assigned to the current user",
+		}}},
+	}
+	linearProvider := &failingSessionCatalogIntegration{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "viewer",
+				Title: "Current Linear viewer",
+			}}},
+		},
+	}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers: testutil.NewProviderRegistry(t, githubProvider, linearProvider),
+		RunGrants: runGrants,
+		Invoker:   invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"claude": &routingAgentProvider{
+				getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        "turn-1",
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetRunGrants(runGrants)
+	runtime.SetToolSearcher(manager)
+
+	broadGrant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{
+			{Plugin: "github", Operations: []string{"issues"}},
+			{Plugin: "linear", Operations: []string{"viewer"}},
+		},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "*"}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint broad grant: %v", err)
+	}
+	broadListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		RunGrant:     broadGrant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools with broad grant: %v", err)
+	}
+	if len(broadListResp.Tools) != 2 || broadListResp.NextPageToken != "" {
+		t.Fatalf("ListTools broad response = %#v, want GitHub tool plus Linear sentinel", broadListResp)
+	}
+	var linearSentinel coreagent.ListedTool
+	for _, listed := range broadListResp.Tools {
+		if listed.MCPName == "linear__reconnect_required" {
+			linearSentinel = listed
+		}
+	}
+	if linearSentinel.ToolID == "" || linearSentinel.Ref.Plugin != "linear" || linearSentinel.Ref.Operation != "" || linearSentinel.Target.Unavailable == nil {
+		t.Fatalf("Linear sentinel = %#v, want unavailable plugin-level tool", linearSentinel)
+	}
+
+	sentinelResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       linearSentinel.ToolID,
+		RunGrant:     broadGrant,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool sentinel: %v", err)
+	}
+	if sentinelResp == nil || sentinelResp.Status != http.StatusFailedDependency || !strings.Contains(sentinelResp.Body, `"code":"reconnect_required"`) {
+		t.Fatalf("ExecuteTool sentinel response = %#v, want reconnect error body", sentinelResp)
+	}
+	if calls := invoker.Calls(); len(calls) != 0 {
+		t.Fatalf("ExecuteTool sentinel invoked provider = %#v, want no provider invoke", calls)
+	}
+
+	pluginGrant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "linear",
+			Operations: []string{"viewer"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "linear"}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint plugin grant: %v", err)
+	}
+	pluginListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		RunGrant:     pluginGrant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools plugin-level unavailable: %v", err)
+	}
+	if len(pluginListResp.Tools) != 1 || pluginListResp.Tools[0].MCPName != "linear__reconnect_required" {
+		t.Fatalf("ListTools plugin-level unavailable = %#v, want only Linear sentinel", pluginListResp)
+	}
+
+	exactGrant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "linear",
+			Operations: []string{"viewer"},
+		}},
+		ToolRefs:   []coreagent.ToolRef{{Plugin: "linear", Operation: "viewer"}},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint exact grant: %v", err)
+	}
+	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		RunGrant:     exactGrant,
+	})
+	if !errors.Is(err, invocation.ErrReconnectRequired) {
+		t.Fatalf("ListTools exact unavailable error = %v, want ErrReconnectRequired", err)
 	}
 }
 

@@ -37,8 +37,13 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		Connection:     strings.TrimSpace(target.Connection),
 		Instance:       strings.TrimSpace(target.Instance),
 		CredentialMode: core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
+		Unavailable:    normalizeUnavailableToolTarget(target.Unavailable),
 	}
-	if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
+	if target.Unavailable != nil {
+		if target.Plugin == "" || target.System != "" || target.Operation != "" {
+			return "", fmt.Errorf("agent tool target is incomplete")
+		}
+	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
 		return "", fmt.Errorf("agent tool target is incomplete")
 	}
 	sealed, err := m.sealValue(sealPurposeToolID, toolBinding{Target: target})
@@ -67,10 +72,29 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.Connection = strings.TrimSpace(target.Connection)
 	target.Instance = strings.TrimSpace(target.Instance)
 	target.CredentialMode = core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode)))
-	if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
+	target.Unavailable = normalizeUnavailableToolTarget(target.Unavailable)
+	if target.Unavailable != nil {
+		if target.Plugin == "" || target.System != "" || target.Operation != "" {
+			return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
+		}
+	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	return target, nil
+}
+
+func normalizeUnavailableToolTarget(value *coreagent.UnavailableToolTarget) *coreagent.UnavailableToolTarget {
+	if value == nil {
+		return nil
+	}
+	reason := strings.TrimSpace(value.Reason)
+	if reason == "" {
+		return nil
+	}
+	return &coreagent.UnavailableToolTarget{
+		Reason:  reason,
+		Message: strings.TrimSpace(value.Message),
+	}
 }
 
 func (m *Manager) sealValue(purpose string, value any) (string, error) {
