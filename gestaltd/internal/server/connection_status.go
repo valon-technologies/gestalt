@@ -61,6 +61,9 @@ func (s *Server) defaultIntegrationStatus(info *integrationInfo, prov core.Provi
 	if info == nil {
 		return unknownConnectionStatus()
 	}
+	if status, ok := summarizeReconnectRequiredConnectionStatuses(info.Connections); ok {
+		return status
+	}
 	if conn, ok := info.connectionStatusForDefaultTarget(s.defaultConnectionName(info.Name)); ok {
 		return statusFromConnectionInfo(conn)
 	}
@@ -188,6 +191,9 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 	if len(connections) == 0 {
 		return unknownConnectionStatus()
 	}
+	if status, ok := summarizeReconnectRequiredConnectionStatuses(connections); ok {
+		return status
+	}
 	for i := range connections {
 		conn := &connections[i]
 		if conn.Status == connectionStatusNeedsInstanceSelection {
@@ -245,6 +251,49 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 	return unknownConnectionStatus()
 }
 
+func summarizeReconnectRequiredConnectionStatuses(connections []connectionDefInfo) (connectionStatusInfo, bool) {
+	if len(connections) == 0 {
+		return connectionStatusInfo{}, false
+	}
+	var (
+		invalidStatus *connectionDefInfo
+		hasConnected  bool
+	)
+	for i := range connections {
+		conn := &connections[i]
+		if conn.Status == connectionStatusDegraded {
+			return statusFromConnectionInfo(conn), true
+		}
+		if conn.CredentialState == credentialStateInvalid || conn.StatusCode == "reconnect_required" {
+			if invalidStatus == nil {
+				invalidStatus = conn
+			}
+			continue
+		}
+		if conn.connected || conn.Status == connectionStatusReady || conn.CredentialState == credentialStateConnected || conn.CredentialState == credentialStateConfigured {
+			hasConnected = true
+		}
+	}
+	if invalidStatus == nil {
+		return connectionStatusInfo{}, false
+	}
+	if hasConnected {
+		return connectionStatusInfo{
+			Status:          connectionStatusDegraded,
+			CredentialState: credentialStateInvalid,
+			HealthState:     healthStateUnhealthy,
+			Actions:         []string{},
+			CredentialMode:  invalidStatus.CredentialMode,
+			OwnerKind:       invalidStatus.OwnerKind,
+			Disconnectable:  invalidStatus.disconnectable,
+			Connected:       true,
+			StatusCode:      "reconnect_required",
+			StatusReason:    "one or more stored credentials are expired and refresh has failed; reconnect them",
+		}, true
+	}
+	return statusFromConnectionInfo(invalidStatus), true
+}
+
 func unknownConnectionStatus() connectionStatusInfo {
 	return connectionStatusInfo{
 		Status:          connectionStatusUnknown,
@@ -300,6 +349,8 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 		Actions:        []string{},
 		Connected:      false,
 	}
+	invalidCount := invalidInstanceCount(instances)
+	validCount := len(instances) - invalidCount
 	switch len(instances) {
 	case 0:
 		status.Status = connectionStatusNeedsUserConnection
@@ -307,24 +358,76 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 		if connectable {
 			status.Actions = []string{actionConnect}
 		}
-	case 1:
-		status.Status = connectionStatusReady
-		status.CredentialState = credentialStateConnected
-		status.HealthState = healthStateNotChecked
-		status.Disconnectable = true
-		status.Connected = true
-		status.Actions = subjectConnectionActions(true, connectable, false)
 	default:
-		status.Status = connectionStatusNeedsInstanceSelection
-		status.CredentialState = credentialStateConnected
-		status.HealthState = healthStateNotChecked
-		status.Disconnectable = true
-		status.Connected = true
-		status.Actions = subjectConnectionActions(true, connectable, true)
-		status.StatusCode = "instance_selection_required"
-		status.StatusReason = "multiple connected instances require explicit instance selection"
+		switch {
+		case invalidCount == 0 && len(instances) == 1:
+			status.Status = connectionStatusReady
+			status.CredentialState = credentialStateConnected
+			status.HealthState = healthStateNotChecked
+			status.Disconnectable = true
+			status.Connected = true
+			status.Actions = subjectConnectionActions(true, connectable, false)
+		case invalidCount == 0:
+			status.Status = connectionStatusNeedsInstanceSelection
+			status.CredentialState = credentialStateConnected
+			status.HealthState = healthStateNotChecked
+			status.Disconnectable = true
+			status.Connected = true
+			status.Actions = subjectConnectionActions(true, connectable, true)
+			status.StatusCode = "instance_selection_required"
+			status.StatusReason = "multiple connected instances require explicit instance selection"
+		case validCount == 0:
+			status.Status = connectionStatusNeedsUserConnection
+			status.CredentialState = credentialStateInvalid
+			status.HealthState = healthStateUnhealthy
+			status.Disconnectable = true
+			status.Connected = false
+			status.Actions = reconnectStatusActions(instances, connectable, true, false)
+			status.StatusCode = "reconnect_required"
+			status.StatusReason = "stored credential is expired and refresh has failed; reconnect it"
+		default:
+			status.Status = connectionStatusDegraded
+			status.CredentialState = credentialStateInvalid
+			status.HealthState = healthStateUnhealthy
+			status.Disconnectable = true
+			status.Connected = true
+			status.Actions = reconnectStatusActions(instances, connectable, true, connectable)
+			status.StatusCode = "reconnect_required"
+			status.StatusReason = "one or more stored credentials are expired and refresh has failed; reconnect them"
+		}
 	}
 	return status
+}
+
+func invalidInstanceCount(instances []instanceInfo) int {
+	count := 0
+	for _, instance := range instances {
+		if instance.credentialInvalid {
+			count++
+		}
+	}
+	return count
+}
+
+func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnectable, addInstance bool) []string {
+	var actions []string
+	if len(instances) > 1 {
+		actions = append(actions, actionSelectInstance)
+	}
+	if reconnectable && reconnectTargetsDefaultInstance(instances) {
+		actions = append(actions, actionReconnect)
+	}
+	if disconnectable {
+		actions = append(actions, actionDisconnect)
+	}
+	if addInstance {
+		actions = append(actions, actionAddInstance)
+	}
+	return actions
+}
+
+func reconnectTargetsDefaultInstance(instances []instanceInfo) bool {
+	return len(instances) == 1 && instances[0].Name == defaultTokenInstance
 }
 
 func subjectConnectionActions(disconnectable, connectable, selectInstance bool) []string {

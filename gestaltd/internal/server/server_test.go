@@ -9554,6 +9554,158 @@ func TestListIntegrations_ConnectionStatusContract(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_StaleRefreshFailuresRequireReconnect(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	subjectID := principal.UserSubjectID(u.ID)
+	past := time.Now().Add(-1 * time.Hour)
+	future := time.Now().Add(1 * time.Hour)
+
+	seedStatusToken := func(integration, connection, instance string, expiresAt *time.Time, refreshErrors int) {
+		t.Helper()
+		seedToken(t, svc, &core.ExternalCredential{
+			ID:                integration + "-" + connection + "-" + instance,
+			SubjectID:         subjectID,
+			ConnectionID:      integration + ":" + config.ResolveConnectionAlias(connection),
+			Integration:       integration,
+			Connection:        connection,
+			Instance:          instance,
+			AccessToken:       integration + "-" + instance + "-access-token",
+			RefreshToken:      integration + "-" + instance + "-refresh-token",
+			ExpiresAt:         expiresAt,
+			RefreshErrorCount: refreshErrors,
+		})
+	}
+
+	seedStatusToken("expired-failed", testDefaultConnection, "default", &past, 2)
+	seedStatusToken("expired-untried", testDefaultConnection, "default", &past, 0)
+	seedStatusToken("unexpired-error", testDefaultConnection, "default", &future, 3)
+	seedStatusToken("mixed", testDefaultConnection, "valid", &future, 0)
+	seedStatusToken("mixed", testDefaultConnection, "stale", &past, 1)
+	seedStatusToken("all-invalid-multi", testDefaultConnection, "stale-a", &past, 1)
+	seedStatusToken("all-invalid-multi", testDefaultConnection, "stale-b", &past, 3)
+	seedStatusToken("named-stale", testDefaultConnection, "default", &future, 0)
+	seedStatusToken("named-stale", "archive", "archive", &past, 1)
+
+	providers := testutil.NewProviderRegistry(t,
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "expired-failed", DN: "Expired Failed"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "expired-untried", DN: "Expired Untried"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "unexpired-error", DN: "Unexpired Error"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "mixed", DN: "Mixed"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "all-invalid-multi", DN: "All Invalid Multi"}},
+		&stubManualProvider{StubIntegration: coretesting.StubIntegration{N: "named-stale", DN: "Named Stale"}},
+	)
+	pluginDefs := map[string]*config.ProviderEntry{}
+	for _, name := range []string{"expired-failed", "expired-untried", "unexpired-error", "mixed", "all-invalid-multi"} {
+		pluginDefs[name] = testPluginDefsForConnections(name, testDefaultConnection)[name]
+	}
+	pluginDefs["named-stale"] = &config.ProviderEntry{
+		Connections: map[string]*config.ConnectionDef{
+			testDefaultConnection: {
+				ConnectionID: "named-stale:" + testDefaultConnection,
+				Mode:         providermanifestv1.ConnectionModeUser,
+			},
+			"archive": {
+				ConnectionID: "named-stale:archive",
+				Mode:         providermanifestv1.ConnectionModeUser,
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.PluginDefs = pluginDefs
+		cfg.Services = svc
+		cfg.DefaultConnection = map[string]string{"named-stale": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	type statusConnection struct {
+		Name            string           `json:"name"`
+		Status          string           `json:"status"`
+		CredentialState string           `json:"credentialState"`
+		HealthState     string           `json:"healthState"`
+		Actions         []string         `json:"actions"`
+		Instances       []map[string]any `json:"instances"`
+		StatusCode      string           `json:"statusCode"`
+	}
+	type statusIntegration struct {
+		Name            string             `json:"name"`
+		Connections     []statusConnection `json:"connections"`
+		Status          string             `json:"status"`
+		CredentialState string             `json:"credentialState"`
+		HealthState     string             `json:"healthState"`
+		Actions         []string           `json:"actions"`
+	}
+	var integrations []statusIntegration
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decode integrations: %v (body: %s)", err, body)
+	}
+	got := make(map[string]statusIntegration, len(integrations))
+	for _, integration := range integrations {
+		got[integration.Name] = integration
+	}
+
+	assertStatus := func(name, status, credentialState, healthState string, actions []string) statusIntegration {
+		t.Helper()
+		integration, ok := got[name]
+		if !ok {
+			t.Fatalf("integration %q missing from response: %s", name, body)
+		}
+		if integration.Status != status || integration.CredentialState != credentialState || integration.HealthState != healthState || !reflect.DeepEqual(integration.Actions, actions) {
+			t.Fatalf("%s status = {status:%q credential:%q health:%q actions:%v}, want {%q %q %q %v}",
+				name, integration.Status, integration.CredentialState, integration.HealthState, integration.Actions,
+				status, credentialState, healthState, actions)
+		}
+		return integration
+	}
+	assertConnection := func(integration statusIntegration, connection, status, credentialState, healthState, statusCode string, actions []string) statusConnection {
+		t.Helper()
+		for _, conn := range integration.Connections {
+			if conn.Name != connection {
+				continue
+			}
+			if conn.Status != status || conn.CredentialState != credentialState || conn.HealthState != healthState || conn.StatusCode != statusCode || !reflect.DeepEqual(conn.Actions, actions) {
+				t.Fatalf("%s/%s connection = {status:%q credential:%q health:%q code:%q actions:%v}, want {%q %q %q %q %v}",
+					integration.Name, connection, conn.Status, conn.CredentialState, conn.HealthState, conn.StatusCode, conn.Actions,
+					status, credentialState, healthState, statusCode, actions)
+			}
+			return conn
+		}
+		t.Fatalf("%s connection %q missing: %+v", integration.Name, connection, integration.Connections)
+		return statusConnection{}
+	}
+
+	expiredFailed := assertStatus("expired-failed", "needs_user_connection", "invalid", "unhealthy", []string{"reconnect", "disconnect"})
+	assertConnection(expiredFailed, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"reconnect", "disconnect"})
+	assertStatus("expired-untried", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
+	assertStatus("unexpired-error", "ready", "connected", "not_checked", []string{"disconnect", "add_instance"})
+	mixed := assertStatus("mixed", "degraded", "invalid", "unhealthy", []string{"select_instance", "disconnect", "add_instance"})
+	assertConnection(mixed, testDefaultConnection, "degraded", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect", "add_instance"})
+	allInvalid := assertStatus("all-invalid-multi", "needs_user_connection", "invalid", "unhealthy", []string{"select_instance", "disconnect"})
+	assertConnection(allInvalid, testDefaultConnection, "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"select_instance", "disconnect"})
+	namedStale := assertStatus("named-stale", "degraded", "invalid", "unhealthy", []string{})
+	assertConnection(namedStale, testDefaultConnection, "ready", "connected", "not_checked", "", []string{"disconnect", "add_instance"})
+	assertConnection(namedStale, "archive", "needs_user_connection", "invalid", "unhealthy", "reconnect_required", []string{"disconnect"})
+}
+
 func TestListIntegrations_AuthTypes(t *testing.T) {
 	t.Parallel()
 
