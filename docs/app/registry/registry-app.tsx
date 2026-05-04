@@ -174,11 +174,9 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
     <main className={styles.shell}>
       <header className={styles.header}>
         <a className={styles.brand} href={routePrefix || "/"}>
-          <span className={styles.brandMark}>G</span>
-          <span>
-            <strong>Gestalt</strong>
-            <small>Provider Registry</small>
-          </span>
+          <span className={styles.brandWord}>Gestalt</span>
+          <span className={styles.brandDivider} aria-hidden="true" />
+          <span className={styles.brandContext}>Provider Registry</span>
         </a>
         <nav className={styles.nav}>
           <a href="https://gestaltd.ai">Docs</a>
