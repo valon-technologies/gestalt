@@ -3,6 +3,7 @@ package authorization
 import (
 	"context"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -41,6 +42,12 @@ type ProviderActionAuthorizer interface {
 // the current runtime authorizer when one exists.
 type ManagedAuthorizationModelResolver interface {
 	ManagedModelID(ctx context.Context) (string, error)
+}
+
+// ManagedAuthorizationDynamicRoleEnsurer prepares the managed authorization
+// model for a dynamic role before the corresponding relationship is written.
+type ManagedAuthorizationDynamicRoleEnsurer interface {
+	EnsureManagedDynamicRole(ctx context.Context, resource *core.ResourceRef, role string) (string, error)
 }
 
 var _ RuntimeAuthorizer = (*Authorizer)(nil)

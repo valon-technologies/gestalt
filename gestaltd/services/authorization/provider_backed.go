@@ -36,6 +36,8 @@ type ProviderBackedAuthorizer struct {
 	pollCancel  context.CancelFunc
 	pollDone    chan struct{}
 
+	reloadMu sync.Mutex
+
 	stateMu sync.RWMutex
 	state   providerBackedRoleState
 }
@@ -118,27 +120,74 @@ func (a *ProviderBackedAuthorizer) ReloadAuthorizationState(ctx context.Context)
 		return nil
 	}
 
+	a.reloadMu.Lock()
+	defer a.reloadMu.Unlock()
+	_, err := a.reloadAuthorizationStateLocked(ctx, nil)
+	return err
+}
+
+func (a *ProviderBackedAuthorizer) EnsureManagedDynamicRole(ctx context.Context, resource *core.ResourceRef, role string) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("authorization provider is unavailable")
+	}
+	resourceType := strings.TrimSpace(resource.GetType())
+	resourceID := strings.TrimSpace(resource.GetId())
+	role = strings.TrimSpace(role)
+	if resourceType == "" || resourceID == "" {
+		return "", fmt.Errorf("authorization resource is required")
+	}
+	if role == "" {
+		return "", fmt.Errorf("authorization role is required")
+	}
+
+	a.reloadMu.Lock()
+	defer a.reloadMu.Unlock()
+	return a.reloadAuthorizationStateLocked(ctx, func(roles *providerBackedRoleState) error {
+		switch resourceType {
+		case resourceTypePluginDynamic:
+			if roles.pluginDynamicRoles == nil {
+				roles.pluginDynamicRoles = map[string][]string{}
+			}
+			roles.pluginDynamicRoles[resourceID] = roleListWith(roles.pluginDynamicRoles[resourceID], role)
+		case resourceTypeAdminDynamic:
+			if resourceID != resourceIDAdminDynamicGlobal {
+				return fmt.Errorf("unsupported admin dynamic resource %q", resourceID)
+			}
+			roles.adminDynamicRoles = roleListWith(roles.adminDynamicRoles, role)
+		default:
+			return fmt.Errorf("unsupported managed dynamic resource type %q", resourceType)
+		}
+		return nil
+	})
+}
+
+func (a *ProviderBackedAuthorizer) reloadAuthorizationStateLocked(ctx context.Context, mutateRoles func(*providerBackedRoleState) error) (string, error) {
 	sourceModelID, err := a.sourceModelID(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	sourceExisting := map[string]*core.Relationship{}
 	if sourceModelID != "" {
 		sourceExisting, err = a.readAllRelationships(ctx, sourceModelID)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 	desired, roles, err := a.buildDesiredRelationships(sourceExisting)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if mutateRoles != nil {
+		if err := mutateRoles(&roles); err != nil {
+			return "", err
+		}
 	}
 	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Model: buildProviderAuthorizationModel(roles)})
 	if err != nil {
-		return fmt.Errorf("write authorization model: %w", err)
+		return "", fmt.Errorf("write authorization model: %w", err)
 	}
 	if model == nil || strings.TrimSpace(model.GetId()) == "" {
-		return fmt.Errorf("write authorization model: missing model id")
+		return "", fmt.Errorf("write authorization model: missing model id")
 	}
 	modelID := strings.TrimSpace(model.GetId())
 
@@ -146,7 +195,7 @@ func (a *ProviderBackedAuthorizer) ReloadAuthorizationState(ctx context.Context)
 	if modelID != sourceModelID {
 		targetExisting, err = a.readAllRelationships(ctx, modelID)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -157,7 +206,7 @@ func (a *ProviderBackedAuthorizer) ReloadAuthorizationState(ctx context.Context)
 			Deletes: deletes,
 			ModelId: modelID,
 		}); err != nil {
-			return fmt.Errorf("sync authorization relationships: %w", err)
+			return "", fmt.Errorf("sync authorization relationships: %w", err)
 		}
 	}
 
@@ -165,7 +214,7 @@ func (a *ProviderBackedAuthorizer) ReloadAuthorizationState(ctx context.Context)
 	roles.modelID = modelID
 	a.state = roles
 	a.stateMu.Unlock()
-	return nil
+	return modelID, nil
 }
 
 func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, error) {
@@ -699,6 +748,23 @@ func normalizeRoleList(roles map[string]struct{}) []string {
 		return roleSortKey(out[i]) < roleSortKey(out[j])
 	})
 	return out
+}
+
+func roleListWith(roles []string, role string) []string {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return append([]string(nil), roles...)
+	}
+	roleSet := make(map[string]struct{}, len(roles)+1)
+	for _, existing := range roles {
+		existing = strings.TrimSpace(existing)
+		if existing == "" {
+			continue
+		}
+		roleSet[existing] = struct{}{}
+	}
+	roleSet[role] = struct{}{}
+	return normalizeRoleList(roleSet)
 }
 
 func ensureRoleSet(target map[string]map[string]struct{}, key string) map[string]struct{} {
