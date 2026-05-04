@@ -1529,16 +1529,19 @@ func (s ServerConfig) ManagementBaseURL() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection.
 type ConnectionDef struct {
-	Ref              string                                `yaml:"ref,omitempty"`
-	DisplayName      string                                `yaml:"displayName,omitempty"`
-	Mode             providermanifestv1.ConnectionMode     `yaml:"mode"`
-	Exposure         providermanifestv1.ConnectionExposure `yaml:"exposure,omitempty"`
-	Auth             ConnectionAuthDef                     `yaml:"auth"`
-	ConnectionParams map[string]ConnectionParamDef         `yaml:"params"`
-	Discovery        *providermanifestv1.ProviderDiscovery `yaml:"-"`
-	ConnectionID     string                                `yaml:"-"`
-	BindingResolved  bool                                  `yaml:"-"`
+	Ref               string                                `yaml:"ref,omitempty"`
+	DisplayName       string                                `yaml:"displayName,omitempty"`
+	Mode              providermanifestv1.ConnectionMode     `yaml:"mode"`
+	Exposure          providermanifestv1.ConnectionExposure `yaml:"exposure,omitempty"`
+	Auth              ConnectionAuthDef                     `yaml:"auth"`
+	ConnectionParams  map[string]ConnectionParamDef         `yaml:"params"`
+	CredentialRefresh *CredentialRefreshDef                 `yaml:"credentialRefresh,omitempty"`
+	Discovery         *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ConnectionID      string                                `yaml:"-"`
+	BindingResolved   bool                                  `yaml:"-"`
 }
+
+type CredentialRefreshDef = providermanifestv1.CredentialRefreshConfig
 
 type ConnectionAuthDef struct {
 	Type                 providermanifestv1.AuthType `yaml:"type"`
@@ -1706,6 +1709,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	MergeConnectionAuth(&dst.Auth, src.Auth)
 	if len(src.ConnectionParams) > 0 {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
+	}
+	if src.CredentialRefresh != nil {
+		dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
 	}
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery

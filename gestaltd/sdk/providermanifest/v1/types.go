@@ -372,12 +372,18 @@ type ManifestOperationOverride struct {
 }
 
 type ManifestConnectionDef struct {
-	DisplayName string                             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Mode        ConnectionMode                     `json:"mode,omitempty" yaml:"mode,omitempty"`
-	Exposure    ConnectionExposure                 `json:"exposure,omitempty" yaml:"exposure,omitempty"`
-	Auth        *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Params      map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
-	Discovery   *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+	DisplayName       string                             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Mode              ConnectionMode                     `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Exposure          ConnectionExposure                 `json:"exposure,omitempty" yaml:"exposure,omitempty"`
+	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Params            map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
+	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+	CredentialRefresh *CredentialRefreshConfig           `json:"credentialRefresh,omitempty" yaml:"credentialRefresh,omitempty"`
+}
+
+type CredentialRefreshConfig struct {
+	RefreshInterval     string `json:"refreshInterval,omitempty" yaml:"refreshInterval,omitempty"`
+	RefreshBeforeExpiry string `json:"refreshBeforeExpiry,omitempty" yaml:"refreshBeforeExpiry,omitempty"`
 }
 
 type UIRoute struct {

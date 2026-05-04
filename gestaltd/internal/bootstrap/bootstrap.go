@@ -1390,10 +1390,10 @@ func buildExternalCredentialsProvider(ctx context.Context, cfg *config.Config, f
 		name = config.DefaultProviderInstance
 		entry = defaultExternalCredentialsProviderEntry()
 	}
-	return buildNamedExternalCredentialsProvider(ctx, name, entry, factories, deps)
+	return buildNamedExternalCredentialsProvider(ctx, name, entry, cfg, factories, deps)
 }
 
-func buildNamedExternalCredentialsProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
+func buildNamedExternalCredentialsProvider(ctx context.Context, name string, entry *config.ProviderEntry, runtimeConfig *config.Config, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "external-credentials"
@@ -1404,7 +1404,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 	if factories.ExternalCredentials == nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider factory is not registered")
 	}
-	node, err := buildExternalCredentialsRuntimeConfigNode(logicalName, entry, deps.EncryptionKey)
+	node, err := buildExternalCredentialsRuntimeConfigNode(logicalName, entry, runtimeConfig, deps.EncryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1435,7 +1435,7 @@ func defaultExternalCredentialsProviderEntry() *config.ProviderEntry {
 	}
 }
 
-func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.ProviderEntry, encryptionKey []byte) (yaml.Node, error) {
+func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.ProviderEntry, runtimeConfig *config.Config, encryptionKey []byte) (yaml.Node, error) {
 	if entry == nil {
 		return yaml.Node{}, fmt.Errorf("external credentials provider %q is required", name)
 	}
@@ -1451,6 +1451,16 @@ func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.Provid
 			return yaml.Node{}, fmt.Errorf("config.encryptionKey is required")
 		}
 		cfg["encryptionKey"] = hex.EncodeToString(encryptionKey)
+	}
+	targets, err := buildExternalCredentialRefreshRuntimeTargets(runtimeConfig)
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("credentialRefresh: %w", err)
+	}
+	if len(targets) > 0 {
+		if _, ok := cfg["credentialRefresh"]; ok {
+			return yaml.Node{}, fmt.Errorf("config.credentialRefresh is managed by connection credentialRefresh settings")
+		}
+		cfg["credentialRefresh"] = externalCredentialRefreshRuntimeConfig{Targets: targets}
 	}
 	return mapToYAMLNode(cfg)
 }

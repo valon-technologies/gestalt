@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBuildConnectionRuntimePlatformManualDirectAuthMapping(t *testing.T) {
@@ -85,6 +86,245 @@ func TestBuildConnectionRuntimePlatformManualDirectAuthMapping(t *testing.T) {
 	}
 	if info.Token != "{}" {
 		t.Fatalf("Token = %q, want placeholder JSON token", info.Token)
+	}
+}
+
+func TestBuildExternalCredentialsRuntimeConfigNodeIncludesCredentialRefreshTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"gmail": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"default": {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{
+									Type:            providermanifestv1.AuthTypeOAuth2,
+									TokenURL:        "https://oauth2.googleapis.com/token/{tenant}",
+									ClientAuth:      "header",
+									TokenExchange:   "json",
+									Scopes:          []string{"https://www.googleapis.com/auth/gmail.modify"},
+									RefreshParams:   map[string]string{"audience": "google"},
+									AcceptHeader:    "application/json",
+									AccessTokenPath: "data.access_token",
+								},
+								Params: map[string]providermanifestv1.ProviderConnectionParam{
+									"tenant": {Default: "acme"},
+								},
+								CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+									RefreshInterval:     "15m",
+									RefreshBeforeExpiry: "30m",
+								},
+							},
+						},
+					},
+				},
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						Auth: config.ConnectionAuthDef{
+							ClientID:     "client-id",
+							ClientSecret: "client-secret",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	node, err := buildExternalCredentialsRuntimeConfigNode("default", &config.ProviderEntry{}, cfg, []byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("buildExternalCredentialsRuntimeConfigNode() error = %v", err)
+	}
+	var decoded struct {
+		CredentialRefresh externalCredentialRefreshRuntimeConfig `yaml:"credentialRefresh"`
+	}
+	if err := node.Decode(&decoded); err != nil {
+		t.Fatalf("Decode(runtime config): %v", err)
+	}
+	if len(decoded.CredentialRefresh.Targets) != 1 {
+		t.Fatalf("targets = %+v, want one", decoded.CredentialRefresh.Targets)
+	}
+	target := decoded.CredentialRefresh.Targets[0]
+	if target.Provider != "gmail" || target.Connection != "default" || target.ConnectionID != "gmail:default" {
+		t.Fatalf("target identity = %+v, want gmail/default fallback connection id", target)
+	}
+	if target.RefreshInterval != "15m0s" || target.RefreshBeforeExpiry != "30m0s" {
+		t.Fatalf("target refresh durations = %q/%q", target.RefreshInterval, target.RefreshBeforeExpiry)
+	}
+	if target.Auth.TokenURL != "https://oauth2.googleapis.com/token/{tenant}" ||
+		target.Auth.ClientID != "client-id" ||
+		target.Auth.ClientSecret != "client-secret" ||
+		target.Auth.ClientAuth != "header" ||
+		target.Auth.TokenExchange != "json" ||
+		target.Auth.RefreshParams["audience"] != "google" ||
+		target.Auth.AcceptHeader != "application/json" ||
+		target.Auth.AccessTokenPath != "data.access_token" {
+		t.Fatalf("target auth = %+v, want lower-camel runtime auth config", target.Auth)
+	}
+	if target.ConnectionParams["tenant"] != "acme" {
+		t.Fatalf("connectionParams = %+v, want tenant default", target.ConnectionParams)
+	}
+
+	raw, err := yaml.Marshal(node)
+	if err != nil {
+		t.Fatalf("Marshal(runtime config): %v", err)
+	}
+	text := string(raw)
+	for _, want := range []string{"credentialRefresh:", "connectionId: gmail:default", "tokenUrl: https://oauth2.googleapis.com/token/{tenant}", "clientId: client-id", "refreshBeforeExpiry: 30m0s"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("runtime config YAML missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestBuildExternalCredentialRefreshTargetsOmittedConfigProducesNoTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"gmail": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"default": {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{
+									Type:     providermanifestv1.AuthTypeOAuth2,
+									TokenURL: "https://oauth2.googleapis.com/token",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	targets, err := buildExternalCredentialRefreshRuntimeTargets(cfg)
+	if err != nil {
+		t.Fatalf("buildExternalCredentialRefreshRuntimeTargets() error = %v", err)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("targets = %+v, want none", targets)
+	}
+}
+
+func TestBuildExternalCredentialRefreshTargetsUseResolvedConnectionIDAndDedupeSharedScopes(t *testing.T) {
+	t.Parallel()
+
+	shared := &config.ConnectionDef{
+		Mode: providermanifestv1.ConnectionModeUser,
+		Auth: config.ConnectionAuthDef{
+			Type:         providermanifestv1.AuthTypeOAuth2,
+			TokenURL:     "https://oauth2.googleapis.com/token",
+			ClientID:     "client-id",
+			ClientSecret: "client-secret",
+		},
+		CredentialRefresh: &config.CredentialRefreshDef{
+			RefreshInterval:     "15m",
+			RefreshBeforeExpiry: "30m",
+		},
+	}
+	cfg := &config.Config{
+		APIVersion: config.ConfigAPIVersion,
+		Connections: map[string]*config.ConnectionDef{
+			"shared_google": shared,
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"gmail":           googleRefPlugin("shared_google", "https://www.googleapis.com/auth/gmail.modify"),
+			"google_calendar": googleRefPlugin("shared_google", "https://www.googleapis.com/auth/calendar.events"),
+		},
+	}
+	if err := config.ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+
+	targets, err := buildExternalCredentialRefreshRuntimeTargets(cfg)
+	if err != nil {
+		t.Fatalf("buildExternalCredentialRefreshRuntimeTargets() error = %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets = %+v, want one deduped shared target", targets)
+	}
+	if targets[0].ConnectionID != "shared_google" {
+		t.Fatalf("connectionId = %q, want resolved shared_google", targets[0].ConnectionID)
+	}
+}
+
+func TestBuildExternalCredentialRefreshTargetsRejectConflictingDuplicateConnectionID(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"gmail": {
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						Mode:         providermanifestv1.ConnectionModeUser,
+						ConnectionID: "shared_google",
+						Auth: config.ConnectionAuthDef{
+							Type:         providermanifestv1.AuthTypeOAuth2,
+							TokenURL:     "https://oauth2.googleapis.com/token",
+							ClientID:     "client-id",
+							ClientSecret: "client-secret",
+						},
+						CredentialRefresh: &config.CredentialRefreshDef{
+							RefreshInterval:     "15m",
+							RefreshBeforeExpiry: "30m",
+						},
+					},
+				},
+			},
+			"google_calendar": {
+				Connections: map[string]*config.ConnectionDef{
+					"default": {
+						Mode:         providermanifestv1.ConnectionModeUser,
+						ConnectionID: "shared_google",
+						Auth: config.ConnectionAuthDef{
+							Type:         providermanifestv1.AuthTypeOAuth2,
+							TokenURL:     "https://oauth2.googleapis.com/token",
+							ClientID:     "client-id",
+							ClientSecret: "different-secret",
+						},
+						CredentialRefresh: &config.CredentialRefreshDef{
+							RefreshInterval:     "15m",
+							RefreshBeforeExpiry: "30m",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := buildExternalCredentialRefreshRuntimeTargets(cfg)
+	if err == nil {
+		t.Fatal("buildExternalCredentialRefreshRuntimeTargets() error = nil, want duplicate conflict")
+	}
+	if !strings.Contains(err.Error(), "conflicting refresh configuration") {
+		t.Fatalf("error = %v, want conflicting refresh configuration", err)
+	}
+}
+
+func googleRefPlugin(ref, scope string) *config.ProviderEntry {
+	return &config.ProviderEntry{
+		Source: config.ProviderSource{Path: "./manifest.yaml"},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {
+						Mode: providermanifestv1.ConnectionModeUser,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type:     providermanifestv1.AuthTypeOAuth2,
+							TokenURL: "https://oauth2.googleapis.com/token",
+							Scopes:   []string{scope},
+						},
+					},
+				},
+			},
+		},
+		Connections: map[string]*config.ConnectionDef{
+			"default": {Ref: ref},
+		},
 	}
 }
 

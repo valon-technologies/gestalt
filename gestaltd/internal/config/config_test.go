@@ -5104,6 +5104,55 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	}
 }
 
+func TestValidateStructureConnectionRefBindingOverridesCredentialRefresh(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"shared_google": {
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: ConnectionAuthDef{
+					Type:     providermanifestv1.AuthTypeOAuth2,
+					TokenURL: "https://oauth2.googleapis.com/token",
+				},
+				CredentialRefresh: &CredentialRefreshDef{
+					RefreshInterval:     "1h",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"gmail": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					"default": {
+						Ref: "shared_google",
+						CredentialRefresh: &CredentialRefreshDef{
+							RefreshInterval:     "15m",
+							RefreshBeforeExpiry: "10m",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+	resolved := cfg.Plugins["gmail"].Connections["default"]
+	if resolved == nil || resolved.ConnectionID != "shared_google" {
+		t.Fatalf("resolved connection = %+v, want shared_google ref", resolved)
+	}
+	if resolved.CredentialRefresh == nil {
+		t.Fatal("resolved CredentialRefresh is nil")
+	}
+	if resolved.CredentialRefresh.RefreshInterval != "15m" || resolved.CredentialRefresh.RefreshBeforeExpiry != "10m" {
+		t.Fatalf("resolved CredentialRefresh = %+v, want binding override", resolved.CredentialRefresh)
+	}
+}
+
 func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
 	t.Parallel()
 
@@ -5156,6 +5205,122 @@ func TestValidateStructureRejectsInlineUserMCPOAuthConnection(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "user-owned inline connections are not supported") {
 		t.Fatalf("ValidateStructure() error = %v, want inline user connection rejection", err)
+	}
+}
+
+func TestValidateResolvedStructureCredentialRefreshContract(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		conn    *providermanifestv1.ManifestConnectionDef
+		wantErr string
+	}{
+		{
+			name: "valid user oauth2",
+			conn: &providermanifestv1.ManifestConnectionDef{
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type:     providermanifestv1.AuthTypeOAuth2,
+					TokenURL: "https://oauth2.googleapis.com/token",
+				},
+				CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+					RefreshInterval:     "15m",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+		},
+		{
+			name: "invalid duration",
+			conn: &providermanifestv1.ManifestConnectionDef{
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type:     providermanifestv1.AuthTypeOAuth2,
+					TokenURL: "https://oauth2.googleapis.com/token",
+				},
+				CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+					RefreshInterval:     "not-a-duration",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+			wantErr: "credentialRefresh.refreshInterval",
+		},
+		{
+			name: "platform mode",
+			conn: &providermanifestv1.ManifestConnectionDef{
+				Mode: providermanifestv1.ConnectionModePlatform,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type:     providermanifestv1.AuthTypeOAuth2,
+					TokenURL: "https://oauth2.googleapis.com/token",
+				},
+				CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+					RefreshInterval:     "15m",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+			wantErr: "credentialRefresh requires mode user",
+		},
+		{
+			name: "manual auth",
+			conn: &providermanifestv1.ManifestConnectionDef{
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeManual,
+				},
+				CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+					RefreshInterval:     "15m",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+			wantErr: "credentialRefresh requires auth.type oauth2",
+		},
+		{
+			name: "missing token url",
+			conn: &providermanifestv1.ManifestConnectionDef{
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeOAuth2,
+				},
+				CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+					RefreshInterval:     "15m",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+			wantErr: "credentialRefresh requires auth.tokenUrl",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{
+				Plugins: map[string]*ProviderEntry{
+					"gmail": {
+						ResolvedManifest: &providermanifestv1.Manifest{
+							Spec: &providermanifestv1.Spec{
+								Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+									"default": tc.conn,
+								},
+							},
+						},
+					},
+				},
+			}
+			err := ValidateResolvedStructure(cfg)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateResolvedStructure() error = %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ValidateResolvedStructure() error = nil, want %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ValidateResolvedStructure() error = %v, want %q", err, tc.wantErr)
+			}
+		})
 	}
 }
 
