@@ -3,7 +3,7 @@ module github.com/valon-technologies/gestalt/server
 go 1.26
 
 require (
-	github.com/Masterminds/semver/v3 v3.3.1
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/blevesearch/bleve/v2 v2.6.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
