@@ -68,6 +68,43 @@ list hydration from `GetCapabilities`. When Gestalt asks for `limit` or
 `summary_only`, it expects the provider to apply those options before returning
 results instead of hydrating the full session or turn history in the daemon.
 
+## MCP Catalog Tools
+
+Agent providers opt in to Gestalt integration tools by advertising
+`mcp_catalog` in `GetCapabilities`:
+
+```go
+return &proto.AgentProviderCapabilities{
+  ToolCalls: true,
+  SupportedToolSources: []proto.AgentToolSourceMode{
+    proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+  },
+}
+```
+
+When a turn uses `tool_source: mcp_catalog`, Gestalt passes the provider:
+
+- `tool_refs`: the requested catalog scope, such as one operation, one plugin,
+  or a broad catalog grant.
+- `run_grant`: the scoped authority the provider must pass back to
+  `AgentHost.ListTools`, `AgentHost.ExecuteTool`, and
+  `AgentHost.ResolveConnection`.
+
+`mcp_catalog` means the provider can accept catalog grants. It does not require
+a single discovery strategy. Providers should choose the strategy that matches
+their runtime:
+
+- Native deferred MCP search: mount the Gestalt MCP surface and let the runtime
+  search/load tool schemas on demand.
+- Provider catalog proxy: expose a small provider-owned search/schema/call tool
+  surface, then call `AgentHost.ListTools` and `AgentHost.ExecuteTool` behind it.
+- Eager exact-list hydration: list and expose the granted tools directly when
+  the grant is known to be small.
+
+Keep provider-specific discovery inside the provider. `gestaltd` authorizes the
+catalog scope, mints the run grant, pages tools, and executes selected tools; it
+does not rank tools for a model or add integration-specific aliases.
+
 ## Observability
 
 Provider authors do not need to emit the baseline `gestaltd` agent metrics.
