@@ -1,6 +1,29 @@
 .shell {
   --registry-page-gutter: 4rem;
   --registry-page-gutters: 8rem;
+  --registry-bg-start: #ffffff;
+  --registry-bg-end: #fdfcf9;
+  --registry-header-bg: rgba(255, 255, 255, 0.84);
+  --registry-glow-start: rgba(238, 213, 174, 0.26);
+  --registry-glow-mid: rgba(243, 233, 221, 0.34);
+  --registry-glow-end: rgba(255, 255, 255, 0);
+  --registry-surface: rgba(248, 246, 243, 0.9);
+  --registry-surface-hover: rgba(248, 246, 243, 0.98);
+  --registry-surface-focus: rgba(255, 255, 255, 0.92);
+  --registry-surface-subtle: rgba(255, 255, 255, 0.66);
+  --registry-icon-surface: rgba(236, 228, 221, 0.62);
+  --registry-selected-surface: rgba(255, 247, 233, 0.8);
+  --registry-selected-hover: rgba(255, 247, 233, 0.92);
+  --registry-table-surface: rgba(248, 246, 243, 0.72);
+  --registry-row-hover: rgba(35, 24, 16, 0.05);
+  --registry-shadow: rgba(35, 24, 16, 0.08);
+  --registry-solid-border: rgba(var(--valon-ink), 1);
+  --registry-solid-surface: rgba(var(--valon-ink), 1);
+  --registry-solid-text: #ffffff;
+  --registry-solid-muted: rgba(255, 255, 255, 0.68);
+  --registry-solid-muted-strong: rgba(255, 255, 255, 0.74);
+  --registry-code-surface: rgba(248, 246, 243, 0.88);
+  --registry-inline-code-border: rgba(35, 24, 16, 0.08);
 
   position: relative;
   min-height: 100vh;
@@ -8,11 +31,51 @@
   background:
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 1) 0%,
-      rgba(253, 252, 249, 1) 100%
+      var(--registry-bg-start) 0%,
+      var(--registry-bg-end) 100%
     );
   color: rgba(var(--valon-ink), 1);
   overflow-x: clip;
+}
+
+.lightShell {
+  color-scheme: light;
+}
+
+.darkShell {
+  --valon-ink: 232, 222, 212;
+  --valon-bg: #161110;
+  --valon-surface: #1e1916;
+  --valon-surface-strong: #2e2622;
+  --valon-line: rgba(232, 222, 212, 0.12);
+  --valon-line-strong: rgba(232, 222, 212, 0.2);
+  --valon-muted: rgba(232, 222, 212, 0.55);
+  --valon-secondary: rgba(232, 222, 212, 0.78);
+  --valon-gold: #f5ca78;
+  --registry-bg-start: #161110;
+  --registry-bg-end: #1a1510;
+  --registry-header-bg: rgba(22, 17, 16, 0.84);
+  --registry-glow-start: rgba(245, 202, 120, 0.12);
+  --registry-glow-mid: rgba(68, 49, 28, 0.2);
+  --registry-glow-end: rgba(22, 17, 16, 0);
+  --registry-surface: rgba(30, 25, 22, 0.9);
+  --registry-surface-hover: rgba(38, 31, 27, 0.96);
+  --registry-surface-focus: rgba(38, 31, 27, 0.96);
+  --registry-surface-subtle: rgba(232, 222, 212, 0.06);
+  --registry-icon-surface: rgba(232, 222, 212, 0.08);
+  --registry-selected-surface: rgba(245, 202, 120, 0.1);
+  --registry-selected-hover: rgba(245, 202, 120, 0.14);
+  --registry-table-surface: rgba(30, 25, 22, 0.72);
+  --registry-row-hover: rgba(232, 222, 212, 0.06);
+  --registry-shadow: rgba(0, 0, 0, 0.34);
+  --registry-solid-border: rgba(245, 202, 120, 0.32);
+  --registry-solid-surface: rgba(245, 202, 120, 0.12);
+  --registry-solid-text: rgba(232, 222, 212, 1);
+  --registry-solid-muted: rgba(232, 222, 212, 0.58);
+  --registry-solid-muted-strong: rgba(232, 222, 212, 0.66);
+  --registry-code-surface: rgba(30, 25, 22, 0.88);
+  --registry-inline-code-border: rgba(232, 222, 212, 0.12);
+  color-scheme: dark;
 }
 
 .shell::before {
@@ -25,9 +88,9 @@
   background:
     radial-gradient(
       140% 90% at 50% 0%,
-      rgba(238, 213, 174, 0.26) 0%,
-      rgba(243, 233, 221, 0.34) 38%,
-      rgba(255, 255, 255, 0) 76%
+      var(--registry-glow-start) 0%,
+      var(--registry-glow-mid) 38%,
+      var(--registry-glow-end) 76%
     );
 }
 
@@ -47,7 +110,7 @@
   justify-content: space-between;
   gap: 24px;
   border-bottom: 1px solid var(--valon-line);
-  background: rgba(255, 255, 255, 0.84);
+  background: var(--registry-header-bg);
   padding: 0 max(var(--registry-page-gutter), calc((100vw - 1300px) / 2));
   width: 100vw;
   max-width: 100%;
@@ -96,6 +159,51 @@
   gap: 0.75rem;
 }
 
+.headerActions {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.themeControl {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--valon-line);
+  border-radius: 999px;
+  background: var(--registry-surface);
+  padding: 3px;
+}
+
+.themeControl button {
+  min-height: 28px;
+  cursor: pointer;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--valon-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 0.7rem;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.themeControl button:hover {
+  color: rgba(var(--valon-ink), 1);
+}
+
+.themeControl .activeTheme {
+  background: var(--registry-solid-surface);
+  color: var(--registry-solid-text);
+}
+
 .nav a {
   display: inline-flex;
   align-items: center;
@@ -103,7 +211,7 @@
   min-height: 34px;
   border: 1px solid var(--valon-line);
   border-radius: 999px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: rgba(var(--valon-ink), 0.88);
   font-size: 0.875rem;
   line-height: 1;
@@ -147,7 +255,7 @@
   height: 44px;
   border: 1px solid var(--valon-line);
   border-radius: 8px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   box-shadow: none;
   color: rgba(var(--valon-ink), 1);
   font: inherit;
@@ -160,7 +268,7 @@
 
 .search input:focus {
   border-color: var(--valon-line-strong);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--registry-surface-focus);
 }
 
 .kindTabs {
@@ -178,7 +286,7 @@
   cursor: pointer;
   border: 1px solid var(--valon-line);
   border-radius: 8px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: rgba(var(--valon-ink), 0.8);
   font: inherit;
   font-size: 0.875rem;
@@ -201,23 +309,23 @@
 }
 
 .kindTabs .activeTab {
-  border-color: rgba(var(--valon-ink), 1);
-  background: rgba(var(--valon-ink), 1);
-  color: #ffffff;
+  border-color: var(--registry-solid-border);
+  background: var(--registry-solid-surface);
+  color: var(--registry-solid-text);
 }
 
 .kindTabs .activeTab:hover {
-  border-color: rgba(var(--valon-ink), 1);
-  background: rgba(var(--valon-ink), 1);
-  color: #ffffff;
+  border-color: var(--registry-solid-border);
+  background: var(--registry-solid-surface);
+  color: var(--registry-solid-text);
 }
 
 .kindTabs .activeTab span {
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--registry-solid-muted-strong);
 }
 
 .kindTabs .activeTab:hover span {
-  color: rgba(255, 255, 255, 0.74);
+  color: var(--registry-solid-muted-strong);
 }
 
 .content {
@@ -258,7 +366,7 @@
   cursor: pointer;
   border: 1px solid var(--valon-line);
   border-radius: 12px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: inherit;
   padding: 12px;
   text-align: left;
@@ -271,23 +379,23 @@
 
 .providerCard:hover {
   border-color: var(--valon-line-strong);
-  background: rgba(248, 246, 243, 0.98);
-  box-shadow: 0 8px 24px rgba(35, 24, 16, 0.08);
+  background: var(--registry-surface-hover);
+  box-shadow: 0 8px 24px var(--registry-shadow);
   transform: translateY(-1px);
 }
 
 .selectedCard {
   border-color: rgba(var(--valon-ink), 0.28);
-  background: rgba(255, 247, 233, 0.8);
+  background: var(--registry-selected-surface);
   box-shadow: inset 3px 0 0 var(--valon-gold);
 }
 
 .selectedCard:hover {
   border-color: rgba(var(--valon-ink), 0.34);
-  background: rgba(255, 247, 233, 0.92);
+  background: var(--registry-selected-hover);
   box-shadow:
     inset 3px 0 0 var(--valon-gold),
-    0 8px 24px rgba(35, 24, 16, 0.08);
+    0 8px 24px var(--registry-shadow);
 }
 
 .providerText {
@@ -323,7 +431,7 @@
   align-items: center;
   border: 1px solid var(--valon-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
+  background: var(--registry-surface-subtle);
   color: rgba(var(--valon-ink), 0.7);
   font-size: 0.75rem;
   font-weight: 700;
@@ -378,7 +486,7 @@
   justify-content: center;
   border: 1px solid var(--valon-line);
   border-radius: 12px;
-  background: rgba(236, 228, 221, 0.62);
+  background: var(--registry-icon-surface);
   object-fit: contain;
 }
 
@@ -403,20 +511,20 @@
 .installBlock {
   display: grid;
   gap: 10px;
-  border: 1px solid rgba(var(--valon-ink), 1);
+  border: 1px solid var(--registry-solid-border);
   border-radius: 12px;
-  background: rgba(var(--valon-ink), 1);
-  color: #ffffff;
+  background: var(--registry-solid-surface);
+  color: var(--registry-solid-text);
   padding: 18px;
 }
 
 .installBlock span {
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--registry-solid-muted);
 }
 
 .installBlock code {
   overflow-wrap: anywhere;
-  color: #ffffff;
+  color: var(--registry-solid-text);
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.875rem;
   line-height: 1.55;
@@ -433,7 +541,7 @@
 .versionPanel {
   border: 1px solid var(--valon-line);
   border-radius: 12px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   padding: 16px;
 }
 
@@ -478,7 +586,7 @@
   align-items: center;
   border: 1px solid var(--valon-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--registry-surface-subtle);
   color: rgba(var(--valon-ink), 0.78);
   font-size: 0.75rem;
   font-weight: 700;
@@ -503,7 +611,7 @@
 }
 
 .versionList a:hover {
-  background: rgba(35, 24, 16, 0.05);
+  background: var(--registry-row-hover);
 }
 
 .versionList small {
@@ -524,7 +632,7 @@
   justify-content: center;
   border: 1px solid var(--valon-line);
   border-radius: 8px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: rgba(var(--valon-ink), 0.88);
   font-size: 0.875rem;
   font-weight: 700;
@@ -584,7 +692,7 @@
   justify-content: center;
   border: 1px solid var(--valon-line);
   border-radius: 8px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: rgba(var(--valon-ink), 0.78);
   font-size: 0.875rem;
   font-weight: 700;
@@ -599,15 +707,15 @@
 }
 
 .docsNav .activeDocLink {
-  border-color: rgba(var(--valon-ink), 1);
-  background: rgba(var(--valon-ink), 1);
-  color: #ffffff;
+  border-color: var(--registry-solid-border);
+  background: var(--registry-solid-surface);
+  color: var(--registry-solid-text);
 }
 
 .docsState {
   border: 1px solid var(--valon-line);
   border-radius: 12px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   color: var(--valon-secondary);
   padding: 18px;
 }
@@ -688,31 +796,33 @@
   text-decoration-color: rgba(var(--valon-ink), 0.75);
 }
 
-.markdownBody code {
-  border: 1px solid var(--valon-line);
-  border-radius: 5px;
-  background: rgba(248, 246, 243, 0.9);
-  color: rgba(var(--valon-ink), 0.9);
+.markdownBody :not(pre) > code {
+  border: 1px solid var(--registry-inline-code-border);
+  border-radius: 6px;
+  background: var(--registry-code-surface) !important;
+  color: rgba(var(--valon-ink), 1) !important;
   font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.86em;
   padding: 0.12rem 0.28rem;
 }
 
 .markdownBody pre {
-  overflow-x: auto;
-  border: 1px solid rgba(var(--valon-ink), 1);
-  border-radius: 12px;
-  background: rgba(var(--valon-ink), 1);
-  padding: 16px;
+  overflow-x: auto !important;
+  border: 1px solid var(--valon-line) !important;
+  border-radius: 12px !important;
+  background: var(--registry-code-surface) !important;
+  box-shadow: none !important;
+  padding: 6px 0 !important;
 }
 
 .markdownBody pre code {
-  display: block;
-  border: 0;
-  background: transparent;
-  color: #ffffff;
-  padding: 0;
-  white-space: pre;
+  display: block !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: rgba(var(--valon-ink), 0.92) !important;
+  padding: 10px 16px !important;
+  white-space: pre !important;
 }
 
 .markdownBody blockquote {
@@ -729,7 +839,7 @@
   width: 100%;
   border-collapse: collapse;
   border: 1px solid var(--valon-line);
-  background: rgba(248, 246, 243, 0.72);
+  background: var(--registry-table-surface);
 }
 
 .markdownBody th,
@@ -755,7 +865,7 @@
   margin: 24px;
   border: 1px solid var(--valon-line);
   border-radius: 12px;
-  background: rgba(248, 246, 243, 0.9);
+  background: var(--registry-surface);
   padding: 24px;
 }
 
@@ -812,6 +922,10 @@
 
   .header {
     min-height: 58px;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 10px;
+    padding-top: 10px;
   }
 
   .brand {
@@ -829,6 +943,21 @@
 
   .nav {
     gap: 0.5rem;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .themeControl {
+    flex: 1 1 auto;
+  }
+
+  .themeControl button {
+    flex: 1 1 0;
+    padding: 0 0.45rem;
   }
 
   .nav a {

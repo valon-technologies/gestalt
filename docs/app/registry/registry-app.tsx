@@ -72,8 +72,17 @@ type DocLoadState =
   | { status: "loaded"; source: string }
   | { status: "error"; message: string };
 
+type ThemePreference = "light" | "dark" | "system";
+type ResolvedTheme = "light" | "dark";
+
 const allKinds = "all";
 const catalogSchemaVersion = 1;
+const themeStorageKey = "gestalt-docs-theme";
+const themeOptions: { label: string; value: ThemePreference }[] = [
+  { label: "System", value: "system" },
+  { label: "Light", value: "light" },
+  { label: "Dark", value: "dark" },
+];
 const urlParseBase = "https://registry.gestaltd.ai";
 // Raw GitHub SVG responses include a sandboxing CSP, so render fetched SVGs as data URLs.
 const svgIconDataUrlCache = new Map<string, Promise<string | null>>();
@@ -87,6 +96,35 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
     null,
   );
   const [routePrefix, setRoutePrefix] = useState("");
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>("system");
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
+
+  useEffect(() => {
+    const storedTheme = window.localStorage.getItem(themeStorageKey);
+    if (isThemePreference(storedTheme)) {
+      setThemePreference(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateResolvedTheme = () => {
+      setResolvedTheme(
+        resolveThemePreference(themePreference, mediaQuery.matches),
+      );
+    };
+    updateResolvedTheme();
+    mediaQuery.addEventListener("change", updateResolvedTheme);
+    return () => {
+      mediaQuery.removeEventListener("change", updateResolvedTheme);
+    };
+  }, [themePreference]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+    document.documentElement.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme]);
 
   useEffect(() => {
     const updateRoute = () => {
@@ -202,20 +240,49 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
     });
   }
 
+  function chooseThemePreference(nextThemePreference: ThemePreference) {
+    setThemePreference(nextThemePreference);
+    window.localStorage.setItem(themeStorageKey, nextThemePreference);
+  }
+
+  const shellClassName =
+    resolvedTheme === "dark"
+      ? `${styles.shell} ${styles.darkShell}`
+      : `${styles.shell} ${styles.lightShell}`;
+
   return (
-    <main className={styles.shell}>
+    <main className={shellClassName}>
       <header className={styles.header}>
         <a className={styles.brand} href={routePrefix || "/"}>
           <span className={styles.brandWord}>Gestalt</span>
           <span className={styles.brandDivider} aria-hidden="true" />
           <span className={styles.brandContext}>Provider Registry</span>
         </a>
-        <nav className={styles.nav}>
-          <a href="https://gestaltd.ai">Docs</a>
-          <a href="https://github.com/valon-technologies/gestalt-providers">
-            GitHub
-          </a>
-        </nav>
+        <div className={styles.headerActions}>
+          <div className={styles.themeControl} aria-label="Theme">
+            {themeOptions.map((option) => (
+              <button
+                aria-pressed={themePreference === option.value}
+                className={
+                  themePreference === option.value
+                    ? styles.activeTheme
+                    : undefined
+                }
+                key={option.value}
+                onClick={() => chooseThemePreference(option.value)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <nav className={styles.nav}>
+            <a href="https://gestaltd.ai">Docs</a>
+            <a href="https://github.com/valon-technologies/gestalt-providers">
+              GitHub
+            </a>
+          </nav>
+        </div>
       </header>
 
       <section className={styles.toolbar}>
@@ -303,6 +370,20 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
       )}
     </main>
   );
+}
+
+function isThemePreference(value: string | null): value is ThemePreference {
+  return value === "light" || value === "dark" || value === "system";
+}
+
+function resolveThemePreference(
+  themePreference: ThemePreference,
+  systemPrefersDark: boolean,
+): ResolvedTheme {
+  if (themePreference === "system") {
+    return systemPrefersDark ? "dark" : "light";
+  }
+  return themePreference;
 }
 
 function selectionFromPath(pathname: string): RouteSelection | null {
