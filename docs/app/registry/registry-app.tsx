@@ -1,6 +1,8 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { renderMarkdown } from "./registry-markdown";
 import styles from "./registry.module.css";
 
 type ConfigTarget = {
@@ -16,6 +18,14 @@ type ProviderVersion = {
   runtime: string;
   platforms: string[];
   yanked?: boolean;
+};
+
+type ProviderDoc = {
+  path: string;
+  title: string;
+  sourcePath: string;
+  rawUrl: string;
+  editUrl: string;
 };
 
 type Provider = {
@@ -34,6 +44,7 @@ type Provider = {
   readmeUrl: string | null;
   manifestUrl: string | null;
   iconUrl: string | null;
+  docs?: ProviderDoc[];
 };
 
 type Catalog = {
@@ -52,13 +63,21 @@ type LoadState =
 type RouteSelection = {
   kind: string;
   name: string;
+  docPath: string;
 };
+
+type DocLoadState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; source: string }
+  | { status: "error"; message: string };
 
 const allKinds = "all";
 const catalogSchemaVersion = 1;
 const urlParseBase = "https://registry.gestaltd.ai";
 // Raw GitHub SVG responses include a sandboxing CSP, so render fetched SVGs as data URLs.
 const svgIconDataUrlCache = new Map<string, Promise<string | null>>();
+const providerDocTextCache = new Map<string, Promise<string | null>>();
 
 export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
@@ -170,7 +189,17 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
   function selectProvider(provider: Provider) {
     const href = `${routePrefix}${provider.registryPath}`;
     window.history.pushState(null, "", href);
-    setSelectedRoute({ kind: provider.kind, name: provider.name });
+    setSelectedRoute({ kind: provider.kind, name: provider.name, docPath: "/" });
+  }
+
+  function selectProviderDoc(provider: Provider, doc: ProviderDoc) {
+    const href = providerDocHref(provider, doc, routePrefix);
+    window.history.pushState(null, "", href);
+    setSelectedRoute({
+      kind: provider.kind,
+      name: provider.name,
+      docPath: normalizeDocPath(doc.path),
+    });
   }
 
   return (
@@ -260,7 +289,12 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
 
           <aside className={styles.detailPane}>
             {selectedProvider ? (
-              <ProviderDetail provider={selectedProvider} />
+              <ProviderDetail
+                onSelectDoc={(doc) => selectProviderDoc(selectedProvider, doc)}
+                provider={selectedProvider}
+                routePrefix={routePrefix}
+                selectedDocPath={selectedRoute?.docPath ?? "/"}
+              />
             ) : (
               <div className={styles.statePanel}>No provider selected</div>
             )}
@@ -273,17 +307,28 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
 
 function selectionFromPath(pathname: string): RouteSelection | null {
   const normalized = pathname.replace(/^\/registry/, "");
-  const match = normalized.match(/^\/providers\/([^/]+)\/([^/]+)\/?$/);
+  const match = normalized.match(/^\/providers\/([^/]+)\/([^/]+)(?:\/(.*))?\/?$/);
   if (!match) {
     return null;
   }
   return {
     kind: decodeURIComponent(match[1]),
     name: decodeURIComponent(match[2]),
+    docPath: normalizeDocPath(match[3] ? `/${decodeURIComponent(match[3])}/` : "/"),
   };
 }
 
-function ProviderDetail({ provider }: { provider: Provider }) {
+function ProviderDetail({
+  onSelectDoc,
+  provider,
+  routePrefix,
+  selectedDocPath,
+}: {
+  onSelectDoc: (doc: ProviderDoc) => void;
+  provider: Provider;
+  routePrefix: string;
+  selectedDocPath: string;
+}) {
   const latest = provider.versions[0];
   const installCommand = provider.configTarget.requiredSet?.path
     ? `gestaltd provider add ${provider.package} --set path=/`
@@ -354,11 +399,129 @@ function ProviderDetail({ provider }: { provider: Provider }) {
         </div>
       </section>
 
+      <ProviderDocs
+        onSelectDoc={onSelectDoc}
+        provider={provider}
+        routePrefix={routePrefix}
+        selectedDocPath={selectedDocPath}
+      />
+
       <div className={styles.links}>
         {provider.sourceUrl ? <a href={provider.sourceUrl}>Source</a> : null}
         {provider.readmeUrl ? <a href={provider.readmeUrl}>README</a> : null}
         {provider.manifestUrl ? <a href={provider.manifestUrl}>Manifest</a> : null}
       </div>
+    </div>
+  );
+}
+
+function ProviderDocs({
+  onSelectDoc,
+  provider,
+  routePrefix,
+  selectedDocPath,
+}: {
+  onSelectDoc: (doc: ProviderDoc) => void;
+  provider: Provider;
+  routePrefix: string;
+  selectedDocPath: string;
+}) {
+  const docs = provider.docs ?? [];
+  if (docs.length === 0) {
+    return null;
+  }
+  const normalizedSelectedPath = normalizeDocPath(selectedDocPath);
+  const selectedDoc =
+    docs.find((doc) => normalizeDocPath(doc.path) === normalizedSelectedPath) ??
+    (normalizedSelectedPath === "/" ? docs[0] : null);
+
+  return (
+    <section className={styles.docsPanel}>
+      <div className={styles.docsHeader}>
+        <h2>Documentation</h2>
+        {selectedDoc?.editUrl ? <a href={selectedDoc.editUrl}>Edit</a> : null}
+      </div>
+      <nav className={styles.docsNav} aria-label={`${provider.displayName} docs`}>
+        {docs.map((doc) => {
+          const isActive =
+            selectedDoc !== null &&
+            normalizeDocPath(doc.path) === normalizeDocPath(selectedDoc.path);
+          return (
+            <a
+              aria-current={isActive ? "page" : undefined}
+              className={isActive ? styles.activeDocLink : undefined}
+              href={providerDocHref(provider, doc, routePrefix)}
+              key={doc.path}
+              onClick={(event) => {
+                if (!shouldHandleDocNavigationClick(event)) {
+                  return;
+                }
+                event.preventDefault();
+                onSelectDoc(doc);
+              }}
+            >
+              {doc.title}
+            </a>
+          );
+        })}
+      </nav>
+      {selectedDoc ? (
+        <ProviderDocBody
+          docs={docs}
+          provider={provider}
+          routePrefix={routePrefix}
+          selectedDoc={selectedDoc}
+        />
+      ) : (
+        <div className={styles.docsState}>
+          <h3>Documentation page not found</h3>
+          <p>Select one of the available provider docs pages.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function shouldHandleDocNavigationClick(event: MouseEvent<HTMLAnchorElement>) {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.defaultPrevented
+  );
+}
+
+function ProviderDocBody({
+  docs,
+  provider,
+  routePrefix,
+  selectedDoc,
+}: {
+  docs: ProviderDoc[];
+  provider: Provider;
+  routePrefix: string;
+  selectedDoc: ProviderDoc;
+}) {
+  const loadState = useProviderDocSource(selectedDoc);
+  if (loadState.status === "loading" || loadState.status === "idle") {
+    return <div className={styles.docsState}>Loading documentation</div>;
+  }
+  if (loadState.status === "error") {
+    return (
+      <div className={styles.docsState}>
+        <h3>Documentation unavailable</h3>
+        <p>{loadState.message}</p>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.markdownBody}>
+      {renderMarkdown(loadState.source, {
+        resolveLink: (href) =>
+          resolveProviderDocLink(href, provider, docs, selectedDoc, routePrefix),
+      })}
     </div>
   );
 }
@@ -451,6 +614,123 @@ function loadSvgIconDataUrl(iconUrl: string) {
     .catch(() => null);
   svgIconDataUrlCache.set(iconUrl, promise);
   return promise;
+}
+
+function useProviderDocSource(doc: ProviderDoc) {
+  const [loadState, setLoadState] = useState<DocLoadState>({ status: "idle" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadState({ status: "loading" });
+    void loadProviderDocText(doc.rawUrl).then((source) => {
+      if (cancelled) {
+        return;
+      }
+      if (source === null) {
+        setLoadState({
+          status: "error",
+          message: `Unable to load ${doc.sourcePath}`,
+        });
+        return;
+      }
+      setLoadState({ status: "loaded", source });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc.rawUrl, doc.sourcePath]);
+
+  return loadState;
+}
+
+function loadProviderDocText(rawUrl: string) {
+  const cached = providerDocTextCache.get(rawUrl);
+  if (cached) {
+    return cached;
+  }
+  const promise = fetch(rawUrl)
+    .then(async (response) => {
+      if (!response.ok) {
+        return null;
+      }
+      return response.text();
+    })
+    .catch(() => null);
+  providerDocTextCache.set(rawUrl, promise);
+  return promise;
+}
+
+function normalizeDocPath(path: string) {
+  const clean = path.split(/[?#]/, 1)[0].replace(/^\/+/, "").replace(/\/+$/, "");
+  return clean ? `/${clean}/` : "/";
+}
+
+function providerDocHref(provider: Provider, doc: ProviderDoc, routePrefix: string) {
+  const base = `${routePrefix}${provider.registryPath}`;
+  const docPath = normalizeDocPath(doc.path);
+  if (docPath === "/") {
+    return base;
+  }
+  return `${base.replace(/\/$/, "")}${docPath}`;
+}
+
+function resolveProviderDocLink(
+  href: string,
+  provider: Provider,
+  docs: ProviderDoc[],
+  currentDoc: ProviderDoc,
+  routePrefix: string,
+) {
+  const trimmed = href.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith("#")) {
+    return { href: trimmed, external: false };
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (["http:", "https:", "mailto:"].includes(parsed.protocol)) {
+      return { href: trimmed, external: parsed.protocol !== "mailto:" };
+    }
+    return null;
+  } catch {
+    // Relative links are handled below.
+  }
+  if (trimmed.startsWith("/providers/")) {
+    return { href: `${routePrefix}${trimmed}`, external: false };
+  }
+  if (trimmed.startsWith("/")) {
+    return { href: `https://gestaltd.ai${trimmed}`, external: true };
+  }
+
+  const [withoutHash, hash = ""] = trimmed.split("#", 2);
+  const targetDoc = docForRelativeHref(withoutHash, docs, currentDoc);
+  if (targetDoc) {
+    return {
+      href: `${providerDocHref(provider, targetDoc, routePrefix)}${hash ? `#${hash}` : ""}`,
+      external: false,
+    };
+  }
+  return null;
+}
+
+function docForRelativeHref(
+  href: string,
+  docs: ProviderDoc[],
+  currentDoc: ProviderDoc,
+) {
+  const cleanHref = href.split("?", 1)[0].replace(/^\.\//, "");
+  if (!cleanHref) {
+    return currentDoc;
+  }
+  if (!cleanHref.endsWith(".md") && !cleanHref.endsWith(".mdx")) {
+    return null;
+  }
+  const fileName = cleanHref.split("/").pop() ?? "";
+  const stem = fileName.replace(/\.mdx?$/, "");
+  const docPath = stem === "index" ? "/" : `/${stem}/`;
+  return docs.find((doc) => normalizeDocPath(doc.path) === docPath) ?? null;
 }
 
 function kindLabel(kind: string) {

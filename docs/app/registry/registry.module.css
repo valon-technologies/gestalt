@@ -538,6 +538,219 @@
   color: rgba(var(--valon-ink), 1);
 }
 
+.docsPanel {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--valon-line);
+  padding-top: 8px;
+}
+
+.docsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.docsHeader h2 {
+  margin: 0;
+  color: rgba(var(--valon-ink), 1);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.docsHeader a {
+  color: var(--valon-muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.docsHeader a:hover {
+  color: rgba(var(--valon-ink), 1);
+}
+
+.docsNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.docsNav a {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--valon-line);
+  border-radius: 8px;
+  background: rgba(248, 246, 243, 0.9);
+  color: rgba(var(--valon-ink), 0.78);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.docsNav a:hover {
+  border-color: var(--valon-line-strong);
+  color: rgba(var(--valon-ink), 1);
+}
+
+.docsNav .activeDocLink {
+  border-color: rgba(var(--valon-ink), 1);
+  background: rgba(var(--valon-ink), 1);
+  color: #ffffff;
+}
+
+.docsState {
+  border: 1px solid var(--valon-line);
+  border-radius: 12px;
+  background: rgba(248, 246, 243, 0.9);
+  color: var(--valon-secondary);
+  padding: 18px;
+}
+
+.docsState h3 {
+  margin: 0 0 8px;
+  color: rgba(var(--valon-ink), 1);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.docsState p {
+  margin: 0;
+}
+
+.markdownBody {
+  color: var(--valon-secondary);
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+.markdownBody h2,
+.markdownBody h3,
+.markdownBody h4 {
+  margin: 1.6em 0 0.55em;
+  color: rgba(var(--valon-ink), 1);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.markdownBody h2:first-child,
+.markdownBody h3:first-child,
+.markdownBody h4:first-child {
+  margin-top: 0;
+}
+
+.markdownBody h2 {
+  font-family: "Season Serif", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.markdownBody h3 {
+  font-size: 1.15rem;
+}
+
+.markdownBody h4 {
+  font-size: 1rem;
+}
+
+.markdownBody p,
+.markdownBody ul,
+.markdownBody ol,
+.markdownBody blockquote,
+.markdownBody pre,
+.markdownBody :global(.registry-markdown-table) {
+  margin: 0 0 1rem;
+}
+
+.markdownBody ul,
+.markdownBody ol {
+  padding-left: 1.25rem;
+}
+
+.markdownBody li + li {
+  margin-top: 0.35rem;
+}
+
+.markdownBody a {
+  color: rgba(var(--valon-ink), 1);
+  font-weight: 700;
+  text-decoration-color: rgba(var(--valon-ink), 0.28);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.markdownBody a:hover {
+  text-decoration-color: rgba(var(--valon-ink), 0.75);
+}
+
+.markdownBody code {
+  border: 1px solid var(--valon-line);
+  border-radius: 5px;
+  background: rgba(248, 246, 243, 0.9);
+  color: rgba(var(--valon-ink), 0.9);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.12rem 0.28rem;
+}
+
+.markdownBody pre {
+  overflow-x: auto;
+  border: 1px solid rgba(var(--valon-ink), 1);
+  border-radius: 12px;
+  background: rgba(var(--valon-ink), 1);
+  padding: 16px;
+}
+
+.markdownBody pre code {
+  display: block;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  padding: 0;
+  white-space: pre;
+}
+
+.markdownBody blockquote {
+  border-left: 3px solid var(--valon-gold);
+  color: rgba(var(--valon-ink), 0.72);
+  padding-left: 1rem;
+}
+
+.markdownBody :global(.registry-markdown-table) {
+  overflow-x: auto;
+}
+
+.markdownBody table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--valon-line);
+  background: rgba(248, 246, 243, 0.72);
+}
+
+.markdownBody th,
+.markdownBody td {
+  border-bottom: 1px solid var(--valon-line);
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdownBody th {
+  color: rgba(var(--valon-ink), 0.62);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.markdownBody td {
+  color: var(--valon-secondary);
+}
+
 .statePanel {
   margin: 24px;
   border: 1px solid var(--valon-line);

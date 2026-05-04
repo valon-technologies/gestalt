@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "test:registry": "node scripts/check-registry-static.mjs"
+    "test:registry": "node scripts/check-registry-static.mjs",
+    "test:registry-docs": "node scripts/check-registry-docs-render.mjs"
   },
   "dependencies": {
     "@types/react-dom": "^19.2.3",
