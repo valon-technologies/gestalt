@@ -894,6 +894,129 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	}
 }
 
+func TestManagerCreateTurnDefaultsToRelevantCatalogToolsFromPrompt(t *testing.T) {
+	t.Parallel()
+
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			DN:       "Linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "linear",
+				DisplayName: "Linear",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "viewer",
+						Title:       "Viewer",
+						Description: "Get the current Linear user",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "issues",
+						Title:       "List issues",
+						Description: "List Linear issues assigned to a user",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "searchIssues",
+						Title:       "Search issues",
+						Description: "Search Linear issues",
+						ReadOnly:    true,
+					},
+				},
+			},
+		},
+	}
+	github := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			DN:       "GitHub",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "github",
+				DisplayName: "GitHub",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "issues/list-for-authenticated-user",
+					Title:       "List issues",
+					Description: "List GitHub issues assigned to the authenticated user",
+					ReadOnly:    true,
+				}},
+			},
+		},
+	}
+	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestRunGrants(t)
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear, github),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		RunGrants: grants,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "show me my linear tickets",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
+	}
+	if got := req.ToolRefs; len(got) == 0 || got[0].Plugin == agentToolSearchAllPlugin {
+		t.Fatalf("CreateTurn tool refs = %#v, want bounded relevant catalog refs", got)
+	}
+	for _, ref := range req.ToolRefs {
+		if ref.Plugin != "linear" {
+			t.Fatalf("CreateTurn tool refs = %#v, want only linear refs", req.ToolRefs)
+		}
+		if strings.TrimSpace(ref.Operation) == "" {
+			t.Fatalf("CreateTurn tool refs = %#v, want operation-specific refs", req.ToolRefs)
+		}
+	}
+	if !toolRefsContainOperation(req.ToolRefs, "issues") && !toolRefsContainOperation(req.ToolRefs, "searchIssues") {
+		t.Fatalf("CreateTurn tool refs = %#v, want a Linear issue operation", req.ToolRefs)
+	}
+	grant, err := grants.Resolve(req.RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if !reflect.DeepEqual(grant.ToolRefs, req.ToolRefs) {
+		t.Fatalf("grant tool refs = %#v, want %#v", grant.ToolRefs, req.ToolRefs)
+	}
+}
+
+func toolRefsContainOperation(refs []coreagent.ToolRef, operation string) bool {
+	for _, ref := range refs {
+		if ref.Operation == operation {
+			return true
+		}
+	}
+	return false
+}
+
 func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T) {
 	t.Parallel()
 

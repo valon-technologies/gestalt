@@ -320,6 +320,12 @@ func agentToolSearchTokenVariants(token string) []string {
 	case strings.HasSuffix(token, "s") && len(token) > 3 && !strings.HasSuffix(token, "ss"):
 		variants = append(variants, strings.TrimSuffix(token, "s"))
 	}
+	switch token {
+	case "issue", "issues":
+		variants = append(variants, "ticket", "tickets")
+	case "ticket", "tickets":
+		variants = append(variants, "issue", "issues")
+	}
 	return variants
 }
 

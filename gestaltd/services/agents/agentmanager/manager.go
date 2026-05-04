@@ -49,6 +49,7 @@ const (
 	agentToolListDefaultPageSize = 100
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
+	agentDefaultCatalogToolRefs  = 80
 	maxAgentRouteCacheEntries    = 20_000
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
@@ -766,6 +767,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !req.ToolRefsSet && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
 		toolSource = coreagent.ToolSourceModeMCPCatalog
 		toolRefs = []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}
+		if refinedRefs, err := m.defaultAgentTurnCatalogToolRefs(ctx, p, req.Messages); err == nil && len(refinedRefs) > 0 {
+			toolRefs = refinedRefs
+		}
 	}
 	var tools []coreagent.Tool
 	if toolSource == coreagent.ToolSourceModeMCPCatalog {
@@ -826,6 +830,87 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	return normalized, nil
+}
+
+func (m *Manager) defaultAgentTurnCatalogToolRefs(ctx context.Context, p *principal.Principal, messages []coreagent.Message) ([]coreagent.ToolRef, error) {
+	query := agentTurnToolSearchQuery(messages)
+	if query == "" {
+		return nil, nil
+	}
+	if m == nil || m.providers == nil {
+		return nil, nil
+	}
+	candidates, unavailable, err := m.searchToolCandidates(ctx, p, []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}, query, true)
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]coreagent.ToolRef, 0, min(agentDefaultCatalogToolRefs, len(candidates)+len(unavailable)))
+	seen := map[agentToolTargetKey]struct{}{}
+	appendRef := func(ref coreagent.ToolRef) {
+		if len(refs) >= agentDefaultCatalogToolRefs {
+			return
+		}
+		ref.System = strings.TrimSpace(ref.System)
+		ref.Plugin = strings.TrimSpace(ref.Plugin)
+		ref.Operation = strings.TrimSpace(ref.Operation)
+		ref.Connection = core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection))
+		ref.Instance = strings.TrimSpace(ref.Instance)
+		if ref.System == "" && ref.Plugin == "" {
+			return
+		}
+		key := agentToolTargetKeyFromRef(ref)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		refs = append(refs, ref)
+	}
+	for i := range candidates {
+		ref := candidates[i].ref
+		ref.Operation = strings.TrimSpace(candidates[i].operation.ID)
+		if strings.TrimSpace(ref.Title) == "" {
+			ref.Title = strings.TrimSpace(candidates[i].operation.Title)
+		}
+		if strings.TrimSpace(ref.Description) == "" {
+			ref.Description = strings.TrimSpace(candidates[i].operation.Description)
+		}
+		appendRef(ref)
+	}
+	for i := range unavailable {
+		appendRef(unavailable[i].ref)
+	}
+	return refs, nil
+}
+
+func agentTurnToolSearchQuery(messages []coreagent.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		role := strings.TrimSpace(strings.ToLower(msg.Role))
+		if role != "" && role != "user" {
+			continue
+		}
+		if text := agentMessageToolSearchText(msg); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func agentMessageToolSearchText(msg coreagent.Message) string {
+	parts := make([]string, 0, 1+len(msg.Parts))
+	if text := strings.TrimSpace(msg.Text); text != "" {
+		parts = append(parts, text)
+	}
+	for i := range msg.Parts {
+		part := msg.Parts[i]
+		if part.Type != "" && part.Type != coreagent.MessagePartTypeText {
+			continue
+		}
+		if text := strings.TrimSpace(part.Text); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (turn *coreagent.Turn, err error) {
