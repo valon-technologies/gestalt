@@ -113,6 +113,13 @@ func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource 
 	if len(writes) == 0 && len(deletes) == 0 {
 		return existing, func(context.Context) {}, nil
 	}
+	if len(writes) > 0 {
+		if ensuredModelID, err := s.ensureManagedDynamicRole(ctx, resource, role); err != nil {
+			return nil, nil, err
+		} else if strings.TrimSpace(ensuredModelID) != "" {
+			modelID = strings.TrimSpace(ensuredModelID)
+		}
+	}
 	if err := s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
 		Writes:  writes,
 		Deletes: deletes,
@@ -129,6 +136,18 @@ func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource 
 			ModelId: modelID,
 		})
 	}, nil
+}
+
+func (s *Server) ensureManagedDynamicRole(ctx context.Context, resource *core.ResourceRef, role string) (string, error) {
+	switch strings.TrimSpace(resource.GetType()) {
+	case authorization.ProviderResourceTypePluginDynamic, authorization.ProviderResourceTypeAdminDynamic:
+	default:
+		return s.managedAuthorizationModelID(ctx)
+	}
+	if ensurer, ok := s.authorizer.(authorization.ManagedAuthorizationDynamicRoleEnsurer); ok {
+		return ensurer.EnsureManagedDynamicRole(ctx, resource, role)
+	}
+	return s.managedAuthorizationModelID(ctx)
 }
 
 func (s *Server) deleteProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, subjectID string) ([]*core.Relationship, func(context.Context), error) {

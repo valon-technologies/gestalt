@@ -1904,13 +1904,16 @@ type memoryAuthorizationProvider struct {
 	mu            sync.Mutex
 	activeModelID string
 	models        []*core.AuthorizationModelRef
+	modelDefs     map[string]*core.AuthorizationModel
 	relsByModel   map[string]map[string]*core.Relationship
 	writeErr      error
+	validateModel bool
 }
 
 func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
 	return &memoryAuthorizationProvider{
 		name:        name,
+		modelDefs:   map[string]*core.AuthorizationModel{},
 		relsByModel: map[string]map[string]*core.Relationship{},
 	}
 }
@@ -2035,6 +2038,13 @@ func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req 
 		rels = map[string]*core.Relationship{}
 		p.relsByModel[modelID] = rels
 	}
+	if p.validateModel {
+		for _, rel := range req.GetWrites() {
+			if !memoryAuthorizationModelAllowsRelationship(p.modelDefs[modelID], rel) {
+				return fmt.Errorf("model %q does not allow relationship %s", modelID, memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource()))
+			}
+		}
+	}
 	for _, key := range req.GetDeletes() {
 		delete(rels, memoryAuthorizationRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
 	}
@@ -2082,6 +2092,7 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 	for _, existing := range p.models {
 		if existing.GetId() == modelID {
 			p.activeModelID = modelID
+			p.modelDefs[modelID] = gproto.Clone(definition).(*core.AuthorizationModel)
 			if p.relsByModel[modelID] == nil {
 				p.relsByModel[modelID] = map[string]*core.Relationship{}
 			}
@@ -2093,11 +2104,31 @@ func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.Wr
 		Version: fmt.Sprintf("%d", modelVersion),
 	}
 	p.models = append(p.models, model)
+	p.modelDefs[model.GetId()] = gproto.Clone(definition).(*core.AuthorizationModel)
 	p.activeModelID = model.GetId()
 	if p.relsByModel[model.GetId()] == nil {
 		p.relsByModel[model.GetId()] = map[string]*core.Relationship{}
 	}
 	return model, nil
+}
+
+func memoryAuthorizationModelAllowsRelationship(model *core.AuthorizationModel, rel *core.Relationship) bool {
+	if model == nil || rel == nil || rel.GetResource() == nil {
+		return false
+	}
+	resourceType := rel.GetResource().GetType()
+	relation := rel.GetRelation()
+	for _, rt := range model.GetResourceTypes() {
+		if rt.GetName() != resourceType {
+			continue
+		}
+		for _, allowed := range rt.GetRelations() {
+			if allowed.GetName() == relation {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func memoryAuthorizationRelationshipMatches(rel *core.Relationship, req *core.ReadRelationshipsRequest) bool {
@@ -5529,6 +5560,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	svc := testutil.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
+	provider.validateModel = true
 	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
@@ -5967,6 +5999,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
+	provider.validateModel = true
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
