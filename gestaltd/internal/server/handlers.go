@@ -52,6 +52,8 @@ var (
 type instanceInfo struct {
 	Name       string `json:"name"`
 	Connection string `json:"connection,omitempty"`
+
+	credentialInvalid bool
 }
 
 type credentialFieldInfo struct {
@@ -249,19 +251,29 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 	if err != nil {
 		return nil, fmt.Errorf("listing external credentials: %w", err)
 	}
+	now := time.Now()
 	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
 		if tok == nil {
 			continue
 		}
+		credentialInvalid := credentialNeedsReconnect(tok, now)
 		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
 			m[binding.Plugin] = append(m[binding.Plugin], instanceInfo{
-				Name:       tok.Instance,
-				Connection: userFacingConnectionName(binding.Connection),
+				Name:              tok.Instance,
+				Connection:        userFacingConnectionName(binding.Connection),
+				credentialInvalid: credentialInvalid,
 			})
 		}
 	}
 	return m, nil
+}
+
+func credentialNeedsReconnect(credential *core.ExternalCredential, now time.Time) bool {
+	if credential == nil || credential.ExpiresAt == nil || credential.RefreshErrorCount <= 0 {
+		return false
+	}
+	return !credential.ExpiresAt.After(now)
 }
 
 type pluginConnectionBinding struct {
