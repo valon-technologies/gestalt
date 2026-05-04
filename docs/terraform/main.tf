@@ -93,6 +93,10 @@ resource "google_compute_managed_ssl_certificate" "docs" {
 
   lifecycle {
     create_before_destroy = true
+    # A newly-created Google-managed certificate can be provisioned in Terraform
+    # before it is actually served at the edge. Refuse certificate replacement
+    # plans so domain changes cannot detach the active certificate first.
+    prevent_destroy = true
   }
 }
 
