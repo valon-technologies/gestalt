@@ -9,12 +9,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -786,6 +788,375 @@ plugins:
 	}
 	if _, err := os.Stat(providedArtifactsDir); !os.IsNotExist(err) {
 		t.Fatalf("validate should not mutate provided artifacts dir, got err=%v", err)
+	}
+}
+
+func TestE2EValidateStaticAcceptsMissingRuntimeEnvPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writeValidValidateConfig(t, dir)
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	data = []byte(strings.Replace(string(data), "encryptionKey: valid-config-e2e-key", "encryptionKey: ${GESTALT_E2E_VALIDATE_MISSING_KEY}", 1))
+	if err := os.WriteFile(cfgPath, data, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected static validate to succeed with missing runtime env placeholder: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected validate success, got: %s", out)
+	}
+}
+
+func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := writeValidValidateConfig(t, dir)
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock failed: %v\n%s", err, out)
+	}
+
+	var archiveHits atomic.Int64
+	archiveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		archiveHits.Add(1)
+		http.Error(w, "static validate must not fetch this archive", http.StatusTeapot)
+	}))
+	t.Cleanup(archiveServer.Close)
+
+	lockData, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("read lockfile: %v", err)
+	}
+	var lock map[string]any
+	if err := json.Unmarshal(lockData, &lock); err != nil {
+		t.Fatalf("parse lockfile: %v", err)
+	}
+	providers := lock["providers"].(map[string]any)
+	plugins := providers["plugin"].(map[string]any)
+	example := plugins["example"].(map[string]any)
+	example["archives"] = map[string]any{
+		"linux/amd64": map[string]any{
+			"url":    archiveServer.URL + "/provider.tar.gz",
+			"sha256": strings.Repeat("a", 64),
+		},
+	}
+	updated, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal lockfile: %v", err)
+	}
+	updated = append(updated, '\n')
+	if err := os.WriteFile(lockPath, updated, 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	out, err = exec.Command(gestaltdBin, "validate", "--platform", "linux/amd64", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected platform validate to use locked static metadata: %v\n%s", err, out)
+	}
+	if got := archiveHits.Load(); got != 0 {
+		t.Fatalf("archive fetches = %d, want 0", got)
+	}
+}
+
+func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "caller")))
+	targetManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "target")))
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeConfig := func(targetOperation string) {
+		t.Helper()
+		cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  caller:
+    source:
+      path: %s
+    invokes:
+      - plugin: target
+        operation: echo
+  target:
+    source:
+      path: %s
+    allowedOperations:
+      %s: {}
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetManifest, targetOperation)
+		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+	}
+	writeConfig("echo")
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock failed: %v\n%s", err, out)
+	}
+
+	writeConfig("greet")
+	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected stale static catalog metadata to fail validation:\n%s", out)
+	}
+	if !strings.Contains(string(out), `lock entry for plugin \"target\" is stale`) {
+		t.Fatalf("expected stale target lock error, got: %s", out)
+	}
+}
+
+func TestE2EValidateStaticPlatformRejectsExplicitMissingLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  remote:
+    source: https://example.com/provider-release.yaml
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	lockPath := filepath.Join(dir, "missing.lock.json")
+	out, err := exec.Command(gestaltdBin, "validate", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected explicit missing lockfile to fail:\n%s", out)
+	}
+	if !strings.Contains(string(out), "lockfile is missing or unreadable") {
+		t.Fatalf("expected missing lockfile error, got: %s", out)
+	}
+}
+
+func TestE2EValidateStaticLegacyLockAllowsUnavailablePolicyBoundUIMetadata(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+
+	var archiveHits atomic.Int64
+	archiveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		archiveHits.Add(1)
+		http.Error(w, "private release asset", http.StatusUnauthorized)
+	}))
+	t.Cleanup(archiveServer.Close)
+
+	uiSource := archiveServer.URL + "/private-ui/provider-release.yaml"
+	uiPackage := "github.com/test/private-ui"
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+  ui:
+    private:
+      source: %s
+      path: /private
+      authorizationPolicy: sample_policy
+authorization:
+  policies:
+    sample_policy:
+      default: deny
+      members:
+        - subjectID: user:viewer
+          role: viewer
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, uiSource)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	fingerprint, err := operator.NamedUIProviderFingerprint("private", &config.ProviderEntry{
+		Source: config.NewMetadataSource(uiSource),
+	}, dir)
+	if err != nil {
+		t.Fatalf("fingerprint ui provider: %v", err)
+	}
+	lock := map[string]any{
+		"schema":        "gestaltd-provider-lock",
+		"schemaVersion": 5,
+		"revision":      0,
+		"providers": map[string]any{
+			"ui": map[string]any{
+				"private": map[string]any{
+					"inputDigest": fingerprint,
+					"package":     uiPackage,
+					"kind":        providermanifestv1.KindUI,
+					"runtime":     "ui",
+					"source":      uiSource,
+					"version":     "0.0.1-alpha.1",
+					"archives": map[string]any{
+						"generic": map[string]any{
+							"url":    archiveServer.URL + "/private-ui.tar.gz",
+							"sha256": strings.Repeat("b", 64),
+						},
+					},
+				},
+			},
+		},
+	}
+	lockData, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal lockfile: %v", err)
+	}
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	if err := os.WriteFile(lockPath, append(lockData, '\n'), 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected static validate to tolerate unavailable legacy ui metadata: %v\n%s", err, out)
+	}
+	if got := archiveHits.Load(); got == 0 {
+		t.Fatalf("expected static validate to attempt legacy archive download")
+	}
+}
+
+func TestE2EValidateStaticLegacyLockAllowsUnavailableInvokesTargetCatalog(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+
+	var archiveHits atomic.Int64
+	archiveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		archiveHits.Add(1)
+		http.Error(w, "private release asset", http.StatusUnauthorized)
+	}))
+	t.Cleanup(archiveServer.Close)
+
+	targetSource := archiveServer.URL + "/target/provider-release.yaml"
+	targetPackage := "github.com/test/private-target"
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  caller:
+    source:
+      path: %s
+    invokes:
+      - plugin: target
+        operation: privateOperation
+  target:
+    source: %s
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetSource)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	fingerprint, err := operator.ProviderFingerprint("target", &config.ProviderEntry{
+		Source: config.NewMetadataSource(targetSource),
+	}, dir)
+	if err != nil {
+		t.Fatalf("fingerprint target provider: %v", err)
+	}
+	lock := map[string]any{
+		"schema":        "gestaltd-provider-lock",
+		"schemaVersion": 5,
+		"revision":      0,
+		"providers": map[string]any{
+			"plugin": map[string]any{
+				"target": map[string]any{
+					"inputDigest": fingerprint,
+					"package":     targetPackage,
+					"kind":        providermanifestv1.KindPlugin,
+					"runtime":     "executable",
+					"source":      targetSource,
+					"version":     "0.0.1-alpha.1",
+					"archives": map[string]any{
+						runtime.GOOS + "/" + runtime.GOARCH: map[string]any{
+							"url":    archiveServer.URL + "/target.tar.gz",
+							"sha256": strings.Repeat("c", 64),
+						},
+					},
+				},
+			},
+		},
+	}
+	lockData, err := json.MarshalIndent(lock, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal lockfile: %v", err)
+	}
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	if err := os.WriteFile(lockPath, append(lockData, '\n'), 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected static validate to tolerate unavailable legacy target catalog: %v\n%s", err, out)
+	}
+	if got := archiveHits.Load(); got == 0 {
+		t.Fatalf("expected static validate to attempt legacy archive download")
 	}
 }
 

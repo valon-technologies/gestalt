@@ -3145,6 +3145,51 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	}
 }
 
+func TestConfigHasProviderLoadingIncludesIndexedDBAndS3(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  *config.Config
+	}{
+		{
+			name: "indexeddb only",
+			cfg: &config.Config{
+				Providers: config.ProvidersConfig{
+					IndexedDB: map[string]*config.ProviderEntry{
+						"main": {
+							Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-indexeddb/v0.0.1-alpha.1/provider-release.yaml"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "s3 only",
+			cfg: &config.Config{
+				Providers: config.ProvidersConfig{
+					S3: map[string]*config.ProviderEntry{
+						"assets": {
+							Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-s3/v0.0.1-alpha.1/provider-release.yaml"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if !configHasProviderLoading(tt.cfg) {
+				t.Fatal("configHasProviderLoading returned false")
+			}
+		})
+	}
+}
+
 func mustFingerprint(t *testing.T, name string, entry *config.ProviderEntry, configDir string) string {
 	t.Helper()
 	fingerprint, err := ProviderFingerprint(name, entry, configDir)

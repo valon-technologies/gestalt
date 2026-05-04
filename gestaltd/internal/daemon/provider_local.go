@@ -91,7 +91,7 @@ func runProviderValidate(args []string) error {
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
 
-	result, err := validateConfigWithStatePaths(session.ConfigPaths, session.State)
+	result, err := validateConfigWithStatePaths(session.ConfigPaths, session.State, validateConfigOptions{Runtime: true})
 	if err != nil {
 		return err
 	}
@@ -515,15 +515,19 @@ type validatedConfigResult struct {
 	Warnings []string
 }
 
-func validateConfigWithStatePaths(configFlags []string, state operator.StatePaths) (*validatedConfigResult, error) {
-	paths, cfg, err := loadConfigForValidationWithStatePaths(configFlags, state)
+func validateConfigWithStatePaths(configFlags []string, state operator.StatePaths, opts validateConfigOptions) (*validatedConfigResult, error) {
+	paths, cfg, err := loadConfigForValidationWithStatePaths(configFlags, state, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories())
-	if err != nil {
-		return nil, err
+	var warnings []string
+	if opts.Runtime {
+		var err error
+		warnings, err = bootstrap.Validate(context.Background(), cfg, buildFactories())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &validatedConfigResult{

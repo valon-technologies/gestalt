@@ -18,7 +18,15 @@ func allowsGenericArchive(kind string, manifest *providermanifestv1.Manifest) bo
 }
 
 func validateLockedArchivePolicy(subject, kind string, manifest *providermanifestv1.Manifest, entry LockEntry, platform, resolvedKey string) error {
-	if allowsGenericArchive(kind, manifest) {
+	return validateLockedArchivePolicyWithGenericAllowance(subject, entry, platform, resolvedKey, allowsGenericArchive(kind, manifest))
+}
+
+func validateStaticLockedArchivePolicy(subject, kind string, entry LockEntry, platform, resolvedKey string) error {
+	return validateLockedArchivePolicyWithGenericAllowance(subject, entry, platform, resolvedKey, allowsStaticGenericArchive(kind, entry))
+}
+
+func validateLockedArchivePolicyWithGenericAllowance(subject string, entry LockEntry, platform, resolvedKey string, allowsGeneric bool) error {
+	if allowsGeneric {
 		return nil
 	}
 	if resolvedKey == platformKeyGeneric {
@@ -30,6 +38,17 @@ func validateLockedArchivePolicy(subject, kind string, manifest *providermanifes
 		return unsafeGenericArchiveError(subject, platform)
 	}
 	return nil
+}
+
+func allowsStaticGenericArchive(kind string, entry LockEntry) bool {
+	switch kind {
+	case providermanifestv1.KindUI:
+		return true
+	case providermanifestv1.KindPlugin:
+		return lockEntryRuntime(entry, kind) == providerReleaseRuntimeDeclarative
+	default:
+		return false
+	}
 }
 
 func unsafeGenericArchiveError(subject, platform string) error {

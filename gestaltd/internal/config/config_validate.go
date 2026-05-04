@@ -638,6 +638,9 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if entry.AuthorizationPolicy == "" {
 			continue
 		}
+		if entry.StaticManifestUnavailable {
+			continue
+		}
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
 			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved ui manifest", name)
 		}

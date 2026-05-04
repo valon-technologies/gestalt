@@ -38,13 +38,17 @@ type ValidationConfig struct {
 }
 
 type ValidationPlugin struct {
-	Manifest            *providermanifestv1.Manifest
-	ManifestPath        string
-	AllowedOperations   map[string]*OperationOverride
-	Invokes             []InvocationDependency
-	SurfaceURLOverrides map[SpecSurface]string
-	ReadStaticCatalog   StaticCatalogReader
-	LoadAPICatalog      APICatalogLoader
+	Manifest                    *providermanifestv1.Manifest
+	ManifestPath                string
+	AllowedOperations           map[string]*OperationOverride
+	Invokes                     []InvocationDependency
+	SurfaceURLOverrides         map[SpecSurface]string
+	EffectiveCatalog            *catalog.Catalog
+	EffectiveCatalogAvailable   bool
+	EffectiveCatalogSessionOnly bool
+	StaticMetadataUnavailable   bool
+	ReadStaticCatalog           StaticCatalogReader
+	LoadAPICatalog              APICatalogLoader
 }
 
 func (p *ValidationPlugin) manifestSpec() *providermanifestv1.Spec {
