@@ -20,7 +20,7 @@ provider "google" {
 }
 
 locals {
-  docs_cert_name = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}"
+  docs_cert_name = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
 }
 
 # ---------- Cloud Run ----------
@@ -88,7 +88,7 @@ resource "google_compute_managed_ssl_certificate" "docs" {
   name = local.docs_cert_name
 
   managed {
-    domains = [var.domain]
+    domains = [var.domain, var.registry_domain]
   }
 
   lifecycle {
@@ -152,6 +152,15 @@ resource "google_dns_record_set" "docs" {
   provider     = google.dns
   managed_zone = google_dns_managed_zone.docs.name
   name         = "${var.domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.docs.address]
+}
+
+resource "google_dns_record_set" "registry" {
+  provider     = google.dns
+  managed_zone = google_dns_managed_zone.docs.name
+  name         = "${var.registry_domain}."
   type         = "A"
   ttl          = 300
   rrdatas      = [google_compute_global_address.docs.address]
