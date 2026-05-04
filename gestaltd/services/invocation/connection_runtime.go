@@ -21,15 +21,16 @@ type ConnectionRuntimeCredentialSource interface {
 // ConnectionRuntimeInfo describes deployment-owned connection material that is
 // resolved after an operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
-	ConnectionID string
-	Mode         core.ConnectionMode
-	Exposure     core.ConnectionExposure
-	AuthType     providermanifestv1.AuthType
-	AuthConfig   core.ExternalCredentialAuthConfig
-	Token        string
-	TokenSource  ConnectionRuntimeCredentialSource
-	AuthMapping  *providermanifestv1.AuthMapping
-	Params       map[string]string
+	ConnectionID      string
+	Mode              core.ConnectionMode
+	Exposure          core.ConnectionExposure
+	AuthType          providermanifestv1.AuthType
+	AuthConfig        core.ExternalCredentialAuthConfig
+	Token             string
+	TokenSource       ConnectionRuntimeCredentialSource
+	AuthMapping       *providermanifestv1.AuthMapping
+	Params            map[string]string
+	CredentialRefresh *providermanifestv1.CredentialRefreshConfig
 }
 
 // ConnectionRuntimeResolver resolves runtime metadata for a provider

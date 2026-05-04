@@ -1390,10 +1390,10 @@ func buildExternalCredentialsProvider(ctx context.Context, cfg *config.Config, f
 		name = config.DefaultProviderInstance
 		entry = defaultExternalCredentialsProviderEntry()
 	}
-	return buildNamedExternalCredentialsProvider(ctx, name, entry, factories, deps)
+	return buildNamedExternalCredentialsProvider(ctx, cfg, name, entry, factories, deps)
 }
 
-func buildNamedExternalCredentialsProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
+func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Config, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "external-credentials"
@@ -1404,7 +1404,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 	if factories.ExternalCredentials == nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider factory is not registered")
 	}
-	node, err := buildExternalCredentialsRuntimeConfigNode(logicalName, entry, deps.EncryptionKey)
+	node, err := buildExternalCredentialsRuntimeConfigNode(logicalName, entry, deps.EncryptionKey, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1435,24 +1435,34 @@ func defaultExternalCredentialsProviderEntry() *config.ProviderEntry {
 	}
 }
 
-func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.ProviderEntry, encryptionKey []byte) (yaml.Node, error) {
+func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.ProviderEntry, encryptionKey []byte, appCfg *config.Config) (yaml.Node, error) {
 	if entry == nil {
 		return yaml.Node{}, fmt.Errorf("external credentials provider %q is required", name)
 	}
-	cfg, err := config.NodeToMap(entry.Config)
+	providerCfg, err := config.NodeToMap(entry.Config)
 	if err != nil {
 		return yaml.Node{}, fmt.Errorf("decode config: %w", err)
 	}
-	if cfg == nil {
-		cfg = map[string]any{}
+	if providerCfg == nil {
+		providerCfg = map[string]any{}
 	}
-	if _, ok := cfg["encryptionKey"]; !ok {
+	if _, ok := providerCfg["encryptionKey"]; !ok {
 		if len(encryptionKey) == 0 {
 			return yaml.Node{}, fmt.Errorf("config.encryptionKey is required")
 		}
-		cfg["encryptionKey"] = hex.EncodeToString(encryptionKey)
+		providerCfg["encryptionKey"] = hex.EncodeToString(encryptionKey)
 	}
-	return mapToYAMLNode(cfg)
+	resolvedConnections, err := buildExternalCredentialsResolvedConnections(appCfg)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+	if len(resolvedConnections) > 0 {
+		if _, exists := providerCfg["resolvedConnections"]; exists {
+			return yaml.Node{}, fmt.Errorf("config.resolvedConnections is managed by gestaltd")
+		}
+		providerCfg["resolvedConnections"] = resolvedConnections
+	}
+	return mapToYAMLNode(providerCfg)
 }
 
 func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
