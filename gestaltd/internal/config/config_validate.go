@@ -282,6 +282,9 @@ func normalizeConnectionBindings(cfg *Config) error {
 				resolved.DisplayName = binding.DisplayName
 			}
 			resolved.Exposure = binding.Exposure
+			if binding.CredentialRefresh != nil {
+				resolved.CredentialRefresh = cloneCredentialRefreshDef(binding.CredentialRefresh)
+			}
 			entry.Connections[localName] = &resolved
 		}
 		return nil
@@ -350,7 +353,16 @@ func cloneConnectionDef(src ConnectionDef) ConnectionDef {
 	dst := src
 	dst.Auth = cloneConnectionAuthDef(src.Auth)
 	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
+	dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
 	return dst
+}
+
+func cloneCredentialRefreshDef(src *CredentialRefreshDef) *CredentialRefreshDef {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
 }
 
 func cloneConnectionAuthDef(src ConnectionAuthDef) ConnectionAuthDef {
@@ -580,6 +592,9 @@ func validateTopLevelConnections(cfg *Config) error {
 		case core.ConnectionModeNone, core.ConnectionModePlatform, core.ConnectionModeUser:
 		default:
 			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
+		}
+		if err := validateCredentialRefresh(fmt.Sprintf("connections.%s", id), *conn); err != nil {
+			return err
 		}
 		if len(conn.Auth.TokenExchangeDrivers) > 0 {
 			if mode != core.ConnectionModePlatform {
@@ -1908,11 +1923,31 @@ func validatePluginIntegrationConnections(name string, entry *ProviderEntry) err
 	if err := validateConnectionAuthMappings(name, plan.PluginConnection().Auth, "plugin"); err != nil {
 		return err
 	}
+	if err := validateCredentialRefresh(fmt.Sprintf("integration %q plugin connection", name), plan.PluginConnection()); err != nil {
+		return err
+	}
 	for _, connName := range plan.NamedConnectionNames() {
 		conn, _ := plan.NamedConnectionDef(connName)
 		if err := validateConnectionAuthMappings(name, conn.Auth, fmt.Sprintf("connection %q", connName)); err != nil {
 			return err
 		}
+		if err := validateCredentialRefresh(fmt.Sprintf("integration %q connection %q", name, connName), conn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCredentialRefresh(scope string, conn ConnectionDef) error {
+	refresh := conn.CredentialRefresh
+	if refresh == nil {
+		return nil
+	}
+	if _, err := ParseDuration(strings.TrimSpace(refresh.RefreshInterval)); err != nil {
+		return fmt.Errorf("config validation: %s credentialRefresh.refreshInterval: %w", scope, err)
+	}
+	if _, err := ParseDuration(strings.TrimSpace(refresh.RefreshBeforeExpiry)); err != nil {
+		return fmt.Errorf("config validation: %s credentialRefresh.refreshBeforeExpiry: %w", scope, err)
 	}
 	return nil
 }

@@ -398,6 +398,27 @@
         },
         "discovery": {
           "$ref": "#/$defs/providerDiscovery"
+        },
+        "credentialRefresh": {
+          "$ref": "#/$defs/credentialRefreshConfig"
+        }
+      }
+    },
+    "credentialRefreshConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refreshInterval",
+        "refreshBeforeExpiry"
+      ],
+      "properties": {
+        "refreshInterval": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refreshBeforeExpiry": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

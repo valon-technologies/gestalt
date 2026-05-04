@@ -1357,11 +1357,42 @@ is exactly one.
 Connection `mode` determines how credentials are managed: `none` requires no credentials, `platform` uses deployer-managed credential material, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
 
 Binding entries that use `ref` may set only binding metadata such as
-`displayName` and `exposure`; they cannot override `mode`, `auth`, or `params`.
+`displayName`, `exposure`, and `credentialRefresh`; they cannot override `mode`, `auth`, or `params`.
 Top-level connections cannot set `ref` or `exposure`. Inline connection bindings
 are available for simple single-use `none` or `platform` cases; user-owned
 connections that collect or exchange credentials must be declared at the top
 level and referenced by `ref`.
+
+#### Credential Refresh
+
+Connections can opt into proactive external credential maintenance with
+`credentialRefresh`. Omitting this block keeps the connection on the default
+on-demand refresh path.
+
+```yaml
+connections:
+  google-workspace:
+    mode: user
+    auth:
+      type: oauth2
+      tokenUrl: https://oauth2.googleapis.com/token
+      clientId: ${GOOGLE_CLIENT_ID}
+      clientSecret: ${GOOGLE_CLIENT_SECRET}
+    credentialRefresh:
+      refreshInterval: 15m
+      refreshBeforeExpiry: 30m
+```
+
+| Field | Description |
+| --- | --- |
+| `refreshInterval` | How often a supporting external credentials provider should scan stored credentials for this connection. Must be a positive duration. |
+| `refreshBeforeExpiry` | How far before expiry credentials should be refreshed. Must be a positive duration. |
+
+Gestalt treats this as connection metadata. It resolves manifest defaults,
+deployment overrides, and `ref` bindings, then passes the resolved connection
+metadata to the configured external credentials provider. The external
+credentials provider decides whether it supports proactive maintenance for the
+resolved auth shape and owns the refresh behavior.
 
 #### Authentication Shapes
 

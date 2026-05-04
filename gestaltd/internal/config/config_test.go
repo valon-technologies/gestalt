@@ -5104,6 +5104,77 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	}
 }
 
+func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"shared": {
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: ConnectionAuthDef{
+					Type:     providermanifestv1.AuthTypeOAuth2,
+					TokenURL: "https://oauth.example.test/token",
+				},
+				CredentialRefresh: &CredentialRefreshDef{
+					RefreshInterval:     "30m",
+					RefreshBeforeExpiry: "45m",
+				},
+			},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"sample": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Connections: map[string]*ConnectionDef{
+					"default": {
+						Ref: "shared",
+						CredentialRefresh: &CredentialRefreshDef{
+							RefreshInterval:     "15m",
+							RefreshBeforeExpiry: "30m",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+	canonical := cfg.Plugins["sample"].Connections["default"]
+	if canonical == nil || canonical.CredentialRefresh == nil {
+		t.Fatalf("resolved credentialRefresh missing: %+v", canonical)
+	}
+	if canonical.CredentialRefresh.RefreshInterval != "15m" || canonical.CredentialRefresh.RefreshBeforeExpiry != "30m" {
+		t.Fatalf("credentialRefresh = %+v, want binding override", canonical.CredentialRefresh)
+	}
+}
+
+func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"shared": {
+				Mode: providermanifestv1.ConnectionModeUser,
+				CredentialRefresh: &CredentialRefreshDef{
+					RefreshInterval:     "0s",
+					RefreshBeforeExpiry: "30m",
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want invalid duration")
+	}
+	if !strings.Contains(err.Error(), "credentialRefresh.refreshInterval") {
+		t.Fatalf("ValidateStructure() error = %v, want credentialRefresh.refreshInterval", err)
+	}
+}
+
 func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
 	t.Parallel()
 

@@ -107,9 +107,13 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		if err != nil {
 			return fmt.Errorf("%s %q: %w", kind, name, err)
 		}
+		providerConfig, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("%s %q config: %w", kind, name, err)
+		}
 		policy := egressDeps.ProviderPolicy(entry)
 		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
-			info, err := connectionRuntimeInfo(name, connName, conn, policy)
+			info, err := connectionRuntimeInfo(name, connName, conn, policy, providerConfig)
 			if err != nil {
 				return err
 			}
@@ -168,26 +172,28 @@ func ValidateConnectionRuntimeCredentials(ctx context.Context, provider core.Ext
 	return nil
 }
 
-func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef, policy egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
-	return staticConnectionRuntimeInfo(integration, connection, *conn, policy)
+func connectionRuntimeInfo(integration, connection string, conn *config.ConnectionDef, policy egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
+	return staticConnectionRuntimeInfo(integration, connection, *conn, policy, providerConfig)
 }
 
 // StaticConnectionRuntimeInfo validates and materializes deployment-owned
 // connection material using the same rules as invocation bootstrap.
 func StaticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef) (invocation.ConnectionRuntimeInfo, error) {
-	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow})
+	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow}, nil)
 }
 
-func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, _ egress.Policy) (invocation.ConnectionRuntimeInfo, error) {
+func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, _ egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
+	authConfig := applyConnectionRuntimeAuthOverlay(ExternalCredentialAuthConfig(conn.Auth), providerConfig)
 	info := invocation.ConnectionRuntimeInfo{
-		ConnectionID: conn.ConnectionID,
-		Mode:         mode,
-		Exposure:     config.ConnectionExposureForConnection(conn),
-		AuthType:     conn.Auth.Type,
-		AuthConfig:   ExternalCredentialAuthConfig(conn.Auth),
-		AuthMapping:  config.CloneAuthMapping(conn.Auth.AuthMapping),
-		Params:       connectionParamDefaults(conn.ConnectionParams),
+		ConnectionID:      conn.ConnectionID,
+		Mode:              mode,
+		Exposure:          config.ConnectionExposureForConnection(conn),
+		AuthType:          conn.Auth.Type,
+		AuthConfig:        authConfig,
+		AuthMapping:       config.CloneAuthMapping(conn.Auth.AuthMapping),
+		Params:            connectionParamDefaults(conn.ConnectionParams),
+		CredentialRefresh: cloneCredentialRefreshConfig(conn.CredentialRefresh),
 	}
 	if mode != core.ConnectionModePlatform {
 		return info, nil
@@ -219,22 +225,43 @@ func staticConnectionRuntimeInfo(integration, connection string, conn config.Con
 		info.Token = token
 		return info, nil
 	case providermanifestv1.AuthTypeOAuth2:
-		if strings.TrimSpace(conn.Auth.GrantType) != "client_credentials" {
+		if strings.TrimSpace(authConfig.GrantType) != "client_credentials" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials", integration, connection)
 		}
-		if strings.TrimSpace(conn.Auth.TokenURL) == "" {
+		if strings.TrimSpace(authConfig.TokenURL) == "" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.tokenUrl is required", integration, connection)
 		}
-		if strings.TrimSpace(conn.Auth.ClientID) == "" {
+		if strings.TrimSpace(authConfig.ClientID) == "" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientId is required", integration, connection)
 		}
-		if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
+		if strings.TrimSpace(authConfig.ClientSecret) == "" {
 			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientSecret is required", integration, connection)
 		}
 		return info, nil
 	default:
 		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials", integration, connection)
 	}
+}
+
+func applyConnectionRuntimeAuthOverlay(auth core.ExternalCredentialAuthConfig, providerConfig map[string]any) core.ExternalCredentialAuthConfig {
+	if auth.Type != string(providermanifestv1.AuthTypeOAuth2) || providerConfig == nil {
+		return auth
+	}
+	if id, _ := providerConfig["clientId"].(string); id != "" {
+		auth.ClientID = id
+	}
+	if sec, _ := providerConfig["clientSecret"].(string); sec != "" {
+		auth.ClientSecret = sec
+	}
+	return auth
+}
+
+func cloneCredentialRefreshConfig(src *providermanifestv1.CredentialRefreshConfig) *providermanifestv1.CredentialRefreshConfig {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
 }
 
 func ExternalCredentialAuthConfig(auth config.ConnectionAuthDef) core.ExternalCredentialAuthConfig {
