@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -274,6 +275,12 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	principalValue := agentRunGrantPrincipal(grant)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	if toolTarget.Unavailable != nil {
+		if err := validateUnavailableAgentToolTargetForGrant(grant, principalValue, toolTarget, req.ToolID); err != nil {
+			return nil, err
+		}
+		return executeUnavailableAgentTool(toolTarget)
 	}
 	if searcher == nil {
 		return nil, fmt.Errorf("%w: agent tool resolver is not configured", invocation.ErrInternal)
@@ -604,6 +611,115 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	return nil
 }
 
+func validateUnavailableAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
+	if err := validateAgentRunGrantForToolTarget(grant, target, rawToolID); err != nil {
+		return err
+	}
+	return validateUnavailableAgentToolTarget(principalValue, grant.ToolRefs, target, rawToolID)
+}
+
+func validateAgentRunGrantForToolTarget(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
+	source := normalizeAgentToolSource(grant.ToolSource)
+	if source != coreagent.ToolSourceModeMCPCatalog {
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, grant.ToolSource)
+	}
+	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+		return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
+	}
+	if len(grant.ToolRefs) == 0 || !agentToolMatchesRefs(target, grant.ToolRefs) {
+		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
+		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	return nil
+}
+
+func validateListedUnavailableAgentToolTarget(p *principal.Principal, refs []coreagent.ToolRef, target coreagent.ToolTarget, rawToolID string) error {
+	if len(refs) == 0 || !agentToolMatchesRefs(target, refs) {
+		return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	return validateUnavailableAgentToolTarget(p, refs, target, rawToolID)
+}
+
+func validateUnavailableAgentToolTarget(principalValue *principal.Principal, refs []coreagent.ToolRef, target coreagent.ToolTarget, rawToolID string) error {
+	if principalValue == nil {
+		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	if target.Unavailable == nil || strings.TrimSpace(target.Unavailable.Reason) == "" {
+		return fmt.Errorf("%w: unavailable agent tool %q is incomplete", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if strings.TrimSpace(target.System) != "" || strings.TrimSpace(target.Operation) != "" {
+		return fmt.Errorf("%w: unavailable agent tool %q cannot target a concrete operation", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	pluginName := strings.TrimSpace(target.Plugin)
+	if pluginName == "" {
+		return fmt.Errorf("%w: unavailable agent tool %q plugin is required", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if !principal.AllowsProviderPermission(principalValue, pluginName) {
+		return fmt.Errorf("%w: unavailable agent tool %q is not authorized", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if !agentUnavailableReasonAllowed(strings.TrimSpace(target.Unavailable.Reason)) {
+		return fmt.Errorf("%w: unavailable agent tool %q reason is invalid", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
+		return fmt.Errorf("%w: unavailable agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	return nil
+}
+
+func agentUnavailableReasonAllowed(reason string) bool {
+	switch reason {
+	case coreagent.ToolUnavailableReasonReconnectRequired,
+		coreagent.ToolUnavailableReasonNotAuthenticated,
+		coreagent.ToolUnavailableReasonNoCredential,
+		coreagent.ToolUnavailableReasonScopeDenied,
+		coreagent.ToolUnavailableReasonInstanceRequired:
+		return true
+	default:
+		return false
+	}
+}
+
+func executeUnavailableAgentTool(target coreagent.ToolTarget) (*coreagent.ExecuteToolResponse, error) {
+	reason := coreagent.ToolUnavailableReasonReconnectRequired
+	message := ""
+	if target.Unavailable != nil {
+		if strings.TrimSpace(target.Unavailable.Reason) != "" {
+			reason = strings.TrimSpace(target.Unavailable.Reason)
+		}
+		message = strings.TrimSpace(target.Unavailable.Message)
+	}
+	if message == "" {
+		message = "The requested integration is unavailable for this agent turn."
+	}
+	status := http.StatusFailedDependency
+	switch reason {
+	case coreagent.ToolUnavailableReasonScopeDenied:
+		status = http.StatusForbidden
+	case coreagent.ToolUnavailableReasonInstanceRequired:
+		status = http.StatusPreconditionRequired
+	case coreagent.ToolUnavailableReasonNotAuthenticated, coreagent.ToolUnavailableReasonNoCredential:
+		status = http.StatusUnauthorized
+	}
+	body, err := json.Marshal(map[string]any{
+		"error": map[string]any{
+			"code":       reason,
+			"message":    message,
+			"plugin":     strings.TrimSpace(target.Plugin),
+			"connection": strings.TrimSpace(target.Connection),
+			"instance":   strings.TrimSpace(target.Instance),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: encode unavailable agent tool response: %v", invocation.ErrInternal, err)
+	}
+	return &coreagent.ExecuteToolResponse{
+		Status: status,
+		Body:   string(body),
+	}, nil
+}
+
 func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
 	if strings.TrimSpace(string(source)) == "" {
 		return coreagent.ToolSourceModeMCPCatalog
@@ -627,6 +743,12 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 			return fmt.Errorf("%w: listed agent tool mcp_name is required", invocation.ErrAuthorizationDenied)
 		}
 		target := tools[i].Target
+		if target.Unavailable != nil {
+			if err := validateListedUnavailableAgentToolTarget(p, refs, target, tools[i].ToolID); err != nil {
+				return err
+			}
+			continue
+		}
 		if systemName := strings.TrimSpace(target.System); systemName != "" {
 			if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(target.Operation) == "" {
 				return fmt.Errorf("%w: listed agent system tool target is incomplete", invocation.ErrAuthorizationDenied)

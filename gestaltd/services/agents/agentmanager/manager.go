@@ -371,7 +371,7 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := m.searchToolCandidates(ctx, p, refs, "", false)
+	candidates, _, err := m.searchToolCandidates(ctx, p, refs, "", false)
 	if err != nil {
 		return nil, err
 	}
@@ -1210,11 +1210,10 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 
-	candidates, err := m.searchToolCandidates(ctx, p, refs, "", true)
+	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, "", true)
 	if err != nil {
 		return nil, err
 	}
-	var firstUnavailableErr error
 	for i := range candidates {
 		candidate := candidates[i]
 		listed, err := m.listedAgentPluginCandidateTool(candidate)
@@ -1223,9 +1222,6 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 				continue
 			}
 			if candidate.skipUnavailable && agentToolSearchUnavailable(err) {
-				if firstUnavailableErr == nil {
-					firstUnavailableErr = err
-				}
 				continue
 			}
 			return nil, err
@@ -1237,11 +1233,23 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		seen[key] = struct{}{}
 		out = append(out, listed)
 	}
-	if len(out) == 0 && len(refs) > 0 && firstUnavailableErr != nil {
-		return nil, firstUnavailableErr
+	for i := range unavailable {
+		listed, err := m.listedUnavailableAgentPluginTool(unavailable[i])
+		if err != nil {
+			return nil, err
+		}
+		key := agentToolTargetKeyFromTarget(listed.Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, listed)
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
+		if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(out[i]), listedAgentToolUnavailable(out[j]); leftUnavailable != rightUnavailable {
+			return !leftUnavailable
+		}
 		if out[i].MCPName != out[j].MCPName {
 			return out[i].MCPName < out[j].MCPName
 		}
@@ -1461,6 +1469,13 @@ type agentToolSearchCandidate struct {
 	score           float64
 }
 
+type agentToolUnavailableCandidate struct {
+	ref     coreagent.ToolRef
+	err     error
+	reason  string
+	message string
+}
+
 type agentToolSearchCatalog struct {
 	ref     coreagent.ToolRef
 	catalog *catalog.Catalog
@@ -1508,12 +1523,12 @@ func (k agentToolTargetKey) String() string {
 	return strings.Join(parts, "/")
 }
 
-func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, error) {
+func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, []agentToolUnavailableCandidate, error) {
 	scope := newAgentToolSearchScope(refs)
 	providerNames := scope.providerNames()
 	if len(providerNames) == 0 {
 		if !scope.all {
-			return nil, nil
+			return nil, nil, nil
 		}
 		providerNames = m.providers.List()
 	}
@@ -1524,6 +1539,7 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		}
 	}
 	candidates := make([]agentToolSearchCandidate, 0)
+	unavailable := make([]agentToolUnavailableCandidate, 0)
 	var firstUnavailableErr error
 	for _, pluginName := range providerNames {
 		pluginName = strings.TrimSpace(pluginName)
@@ -1535,7 +1551,7 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
-			return nil, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
+			return nil, nil, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
 		if !m.allowProvider(ctx, p, pluginName) {
 			continue
@@ -1550,9 +1566,12 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 					if firstUnavailableErr == nil {
 						firstUnavailableErr = err
 					}
+					if principal.AllowsProviderPermission(p, pluginName) {
+						unavailable = append(unavailable, unavailableAgentToolCandidate(searchRef, err))
+					}
 					continue
 				}
-				return nil, err
+				return nil, nil, err
 			}
 			for j := range searchCatalogs {
 				searchCatalog := searchCatalogs[j]
@@ -1592,10 +1611,14 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 			}
 		}
 	}
-	if len(candidates) == 0 && !scope.all && firstUnavailableErr != nil {
-		return nil, firstUnavailableErr
+	if len(candidates) == 0 && len(unavailable) == 0 && !scope.all && firstUnavailableErr != nil {
+		return nil, nil, firstUnavailableErr
 	}
-	return rankAgentToolSearchCandidates(query, candidates)
+	ranked, err := rankAgentToolSearchCandidates(query, candidates)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ranked, unavailable, nil
 }
 
 func agentToolSearchUnavailable(err error) bool {
@@ -1604,6 +1627,75 @@ func agentToolSearchUnavailable(err error) bool {
 		errors.Is(err, invocation.ErrReconnectRequired) ||
 		errors.Is(err, invocation.ErrNotAuthenticated) ||
 		errors.Is(err, invocation.ErrScopeDenied)
+}
+
+func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUnavailableCandidate {
+	ref.Plugin = strings.TrimSpace(ref.Plugin)
+	ref.Operation = ""
+	ref.Title = ""
+	ref.Description = ""
+	reason := unavailableAgentToolReason(err)
+	return agentToolUnavailableCandidate{
+		ref:     ref,
+		err:     err,
+		reason:  reason,
+		message: unavailableAgentToolMessage(ref.Plugin, reason, err),
+	}
+}
+
+func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
+	return tool.Target.Unavailable != nil
+}
+
+func unavailableAgentToolReason(err error) string {
+	switch {
+	case errors.Is(err, invocation.ErrAmbiguousInstance):
+		return coreagent.ToolUnavailableReasonInstanceRequired
+	case errors.Is(err, invocation.ErrScopeDenied):
+		return coreagent.ToolUnavailableReasonScopeDenied
+	case errors.Is(err, invocation.ErrNotAuthenticated):
+		return coreagent.ToolUnavailableReasonNotAuthenticated
+	case errors.Is(err, invocation.ErrNoCredential):
+		return coreagent.ToolUnavailableReasonNoCredential
+	default:
+		return coreagent.ToolUnavailableReasonReconnectRequired
+	}
+}
+
+func unavailableAgentToolTitle(pluginName, reason string) string {
+	pluginName = strings.TrimSpace(pluginName)
+	switch reason {
+	case coreagent.ToolUnavailableReasonInstanceRequired:
+		return pluginName + " instance required"
+	case coreagent.ToolUnavailableReasonScopeDenied:
+		return pluginName + " scope denied"
+	case coreagent.ToolUnavailableReasonNotAuthenticated:
+		return pluginName + " authentication required"
+	case coreagent.ToolUnavailableReasonNoCredential:
+		return pluginName + " connection required"
+	default:
+		return pluginName + " reconnect required"
+	}
+}
+
+func unavailableAgentToolMessage(pluginName, reason string, err error) string {
+	pluginName = strings.TrimSpace(pluginName)
+	if pluginName == "" {
+		pluginName = "this integration"
+	}
+	switch reason {
+	case coreagent.ToolUnavailableReasonInstanceRequired:
+		return fmt.Sprintf("%s has multiple matching instances. Ask the user to choose or reconnect a specific instance before using these tools.", pluginName)
+	case coreagent.ToolUnavailableReasonScopeDenied:
+		return fmt.Sprintf("%s is connected but is missing required OAuth scopes. Ask the user to reconnect %s with the required scopes before using these tools.", pluginName, pluginName)
+	case coreagent.ToolUnavailableReasonNotAuthenticated, coreagent.ToolUnavailableReasonNoCredential, coreagent.ToolUnavailableReasonReconnectRequired:
+		return fmt.Sprintf("%s is not connected, its credentials expired, or refresh failed. Ask the user to reconnect %s before using these tools.", pluginName, pluginName)
+	default:
+		if err != nil {
+			return err.Error()
+		}
+		return fmt.Sprintf("%s is unavailable.", pluginName)
+	}
 }
 
 func agentToolSearchRefSkipsUnavailable(ref coreagent.ToolRef) bool {
@@ -2156,6 +2248,48 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	}, nil
 }
 
+func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailableCandidate) (coreagent.ListedTool, error) {
+	ref := candidate.ref
+	ref.Plugin = strings.TrimSpace(ref.Plugin)
+	ref.Operation = ""
+	ref.Connection = core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection))
+	ref.Instance = strings.TrimSpace(ref.Instance)
+	ref.Title = ""
+	ref.Description = ""
+	target := coreagent.ToolTarget{
+		Plugin:         ref.Plugin,
+		Connection:     ref.Connection,
+		Instance:       ref.Instance,
+		CredentialMode: ref.CredentialMode,
+		Unavailable: &coreagent.UnavailableToolTarget{
+			Reason:  candidate.reason,
+			Message: candidate.message,
+		},
+	}
+	toolID, err := m.mintAgentToolID(target)
+	if err != nil {
+		return coreagent.ListedTool{}, err
+	}
+	return coreagent.ListedTool{
+		ToolID:          toolID,
+		MCPName:         agentUnavailableToolMCPName(target),
+		Title:           unavailableAgentToolTitle(ref.Plugin, candidate.reason),
+		Description:     candidate.message,
+		InputSchemaJSON: `{"type":"object","properties":{},"additionalProperties":false}`,
+		Annotations: core.CapabilityAnnotations{
+			ReadOnlyHint:    agentToolBoolPtr(true),
+			DestructiveHint: agentToolBoolPtr(false),
+			OpenWorldHint:   agentToolBoolPtr(false),
+		},
+		Ref:    ref,
+		Target: target,
+	}, nil
+}
+
+func agentToolBoolPtr(value bool) *bool {
+	return &value
+}
+
 func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.CapabilityAnnotations {
 	return core.CapabilityAnnotations{
 		ReadOnlyHint:    value.ReadOnlyHint,
@@ -2207,6 +2341,9 @@ func assignUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
 }
 
 func agentToolMCPName(target coreagent.ToolTarget) string {
+	if target.Unavailable != nil {
+		return agentUnavailableToolMCPName(target)
+	}
 	var parts []string
 	if strings.TrimSpace(target.System) != "" {
 		parts = []string{"system", target.System, target.Operation}
@@ -2227,6 +2364,19 @@ func agentToolMCPName(target coreagent.ToolTarget) string {
 		return "tool"
 	}
 	return strings.Join(out, "__")
+}
+
+func agentUnavailableToolMCPName(target coreagent.ToolTarget) string {
+	reason := coreagent.ToolUnavailableReasonReconnectRequired
+	if target.Unavailable != nil && strings.TrimSpace(target.Unavailable.Reason) != "" {
+		reason = strings.TrimSpace(target.Unavailable.Reason)
+	}
+	return agentToolMCPName(coreagent.ToolTarget{
+		Plugin:     strings.TrimSpace(target.Plugin),
+		Operation:  reason,
+		Connection: core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		Instance:   strings.TrimSpace(target.Instance),
+	})
 }
 
 func sanitizeMCPNamePart(value string) string {

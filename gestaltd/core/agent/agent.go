@@ -104,7 +104,21 @@ type ToolTarget struct {
 	Connection     string
 	Instance       string
 	CredentialMode core.ConnectionMode
+	Unavailable    *UnavailableToolTarget `json:",omitempty"`
 }
+
+type UnavailableToolTarget struct {
+	Reason  string
+	Message string
+}
+
+const (
+	ToolUnavailableReasonReconnectRequired = "reconnect_required"
+	ToolUnavailableReasonNotAuthenticated  = "not_authenticated"
+	ToolUnavailableReasonNoCredential      = "no_credential"
+	ToolUnavailableReasonScopeDenied       = "scope_denied"
+	ToolUnavailableReasonInstanceRequired  = "instance_required"
+)
 
 type Tool struct {
 	ID               string

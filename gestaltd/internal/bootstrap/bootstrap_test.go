@@ -3229,7 +3229,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 	}
 }
 
-func TestBootstrapGlobalCatalogToolRefsSkipUnavailableProviders(t *testing.T) {
+func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -3355,8 +3355,14 @@ func TestBootstrapGlobalCatalogToolRefsSkipUnavailableProviders(t *testing.T) {
 		t.Fatalf("list response count = %d, want 1", len(listResponses))
 	}
 	tools := listResponses[0].GetTools()
-	if len(tools) != 1 || tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
-		t.Fatalf("listed tools = %#v, want only connected linear issues", tools)
+	if len(tools) != 2 {
+		t.Fatalf("listed tools = %#v, want connected linear issues plus ashby unavailable sentinel", tools)
+	}
+	if tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
+		t.Fatalf("first listed tool = %#v, want connected linear issues before unavailable sentinels", tools[0])
+	}
+	if tools[1].GetRef().GetPlugin() != "ashby" || tools[1].GetRef().GetOperation() != "" || tools[1].GetMcpName() != "ashby__no_credential" {
+		t.Fatalf("second listed tool = %#v, want ashby unavailable sentinel", tools[1])
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
 		t.Fatalf("tool callback bodies = %#v, want executed linear issues", toolBodies)
