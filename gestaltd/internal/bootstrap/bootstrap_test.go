@@ -4164,6 +4164,30 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	}
 }
 
+func TestBootstrapProvisionsAgentRouteStoresOnSelectedIndexedDB(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	factories := validFactories()
+	selectedDB := &trackedIndexedDB{StubIndexedDB: &coretesting.StubIndexedDB{}}
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		return selectedDB, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+
+	if !selectedDB.HasObjectStore("agent_session_routes") {
+		t.Fatal("selected indexeddb missing agent_session_routes store")
+	}
+	if !selectedDB.HasObjectStore("agent_turn_routes") {
+		t.Fatal("selected indexeddb missing agent_turn_routes store")
+	}
+}
+
 func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.T) {
 	t.Parallel()
 

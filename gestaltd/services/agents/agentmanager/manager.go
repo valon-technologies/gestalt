@@ -38,6 +38,7 @@ var (
 	ErrAgentInheritedSurfaceTool       = errors.New("agent inherited surface tools are not supported")
 	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
+	ErrAgentSessionNotFound            = errors.New("agent session is not found")
 	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
 	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
 	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
@@ -115,6 +116,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	PluginInvokes     map[string][]invocation.PluginInvocationDependency
 	AgentConnections  map[string][]string
+	RouteStore        RouteStore
 }
 
 type Manager struct {
@@ -128,7 +130,8 @@ type Manager struct {
 	catalogConnection map[string]string
 	pluginInvokes     map[string][]invocation.PluginInvocationDependency
 	agentConnections  map[string][]string
-	// Route caches are process-local accelerators; providers remain the durable source of truth.
+	routeStore        RouteStore
+	// Route caches are process-local accelerators; the route store is the durable provider index.
 	routeMu       sync.Mutex
 	sessionRoutes agentRouteCache
 	turnRoutes    agentRouteCache
@@ -146,6 +149,7 @@ func New(cfg Config) *Manager {
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
+		routeStore:        cfg.RouteStore,
 		sessionRoutes:     newAgentRouteCache(),
 		turnRoutes:        newAgentRouteCache(),
 	}
@@ -162,20 +166,80 @@ func cloneStringSliceMap(src map[string][]string) map[string][]string {
 	return dst
 }
 
-func (m *Manager) cachedSessionRoute(sessionID string) string {
+func (m *Manager) cachedSessionRoute(sessionID string) (AgentRoute, bool) {
 	if m == nil {
-		return ""
+		return AgentRoute{}, false
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return ""
+		return AgentRoute{}, false
 	}
 	m.routeMu.Lock()
 	defer m.routeMu.Unlock()
 	return m.sessionRoutes.get(sessionID)
 }
 
-func (m *Manager) rememberSessionRoute(sessionID, providerName string) {
+func (m *Manager) storedSessionRoute(ctx context.Context, sessionID string) (AgentRoute, bool, error) {
+	if m == nil {
+		return AgentRoute{}, false, nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || m.routeStore == nil {
+		return AgentRoute{}, false, nil
+	}
+	route, ok, err := m.routeStore.LookupSession(ctx, sessionID)
+	if err != nil || !ok {
+		return AgentRoute{}, false, err
+	}
+	route.SessionID = sessionID
+	return route, true, nil
+}
+
+func (m *Manager) rememberSessionRoute(ctx context.Context, sessionID, providerName string) error {
+	if m == nil {
+		return nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if sessionID == "" || providerName == "" {
+		return nil
+	}
+	if m.routeStore != nil {
+		if err := m.routeStore.RememberSession(ctx, sessionID, providerName); err != nil {
+			return err
+		}
+	}
+	m.rememberCachedSessionRoute(sessionID, providerName)
+	return nil
+}
+
+func (m *Manager) rememberSessionRouteBestEffort(ctx context.Context, sessionID, providerName string) {
+	if m == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if sessionID == "" || providerName == "" {
+		return
+	}
+	if m.routeStore == nil {
+		m.rememberCachedSessionRoute(sessionID, providerName)
+		return
+	}
+	if existing, ok, err := m.routeStore.LookupSession(ctx, sessionID); err != nil {
+		return
+	} else if ok {
+		if existing.ProviderName != providerName {
+			m.forgetCachedSessionRoute(sessionID, providerName)
+			return
+		}
+	} else if err := m.routeStore.RememberSession(ctx, sessionID, providerName); err != nil {
+		return
+	}
+	m.rememberCachedSessionRoute(sessionID, providerName)
+}
+
+func (m *Manager) rememberCachedSessionRoute(sessionID, providerName string) {
 	if m == nil {
 		return
 	}
@@ -186,10 +250,10 @@ func (m *Manager) rememberSessionRoute(sessionID, providerName string) {
 	}
 	m.routeMu.Lock()
 	defer m.routeMu.Unlock()
-	m.sessionRoutes.remember(sessionID, providerName)
+	m.sessionRoutes.remember(sessionID, AgentRoute{ProviderName: providerName, SessionID: sessionID})
 }
 
-func (m *Manager) forgetSessionRoute(sessionID, providerName string) {
+func (m *Manager) forgetCachedSessionRoute(sessionID, providerName string) {
 	if m == nil {
 		return
 	}
@@ -203,34 +267,114 @@ func (m *Manager) forgetSessionRoute(sessionID, providerName string) {
 	m.sessionRoutes.forget(sessionID, providerName)
 }
 
-func (m *Manager) cachedTurnRoute(turnID string) string {
+func (m *Manager) forgetSessionRoute(ctx context.Context, sessionID, providerName string) error {
 	if m == nil {
-		return ""
+		return nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if sessionID == "" {
+		return nil
+	}
+	if m.routeStore != nil {
+		if err := m.routeStore.ForgetSession(ctx, sessionID, providerName); err != nil {
+			return err
+		}
+	}
+	m.forgetCachedSessionRoute(sessionID, providerName)
+	return nil
+}
+
+func (m *Manager) cachedTurnRoute(turnID string) (AgentRoute, bool) {
+	if m == nil {
+		return AgentRoute{}, false
 	}
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
-		return ""
+		return AgentRoute{}, false
 	}
 	m.routeMu.Lock()
 	defer m.routeMu.Unlock()
 	return m.turnRoutes.get(turnID)
 }
 
-func (m *Manager) rememberTurnRoute(turnID, providerName string) {
+func (m *Manager) storedTurnRoute(ctx context.Context, turnID string) (AgentRoute, bool, error) {
+	if m == nil {
+		return AgentRoute{}, false, nil
+	}
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" || m.routeStore == nil {
+		return AgentRoute{}, false, nil
+	}
+	route, ok, err := m.routeStore.LookupTurn(ctx, turnID)
+	if err != nil || !ok {
+		return AgentRoute{}, false, err
+	}
+	return route, true, nil
+}
+
+func (m *Manager) rememberTurnRoute(ctx context.Context, turnID, sessionID, providerName string) error {
+	if m == nil {
+		return nil
+	}
+	turnID = strings.TrimSpace(turnID)
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if turnID == "" || sessionID == "" || providerName == "" {
+		return nil
+	}
+	if m.routeStore != nil {
+		if err := m.routeStore.RememberTurn(ctx, turnID, sessionID, providerName); err != nil {
+			return err
+		}
+	}
+	m.rememberCachedTurnRoute(turnID, sessionID, providerName)
+	return nil
+}
+
+func (m *Manager) rememberTurnRouteBestEffort(ctx context.Context, turnID, sessionID, providerName string) {
 	if m == nil {
 		return
 	}
 	turnID = strings.TrimSpace(turnID)
+	sessionID = strings.TrimSpace(sessionID)
 	providerName = strings.TrimSpace(providerName)
-	if turnID == "" || providerName == "" {
+	if turnID == "" || sessionID == "" || providerName == "" {
+		return
+	}
+	if m.routeStore == nil {
+		m.rememberCachedTurnRoute(turnID, sessionID, providerName)
+		return
+	}
+	if existing, ok, err := m.routeStore.LookupTurn(ctx, turnID); err != nil {
+		return
+	} else if ok {
+		if existing.ProviderName != providerName || existing.SessionID != sessionID {
+			m.forgetCachedTurnRoute(turnID, providerName)
+			return
+		}
+	} else if err := m.routeStore.RememberTurn(ctx, turnID, sessionID, providerName); err != nil {
+		return
+	}
+	m.rememberCachedTurnRoute(turnID, sessionID, providerName)
+}
+
+func (m *Manager) rememberCachedTurnRoute(turnID, sessionID, providerName string) {
+	if m == nil {
+		return
+	}
+	turnID = strings.TrimSpace(turnID)
+	sessionID = strings.TrimSpace(sessionID)
+	providerName = strings.TrimSpace(providerName)
+	if turnID == "" || sessionID == "" || providerName == "" {
 		return
 	}
 	m.routeMu.Lock()
 	defer m.routeMu.Unlock()
-	m.turnRoutes.remember(turnID, providerName)
+	m.turnRoutes.remember(turnID, AgentRoute{ProviderName: providerName, SessionID: sessionID})
 }
 
-func (m *Manager) forgetTurnRoute(turnID, providerName string) {
+func (m *Manager) forgetCachedTurnRoute(turnID, providerName string) {
 	if m == nil {
 		return
 	}
@@ -244,6 +388,24 @@ func (m *Manager) forgetTurnRoute(turnID, providerName string) {
 	m.turnRoutes.forget(turnID, providerName)
 }
 
+func (m *Manager) forgetTurnRoute(ctx context.Context, turnID, providerName string) error {
+	if m == nil {
+		return nil
+	}
+	turnID = strings.TrimSpace(turnID)
+	providerName = strings.TrimSpace(providerName)
+	if turnID == "" {
+		return nil
+	}
+	if m.routeStore != nil {
+		if err := m.routeStore.ForgetTurn(ctx, turnID, providerName); err != nil {
+			return err
+		}
+	}
+	m.forgetCachedTurnRoute(turnID, providerName)
+	return nil
+}
+
 type agentRouteCache struct {
 	values map[string]*list.Element
 	order  *list.List
@@ -251,7 +413,7 @@ type agentRouteCache struct {
 
 type agentRouteEntry struct {
 	key   string
-	value string
+	value AgentRoute
 }
 
 func newAgentRouteCache() agentRouteCache {
@@ -270,19 +432,19 @@ func (c *agentRouteCache) ensure() {
 	}
 }
 
-func (c *agentRouteCache) get(key string) string {
+func (c *agentRouteCache) get(key string) (AgentRoute, bool) {
 	if c == nil || c.values == nil {
-		return ""
+		return AgentRoute{}, false
 	}
 	elem := c.values[key]
 	if elem == nil {
-		return ""
+		return AgentRoute{}, false
 	}
 	c.order.MoveToBack(elem)
-	return elem.Value.(agentRouteEntry).value
+	return elem.Value.(agentRouteEntry).value, true
 }
 
-func (c *agentRouteCache) remember(key, value string) {
+func (c *agentRouteCache) remember(key string, value AgentRoute) {
 	c.ensure()
 	if elem := c.values[key]; elem != nil {
 		elem.Value = agentRouteEntry{key: key, value: value}
@@ -303,7 +465,7 @@ func (c *agentRouteCache) forget(key, value string) {
 		return
 	}
 	entry := elem.Value.(agentRouteEntry)
-	if value != "" && entry.value != value {
+	if value != "" && strings.TrimSpace(entry.value.ProviderName) != value {
 		return
 	}
 	delete(c.values, key)
@@ -451,7 +613,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	m.rememberSessionRoute(normalized.ID, providerName)
+	if err := m.rememberSessionRoute(ctx, normalized.ID, providerName); err != nil {
+		return nil, err
+	}
 	return normalized, nil
 }
 
@@ -514,7 +678,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			if req.State != "" && normalized.State != req.State {
 				continue
 			}
-			m.rememberSessionRoute(normalized.ID, candidate.name)
+			m.rememberSessionRouteBestEffort(ctx, normalized.ID, candidate.name)
 			if req.SummaryOnly {
 				normalized = summarizeAgentSession(normalized)
 			}
@@ -563,7 +727,7 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	m.rememberSessionRoute(normalized.ID, owned.providerName)
+	m.rememberSessionRouteBestEffort(ctx, normalized.ID, owned.providerName)
 	return normalized, nil
 }
 
@@ -578,6 +742,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	ownedSession, err := m.findOwnedSession(ctx, p, req.SessionID, "")
 	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, fmt.Errorf("%w: %w", ErrAgentSessionNotFound, err)
+		}
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
@@ -655,7 +822,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if !providerTurnOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
+	if err := m.rememberTurnRoute(ctx, normalized.ID, normalized.SessionID, ownedSession.providerName); err != nil {
+		return nil, err
+	}
 	return normalized, nil
 }
 
@@ -714,7 +883,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 		if req.Status != "" && normalized.Status != req.Status {
 			continue
 		}
-		m.rememberTurnRoute(normalized.ID, ownedSession.providerName)
+		m.rememberTurnRouteBestEffort(ctx, normalized.ID, normalized.SessionID, ownedSession.providerName)
 		if req.SummaryOnly {
 			normalized = summarizeAgentTurn(normalized)
 		}
@@ -767,7 +936,7 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 			m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
 		}
 	}
-	m.rememberTurnRoute(normalized.ID, owned.providerName)
+	m.rememberTurnRouteBestEffort(ctx, normalized.ID, normalized.SessionID, owned.providerName)
 	return normalized, nil
 }
 
@@ -948,6 +1117,22 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	return authorized, nil
 }
 
+func (m *Manager) agentProviderConfigured(providerName string) bool {
+	if m == nil || m.agent == nil {
+		return false
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return false
+	}
+	for _, name := range m.agent.ProviderNames() {
+		if strings.TrimSpace(name) == providerName {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -959,25 +1144,47 @@ func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, 
 		if err != nil {
 			return nil, err
 		}
-		m.rememberSessionRoute(found.session.ID, found.providerName)
+		m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
 		return found, nil
 	}
-	if cachedProviderName := m.cachedSessionRoute(sessionID); cachedProviderName != "" {
-		found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, cachedProviderName)
-		if err == nil {
-			m.rememberSessionRoute(found.session.ID, found.providerName)
+	if storedRoute, ok, err := m.storedSessionRoute(ctx, sessionID); err != nil {
+		return nil, err
+	} else if ok {
+		found, findErr := m.findOwnedSessionInProviders(ctx, p, sessionID, storedRoute.ProviderName)
+		if findErr == nil {
+			m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
 			return found, nil
 		}
-		if !errors.Is(err, core.ErrNotFound) {
+		if errors.Is(findErr, ErrAgentProviderNotAvailable) {
+			if m.agentProviderConfigured(storedRoute.ProviderName) {
+				return nil, findErr
+			}
+			if err := m.forgetSessionRoute(ctx, sessionID, storedRoute.ProviderName); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(findErr, core.ErrNotFound) {
+			return nil, findErr
+		}
+	}
+	if cachedRoute, ok := m.cachedSessionRoute(sessionID); ok {
+		found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, cachedRoute.ProviderName)
+		if err == nil {
+			m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
+			return found, nil
+		}
+		m.forgetCachedSessionRoute(sessionID, cachedRoute.ProviderName)
+		if !errors.Is(err, core.ErrNotFound) && !errors.Is(err, ErrAgentProviderNotAvailable) {
 			return nil, err
 		}
-		m.forgetSessionRoute(sessionID, cachedProviderName)
+		if errors.Is(err, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(cachedRoute.ProviderName) {
+			_ = m.forgetSessionRoute(ctx, sessionID, cachedRoute.ProviderName)
+		}
 	}
 	found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, "")
 	if err != nil {
 		return nil, err
 	}
-	m.rememberSessionRoute(found.session.ID, found.providerName)
+	m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
 	return found, nil
 }
 
@@ -1027,33 +1234,55 @@ func (m *Manager) findOwnedTurn(ctx context.Context, p *principal.Principal, tur
 	}
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
-		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, providerName)
+		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, providerName, "")
 		if err != nil {
 			return nil, err
 		}
-		m.rememberTurnRoute(found.turn.ID, found.providerName)
+		m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
 		return found, nil
 	}
-	if cachedProviderName := m.cachedTurnRoute(turnID); cachedProviderName != "" {
-		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, cachedProviderName)
-		if err == nil {
-			m.rememberTurnRoute(found.turn.ID, found.providerName)
+	if storedRoute, ok, err := m.storedTurnRoute(ctx, turnID); err != nil {
+		return nil, err
+	} else if ok {
+		found, findErr := m.findOwnedTurnInProviders(ctx, p, turnID, storedRoute.ProviderName, storedRoute.SessionID)
+		if findErr == nil {
+			m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
 			return found, nil
 		}
-		if !errors.Is(err, core.ErrNotFound) {
+		if errors.Is(findErr, ErrAgentProviderNotAvailable) {
+			if m.agentProviderConfigured(storedRoute.ProviderName) {
+				return nil, findErr
+			}
+			if err := m.forgetTurnRoute(ctx, turnID, storedRoute.ProviderName); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(findErr, core.ErrNotFound) {
+			return nil, findErr
+		}
+	}
+	if cachedRoute, ok := m.cachedTurnRoute(turnID); ok {
+		found, err := m.findOwnedTurnInProviders(ctx, p, turnID, cachedRoute.ProviderName, cachedRoute.SessionID)
+		if err == nil {
+			m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
+			return found, nil
+		}
+		m.forgetCachedTurnRoute(turnID, cachedRoute.ProviderName)
+		if !errors.Is(err, core.ErrNotFound) && !errors.Is(err, ErrAgentProviderNotAvailable) {
 			return nil, err
 		}
-		m.forgetTurnRoute(turnID, cachedProviderName)
+		if errors.Is(err, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(cachedRoute.ProviderName) {
+			_ = m.forgetTurnRoute(ctx, turnID, cachedRoute.ProviderName)
+		}
 	}
-	found, err := m.findOwnedTurnInProviders(ctx, p, turnID, "")
+	found, err := m.findOwnedTurnInProviders(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
 	}
-	m.rememberTurnRoute(found.turn.ID, found.providerName)
+	m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
 	return found, nil
 }
 
-func (m *Manager) findOwnedTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName string) (*ownedAgentTurn, error) {
+func (m *Manager) findOwnedTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*ownedAgentTurn, error) {
 	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
 		return nil, err
@@ -1074,6 +1303,9 @@ func (m *Manager) findOwnedTurnInProviders(ctx context.Context, p *principal.Pri
 			continue
 		}
 		sessionID := strings.TrimSpace(turn.SessionID)
+		if expectedSessionID = strings.TrimSpace(expectedSessionID); expectedSessionID != "" {
+			sessionID = expectedSessionID
+		}
 		normalized, err := normalizeProviderTurn(candidate.name, sessionID, turnID, turn)
 		if err != nil {
 			return nil, err

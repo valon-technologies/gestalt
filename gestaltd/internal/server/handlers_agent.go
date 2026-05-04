@@ -399,6 +399,10 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		ModelOptions:   maps.Clone(req.ModelOptions),
 	})
 	if err != nil {
+		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {
+			s.writeAgentManagerError(w, r, "session", sessionID, req.ToolRefs, err)
+			return
+		}
 		s.writeAgentManagerError(w, r, "turn", sessionID, req.ToolRefs, err)
 		return
 	}
