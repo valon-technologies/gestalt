@@ -3,6 +3,11 @@ output "docs_url" {
   value       = "https://${var.domain}"
 }
 
+output "registry_url" {
+  description = "Public URL for the provider registry"
+  value       = "https://${var.registry_domain}"
+}
+
 output "load_balancer_ip" {
   description = "Global IP address of the load balancer"
   value       = google_compute_global_address.docs.address

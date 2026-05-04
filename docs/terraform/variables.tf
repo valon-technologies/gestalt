@@ -24,6 +24,12 @@ variable "domain" {
   default     = "gestaltd.ai"
 }
 
+variable "registry_domain" {
+  description = "Provider registry site domain"
+  type        = string
+  default     = "registry.gestaltd.ai"
+}
+
 variable "docs_image" {
   description = "Container image for the docs service (required, no default to prevent accidental reverts)"
   type        = string
