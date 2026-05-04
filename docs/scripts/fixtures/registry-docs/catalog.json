@@ -1,0 +1,57 @@
+{
+  "indexUrl": "https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml",
+  "providers": [
+    {
+      "configTarget": {
+        "entryKind": "plugin",
+        "section": "plugins"
+      },
+      "description": "Read public and private conversations, DMs, and group DMs; send messages; and manage channels.",
+      "displayName": "Slack",
+      "docs": [
+        {
+          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/docs/index.mdx",
+          "path": "/",
+          "rawUrl": "/registry-test/slack-index.mdx",
+          "sourcePath": "plugins/slack/docs/index.mdx",
+          "title": "Overview"
+        },
+        {
+          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/docs/events.mdx",
+          "path": "/events/",
+          "rawUrl": "/registry-test/slack-events.mdx",
+          "sourcePath": "plugins/slack/docs/events.mdx",
+          "title": "Events"
+        }
+      ],
+      "iconUrl": null,
+      "kind": "plugin",
+      "latestInstallableVersion": "0.0.1-alpha.42",
+      "manifestUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/manifest.yaml",
+      "manifestVersion": "0.0.1-alpha.42",
+      "name": "slack",
+      "package": "github.com/valon-technologies/gestalt-providers/plugins/slack",
+      "packagePath": "plugins/slack",
+      "readmeUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/README.md",
+      "registryPath": "/providers/plugin/slack/",
+      "sourceUrl": "https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/slack",
+      "versions": [
+        {
+          "kind": "plugin",
+          "metadata": "https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/slack/v0.0.1-alpha.42/provider-release.yaml",
+          "platforms": [
+            "darwin/amd64",
+            "darwin/arm64",
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "runtime": "executable",
+          "version": "0.0.1-alpha.42"
+        }
+      ]
+    }
+  ],
+  "repository": "valon-technologies/gestalt-providers",
+  "schema": "gestaltd-provider-catalog",
+  "schemaVersion": 1
+}

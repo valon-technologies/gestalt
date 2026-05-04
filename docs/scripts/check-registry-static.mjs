@@ -64,6 +64,12 @@ try {
     includes: "registry-module",
   });
   await assertResponse({
+    url: `${baseUrl}/providers/plugin/slack/events/`,
+    host: "registry.gestaltd.ai",
+    status: 200,
+    includes: "registry-module",
+  });
+  await assertResponse({
     url: `${baseUrl}/_next/static/chunks/does-not-exist.js`,
     host: "registry.gestaltd.ai",
     status: 404,
@@ -76,7 +82,25 @@ try {
     excludes: "registry-module",
   });
   await assertResponse({
+    url: `${baseUrl}/registry/providers/plugin/slack/`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "registry-module",
+  });
+  await assertResponse({
+    url: `${baseUrl}/registry/providers/plugin/slack/events/`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "registry-module",
+  });
+  await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/`,
+    host: "gestaltd.ai",
+    status: 404,
+    excludes: "registry-module",
+  });
+  await assertResponse({
+    url: `${baseUrl}/providers/plugin/slack/events/`,
     host: "gestaltd.ai",
     status: 404,
     excludes: "registry-module",
@@ -100,6 +124,9 @@ async function serveRegistryHost(pathname, response) {
 }
 
 async function serveDocsHost(pathname, response) {
+  if (pathname === "/registry" || pathname.startsWith("/registry/")) {
+    return serveFile("/registry.html", response, false);
+  }
   if (pathname.match(/^\/reference\/(python|typescript|go|rust)-sdk(?:\.html)?$/)) {
     const target = pathname.replace(/-sdk(?:\.html)?$/, "");
     response.writeHead(301, { location: `/reference/sdk${target.replace("/reference", "")}` });

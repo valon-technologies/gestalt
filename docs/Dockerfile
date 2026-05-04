@@ -55,6 +55,14 @@ server {
         try_files $uri $uri.html $uri/ =404;
     }
 
+    location = /registry {
+        try_files /registry.html =404;
+    }
+
+    location /registry/ {
+        try_files /registry.html =404;
+    }
+
     location ~ ^/reference/(python|typescript|go|rust)-sdk(\.html)?$ {
         return 301 /reference/sdk/$1;
     }
