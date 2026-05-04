@@ -56,6 +56,9 @@ type RouteSelection = {
 
 const allKinds = "all";
 const catalogSchemaVersion = 1;
+const urlParseBase = "https://registry.gestaltd.ai";
+// Raw GitHub SVG responses include a sandboxing CSP, so render fetched SVGs as data URLs.
+const svgIconDataUrlCache = new Map<string, Promise<string | null>>();
 
 export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
@@ -367,13 +370,15 @@ function ProviderIcon({
   provider: Provider;
   large?: boolean;
 }) {
-  if (provider.iconUrl) {
+  const renderableIconUrl = useRenderableIconUrl(provider.iconUrl);
+
+  if (renderableIconUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         alt=""
         className={large ? styles.largeIcon : styles.icon}
-        src={provider.iconUrl}
+        src={renderableIconUrl}
       />
     );
   }
@@ -382,6 +387,70 @@ function ProviderIcon({
       {provider.displayName.slice(0, 1).toUpperCase()}
     </span>
   );
+}
+
+function useRenderableIconUrl(iconUrl: string | null) {
+  const [renderableIconUrl, setRenderableIconUrl] = useState<string | null>(
+    iconUrl && !isSvgIconUrl(iconUrl) ? iconUrl : null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!iconUrl) {
+      setRenderableIconUrl(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (!isSvgIconUrl(iconUrl)) {
+      setRenderableIconUrl(iconUrl);
+      return () => {
+        cancelled = true;
+      };
+    }
+    setRenderableIconUrl(null);
+    void loadSvgIconDataUrl(iconUrl).then((dataUrl) => {
+      if (!cancelled) {
+        setRenderableIconUrl(dataUrl);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [iconUrl]);
+
+  return renderableIconUrl;
+}
+
+function isSvgIconUrl(iconUrl: string) {
+  try {
+    return new URL(iconUrl, urlParseBase).pathname
+      .toLowerCase()
+      .endsWith(".svg");
+  } catch {
+    return iconUrl.toLowerCase().split("?")[0].endsWith(".svg");
+  }
+}
+
+function loadSvgIconDataUrl(iconUrl: string) {
+  const cached = svgIconDataUrlCache.get(iconUrl);
+  if (cached) {
+    return cached;
+  }
+  const promise = fetch(iconUrl)
+    .then(async (response) => {
+      if (!response.ok) {
+        return null;
+      }
+      const svg = (await response.text()).trim();
+      if (!svg.includes("<svg")) {
+        return null;
+      }
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    })
+    .catch(() => null);
+  svgIconDataUrlCache.set(iconUrl, promise);
+  return promise;
 }
 
 function kindLabel(kind: string) {
