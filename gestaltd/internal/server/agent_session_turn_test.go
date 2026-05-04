@@ -209,6 +209,122 @@ func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
 	}
 }
 
+func TestAgentCreateTurnReportsMissingSession(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	authz := &dynamicProviderAuthorizer{}
+	authz.allowed.Store(true)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.Authorizer = authz
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:      agentControl,
+			Authorizer: authz,
+			RunGrants:  newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/missing-session/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	body, _ := io.ReadAll(turnResp.Body)
+	if turnResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `session \"missing-session\" not found`) {
+		t.Fatalf("create turn body = %s, want missing session", body)
+	}
+	if strings.Contains(string(body), `turn \"missing-session\" not found`) {
+		t.Fatalf("create turn body = %s, should not report missing turn", body)
+	}
+}
+
+func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	provider.createTurnHook = func(turn *coreagent.Turn) {
+		turn.CreatedBy.SubjectID = principal.UserSubjectID("someone-else")
+	}
+	authz := &dynamicProviderAuthorizer{}
+	authz.allowed.Store(true)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.Authorizer = authz
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:      agentControl,
+			Authorizer: authz,
+			RunGrants:  newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	body, _ := io.ReadAll(turnResp.Body)
+	if turnResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
+	}
+	if strings.Contains(string(body), `session \"`+sessionID+`\" not found`) {
+		t.Fatalf("create turn body = %s, should not report missing session", body)
+	}
+	if !strings.Contains(string(body), `turn \"`) {
+		t.Fatalf("create turn body = %s, want missing turn", body)
+	}
+}
+
 func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	t.Parallel()
 
@@ -337,6 +453,7 @@ type memoryAgentProvider struct {
 	listSessionRequests []coreagent.ListSessionsRequest
 	listTurnRequests    []coreagent.ListTurnsRequest
 	createSessionHook   func()
+	createTurnHook      func(*coreagent.Turn)
 	listTurnEventsErr   error
 	capabilities        *coreagent.ProviderCapabilities
 }
@@ -444,6 +561,9 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		CompletedAt:  &now,
 		ExecutionRef: req.ExecutionRef,
 		OutputText:   "turn completed",
+	}
+	if p.createTurnHook != nil {
+		p.createTurnHook(turn)
 	}
 	p.turns[turn.ID] = turn
 	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})

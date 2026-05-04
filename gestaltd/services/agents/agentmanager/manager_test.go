@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
@@ -43,6 +44,26 @@ func newTestManager(t testing.TB, cfg Config) *Manager {
 		cfg.RunGrants = newAgentManagerTestRunGrants(t)
 	}
 	return New(cfg)
+}
+
+func newTestRouteStore(t testing.TB, db *coretesting.StubIndexedDB) RouteStore {
+	t.Helper()
+	store, err := NewIndexedDBRouteStore(context.Background(), db)
+	if err != nil {
+		t.Fatalf("NewIndexedDBRouteStore: %v", err)
+	}
+	return store
+}
+
+type alreadyExistsCreateIndexedDB struct {
+	*coretesting.StubIndexedDB
+}
+
+func (db *alreadyExistsCreateIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	if db.HasObjectStore(name) {
+		return indexeddb.ErrAlreadyExists
+	}
+	return db.StubIndexedDB.CreateObjectStore(ctx, name, schema)
 }
 
 type routeCountingAgentControl struct {
@@ -268,22 +289,22 @@ func TestAgentRouteCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	t.Parallel()
 
 	var cache agentRouteCache
-	cache.remember("old", "alpha")
-	cache.remember("warm", "alpha")
-	if got := cache.get("old"); got != "alpha" {
-		t.Fatalf("cache.get(old) = %q, want alpha", got)
+	cache.remember("old", AgentRoute{ProviderName: "alpha", SessionID: "session-old"})
+	cache.remember("warm", AgentRoute{ProviderName: "alpha", SessionID: "session-warm"})
+	if got, ok := cache.get("old"); !ok || got.ProviderName != "alpha" {
+		t.Fatalf("cache.get(old) = %+v, %t, want alpha", got, ok)
 	}
-	cache.remember("new", "alpha")
+	cache.remember("new", AgentRoute{ProviderName: "alpha", SessionID: "session-new"})
 	cache.trim(2)
 
-	if got := cache.get("warm"); got != "" {
-		t.Fatalf("cache.get(warm) = %q, want evicted", got)
+	if got, ok := cache.get("warm"); ok {
+		t.Fatalf("cache.get(warm) = %+v, %t, want evicted", got, ok)
 	}
-	if got := cache.get("old"); got != "alpha" {
-		t.Fatalf("cache.get(old) = %q, want retained alpha", got)
+	if got, ok := cache.get("old"); !ok || got.ProviderName != "alpha" {
+		t.Fatalf("cache.get(old) = %+v, %t, want retained alpha", got, ok)
 	}
-	if got := cache.get("new"); got != "alpha" {
-		t.Fatalf("cache.get(new) = %q, want retained alpha", got)
+	if got, ok := cache.get("new"); !ok || got.ProviderName != "alpha" {
+		t.Fatalf("cache.get(new) = %+v, %t, want retained alpha", got, ok)
 	}
 }
 
@@ -346,6 +367,313 @@ func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
 	}
 	if alpha.getTurnCalls != 1 || beta.getTurnCalls != 0 {
 		t.Fatalf("GetTurn calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getTurnCalls, beta.getTurnCalls)
+	}
+}
+
+func TestManagerUsesDurableProviderRoutesAcrossManagers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.capabilities = &coreagent.ProviderCapabilities{
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+	}
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"beta", "alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	managerA := newTestManager(t, Config{
+		Agent:      control,
+		RunGrants:  newAgentManagerTestRunGrants(t),
+		RouteStore: newTestRouteStore(t, db),
+	})
+	managerB := newTestManager(t, Config{
+		Agent:      control,
+		RunGrants:  newAgentManagerTestRunGrants(t),
+		RouteStore: newTestRouteStore(t, db),
+	})
+	managerC := newTestManager(t, Config{
+		Agent:      control,
+		RunGrants:  newAgentManagerTestRunGrants(t),
+		RouteStore: newTestRouteStore(t, db),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := managerA.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	alpha.getSessionCalls = 0
+	beta.getSessionCalls = 0
+	turn, err := managerB.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn(cold manager): %v", err)
+	}
+	if alpha.getSessionCalls != 1 || beta.getSessionCalls != 0 {
+		t.Fatalf("CreateTurn session lookup calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getSessionCalls, beta.getSessionCalls)
+	}
+
+	alpha.getTurnCalls = 0
+	beta.getTurnCalls = 0
+	if _, err := managerC.GetTurn(ctx, p, turn.ID); err != nil {
+		t.Fatalf("GetTurn(cold manager): %v", err)
+	}
+	if alpha.getTurnCalls != 1 || beta.getTurnCalls != 0 {
+		t.Fatalf("GetTurn calls = alpha:%d beta:%d, want alpha:1 beta:0", alpha.getTurnCalls, beta.getTurnCalls)
+	}
+}
+
+func TestManagerWrongPrincipalDoesNotDeleteDurableSessionRoute(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+		},
+	}
+	managerA := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	managerB := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	managerC := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	other := &principal.Principal{SubjectID: principal.UserSubjectID("user-2")}
+
+	session, err := managerA.CreateSession(ctx, owner, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := managerB.GetSession(ctx, other, session.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetSession(wrong principal) error = %v, want not found", err)
+	}
+	route, ok, err := routeStore.LookupSession(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("LookupSession: %v", err)
+	}
+	if !ok || route.ProviderName != "alpha" {
+		t.Fatalf("LookupSession route = %+v, %t, want alpha", route, ok)
+	}
+	if _, err := managerC.GetSession(ctx, owner, session.ID); err != nil {
+		t.Fatalf("GetSession(owner after wrong principal): %v", err)
+	}
+}
+
+func TestManagerDurableTurnRouteValidatesStoredSessionID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+		},
+	}
+	managerA := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	managerB := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := managerA.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := managerA.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if err := routeStore.RememberTurn(ctx, turn.ID, "wrong-session", "alpha"); err != nil {
+		t.Fatalf("RememberTurn(wrong session): %v", err)
+	}
+	_, err = managerB.GetTurn(ctx, p, turn.ID)
+	if err == nil || !strings.Contains(err.Error(), `turn session id`) || !strings.Contains(err.Error(), `wrong-session`) {
+		t.Fatalf("GetTurn error = %v, want turn session id mismatch", err)
+	}
+}
+
+func TestManagerDurableRoutesBeatStaleProcessCache(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha", "beta"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	managerA := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	managerB := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := managerA.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := managerA.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if _, err := managerB.GetSession(ctx, p, session.ID); err != nil {
+		t.Fatalf("GetSession(warm stale cache): %v", err)
+	}
+	if _, err := managerB.GetTurn(ctx, p, turn.ID); err != nil {
+		t.Fatalf("GetTurn(warm stale cache): %v", err)
+	}
+
+	beta.sessions[session.ID] = cloneRouteSession(session)
+	beta.sessions[session.ID].ProviderName = "beta"
+	beta.turns[turn.ID] = cloneRouteTurn(turn)
+	beta.turns[turn.ID].ProviderName = "beta"
+	if err := routeStore.RememberSession(ctx, session.ID, "beta"); err != nil {
+		t.Fatalf("RememberSession(beta): %v", err)
+	}
+	if err := routeStore.RememberTurn(ctx, turn.ID, session.ID, "beta"); err != nil {
+		t.Fatalf("RememberTurn(beta): %v", err)
+	}
+
+	alpha.getSessionCalls = 0
+	beta.getSessionCalls = 0
+	fetchedSession, err := managerB.GetSession(ctx, p, session.ID)
+	if err != nil {
+		t.Fatalf("GetSession(after durable route update): %v", err)
+	}
+	if fetchedSession.ProviderName != "beta" {
+		t.Fatalf("GetSession provider = %q, want beta", fetchedSession.ProviderName)
+	}
+	if alpha.getSessionCalls != 0 || beta.getSessionCalls != 1 {
+		t.Fatalf("GetSession calls = alpha:%d beta:%d, want alpha:0 beta:1", alpha.getSessionCalls, beta.getSessionCalls)
+	}
+
+	alpha.getTurnCalls = 0
+	beta.getTurnCalls = 0
+	fetchedTurn, err := managerB.GetTurn(ctx, p, turn.ID)
+	if err != nil {
+		t.Fatalf("GetTurn(after durable route update): %v", err)
+	}
+	if fetchedTurn.ProviderName != "beta" {
+		t.Fatalf("GetTurn provider = %q, want beta", fetchedTurn.ProviderName)
+	}
+	if alpha.getTurnCalls != 0 || beta.getTurnCalls != 1 {
+		t.Fatalf("GetTurn calls = alpha:%d beta:%d, want alpha:0 beta:1", alpha.getTurnCalls, beta.getTurnCalls)
+	}
+}
+
+func TestManagerStaleDurableRouteDoesNotPopulateProcessCache(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+		},
+	}
+	manager := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	if err := routeStore.RememberSession(ctx, "missing-session", "alpha"); err != nil {
+		t.Fatalf("RememberSession: %v", err)
+	}
+	if err := routeStore.RememberTurn(ctx, "missing-turn", "missing-session", "alpha"); err != nil {
+		t.Fatalf("RememberTurn: %v", err)
+	}
+
+	if _, err := manager.GetSession(ctx, p, "missing-session"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetSession error = %v, want not found", err)
+	}
+	if route, ok := manager.cachedSessionRoute("missing-session"); ok {
+		t.Fatalf("cachedSessionRoute = %+v, want none", route)
+	}
+	if _, err := manager.GetTurn(ctx, p, "missing-turn"); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetTurn error = %v, want not found", err)
+	}
+	if route, ok := manager.cachedTurnRoute("missing-turn"); ok {
+		t.Fatalf("cachedTurnRoute = %+v, want none", route)
+	}
+}
+
+func TestManagerBestEffortRoutesDoNotCacheDurableConflicts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	manager := newTestManager(t, Config{RouteStore: routeStore})
+	if err := routeStore.RememberSession(ctx, "session-1", "beta"); err != nil {
+		t.Fatalf("RememberSession: %v", err)
+	}
+	if err := routeStore.RememberTurn(ctx, "turn-1", "session-1", "beta"); err != nil {
+		t.Fatalf("RememberTurn: %v", err)
+	}
+	manager.rememberCachedSessionRoute("session-1", "alpha")
+	manager.rememberCachedTurnRoute("turn-1", "session-1", "alpha")
+
+	manager.rememberSessionRouteBestEffort(ctx, "session-1", "alpha")
+	manager.rememberTurnRouteBestEffort(ctx, "turn-1", "session-1", "alpha")
+
+	if route, ok := manager.cachedSessionRoute("session-1"); ok {
+		t.Fatalf("cachedSessionRoute = %+v, want none", route)
+	}
+	if route, ok := manager.cachedTurnRoute("turn-1"); ok {
+		t.Fatalf("cachedTurnRoute = %+v, want none", route)
+	}
+}
+
+func TestIndexedDBRouteStoreAcceptsExistingObjectStores(t *testing.T) {
+	t.Parallel()
+
+	db := &alreadyExistsCreateIndexedDB{StubIndexedDB: &coretesting.StubIndexedDB{}}
+	if _, err := NewIndexedDBRouteStore(context.Background(), db); err != nil {
+		t.Fatalf("NewIndexedDBRouteStore(first): %v", err)
+	}
+	if _, err := NewIndexedDBRouteStore(context.Background(), db); err != nil {
+		t.Fatalf("NewIndexedDBRouteStore(existing stores): %v", err)
 	}
 }
 
