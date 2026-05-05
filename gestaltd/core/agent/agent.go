@@ -222,6 +222,26 @@ type CreateSessionRequest struct {
 	Metadata       map[string]any
 	CreatedBy      Actor
 	Subject        SubjectContext
+	SessionStart   *SessionStartConfig
+}
+
+type SessionStartConfig struct {
+	Hooks []SessionStartHook
+}
+
+type SessionStartHook struct {
+	ID      string
+	Type    string
+	Command []string
+	CWD     string
+	Timeout string
+	Env     map[string]string
+	Output  SessionStartHookOutput
+}
+
+type SessionStartHookOutput struct {
+	AdditionalContext bool
+	Metadata          bool
 }
 
 type GetSessionRequest struct {
@@ -346,13 +366,14 @@ type ListTurnEventsRequest struct {
 type GetCapabilitiesRequest struct{}
 
 type ProviderCapabilities struct {
-	StreamingText      bool
-	ToolCalls          bool
-	ParallelToolCalls  bool
-	StructuredOutput   bool
-	Interactions       bool
-	ResumableTurns     bool
-	ReasoningSummaries bool
+	StreamingText        bool
+	ToolCalls            bool
+	ParallelToolCalls    bool
+	StructuredOutput     bool
+	Interactions         bool
+	ResumableTurns       bool
+	ReasoningSummaries   bool
+	SupportsSessionStart bool
 	// BoundedListHydration means provider list APIs can apply Limit and SummaryOnly
 	// without hydrating every source record, while preserving the list ordering
 	// contract before applying Limit.

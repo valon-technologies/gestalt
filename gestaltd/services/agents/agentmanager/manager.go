@@ -42,6 +42,8 @@ var (
 	ErrAgentSessionNotFound            = errors.New("agent session is not found")
 	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
 	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
+	ErrAgentSessionStartUnsupported    = errors.New("agent provider does not support session start hooks")
+	ErrAgentSessionMetadataInvalid     = errors.New("agent session metadata is invalid")
 	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
 )
 
@@ -118,6 +120,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	PluginInvokes     map[string][]invocation.PluginInvocationDependency
 	AgentConnections  map[string][]string
+	SessionStart      map[string]*coreagent.SessionStartConfig
 	RouteStore        RouteStore
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
 	// catalog grants are narrowed to exactly mentioned providers. Nil uses the
@@ -137,6 +140,7 @@ type Manager struct {
 	catalogConnection             map[string]string
 	pluginInvokes                 map[string][]invocation.PluginInvocationDependency
 	agentConnections              map[string][]string
+	sessionStart                  map[string]*coreagent.SessionStartConfig
 	routeStore                    RouteStore
 	defaultToolNarrowingThreshold int
 	// Route caches are process-local accelerators; the route store is the durable provider index.
@@ -157,6 +161,7 @@ func New(cfg Config) *Manager {
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
+		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		routeStore:        cfg.RouteStore,
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
 			cfg.DefaultToolNarrowingThreshold,
@@ -164,6 +169,38 @@ func New(cfg Config) *Manager {
 		sessionRoutes: newAgentRouteCache(),
 		turnRoutes:    newAgentRouteCache(),
 	}
+}
+
+func cloneSessionStartConfigMap(src map[string]*coreagent.SessionStartConfig) map[string]*coreagent.SessionStartConfig {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]*coreagent.SessionStartConfig, len(src))
+	for key, value := range src {
+		key = strings.TrimSpace(key)
+		if key == "" || value == nil {
+			continue
+		}
+		dst[key] = cloneSessionStartConfig(value)
+	}
+	if len(dst) == 0 {
+		return nil
+	}
+	return dst
+}
+
+func cloneSessionStartConfig(src *coreagent.SessionStartConfig) *coreagent.SessionStartConfig {
+	if src == nil {
+		return nil
+	}
+	dst := &coreagent.SessionStartConfig{Hooks: make([]coreagent.SessionStartHook, len(src.Hooks))}
+	for i := range src.Hooks {
+		hook := src.Hooks[i]
+		hook.Command = append([]string(nil), hook.Command...)
+		hook.Env = maps.Clone(hook.Env)
+		dst.Hooks[i] = hook
+	}
+	return dst
 }
 
 func effectiveAgentToolNarrowingThreshold(configured *int) int {
@@ -606,6 +643,13 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if !m.allowsAgentProvider(ctx, p, providerName) {
 		return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
 	}
+	if err := validateAgentSessionUserMetadata(req.Metadata); err != nil {
+		return nil, err
+	}
+	sessionStart, err := m.sessionStartForProvider(ctx, providerName, provider)
+	if err != nil {
+		return nil, err
+	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	sessionID := uuid.NewString()
 	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
@@ -616,8 +660,12 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		Metadata:       maps.Clone(req.Metadata),
 		CreatedBy:      agentActorFromPrincipal(p),
 		Subject:        agentSubjectFromPrincipal(p),
+		SessionStart:   sessionStart,
 	})
 	if err != nil {
+		if sessionStart != nil {
+			return nil, err
+		}
 		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{
 			SessionID: sessionID,
 			Subject:   agentSubjectFromPrincipal(p),
@@ -730,12 +778,16 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, err
 	}
+	if err := validateAgentSessionUserMetadata(req.Metadata); err != nil {
+		return nil, err
+	}
+	metadata := mergeReservedLifecycleMetadata(req.Metadata, owned.session.Metadata)
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	session, err = owned.provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
 		SessionID: strings.TrimSpace(req.SessionID),
 		ClientRef: strings.TrimSpace(req.ClientRef),
 		State:     req.State,
-		Metadata:  maps.Clone(req.Metadata),
+		Metadata:  metadata,
 		Subject:   agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
@@ -3288,6 +3340,62 @@ func requireAgentProviderBoundedListHydration(ctx context.Context, providerName 
 		return nil
 	}
 	return errAgentBoundedListUnsupported(providerName)
+}
+
+func (m *Manager) sessionStartForProvider(ctx context.Context, providerName string, provider coreagent.Provider) (*coreagent.SessionStartConfig, error) {
+	if m == nil || len(m.sessionStart) == 0 {
+		return nil, nil
+	}
+	cfg := m.sessionStart[strings.TrimSpace(providerName)]
+	if cfg == nil || len(cfg.Hooks) == 0 {
+		return nil, nil
+	}
+	if provider == nil {
+		return nil, ErrAgentProviderNotAvailable
+	}
+	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	if caps == nil || !caps.SupportsSessionStart {
+		return nil, errAgentSessionStartUnsupported(providerName)
+	}
+	return cloneSessionStartConfig(cfg), nil
+}
+
+func errAgentSessionStartUnsupported(providerName string) error {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return ErrAgentSessionStartUnsupported
+	}
+	return fmt.Errorf("%w: provider %q", ErrAgentSessionStartUnsupported, providerName)
+}
+
+func validateAgentSessionUserMetadata(metadata map[string]any) error {
+	for key := range metadata {
+		if isReservedLifecycleMetadataKey(key) {
+			return fmt.Errorf("%w: key %q is reserved for Gestalt lifecycle data", ErrAgentSessionMetadataInvalid, key)
+		}
+	}
+	return nil
+}
+
+func mergeReservedLifecycleMetadata(metadata map[string]any, existing map[string]any) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	merged := maps.Clone(metadata)
+	for key, value := range existing {
+		if isReservedLifecycleMetadataKey(key) {
+			merged[key] = value
+		}
+	}
+	return merged
+}
+
+func isReservedLifecycleMetadataKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key == "__gestalt.lifecycle" || strings.HasPrefix(key, "__gestalt.lifecycle.")
 }
 
 func errAgentBoundedListUnsupported(providerName string) error {

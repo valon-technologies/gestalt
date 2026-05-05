@@ -141,6 +141,7 @@ message AgentProviderCapabilities {
   // and turns by the relevant newest-first recency fields before applying limit.
   bool bounded_list_hydration = 9;
   repeated AgentToolSourceMode supported_tool_sources = 10;
+  bool supports_session_start = 11;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
@@ -183,6 +184,26 @@ message CreateAgentProviderSessionRequest {
   google.protobuf.Struct metadata = 5;
   AgentActor created_by = 7;
   AgentSubjectContext subject = 8;
+  AgentSessionStartConfig session_start = 9;
+}
+
+message AgentSessionStartConfig {
+  repeated AgentSessionStartHook hooks = 1;
+}
+
+message AgentSessionStartHook {
+  string id = 1;
+  string type = 2;
+  repeated string command = 3;
+  string cwd = 4;
+  string timeout = 5;
+  map<string, string> env = 6;
+  AgentSessionStartHookOutput output = 7;
+}
+
+message AgentSessionStartHookOutput {
+  bool additional_context = 1;
+  bool metadata = 2;
 }
 
 message GetAgentProviderSessionRequest {

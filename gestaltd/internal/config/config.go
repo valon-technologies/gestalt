@@ -398,6 +398,7 @@ type ProviderEntry struct {
 	DefaultHarness  string                                 `yaml:"defaultHarness,omitempty"`
 	Harnesses       map[string]*ProviderEntryHarnessConfig `yaml:"harnesses,omitempty"`
 	LocalHarness    *ProviderEntryHarnessConfig            `yaml:"localHarness,omitempty"`
+	Lifecycle       *AgentProviderLifecycleConfig          `yaml:"lifecycle,omitempty"`
 	RouteAuth       *RouteAuthDef                          `yaml:"-"`
 	SecuritySchemes map[string]*HTTPSecurityScheme         `yaml:"securitySchemes,omitempty"`
 	HTTP            map[string]*HTTPBinding                `yaml:"http,omitempty"`
@@ -468,6 +469,25 @@ type ProviderEntryHarnessInstallCommand struct {
 	Args        []string          `yaml:"args,omitempty"`
 	Shell       string            `yaml:"shell,omitempty"`
 	Env         map[string]string `yaml:"env,omitempty"`
+}
+
+type AgentProviderLifecycleConfig struct {
+	SessionStart []AgentProviderSessionStartHookConfig `yaml:"sessionStart,omitempty"`
+}
+
+type AgentProviderSessionStartHookConfig struct {
+	ID      string                                    `yaml:"id,omitempty"`
+	Type    string                                    `yaml:"type,omitempty"`
+	Command []string                                  `yaml:"command,omitempty"`
+	CWD     string                                    `yaml:"cwd,omitempty"`
+	Timeout string                                    `yaml:"timeout,omitempty"`
+	Env     map[string]string                         `yaml:"env,omitempty"`
+	Output  AgentProviderSessionStartHookOutputConfig `yaml:"output,omitempty"`
+}
+
+type AgentProviderSessionStartHookOutputConfig struct {
+	AdditionalContext bool `yaml:"additionalContext,omitempty"`
+	Metadata          bool `yaml:"metadata,omitempty"`
 }
 
 type ProviderEntryDevConfig struct {
@@ -915,8 +935,28 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
 	e.LocalHarness = cloneProviderEntryHarnessConfig(e.LocalHarness)
+	e.Lifecycle = cloneAgentProviderLifecycleConfig(e.Lifecycle)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
+}
+
+func cloneAgentProviderLifecycleConfig(src *AgentProviderLifecycleConfig) *AgentProviderLifecycleConfig {
+	if src == nil {
+		return nil
+	}
+	dst := &AgentProviderLifecycleConfig{
+		SessionStart: make([]AgentProviderSessionStartHookConfig, len(src.SessionStart)),
+	}
+	for i := range src.SessionStart {
+		dst.SessionStart[i] = cloneAgentProviderSessionStartHookConfig(src.SessionStart[i])
+	}
+	return dst
+}
+
+func cloneAgentProviderSessionStartHookConfig(src AgentProviderSessionStartHookConfig) AgentProviderSessionStartHookConfig {
+	src.Command = slices.Clone(src.Command)
+	src.Env = maps.Clone(src.Env)
+	return src
 }
 
 func cloneProviderEntryHarnessConfigMap(src map[string]*ProviderEntryHarnessConfig) map[string]*ProviderEntryHarnessConfig {
@@ -977,6 +1017,7 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	if entry.Dev != nil {
 		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
 	}
+	normalizeAgentProviderLifecycle(entry.Lifecycle)
 	entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
 	normalizeProviderEntryHarness(entry.LocalHarness)
 	for name, harness := range entry.Harnesses {
@@ -988,6 +1029,29 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 			}
 		}
 		normalizeProviderEntryHarness(harness)
+	}
+}
+
+func normalizeAgentProviderLifecycle(lifecycle *AgentProviderLifecycleConfig) {
+	if lifecycle == nil {
+		return
+	}
+	for i := range lifecycle.SessionStart {
+		hook := &lifecycle.SessionStart[i]
+		hook.ID = strings.TrimSpace(hook.ID)
+		hook.Type = strings.TrimSpace(hook.Type)
+		hook.CWD = strings.TrimSpace(hook.CWD)
+		hook.Timeout = strings.TrimSpace(hook.Timeout)
+		if len(hook.Command) > 0 {
+			hook.Command[0] = strings.TrimSpace(hook.Command[0])
+		}
+		if hook.Env != nil {
+			trimmed := make(map[string]string, len(hook.Env))
+			for key, value := range hook.Env {
+				trimmed[strings.TrimSpace(key)] = value
+			}
+			hook.Env = trimmed
+		}
 	}
 }
 
@@ -3205,6 +3269,15 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 			resolveRelativeStringField(harness, "workingDirectory", baseDir)
 		}
 	}
+	if lifecycle, ok := entry["lifecycle"].(map[string]any); ok {
+		if hooks, ok := lifecycle["sessionStart"].([]any); ok {
+			for _, value := range hooks {
+				if hook, ok := value.(map[string]any); ok {
+					resolveRelativeStringField(hook, "cwd", baseDir)
+				}
+			}
+		}
+	}
 	if source, ok := entry["source"].(map[string]any); ok {
 		resolveRelativeStringField(source, "path", baseDir)
 		return
@@ -3273,6 +3346,11 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		for _, harness := range entry.Harnesses {
 			if harness != nil {
 				harness.WorkingDirectory = resolveRelativePath(baseDir, harness.WorkingDirectory)
+			}
+		}
+		if entry.Lifecycle != nil {
+			for i := range entry.Lifecycle.SessionStart {
+				entry.Lifecycle.SessionStart[i].CWD = resolveRelativePath(baseDir, entry.Lifecycle.SessionStart[i].CWD)
 			}
 		}
 	}

@@ -74,6 +74,41 @@ func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
 	return runtime, nil
 }
 
+func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionStartConfig {
+	if cfg == nil || len(cfg.Providers.Agent) == 0 {
+		return nil
+	}
+	out := make(map[string]*coreagent.SessionStartConfig)
+	for name, entry := range cfg.Providers.Agent {
+		name = strings.TrimSpace(name)
+		if name == "" || entry == nil || entry.Lifecycle == nil || len(entry.Lifecycle.SessionStart) == 0 {
+			continue
+		}
+		hooks := make([]coreagent.SessionStartHook, 0, len(entry.Lifecycle.SessionStart))
+		for _, hook := range entry.Lifecycle.SessionStart {
+			hooks = append(hooks, coreagent.SessionStartHook{
+				ID:      hook.ID,
+				Type:    hook.Type,
+				Command: append([]string(nil), hook.Command...),
+				CWD:     hook.CWD,
+				Timeout: hook.Timeout,
+				Env:     maps.Clone(hook.Env),
+				Output: coreagent.SessionStartHookOutput{
+					AdditionalContext: hook.Output.AdditionalContext,
+					Metadata:          hook.Output.Metadata,
+				},
+			})
+		}
+		if len(hooks) > 0 {
+			out[name] = &coreagent.SessionStartConfig{Hooks: hooks}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func (r *agentRuntime) PublishProvider(name string, provider coreagent.Provider) {
 	if r == nil || provider == nil || strings.TrimSpace(name) == "" {
 		return

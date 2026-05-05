@@ -14,13 +14,17 @@ import (
 )
 
 type fakeAgentProviderClient struct {
+	createSession   func(context.Context, *proto.CreateAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error)
 	getCapabilities func(context.Context, *proto.GetAgentProviderCapabilitiesRequest, ...grpc.CallOption) (*proto.AgentProviderCapabilities, error)
 	listSessions    func(context.Context, *proto.ListAgentProviderSessionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error)
 	listTurns       func(context.Context, *proto.ListAgentProviderTurnsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error)
 	listTurnEvents  func(context.Context, *proto.ListAgentProviderTurnEventsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnEventsResponse, error)
 }
 
-func (c *fakeAgentProviderClient) CreateSession(context.Context, *proto.CreateAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error) {
+func (c *fakeAgentProviderClient) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest, opts ...grpc.CallOption) (*proto.AgentSession, error) {
+	if c.createSession != nil {
+		return c.createSession(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected CreateSession call")
 }
 
@@ -99,6 +103,41 @@ func TestRemoteAgentPingRequiresAgentProviderSurface(t *testing.T) {
 	err := agent.Ping(context.Background())
 	if status.Code(err) != codes.Unimplemented {
 		t.Fatalf("Ping error code = %s, want %s (err=%v)", status.Code(err), codes.Unimplemented, err)
+	}
+}
+
+func TestRemoteAgentCreateSessionForwardsSessionStart(t *testing.T) {
+	t.Parallel()
+
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			createSession: func(_ context.Context, req *proto.CreateAgentProviderSessionRequest, _ ...grpc.CallOption) (*proto.AgentSession, error) {
+				if req.GetSessionStart() == nil || len(req.GetSessionStart().GetHooks()) != 1 {
+					t.Fatalf("SessionStart = %#v, want one hook", req.GetSessionStart())
+				}
+				hook := req.GetSessionStart().GetHooks()[0]
+				if hook.GetId() != "setup" || hook.GetCommand()[0] != "bash" || !hook.GetOutput().GetAdditionalContext() || hook.GetEnv()["FOO"] != "bar" {
+					t.Fatalf("session start hook = %#v", hook)
+				}
+				return &proto.AgentSession{Id: req.GetSessionId(), ProviderName: "claude"}, nil
+			},
+		},
+	}
+
+	_, err := agent.CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "session-1",
+		SessionStart: &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{
+			ID:      "setup",
+			Type:    "command",
+			Command: []string{"bash", "-lc", "printf context"},
+			CWD:     "/tmp",
+			Timeout: "5s",
+			Env:     map[string]string{"FOO": "bar"},
+			Output:  coreagent.SessionStartHookOutput{AdditionalContext: true},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
 	}
 }
 

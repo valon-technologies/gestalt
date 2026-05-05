@@ -42,6 +42,9 @@ type (
 	AgentMessage                              = internal.AgentMessage
 	AgentProviderCapabilities                 = internal.AgentProviderCapabilities
 	AgentSession                              = internal.AgentSession
+	AgentSessionStartConfig                   = internal.AgentSessionStartConfig
+	AgentSessionStartHook                     = internal.AgentSessionStartHook
+	AgentSessionStartHookOutput               = internal.AgentSessionStartHookOutput
 	AgentToolRef                              = internal.AgentToolRef
 	AgentTurn                                 = internal.AgentTurn
 	AgentTurnDisplay                          = internal.AgentTurnDisplay

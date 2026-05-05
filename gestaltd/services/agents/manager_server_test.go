@@ -7,17 +7,22 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type recordingManagerService struct {
-	listSessions func(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
-	listTurns    func(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
+	createSession func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
+	listSessions  func(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
+	listTurns     func(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
 }
 
-func (s *recordingManagerService) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (s *recordingManagerService) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+	if s.createSession != nil {
+		return s.createSession(ctx, p, req)
+	}
 	return nil, errors.New("unexpected CreateSession call")
 }
 
@@ -65,6 +70,66 @@ func (s *recordingManagerService) ListInteractions(context.Context, *principal.P
 
 func (s *recordingManagerService) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
 	return nil, errors.New("unexpected ResolveInteraction call")
+}
+
+func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-session-start-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+			return nil, agentmanager.ErrAgentSessionStartUnsupported
+		},
+	}, tokens)
+
+	_, err = server.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+		InvocationToken: token,
+		ProviderName:    "managed",
+	})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.FailedPrecondition)
+	}
+}
+
+func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-metadata-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+			return nil, agentmanager.ErrAgentSessionMetadataInvalid
+		},
+	}, tokens)
+
+	_, err = server.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+		InvocationToken: token,
+		ProviderName:    "managed",
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
 }
 
 func TestManagerServerForwardsBoundedListRequests(t *testing.T) {

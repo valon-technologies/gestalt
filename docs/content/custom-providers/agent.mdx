@@ -68,6 +68,26 @@ list hydration from `GetCapabilities`. When Gestalt asks for `limit` or
 `summary_only`, it expects the provider to apply those options before returning
 results instead of hydrating the full session or turn history in the daemon.
 
+Providers that support deployer-defined session setup must advertise
+`supports_session_start` from `GetCapabilities`. Gestalt then forwards
+`CreateSession.session_start` only to providers with that capability.
+
+```go
+return &proto.AgentProviderCapabilities{
+  SupportsSessionStart: true,
+}
+```
+
+`session_start.hooks` currently contains command hooks only. Providers should
+run each argv with the supplied absolute `cwd`, a sanitized environment plus the
+explicit hook `env`, and fail `CreateSession` when any hook fails. First-party
+providers preserve only `HOME`, `PATH`, `SHELL`, `TMPDIR`, `USER`, `LOGNAME`,
+`LANG`, and `LC_ALL` by default. Persist hook results in session metadata under
+`__gestalt.lifecycle.sessionStart.results.<hookId>` and preserve that reserved
+namespace across later `UpdateSession` calls. If a hook has
+`output.additional_context`, prepend stdout as provider-owned context to future
+turn prompts for that session.
+
 ## MCP Catalog Tools
 
 Agent providers opt in to Gestalt integration tools by advertising
