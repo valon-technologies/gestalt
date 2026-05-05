@@ -1865,6 +1865,35 @@ type PluginInvocationDependency struct {
 	Operation      string                            `yaml:"operation,omitempty"`
 	Surface        string                            `yaml:"surface,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+	RunAs          *PluginInvocationRunAsConfig      `yaml:"runAs,omitempty"`
+}
+
+type PluginInvocationRunAsConfig struct {
+	Subject *PluginInvocationRunAsSubjectConfig `yaml:"subject,omitempty"`
+}
+
+type PluginInvocationRunAsSubjectConfig struct {
+	ID                  string `yaml:"id,omitempty"`
+	Kind                string `yaml:"kind,omitempty"`
+	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
+	DisplayName         string `yaml:"displayName,omitempty"`
+	AuthSource          string `yaml:"authSource,omitempty"`
+}
+
+func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
+	if d.RunAs == nil {
+		return nil
+	}
+	if subject := d.RunAs.Subject; subject != nil {
+		return core.NormalizeRunAsSubject(&core.RunAsSubject{
+			SubjectID:           subject.ID,
+			SubjectKind:         subject.Kind,
+			CredentialSubjectID: subject.CredentialSubjectID,
+			DisplayName:         subject.DisplayName,
+			AuthSource:          subject.AuthSource,
+		})
+	}
+	return nil
 }
 
 func Load(path string) (*Config, error) {

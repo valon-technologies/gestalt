@@ -148,7 +148,7 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	var scope toolScope
-	if err := m.openValue(sealPurposeToolScope, strings.TrimSpace(decoded.ToolScope), &scope); err != nil {
+	if err := m.openValueAny([]string{sealPurposeToolScope, legacySealPurposeToolScope}, strings.TrimSpace(decoded.ToolScope), &scope); err != nil {
 		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	grant := Grant{

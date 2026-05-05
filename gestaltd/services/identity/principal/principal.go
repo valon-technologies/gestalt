@@ -40,6 +40,44 @@ type Principal struct {
 type PermissionSet map[string]map[string]struct{}
 type ActionPermissionSet map[string]map[string]struct{}
 
+func ClonePermissionSet(src PermissionSet) PermissionSet {
+	if src == nil {
+		return nil
+	}
+	out := make(PermissionSet, len(src))
+	for pluginName, operations := range src {
+		if operations == nil {
+			out[pluginName] = nil
+			continue
+		}
+		copied := make(map[string]struct{}, len(operations))
+		for operation := range operations {
+			copied[operation] = struct{}{}
+		}
+		out[pluginName] = copied
+	}
+	return out
+}
+
+func CloneActionPermissionSet(src ActionPermissionSet) ActionPermissionSet {
+	if src == nil {
+		return nil
+	}
+	out := make(ActionPermissionSet, len(src))
+	for resource, actions := range src {
+		if actions == nil {
+			out[resource] = nil
+			continue
+		}
+		copied := make(map[string]struct{}, len(actions))
+		for action := range actions {
+			copied[action] = struct{}{}
+		}
+		out[resource] = copied
+	}
+	return out
+}
+
 func (s Source) String() string {
 	switch s {
 	case SourceSession:

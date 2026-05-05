@@ -72,6 +72,8 @@ type agentRuntimeInvokerCall struct {
 	subjectID              string
 	credentialModeOverride core.ConnectionMode
 	idempotencyKey         string
+	agentSubjectID         string
+	runAsSubjectID         string
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -81,6 +83,15 @@ type recordingAgentRuntimeInvoker struct {
 
 func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	i.mu.Lock()
+	runAsAudit := invocation.RunAsAuditFromContext(ctx)
+	agentSubjectID := ""
+	if runAsAudit.AgentSubject != nil {
+		agentSubjectID = runAsAudit.AgentSubject.SubjectID
+	}
+	runAsSubjectID := ""
+	if runAsAudit.RunAsSubject != nil {
+		runAsSubjectID = runAsAudit.RunAsSubject.SubjectID
+	}
 	i.calls = append(i.calls, agentRuntimeInvokerCall{
 		providerName:           providerName,
 		operation:              operation,
@@ -88,6 +99,8 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		subjectID:              p.SubjectID,
 		credentialModeOverride: invocation.CredentialModeOverrideFromContext(ctx),
 		idempotencyKey:         invocation.IdempotencyKeyFromContext(ctx),
+		agentSubjectID:         agentSubjectID,
+		runAsSubjectID:         runAsSubjectID,
 	})
 	i.mu.Unlock()
 
@@ -1944,6 +1957,123 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	calls = invoker.Calls()
 	if len(calls) != 1 || calls[0].providerName != "slack" || calls[0].operation != "events.reply" {
 		t.Fatalf("invoker calls = %#v, want slack events.reply once", calls)
+	}
+}
+
+func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAgentRuntimeInvoker{}
+	runGrants := newTestAgentRunGrants(t)
+	providers := testutil.NewProviderRegistry(t,
+		&coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "events.reply",
+				Title: "Reply",
+			}}},
+		},
+		&coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "bot.createPullRequest",
+				Title: "Create pull request",
+			}}},
+		},
+	)
+	manager := agentmanager.New(agentmanager.Config{
+		Providers: providers,
+		RunGrants: runGrants,
+		Invoker:   invoker,
+	})
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"simple": &routingAgentProvider{
+				getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        "turn-1",
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+						CreatedBy: coreagent.Actor{SubjectID: "user:user-123"},
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetInvoker(invoker)
+	runtime.SetRunGrants(runGrants)
+	runtime.SetToolSearcher(manager)
+
+	runAs := &core.RunAsSubject{
+		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind: "service_account",
+		AuthSource:  "github_app_webhook",
+	}
+	grant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		DisplayName:  "Hugh",
+		AuthSource:   "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "slack", Operations: []string{"events.reply"}},
+			{Plugin: "github", Operations: []string{"bot.createPullRequest"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "slack", Operation: "events.reply"},
+			{Plugin: "github", Operation: "bot.createPullRequest", RunAs: runAs},
+		},
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Mint runAs grant: %v", err)
+	}
+
+	if _, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}),
+		RunGrant:  grant,
+		Arguments: map[string]any{"eventId": "evt-1"},
+	}); err != nil {
+		t.Fatalf("ExecuteTool slack: %v", err)
+	}
+
+	if _, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
+			Plugin:    "github",
+			Operation: "bot.createPullRequest",
+			RunAs:     runAs,
+		}),
+		RunGrant:  grant,
+		Arguments: map[string]any{"owner": "acme", "repo": "widgets"},
+	}); err != nil {
+		t.Fatalf("ExecuteTool github: %v", err)
+	}
+
+	calls := invoker.Calls()
+	if len(calls) != 2 {
+		t.Fatalf("invoker calls = %#v, want two calls", calls)
+	}
+	if calls[0].providerName != "slack" || calls[0].subjectID != "user:user-123" || calls[0].runAsSubjectID != "" {
+		t.Fatalf("slack call = %#v, want original user subject without runAs", calls[0])
+	}
+	if calls[1].providerName != "github" || calls[1].subjectID != runAs.SubjectID {
+		t.Fatalf("github call = %#v, want delegated subject %q", calls[1], runAs.SubjectID)
+	}
+	if calls[1].agentSubjectID != "user:user-123" || calls[1].runAsSubjectID != runAs.SubjectID {
+		t.Fatalf("github audit context = %#v, want original and delegated subjects", calls[1])
 	}
 }
 

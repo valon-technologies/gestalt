@@ -1259,6 +1259,7 @@ func pluginInvocationDependencies(deps []config.PluginInvocationDependency) []in
 			Operation:      dep.Operation,
 			Surface:        dep.Surface,
 			CredentialMode: core.ConnectionMode(dep.CredentialMode),
+			RunAs:          dep.RunAsSubject(),
 		})
 	}
 	return out

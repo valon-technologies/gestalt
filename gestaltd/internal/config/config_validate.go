@@ -823,6 +823,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 		case entry.Invokes[i].CredentialMode != "" && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeNone && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeUser:
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d].credentialMode %q is not supported", name, i, entry.Invokes[i].CredentialMode)
 		}
+		if err := normalizePluginInvocationRunAs("plugins."+name+".invokes["+strconv.Itoa(i)+"]", &entry.Invokes[i]); err != nil {
+			return err
+		}
 		key := entry.Invokes[i].Plugin + "\x00op:" + entry.Invokes[i].Operation + "\x00surface:" + entry.Invokes[i].Surface
 		if prev, ok := seenInvokes[key]; ok {
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d] duplicates invokes[%d]", name, i, prev)
@@ -876,6 +879,44 @@ func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) err
 	}
 	if _, ok := cfg.Providers.Authentication[entry.RouteAuth.Provider]; !ok {
 		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
+	}
+	return nil
+}
+
+func normalizePluginInvocationRunAs(path string, invoke *PluginInvocationDependency) error {
+	if invoke == nil || invoke.RunAs == nil {
+		return nil
+	}
+	if strings.TrimSpace(invoke.Surface) != "" {
+		return fmt.Errorf("config validation: %s.runAs requires an exact operation", path)
+	}
+	runAs := invoke.RunAs
+	count := 0
+	if runAs.Subject != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("config validation: %s.runAs must set exactly one delegation target", path)
+	}
+	subject := runAs.Subject
+	subject.ID = strings.TrimSpace(subject.ID)
+	subject.Kind = strings.TrimSpace(subject.Kind)
+	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
+	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
+	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
+	if subject.ID == "" {
+		return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
+	}
+	if subject.Kind == "" {
+		if kind, _, ok := core.ParseSubjectID(subject.ID); ok {
+			subject.Kind = kind
+		}
+	}
+	if subject.Kind == "" {
+		return fmt.Errorf("config validation: %s.runAs.subject.kind is required", path)
+	}
+	if subject.CredentialSubjectID == "" {
+		subject.CredentialSubjectID = subject.ID
 	}
 	return nil
 }

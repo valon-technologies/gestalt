@@ -68,6 +68,19 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 			entry.SubjectKind = string(p.Kind)
 		}
 	}
+	if delegation := RunAsAuditFromContext(ctx); delegation.RunAsSubject != nil {
+		if agentSubject := delegation.AgentSubject; agentSubject != nil {
+			entry.AgentSubjectID = agentSubject.SubjectID
+			entry.AgentSubjectKind = agentSubject.SubjectKind
+			entry.AgentDisplayName = agentSubject.DisplayName
+			entry.AgentAuthSource = agentSubject.AuthSource
+		}
+		runAs := delegation.RunAsSubject
+		entry.RunAsSubjectID = runAs.SubjectID
+		entry.RunAsSubjectKind = runAs.SubjectKind
+		entry.RunAsDisplayName = runAs.DisplayName
+		entry.RunAsAuthSource = runAs.AuthSource
+	}
 	access := AccessContextFromContext(ctx)
 	if access.Policy != "" {
 		entry.AccessPolicy = access.Policy
@@ -131,6 +144,30 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	}
 	if auditPrincipal.Kind != "" {
 		attrs = append(attrs, slog.String("subject_kind", string(auditPrincipal.Kind)))
+	}
+	if entry.AgentSubjectID != "" {
+		attrs = append(attrs, slog.String("agent_subject_id", entry.AgentSubjectID))
+	}
+	if entry.AgentSubjectKind != "" {
+		attrs = append(attrs, slog.String("agent_subject_kind", entry.AgentSubjectKind))
+	}
+	if entry.AgentDisplayName != "" {
+		attrs = append(attrs, slog.String("agent_display_name", entry.AgentDisplayName))
+	}
+	if entry.AgentAuthSource != "" {
+		attrs = append(attrs, slog.String("agent_auth_source", entry.AgentAuthSource))
+	}
+	if entry.RunAsSubjectID != "" {
+		attrs = append(attrs, slog.String("run_as_subject_id", entry.RunAsSubjectID))
+	}
+	if entry.RunAsSubjectKind != "" {
+		attrs = append(attrs, slog.String("run_as_subject_kind", entry.RunAsSubjectKind))
+	}
+	if entry.RunAsDisplayName != "" {
+		attrs = append(attrs, slog.String("run_as_display_name", entry.RunAsDisplayName))
+	}
+	if entry.RunAsAuthSource != "" {
+		attrs = append(attrs, slog.String("run_as_auth_source", entry.RunAsAuthSource))
 	}
 	if entry.AccessPolicy != "" {
 		attrs = append(attrs, slog.String("access_policy", entry.AccessPolicy))

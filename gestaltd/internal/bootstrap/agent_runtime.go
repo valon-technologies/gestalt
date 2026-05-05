@@ -292,6 +292,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		Connection:     toolTarget.Connection,
 		Instance:       toolTarget.Instance,
 		CredentialMode: toolTarget.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(toolTarget.RunAs),
 	})
 	if err != nil {
 		return nil, err
@@ -326,11 +327,16 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if mode := resolvedTool.Target.CredentialMode; mode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, mode)
 	}
+	invokePrincipal := principalValue
+	if runAs := core.NormalizeRunAsSubject(resolvedTool.Target.RunAs); runAs != nil {
+		invokePrincipal = agentRunAsPrincipal(principalValue, runAs)
+		ctx = invocation.WithRunAsAudit(ctx, agentAuditSubjectFromPrincipal(principalValue), runAs)
+	}
 	if idempotencyKey != "" {
 		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
 	}
 	params := maps.Clone(req.Arguments)
-	result, err := invoker.Invoke(ctx, principalValue, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
+	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
 		return nil, err
 	}
@@ -572,6 +578,46 @@ func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
 	return principal.Canonicalize(value)
 }
 
+func agentRunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *principal.Principal {
+	base = principal.Canonicalized(base)
+	runAs = core.NormalizeRunAsSubject(runAs)
+	if runAs == nil {
+		return base
+	}
+	if base == nil {
+		base = &principal.Principal{}
+	}
+	value := &principal.Principal{
+		SubjectID:           strings.TrimSpace(runAs.SubjectID),
+		CredentialSubjectID: strings.TrimSpace(runAs.CredentialSubjectID),
+		DisplayName:         strings.TrimSpace(runAs.DisplayName),
+		Kind:                principal.Kind(strings.TrimSpace(runAs.SubjectKind)),
+		Scopes:              append([]string(nil), base.Scopes...),
+		TokenPermissions:    principal.ClonePermissionSet(base.TokenPermissions),
+		ActionPermissions:   principal.CloneActionPermissionSet(base.ActionPermissions),
+		Identity:            base.Identity,
+	}
+	principal.SetAuthSource(value, runAs.AuthSource)
+	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
+		value.CredentialSubjectID = value.SubjectID
+	}
+	return principal.Canonicalize(value)
+}
+
+func agentAuditSubjectFromPrincipal(p *principal.Principal) *core.RunAsSubject {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:           strings.TrimSpace(p.SubjectID),
+		SubjectKind:         string(p.Kind),
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		DisplayName:         strings.TrimSpace(p.DisplayName),
+		AuthSource:          p.AuthSource(),
+	})
+}
+
 func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
 	if principalValue == nil {
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
@@ -608,6 +654,9 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	}
 	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
 		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
+		return fmt.Errorf("%w: agent tool %q runAs delegation was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	return nil
 }
@@ -773,6 +822,9 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 		if tools[i].Hidden && !agentToolHiddenExplicitlyGranted(target, tools[i].ToolID, refs, nil) {
 			return fmt.Errorf("%w: listed hidden agent tool %q was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
+		if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, refs, nil) {
+			return fmt.Errorf("%w: listed agent tool %q runAs delegation was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		}
 	}
 	return nil
 }
@@ -823,6 +875,9 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 			continue
 		}
 		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
+			continue
+		}
+		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
 			continue
 		}
 		return true
@@ -882,6 +937,9 @@ func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID str
 		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
 			continue
 		}
+		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+			continue
+		}
 		return true
 	}
 	return false
@@ -919,11 +977,44 @@ func agentToolCredentialModeExplicitlyGranted(target coreagent.ToolTarget, refs 
 	return false
 }
 
+func agentToolRunAsExplicitlyGranted(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+	if target.RunAs == nil {
+		return true
+	}
+	if agentToolMatchesResolvedTools(target, "", tools) {
+		return true
+	}
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.Plugin) == "*" {
+			continue
+		}
+		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
+			continue
+		}
+		if !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+			continue
+		}
+		if connection := strings.TrimSpace(ref.Connection); connection != "" && config.ResolveConnectionAlias(connection) != config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)) {
+			continue
+		}
+		if instance := strings.TrimSpace(ref.Instance); instance != "" && instance != strings.TrimSpace(target.Instance) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func agentToolTargetsEqual(left, right coreagent.ToolTarget) bool {
 	return strings.TrimSpace(left.System) == strings.TrimSpace(right.System) &&
 		strings.TrimSpace(left.Plugin) == strings.TrimSpace(right.Plugin) &&
 		strings.TrimSpace(left.Operation) == strings.TrimSpace(right.Operation) &&
 		config.ResolveConnectionAlias(strings.TrimSpace(left.Connection)) == config.ResolveConnectionAlias(strings.TrimSpace(right.Connection)) &&
 		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance) &&
-		left.CredentialMode == right.CredentialMode
+		left.CredentialMode == right.CredentialMode &&
+		core.RunAsSubjectsEqual(left.RunAs, right.RunAs)
 }

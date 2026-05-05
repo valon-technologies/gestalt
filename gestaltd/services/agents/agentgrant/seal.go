@@ -16,10 +16,12 @@ import (
 )
 
 const (
-	sealVersion          = "v1"
-	sealPurposeToolID    = "agent-tool-id"
-	sealPurposeToolScope = "agent-tool-scope"
-	toolIDPrefix         = "agt_tool_"
+	sealVersion                = "v1"
+	sealPurposeToolID          = "agent-tool-id-v2"
+	sealPurposeToolScope       = "agent-tool-scope-v2"
+	legacySealPurposeToolID    = "agent-tool-id"
+	legacySealPurposeToolScope = "agent-tool-scope"
+	toolIDPrefix               = "agt_tool_"
 )
 
 type toolBinding struct {
@@ -38,6 +40,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		Instance:       strings.TrimSpace(target.Instance),
 		CredentialMode: core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
 		Unavailable:    normalizeUnavailableToolTarget(target.Unavailable),
+		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
 	}
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
@@ -62,7 +65,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	var binding toolBinding
-	if err := m.openValue(sealPurposeToolID, strings.TrimPrefix(id, toolIDPrefix), &binding); err != nil {
+	if err := m.openValueAny([]string{sealPurposeToolID, legacySealPurposeToolID}, strings.TrimPrefix(id, toolIDPrefix), &binding); err != nil {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	target := binding.Target
@@ -73,6 +76,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.Instance = strings.TrimSpace(target.Instance)
 	target.CredentialMode = core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode)))
 	target.Unavailable = normalizeUnavailableToolTarget(target.Unavailable)
+	target.RunAs = core.NormalizeRunAsSubject(target.RunAs)
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
 			return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
@@ -140,6 +144,24 @@ func (m *Manager) openValue(purpose, token string, value any) error {
 		return fmt.Errorf("decode agent grant payload: %w", err)
 	}
 	return nil
+}
+
+func (m *Manager) openValueAny(purposes []string, token string, value any) error {
+	var lastErr error
+	for _, purpose := range purposes {
+		if strings.TrimSpace(purpose) == "" {
+			continue
+		}
+		if err := m.openValue(purpose, token, value); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("agent grant payload purpose is invalid")
 }
 
 func (m *Manager) sealer(purpose string) (cipher.AEAD, error) {

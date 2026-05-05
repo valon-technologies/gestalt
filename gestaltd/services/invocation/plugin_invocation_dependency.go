@@ -9,13 +9,22 @@ type PluginInvocationDependency struct {
 	Operation      string
 	Surface        string
 	CredentialMode core.ConnectionMode
+	RunAs          *core.RunAsSubject
 }
 
 func ClonePluginInvocationDependencies(src []PluginInvocationDependency) []PluginInvocationDependency {
 	if len(src) == 0 {
 		return nil
 	}
-	return append([]PluginInvocationDependency(nil), src...)
+	out := make([]PluginInvocationDependency, len(src))
+	for i := range src {
+		out[i] = src[i]
+		if src[i].RunAs != nil {
+			runAs := *src[i].RunAs
+			out[i].RunAs = &runAs
+		}
+	}
+	return out
 }
 
 func ClonePluginInvocationDependencyMap(src map[string][]PluginInvocationDependency) map[string][]PluginInvocationDependency {

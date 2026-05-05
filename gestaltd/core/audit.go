@@ -12,6 +12,14 @@ type AuditEntry struct {
 	AuthSource                   string
 	SubjectID                    string
 	SubjectKind                  string
+	AgentSubjectID               string
+	AgentSubjectKind             string
+	AgentDisplayName             string
+	AgentAuthSource              string
+	RunAsSubjectID               string
+	RunAsSubjectKind             string
+	RunAsDisplayName             string
+	RunAsAuthSource              string
 	AccessPolicy                 string
 	AccessRole                   string
 	AuthorizationDecision        string
