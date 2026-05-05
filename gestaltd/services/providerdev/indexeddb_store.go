@@ -381,6 +381,9 @@ func (s *indexedDBSessionStore) consumeAttachAuthorization(ctx context.Context, 
 func (s *indexedDBSessionStore) poll(ctx context.Context, id, dispatcherSecret string) (*PollResponse, bool, error) {
 	nextHeartbeat := time.Time{}
 	for {
+		if pollContextDone(ctx) {
+			return nil, false, nil
+		}
 		now := time.Now()
 		heartbeat := nextHeartbeat.IsZero() || !now.Before(nextHeartbeat)
 		resp, ok, err := s.claimCall(ctx, id, dispatcherSecret, now, heartbeat)
@@ -406,6 +409,9 @@ func (s *indexedDBSessionStore) poll(ctx context.Context, id, dispatcherSecret s
 func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSecret string, now time.Time, heartbeat bool) (*PollResponse, bool, error) {
 	tx, err := s.db.Transaction(ctx, []string{indexedDBAttachmentStore, indexedDBCallStore}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
 	if err != nil {
+		if pollContextOperationDone(ctx, err) {
+			return nil, false, nil
+		}
 		return nil, false, status.Errorf(codes.Internal, "open provider dev poll transaction: %v", err)
 	}
 	committed := false
@@ -413,37 +419,46 @@ func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSec
 
 	attachments := tx.ObjectStore(indexedDBAttachmentStore)
 	calls := tx.ObjectStore(indexedDBCallStore)
-	session, err := s.attachmentFromStore(ctx, attachments, id, now)
+	session, err := pollAttachmentFromStore(ctx, attachments, id, now)
 	if err != nil {
+		if pollContextOperationDone(ctx, err) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
 	if err := verifyStoredDispatcherSecret(session, dispatcherSecret); err != nil {
 		return nil, false, err
 	}
 	touched := false
-	touchSession := func() error {
+	touchSession := func(suppressContextDone bool) (bool, error) {
 		if touched {
-			return nil
+			return false, nil
 		}
 		rec, err := attachmentToRecord(session)
 		if err != nil {
-			return err
+			return false, err
 		}
 		rec["last_seen_at"] = unixNano(now)
 		if err := attachments.Put(ctx, rec); err != nil {
-			return status.Errorf(codes.Internal, "touch provider dev attachment: %v", err)
+			if suppressContextDone && pollContextOperationDone(ctx, err) {
+				return true, nil
+			}
+			return false, status.Errorf(codes.Internal, "touch provider dev attachment: %v", err)
 		}
 		touched = true
-		return nil
+		return false, nil
 	}
 	if heartbeat {
-		if err := touchSession(); err != nil {
+		if done, err := touchSession(true); done || err != nil {
 			return nil, false, err
 		}
 	}
 
 	callRecords, err := calls.Index("by_attachment_state").GetAll(ctx, nil, id, indexedDBCallStatePending)
 	if err != nil {
+		if pollContextOperationDone(ctx, err) {
+			return nil, false, nil
+		}
 		return nil, false, status.Errorf(codes.Internal, "list provider dev calls: %v", err)
 	}
 	var claim *indexedDBCallRecord
@@ -460,6 +475,9 @@ func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSec
 			call.errorCode = codes.DeadlineExceeded
 			call.errorMessage = "provider dev call expired before dispatch"
 			if err := calls.Put(ctx, callToRecord(call)); err != nil {
+				if pollContextOperationDone(ctx, err) {
+					return nil, false, nil
+				}
 				return nil, false, status.Errorf(codes.Internal, "expire provider dev call: %v", err)
 			}
 			continue
@@ -471,6 +489,9 @@ func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSec
 	}
 	if claim == nil {
 		if err := tx.Commit(ctx); err != nil {
+			if pollContextOperationDone(ctx, err) {
+				return nil, false, nil
+			}
 			return nil, false, status.Errorf(codes.Internal, "commit provider dev poll heartbeat: %v", err)
 		}
 		committed = true
@@ -478,7 +499,7 @@ func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSec
 	}
 	claim.state = indexedDBCallStateLeased
 	claim.leasedAt = now
-	if err := touchSession(); err != nil {
+	if _, err := touchSession(false); err != nil {
 		return nil, false, err
 	}
 	if err := calls.Put(ctx, callToRecord(*claim)); err != nil {
@@ -494,6 +515,50 @@ func (s *indexedDBSessionStore) claimCall(ctx context.Context, id, dispatcherSec
 		Method:        claim.method,
 		RequestBase64: base64.StdEncoding.EncodeToString(claim.request),
 	}, true, nil
+}
+
+func pollContextDone(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	err := ctx.Err()
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func pollContextOperationDone(ctx context.Context, err error) bool {
+	if err == nil || !pollContextDone(ctx) {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	return st.Code() == codes.Canceled || st.Code() == codes.DeadlineExceeded
+}
+
+func pollAttachmentFromStore(ctx context.Context, attachments indexeddb.TransactionObjectStore, id string, now time.Time) (*indexedDBSessionRecord, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, status.Error(codes.InvalidArgument, "session id is required")
+	}
+	raw, err := attachments.Get(ctx, id)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", id)
+		}
+		return nil, err
+	}
+	session, err := sessionFromRecord(raw)
+	if err != nil {
+		return nil, err
+	}
+	if !attachmentActive(session, now) {
+		return nil, status.Errorf(codes.NotFound, "provider dev session %q not found", id)
+	}
+	return &session, nil
 }
 
 func (s *indexedDBSessionStore) completeCall(ctx context.Context, attachmentID, callID, dispatcherSecret string, req CompleteCallRequest) error {
@@ -1349,7 +1414,13 @@ func abortIfUncommitted(ctx context.Context, tx indexeddb.Transaction, committed
 	if tx == nil || committed == nil || *committed {
 		return
 	}
-	_ = tx.Abort(ctx)
+	abortCtx := ctx
+	var cancel context.CancelFunc
+	if pollContextDone(ctx) {
+		abortCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+	}
+	_ = tx.Abort(abortCtx)
 }
 
 func recordString(rec indexeddb.Record, key string) string {

@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1676,12 +1678,42 @@ type DispatcherOption func(*dispatcherConfig)
 
 type dispatcherConfig struct {
 	UIHandlers map[string]http.Handler
+	PollRetry  dispatcherPollRetryConfig
+}
+
+type dispatcherPollRetryConfig struct {
+	InitialDelay time.Duration
+	MaxDelay     time.Duration
+	MaxElapsed   time.Duration
 }
 
 func WithUIHandlers(handlers map[string]http.Handler) DispatcherOption {
 	return func(cfg *dispatcherConfig) {
 		cfg.UIHandlers = handlers
 	}
+}
+
+func withDispatcherPollRetryConfig(cfg dispatcherPollRetryConfig) DispatcherOption {
+	return func(dispatcher *dispatcherConfig) {
+		dispatcher.PollRetry = cfg
+	}
+}
+
+func (cfg dispatcherConfig) pollRetryConfig() dispatcherPollRetryConfig {
+	retry := cfg.PollRetry
+	if retry.InitialDelay <= 0 {
+		retry.InitialDelay = 250 * time.Millisecond
+	}
+	if retry.MaxDelay <= 0 {
+		retry.MaxDelay = 5 * time.Second
+	}
+	if retry.MaxElapsed <= 0 {
+		retry.MaxElapsed = 2 * time.Minute
+	}
+	if retry.MaxDelay < retry.InitialDelay {
+		retry.MaxDelay = retry.InitialDelay
+	}
+	return retry
 }
 
 func (c *Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*CreateSessionResponse, error) {
@@ -1769,14 +1801,43 @@ func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers m
 			option(&cfg)
 		}
 	}
+	retryCfg := cfg.pollRetryConfig()
+	retryAttempt := 0
+	var retryStarted time.Time
 	for {
 		call, ok, err := c.Poll(ctx, sessionID)
 		if err != nil {
 			if dispatcherContextDone(ctx) {
 				return nil
 			}
+			if isTransientPollError(ctx, err) {
+				now := time.Now()
+				if retryStarted.IsZero() {
+					retryStarted = now
+				}
+				elapsed := now.Sub(retryStarted)
+				if elapsed >= retryCfg.MaxElapsed {
+					return err
+				}
+				delay := dispatcherPollRetryDelay(retryCfg, retryAttempt)
+				if remaining := retryCfg.MaxElapsed - elapsed; delay > remaining {
+					delay = remaining
+				}
+				slog.WarnContext(ctx, "provider dev remote poll failed; retrying", "error", err, "delay", delay.String())
+				timer := time.NewTimer(delay)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil
+				case <-timer.C:
+				}
+				retryAttempt++
+				continue
+			}
 			return err
 		}
+		retryAttempt = 0
+		retryStarted = time.Time{}
 		if !ok {
 			continue
 		}
@@ -1788,6 +1849,78 @@ func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers m
 			return err
 		}
 	}
+}
+
+func dispatcherPollRetryDelay(cfg dispatcherPollRetryConfig, attempt int) time.Duration {
+	delay := cfg.InitialDelay
+	for i := 0; i < attempt; i++ {
+		if delay >= cfg.MaxDelay/2 {
+			return cfg.MaxDelay
+		}
+		delay *= 2
+	}
+	if delay > cfg.MaxDelay {
+		return cfg.MaxDelay
+	}
+	return delay
+}
+
+func isTransientPollError(ctx context.Context, err error) bool {
+	if err == nil || dispatcherContextDone(ctx) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var statusErr *remoteStatusError
+	if errors.As(err, &statusErr) {
+		switch statusErr.statusCode {
+		case http.StatusInternalServerError:
+			return isTransientPollInternalServerError(statusErr)
+		case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return true
+		default:
+			return false
+		}
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		if urlErr.Timeout() {
+			return true
+		}
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "server closed idle connection") ||
+		strings.Contains(msg, "unexpected eof") ||
+		(strings.Contains(msg, "stream error:") && strings.Contains(msg, "cancel")) ||
+		(strings.Contains(msg, "rst_stream") && strings.Contains(msg, "cancel"))
+}
+
+func isTransientPollInternalServerError(err *remoteStatusError) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.body)
+	if msg == "" {
+		msg = strings.ToLower(err.message)
+	}
+	hasContextReset := strings.Contains(msg, "canceled") ||
+		strings.Contains(msg, "deadlineexceeded") ||
+		strings.Contains(msg, "deadline exceeded") ||
+		strings.Contains(msg, "rst_stream") ||
+		strings.Contains(msg, "stream terminated")
+	if !hasContextReset {
+		return false
+	}
+	return strings.Contains(msg, "open provider dev poll transaction:") ||
+		strings.Contains(msg, "list provider dev calls:") ||
+		strings.Contains(msg, "expire provider dev call:") ||
+		strings.Contains(msg, "commit provider dev poll heartbeat:")
 }
 
 func dispatcherContextDone(ctx context.Context) bool {
@@ -1994,7 +2127,9 @@ func (c Client) doJSONStatus(ctx context.Context, method, path string, in any, o
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return resp.StatusCode, fmt.Errorf("provider dev remote %s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(payload)))
+		body := strings.TrimSpace(string(payload))
+		err := fmt.Sprintf("provider dev remote %s %s: %s: %s", method, path, resp.Status, body)
+		return resp.StatusCode, &remoteStatusError{statusCode: resp.StatusCode, body: body, message: err}
 	}
 	if out != nil {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
@@ -2002,6 +2137,19 @@ func (c Client) doJSONStatus(ctx context.Context, method, path string, in any, o
 		}
 	}
 	return resp.StatusCode, nil
+}
+
+type remoteStatusError struct {
+	statusCode int
+	body       string
+	message    string
+}
+
+func (e *remoteStatusError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.message
 }
 
 func (c Client) endpoint(path string) (string, error) {

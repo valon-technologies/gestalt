@@ -17,13 +17,16 @@ import (
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
@@ -465,6 +468,131 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("dispatcher did not stop")
+	}
+}
+
+func TestIndexedDBAttachmentStatePollTransactionOpenContextDoneReturnsNoContent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
+	manager, session := newSharedProviderDevSession(t, ctx, db)
+
+	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+		if isProviderDevPollTransaction(stores) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return db.inner.Transaction(ctx, stores, mode, opts)
+	}
+
+	statusCode, body := pollProviderDevAttachment(t, manager, session, session.DispatcherSecret, 10*time.Millisecond)
+	if statusCode != http.StatusNoContent {
+		t.Fatalf("poll status = %d, want 204: %s", statusCode, body)
+	}
+}
+
+func TestIndexedDBAttachmentStatePollNoClaimCommitContextDoneReturnsNoContent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
+	manager, session := newSharedProviderDevSession(t, ctx, db)
+
+	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+		tx, err := db.inner.Transaction(ctx, stores, mode, opts)
+		if err != nil || !isProviderDevPollTransaction(stores) {
+			return tx, err
+		}
+		return interceptTransaction{
+			Transaction: tx,
+			commitFn: func(ctx context.Context) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		}, nil
+	}
+
+	statusCode, body := pollProviderDevAttachment(t, manager, session, session.DispatcherSecret, 10*time.Millisecond)
+	if statusCode != http.StatusNoContent {
+		t.Fatalf("poll status = %d, want 204: %s", statusCode, body)
+	}
+}
+
+func TestIndexedDBAttachmentStatePollLiveTransactionErrorReturnsInternal(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
+	manager, session := newSharedProviderDevSession(t, ctx, db)
+
+	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+		if isProviderDevPollTransaction(stores) {
+			return nil, errors.New("indexeddb unavailable")
+		}
+		return db.inner.Transaction(ctx, stores, mode, opts)
+	}
+
+	statusCode, body := pollProviderDevAttachment(t, manager, session, session.DispatcherSecret, time.Second)
+	if statusCode != http.StatusInternalServerError {
+		t.Fatalf("poll status = %d, want 500: %s", statusCode, body)
+	}
+}
+
+func TestIndexedDBAttachmentStatePollPostClaimCommitContextDoneReturnsInternal(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &interceptIndexedDB{inner: &coretesting.StubIndexedDB{}}
+	manager, session := newSharedProviderDevSession(t, ctx, db)
+	if _, err := manager.shared.enqueueCall(ctx, session.AttachID, "user:user-123", "roadmap", "Execute", []byte("payload")); err != nil {
+		t.Fatalf("enqueueCall: %v", err)
+	}
+
+	db.transactionFn = func(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+		tx, err := db.inner.Transaction(ctx, stores, mode, opts)
+		if err != nil || !isProviderDevPollTransaction(stores) {
+			return tx, err
+		}
+		return interceptTransaction{
+			Transaction: tx,
+			commitFn: func(ctx context.Context) error {
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		}, nil
+	}
+
+	statusCode, body := pollProviderDevAttachment(t, manager, session, session.DispatcherSecret, 10*time.Millisecond)
+	if statusCode != http.StatusInternalServerError {
+		t.Fatalf("poll status = %d, want 500: %s", statusCode, body)
+	}
+}
+
+func TestIndexedDBAttachmentStatePollDispatcherSecretErrorsRemainVisible(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	manager, session := newSharedProviderDevSession(t, ctx, db)
+
+	for _, tc := range []struct {
+		name       string
+		secret     string
+		wantStatus int
+	}{
+		{name: "missing", secret: "", wantStatus: http.StatusUnauthorized},
+		{name: "invalid", secret: "wrong-secret", wantStatus: http.StatusForbidden},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			statusCode, body := pollProviderDevAttachment(t, manager, session, tc.secret, time.Second)
+			if statusCode != tc.wantStatus {
+				t.Fatalf("poll status = %d, want %d: %s", statusCode, tc.wantStatus, body)
+			}
+		})
 	}
 }
 
@@ -1036,6 +1164,487 @@ func TestSessionCloseReturnsSameErrorToConcurrentCallers(t *testing.T) {
 	if err := <-secondDone; !errors.Is(err, expected) {
 		t.Fatalf("second Close error = %v, want %v", err, expected)
 	}
+}
+
+func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
+	t.Parallel()
+
+	executePayload := mustExecuteRequestBase64(t, "hello")
+	var mu sync.Mutex
+	polls := 0
+	completed := make(chan CompleteCallRequest, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == PathAttachments+"/session-1/poll":
+			mu.Lock()
+			polls++
+			poll := polls
+			mu.Unlock()
+			if poll == 1 {
+				http.Error(w, "open provider dev poll transaction: rpc error: code = DeadlineExceeded desc = stream terminated by RST_STREAM with error code: CANCEL", http.StatusInternalServerError)
+				return
+			}
+			writeProviderDevTestJSON(w, http.StatusOK, PollResponse{
+				CallID:        "call-1",
+				Provider:      "roadmap",
+				Method:        "Execute",
+				RequestBase64: executePayload,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == PathAttachments+"/session-1/calls/call-1":
+			var req CompleteCallRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			completed <- req
+			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.IntegrationProviderClient{
+			"roadmap": &recordingIntegrationClient{},
+		}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+			InitialDelay: time.Millisecond,
+			MaxDelay:     time.Millisecond,
+			MaxElapsed:   time.Second,
+		}))
+	}()
+
+	select {
+	case req := <-completed:
+		if req.Error != nil {
+			t.Fatalf("completion error = %#v", req.Error)
+		}
+		cancel()
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatcher did not complete call after transient poll error")
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("RunDispatcher: %v", err)
+	}
+	mu.Lock()
+	gotPolls := polls
+	mu.Unlock()
+	if gotPolls < 2 {
+		t.Fatalf("polls = %d, want retry", gotPolls)
+	}
+}
+
+func TestRunDispatcherRetriesHTTP2StreamCancelPollError(t *testing.T) {
+	t.Parallel()
+
+	executePayload := mustExecuteRequestBase64(t, "hello")
+	var mu sync.Mutex
+	polls := 0
+	completed := make(chan CompleteCallRequest, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == PathAttachments+"/session-1/poll":
+			writeProviderDevTestJSON(w, http.StatusOK, PollResponse{
+				CallID:        "call-1",
+				Provider:      "roadmap",
+				Method:        "Execute",
+				RequestBase64: executePayload,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == PathAttachments+"/session-1/calls/call-1":
+			var req CompleteCallRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			completed <- req
+			writeProviderDevTestJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	baseTransport := ts.Client().Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method == http.MethodGet && req.URL.Path == PathAttachments+"/session-1/poll" {
+			mu.Lock()
+			polls++
+			poll := polls
+			mu.Unlock()
+			if poll == 1 {
+				return nil, errors.New("stream error: stream ID 7; CANCEL")
+			}
+		}
+		return baseTransport.RoundTrip(req)
+	})}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		client := Client{BaseURL: ts.URL, HTTPClient: httpClient}
+		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.IntegrationProviderClient{
+			"roadmap": &recordingIntegrationClient{},
+		}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+			InitialDelay: time.Millisecond,
+			MaxDelay:     time.Millisecond,
+			MaxElapsed:   time.Second,
+		}))
+	}()
+
+	select {
+	case req := <-completed:
+		if req.Error != nil {
+			t.Fatalf("completion error = %#v", req.Error)
+		}
+		cancel()
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatcher did not complete call after HTTP/2 stream cancel")
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("RunDispatcher: %v", err)
+	}
+	mu.Lock()
+	gotPolls := polls
+	mu.Unlock()
+	if gotPolls < 2 {
+		t.Fatalf("polls = %d, want retry", gotPolls)
+	}
+}
+
+func TestRunDispatcherDoesNotRetryPostClaimPollInternalError(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	polls := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != PathAttachments+"/session-1/poll" {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		polls++
+		mu.Unlock()
+		http.Error(w, "commit provider dev call lease: context deadline exceeded", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	err := client.RunDispatcher(context.Background(), "session-1", nil, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+		InitialDelay: time.Millisecond,
+		MaxDelay:     time.Millisecond,
+		MaxElapsed:   time.Second,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "commit provider dev call lease") {
+		t.Fatalf("RunDispatcher error = %v, want post-claim poll 500", err)
+	}
+	mu.Lock()
+	gotPolls := polls
+	mu.Unlock()
+	if gotPolls != 1 {
+		t.Fatalf("polls = %d, want no retry for post-claim poll failure", gotPolls)
+	}
+}
+
+func TestRunDispatcherReturnsAfterTransientPollRetryWindow(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	polls := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != PathAttachments+"/session-1/poll" {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		polls++
+		mu.Unlock()
+		http.Error(w, `{"error":"still down"}`, http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	err := client.RunDispatcher(ctx, "session-1", nil, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+		InitialDelay: time.Millisecond,
+		MaxDelay:     time.Millisecond,
+		MaxElapsed:   5 * time.Millisecond,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "503 Service Unavailable") {
+		t.Fatalf("RunDispatcher error = %v, want original 503", err)
+	}
+	mu.Lock()
+	gotPolls := polls
+	mu.Unlock()
+	if gotPolls < 2 {
+		t.Fatalf("polls = %d, want bounded retries", gotPolls)
+	}
+}
+
+func TestRunDispatcherDoesNotRetryNonTransientPollStatuses(t *testing.T) {
+	t.Parallel()
+
+	for _, statusCode := range []int{
+		http.StatusBadRequest,
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusNotFound,
+	} {
+		t.Run(fmt.Sprintf("status_%d", statusCode), func(t *testing.T) {
+			t.Parallel()
+			var mu sync.Mutex
+			polls := 0
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != PathAttachments+"/session-1/poll" {
+					http.NotFound(w, r)
+					return
+				}
+				mu.Lock()
+				polls++
+				mu.Unlock()
+				http.Error(w, `{"error":"no"}`, statusCode)
+			}))
+			t.Cleanup(ts.Close)
+
+			client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+			err := client.RunDispatcher(context.Background(), "session-1", nil, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+				InitialDelay: time.Millisecond,
+				MaxDelay:     time.Millisecond,
+				MaxElapsed:   time.Second,
+			}))
+			if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%d", statusCode)) {
+				t.Fatalf("RunDispatcher error = %v, want status %d", err, statusCode)
+			}
+			mu.Lock()
+			gotPolls := polls
+			mu.Unlock()
+			if gotPolls != 1 {
+				t.Fatalf("polls = %d, want no retry", gotPolls)
+			}
+		})
+	}
+}
+
+func TestRunDispatcherDoesNotRetryCompleteFailure(t *testing.T) {
+	t.Parallel()
+
+	executePayload := mustExecuteRequestBase64(t, "hello")
+	var mu sync.Mutex
+	polls := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == PathAttachments+"/session-1/poll":
+			mu.Lock()
+			polls++
+			mu.Unlock()
+			writeProviderDevTestJSON(w, http.StatusOK, PollResponse{
+				CallID:        "call-1",
+				Provider:      "roadmap",
+				Method:        "Execute",
+				RequestBase64: executePayload,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == PathAttachments+"/session-1/calls/call-1":
+			http.Error(w, `{"error":"complete failed"}`, http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	err := client.RunDispatcher(context.Background(), "session-1", map[string]proto.IntegrationProviderClient{
+		"roadmap": &recordingIntegrationClient{},
+	}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+		InitialDelay: time.Millisecond,
+		MaxDelay:     time.Millisecond,
+		MaxElapsed:   time.Second,
+	}))
+	if err == nil || !strings.Contains(err.Error(), "500 Internal Server Error") {
+		t.Fatalf("RunDispatcher error = %v, want completion 500", err)
+	}
+	mu.Lock()
+	gotPolls := polls
+	mu.Unlock()
+	if gotPolls != 1 {
+		t.Fatalf("polls = %d, want no retry after completion failure", gotPolls)
+	}
+}
+
+func TestRunDispatcherCanceledContextDoesNotRetryPoll(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := Client{BaseURL: "http://127.0.0.1:1"}
+	if err := client.RunDispatcher(ctx, "session-1", nil, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
+		InitialDelay: time.Millisecond,
+		MaxDelay:     time.Millisecond,
+		MaxElapsed:   time.Second,
+	})); err != nil {
+		t.Fatalf("RunDispatcher with canceled context = %v, want nil", err)
+	}
+}
+
+func newSharedProviderDevSession(t *testing.T, ctx context.Context, db indexeddb.IndexedDB) (*Manager, *CreateSessionResponse) {
+	t.Helper()
+	manager, err := NewManager([]Target{{Name: "roadmap"}}, WithIndexedDBAttachmentState(ctx, db))
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	session, err := manager.CreateSession(ctx, p, CreateSessionRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	return manager, session
+}
+
+func pollProviderDevAttachment(t *testing.T, manager *Manager, session *CreateSessionResponse, dispatcherSecret string, timeout time.Duration) (int, string) {
+	t.Helper()
+	ts := httptest.NewServer(providerDevPollOnlyHandler(t, manager, timeout))
+	t.Cleanup(ts.Close)
+	req, err := http.NewRequest(http.MethodGet, ts.URL+PathAttachments+"/"+session.AttachID+"/poll", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	if dispatcherSecret != "" {
+		req.Header.Set(HeaderDispatcherSecret, dispatcherSecret)
+	}
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("poll request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read poll body: %v", err)
+	}
+	return resp.StatusCode, string(body)
+}
+
+func providerDevPollOnlyHandler(t *testing.T, manager *Manager, timeout time.Duration) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, PathAttachments+"/")
+		parts := strings.Split(rest, "/")
+		if len(parts) != 2 || parts[1] != "poll" {
+			http.NotFound(w, r)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		resp, ok, err := manager.PollSessionWithDispatcherSecretOnly(ctx, parts[0], r.Header.Get(HeaderDispatcherSecret))
+		if err != nil {
+			writeProviderDevTestError(w, err)
+			return
+		}
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeProviderDevTestJSON(w, http.StatusOK, resp)
+	})
+}
+
+type interceptIndexedDB struct {
+	inner         indexeddb.IndexedDB
+	transactionFn func(context.Context, []string, indexeddb.TransactionMode, indexeddb.TransactionOptions) (indexeddb.Transaction, error)
+}
+
+func (db *interceptIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	return db.inner.ObjectStore(name)
+}
+
+func (db *interceptIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	if db.transactionFn != nil {
+		return db.transactionFn(ctx, stores, mode, opts)
+	}
+	return db.inner.Transaction(ctx, stores, mode, opts)
+}
+
+func (db *interceptIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	return db.inner.CreateObjectStore(ctx, name, schema)
+}
+
+func (db *interceptIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
+	return db.inner.DeleteObjectStore(ctx, name)
+}
+
+func (db *interceptIndexedDB) Ping(ctx context.Context) error {
+	return db.inner.Ping(ctx)
+}
+
+func (db *interceptIndexedDB) Close() error {
+	return db.inner.Close()
+}
+
+type interceptTransaction struct {
+	indexeddb.Transaction
+	commitFn func(context.Context) error
+	abortFn  func(context.Context) error
+}
+
+func (tx interceptTransaction) Commit(ctx context.Context) error {
+	if tx.commitFn != nil {
+		return tx.commitFn(ctx)
+	}
+	return tx.Transaction.Commit(ctx)
+}
+
+func (tx interceptTransaction) Abort(ctx context.Context) error {
+	if tx.abortFn != nil {
+		return tx.abortFn(ctx)
+	}
+	return tx.Transaction.Abort(ctx)
+}
+
+func isProviderDevPollTransaction(stores []string) bool {
+	hasAttachments := false
+	hasCalls := false
+	for _, store := range stores {
+		switch store {
+		case indexedDBAttachmentStore:
+			hasAttachments = true
+		case indexedDBCallStore:
+			hasCalls = true
+		}
+	}
+	return hasAttachments && hasCalls
+}
+
+func mustExecuteRequestBase64(t *testing.T, message string) string {
+	t.Helper()
+	params, err := structpb.NewStruct(map[string]any{"message": message})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+	payload, err := gproto.Marshal(&proto.ExecuteRequest{
+		Operation: "echo",
+		Params:    params,
+		Token:     "remote-token",
+	})
+	if err != nil {
+		t.Fatalf("Marshal ExecuteRequest: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(payload)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }
 
 func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Principal) http.Handler {
