@@ -170,7 +170,13 @@ func truncateAgentToolSearchMetadataText(value string) string {
 	if len(value) <= agentToolSearchMetadataTextMaxBytes {
 		return value
 	}
-	return strings.TrimSpace(value[:agentToolSearchMetadataTextMaxBytes-3]) + "..."
+	limit := agentToolSearchMetadataTextMaxBytes - 3
+	for i := range value {
+		if i >= limit {
+			return strings.TrimSpace(value[:i]) + "..."
+		}
+	}
+	return value
 }
 
 func agentToolSearchParameterText(op catalog.CatalogOperation) string {
