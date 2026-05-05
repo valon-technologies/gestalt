@@ -50,6 +50,8 @@ func run(args []string, version string) error {
 			return nil
 		case "provider":
 			return runProvider(args[1:])
+		case "agent":
+			return runAgent(args[1:])
 		case "serve":
 			return runServe(args[1:])
 		case "lock":
@@ -305,10 +307,12 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  agent       Launch or inspect local agent harnesses")
 	writeUsageLine(w, "  lock        Resolve provider metadata and write lock state")
 	writeUsageLine(w, "  sync        Materialize prepared artifacts from lock state")
 	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")

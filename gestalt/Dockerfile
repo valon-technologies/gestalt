@@ -16,7 +16,8 @@ RUN case "$TARGETARCH" in \
     esac && \
     mkdir -p /out && \
     tar -xzf "$archive" -C /out && \
-    test -x /out/gestalt
+    test -x /out/gestalt && \
+    test -x /out/gestaltd
 
 FROM gcr.io/distroless/cc-debian12@sha256:847433844c7e04bcf07a3a0f0f5a8de554c6df6fa9e3e3ab14d3f6b73d780235 AS distroless
 ARG GESTALT_VERSION
@@ -26,6 +27,7 @@ ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 COPY --from=unpack /out/gestalt /gestalt
+COPY --from=unpack /out/gestaltd /gestaltd
 LABEL org.opencontainers.image.title="gestalt" \
       org.opencontainers.image.description="CLI client for managing Gestalt integrations, authentication, and operations." \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \

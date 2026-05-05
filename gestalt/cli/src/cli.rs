@@ -221,6 +221,18 @@ pub struct AgentArgs {
     #[command(subcommand)]
     pub command: Option<AgentCommands>,
 
+    /// Run the agent harness locally (default for `gestalt agent`)
+    #[arg(long, conflicts_with = "cloud")]
+    pub local: bool,
+
+    /// Run through the configured Gestalt server
+    #[arg(long, conflicts_with = "local")]
+    pub cloud: bool,
+
+    /// Gestaltd config path for local agent launch; repeat to layer overrides
+    #[arg(long = "config")]
+    pub config: Vec<String>,
+
     /// Agent provider name for a new session
     #[arg(long)]
     pub provider: Option<String>,
@@ -246,6 +258,8 @@ pub struct AgentArgs {
 pub enum AgentCommands {
     /// Resume an interactive agent session
     Resume(AgentResumeArgs),
+    /// Check the configured local agent harness
+    Doctor(AgentDoctorArgs),
     /// Inspect and control agent sessions
     Sessions {
         #[command(subcommand)]
@@ -256,6 +270,17 @@ pub enum AgentCommands {
         #[command(subcommand)]
         command: AgentTurnCommands,
     },
+}
+
+#[derive(Args)]
+pub struct AgentDoctorArgs {
+    /// Agent provider name; defaults to the configured default
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Gestaltd config path for local agent launch; repeat to layer overrides
+    #[arg(long = "config")]
+    pub config: Vec<String>,
 }
 
 #[derive(Args)]

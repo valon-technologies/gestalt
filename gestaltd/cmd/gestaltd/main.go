@@ -20,6 +20,9 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
+		if code, ok := daemon.ExitCode(err); ok {
+			os.Exit(code)
+		}
 		slog.Error("gestaltd exited", "error", err)
 		os.Exit(1)
 	}
