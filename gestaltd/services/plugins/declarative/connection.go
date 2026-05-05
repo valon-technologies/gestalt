@@ -23,6 +23,7 @@ type ConnectionAuthDef struct {
 	Type                providermanifestv1.AuthType
 	Token               string
 	GrantType           string
+	RefreshToken        string
 	AuthorizationURL    string
 	TokenURL            string
 	ClientID            string

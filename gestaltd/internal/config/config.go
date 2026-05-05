@@ -1615,6 +1615,7 @@ type ConnectionAuthDef struct {
 	Type                 providermanifestv1.AuthType `yaml:"type"`
 	Token                string                      `yaml:"token"`
 	GrantType            string                      `yaml:"grantType"`
+	RefreshToken         string                      `yaml:"refreshToken"`
 	AuthorizationURL     string                      `yaml:"authorizationUrl"`
 	TokenURL             string                      `yaml:"tokenUrl"`
 	ClientID             string                      `yaml:"clientId"`
@@ -1671,6 +1672,7 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 	}
 	setString(&dst.Token, src.Token)
 	setString(&dst.GrantType, src.GrantType)
+	setString(&dst.RefreshToken, src.RefreshToken)
 	setString(&dst.AuthorizationURL, src.AuthorizationURL)
 	setString(&dst.TokenURL, src.TokenURL)
 	setString(&dst.ClientID, src.ClientID)

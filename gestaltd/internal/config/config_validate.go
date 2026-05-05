@@ -317,6 +317,7 @@ func connectionBindingHasCredentialMaterial(conn *ConnectionDef) bool {
 		conn.Auth.Type != "" ||
 		conn.Auth.Token != "" ||
 		conn.Auth.GrantType != "" ||
+		conn.Auth.RefreshToken != "" ||
 		conn.Auth.AuthorizationURL != "" ||
 		conn.Auth.TokenURL != "" ||
 		conn.Auth.ClientID != "" ||
@@ -604,6 +605,9 @@ func validateTopLevelConnections(cfg *Config) error {
 			if mode != core.ConnectionModePlatform {
 				return fmt.Errorf("config validation: connections.%s tokenExchangeDrivers requires mode platform", id)
 			}
+			if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
+				return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
+			}
 			for i, driver := range conn.Auth.TokenExchangeDrivers {
 				if strings.TrimSpace(driver.Type) == "" {
 					return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers[%d].type is required", id, i)
@@ -614,6 +618,9 @@ func validateTopLevelConnections(cfg *Config) error {
 		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
 			if mode != core.ConnectionModePlatform {
 				return fmt.Errorf("config validation: connections.%s oauth2 client_credentials requires mode platform", id)
+			}
+			if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
+				return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
 			}
 			if strings.TrimSpace(conn.Auth.TokenURL) == "" {
 				return fmt.Errorf("config validation: connections.%s auth.tokenUrl is required for oauth2 client_credentials", id)
@@ -626,8 +633,29 @@ func validateTopLevelConnections(cfg *Config) error {
 			}
 			continue
 		}
+		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "refresh_token" {
+			if mode != core.ConnectionModePlatform {
+				return fmt.Errorf("config validation: connections.%s oauth2 refresh_token requires mode platform", id)
+			}
+			if strings.TrimSpace(conn.Auth.TokenURL) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.tokenUrl is required for oauth2 refresh_token", id)
+			}
+			if strings.TrimSpace(conn.Auth.ClientID) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.clientId is required for oauth2 refresh_token", id)
+			}
+			if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.clientSecret is required for oauth2 refresh_token", id)
+			}
+			if strings.TrimSpace(conn.Auth.RefreshToken) == "" {
+				return fmt.Errorf("config validation: connections.%s auth.refreshToken is required for oauth2 refresh_token", id)
+			}
+			continue
+		}
 		if strings.TrimSpace(conn.Auth.GrantType) != "" {
-			return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials", id)
+			return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials or refresh_token", id)
+		}
+		if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
+			return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
 		}
 	}
 	return nil

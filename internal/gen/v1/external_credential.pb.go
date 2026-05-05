@@ -570,6 +570,7 @@ type ExternalCredentialAuthConfig struct {
 	AcceptHeader         string                                   `protobuf:"bytes,15,opt,name=accept_header,json=acceptHeader,proto3" json:"accept_header,omitempty"`
 	AccessTokenPath      string                                   `protobuf:"bytes,16,opt,name=access_token_path,json=accessTokenPath,proto3" json:"access_token_path,omitempty"`
 	TokenExchangeDrivers []*ExternalCredentialTokenExchangeDriver `protobuf:"bytes,17,rep,name=token_exchange_drivers,json=tokenExchangeDrivers,proto3" json:"token_exchange_drivers,omitempty"`
+	RefreshToken         string                                   `protobuf:"bytes,18,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -721,6 +722,13 @@ func (x *ExternalCredentialAuthConfig) GetTokenExchangeDrivers() []*ExternalCred
 		return x.TokenExchangeDrivers
 	}
 	return nil
+}
+
+func (x *ExternalCredentialAuthConfig) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return ""
 }
 
 type ValidateExternalCredentialConfigRequest struct {
@@ -1284,7 +1292,7 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x06params\x18\x06 \x03(\v2F.gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xac\a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd1\a\n" +
 	"\x1cExternalCredentialAuthConfig\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12!\n" +
@@ -1306,7 +1314,8 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x0erefresh_params\x18\x0e \x03(\v2D.gestalt.provider.v1.ExternalCredentialAuthConfig.RefreshParamsEntryR\rrefreshParams\x12#\n" +
 	"\raccept_header\x18\x0f \x01(\tR\facceptHeader\x12*\n" +
 	"\x11access_token_path\x18\x10 \x01(\tR\x0faccessTokenPath\x12p\n" +
-	"\x16token_exchange_drivers\x18\x11 \x03(\v2:.gestalt.provider.v1.ExternalCredentialTokenExchangeDriverR\x14tokenExchangeDrivers\x1a>\n" +
+	"\x16token_exchange_drivers\x18\x11 \x03(\v2:.gestalt.provider.v1.ExternalCredentialTokenExchangeDriverR\x14tokenExchangeDrivers\x12#\n" +
+	"\rrefresh_token\x18\x12 \x01(\tR\frefreshToken\x1a>\n" +
 	"\x10TokenParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +

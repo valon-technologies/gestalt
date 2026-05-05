@@ -31,6 +31,7 @@ func declarativeConnectionAuthDef(auth config.ConnectionAuthDef) declarative.Con
 		Type:                auth.Type,
 		Token:               auth.Token,
 		GrantType:           auth.GrantType,
+		RefreshToken:        auth.RefreshToken,
 		AuthorizationURL:    auth.AuthorizationURL,
 		TokenURL:            auth.TokenURL,
 		ClientID:            auth.ClientID,

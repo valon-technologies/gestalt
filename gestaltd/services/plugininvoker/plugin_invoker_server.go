@@ -223,6 +223,8 @@ func invocationStatusError(err error) error {
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, invocation.ErrAmbiguousInstance):

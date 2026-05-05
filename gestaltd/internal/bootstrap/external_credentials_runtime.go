@@ -33,6 +33,7 @@ type externalCredentialsResolvedAuthConfig struct {
 	Token                string                                           `yaml:"token,omitempty"`
 	TokenPrefix          string                                           `yaml:"tokenPrefix,omitempty"`
 	GrantType            string                                           `yaml:"grantType,omitempty"`
+	RefreshToken         string                                           `yaml:"refreshToken,omitempty"`
 	TokenURL             string                                           `yaml:"tokenUrl,omitempty"`
 	ClientID             string                                           `yaml:"clientId,omitempty"`
 	ClientSecret         string                                           `yaml:"clientSecret,omitempty"`
@@ -160,6 +161,7 @@ func externalCredentialsResolvedAuth(auth core.ExternalCredentialAuthConfig) ext
 		Token:                auth.Token,
 		TokenPrefix:          auth.TokenPrefix,
 		GrantType:            auth.GrantType,
+		RefreshToken:         auth.RefreshToken,
 		TokenURL:             auth.TokenURL,
 		ClientID:             auth.ClientID,
 		ClientSecret:         auth.ClientSecret,
