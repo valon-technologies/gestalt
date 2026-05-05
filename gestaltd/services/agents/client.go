@@ -99,6 +99,7 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 		Metadata:       metadata,
 		CreatedBy:      agentActorToProto(req.CreatedBy),
 		Subject:        agentSubjectContextToProto(req.Subject),
+		SessionStart:   sessionStartConfigToProto(req.SessionStart),
 	})
 	if err != nil {
 		return nil, err

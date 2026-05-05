@@ -3954,6 +3954,150 @@ server:
 	}
 }
 
+func TestLoadConfigAgentSessionStartLifecycle(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      lifecycle:
+        sessionStart:
+          - id: load-memory
+            command: ["bash", "-lc", "printf context"]
+            cwd: ./hooks
+            timeout: 5s
+            env:
+              MEMORY_ROOT: ./memory
+            output:
+              additionalContext: true
+              metadata: true
+server:
+  encryptionKey: server-key
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	hooks := cfg.Providers.Agent["simple"].Lifecycle.SessionStart
+	if len(hooks) != 1 {
+		t.Fatalf("sessionStart hooks = %d, want 1", len(hooks))
+	}
+	wantCWD := filepath.Join(filepath.Dir(path), "hooks")
+	if hooks[0].Type != "command" || hooks[0].CWD != wantCWD || !hooks[0].Output.AdditionalContext || !hooks[0].Output.Metadata {
+		t.Fatalf("sessionStart hook = %#v", hooks[0])
+	}
+}
+
+func TestLoadConfigAgentSessionStartLifecycleValidation(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "missing command",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source: ./providers/agent/simple
+      lifecycle:
+        sessionStart:
+          - id: setup
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.lifecycle.sessionStart[0].command is required",
+		},
+		{
+			name: "duplicate id",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source: ./providers/agent/simple
+      lifecycle:
+        sessionStart:
+          - id: setup
+            command: ["true"]
+          - id: setup
+            command: ["true"]
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.lifecycle.sessionStart[1].id duplicates "setup"`,
+		},
+		{
+			name: "unsupported type",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source: ./providers/agent/simple
+      lifecycle:
+        sessionStart:
+          - id: setup
+            type: native
+            command: ["true"]
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.lifecycle.sessionStart[0].type "native" is not supported`,
+		},
+		{
+			name: "invalid hook id",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source: ./providers/agent/simple
+      lifecycle:
+        sessionStart:
+          - id: setup.memory
+            command: ["true"]
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.lifecycle.sessionStart[0].id must contain only letters",
+		},
+		{
+			name: "plugin lifecycle",
+			yaml: `
+plugins:
+  service:
+    source: ./providers/plugin/service
+    lifecycle:
+      sessionStart:
+        - id: setup
+          command: ["true"]
+server:
+  encryptionKey: server-key
+`,
+			want: `plugins.service.lifecycle is only supported on providers.agent.*`,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load error = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadConfigRuntimeRelayBaseURL(t *testing.T) {
 	t.Parallel()
 

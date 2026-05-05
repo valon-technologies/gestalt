@@ -3,6 +3,7 @@ package agents
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -448,9 +449,66 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		Interactions:         value.GetInteractions(),
 		ResumableTurns:       value.GetResumableTurns(),
 		ReasoningSummaries:   value.GetReasoningSummaries(),
+		SupportsSessionStart: value.GetSupportsSessionStart(),
 		BoundedListHydration: value.GetBoundedListHydration(),
 		SupportedToolSources: agentToolSourceModesFromProto(value.GetSupportedToolSources()),
 	}
+}
+
+func sessionStartConfigToProto(value *coreagent.SessionStartConfig) *proto.AgentSessionStartConfig {
+	if value == nil || len(value.Hooks) == 0 {
+		return nil
+	}
+	out := &proto.AgentSessionStartConfig{
+		Hooks: make([]*proto.AgentSessionStartHook, 0, len(value.Hooks)),
+	}
+	for i := range value.Hooks {
+		hook := value.Hooks[i]
+		out.Hooks = append(out.Hooks, &proto.AgentSessionStartHook{
+			Id:      hook.ID,
+			Type:    hook.Type,
+			Command: append([]string(nil), hook.Command...),
+			Cwd:     hook.CWD,
+			Timeout: hook.Timeout,
+			Env:     maps.Clone(hook.Env),
+			Output: &proto.AgentSessionStartHookOutput{
+				AdditionalContext: hook.Output.AdditionalContext,
+				Metadata:          hook.Output.Metadata,
+			},
+		})
+	}
+	return out
+}
+
+func sessionStartConfigFromProto(value *proto.AgentSessionStartConfig) *coreagent.SessionStartConfig {
+	if value == nil || len(value.GetHooks()) == 0 {
+		return nil
+	}
+	out := &coreagent.SessionStartConfig{
+		Hooks: make([]coreagent.SessionStartHook, 0, len(value.GetHooks())),
+	}
+	for _, hook := range value.GetHooks() {
+		if hook == nil {
+			continue
+		}
+		output := hook.GetOutput()
+		out.Hooks = append(out.Hooks, coreagent.SessionStartHook{
+			ID:      hook.GetId(),
+			Type:    hook.GetType(),
+			Command: append([]string(nil), hook.GetCommand()...),
+			CWD:     hook.GetCwd(),
+			Timeout: hook.GetTimeout(),
+			Env:     maps.Clone(hook.GetEnv()),
+			Output: coreagent.SessionStartHookOutput{
+				AdditionalContext: output.GetAdditionalContext(),
+				Metadata:          output.GetMetadata(),
+			},
+		})
+	}
+	if len(out.Hooks) == 0 {
+		return nil
+	}
+	return out
 }
 
 func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.InteractionType, error) {

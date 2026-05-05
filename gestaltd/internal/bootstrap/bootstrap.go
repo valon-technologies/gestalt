@@ -1108,6 +1108,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CatalogConnection:             connMaps.APIConnection,
 		PluginInvokes:                 agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
+		SessionStart:                  agentSessionStartConfigs(cfg),
 		RouteStore:                    agentRouteStore,
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))

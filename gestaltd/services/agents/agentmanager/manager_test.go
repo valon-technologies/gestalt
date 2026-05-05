@@ -134,18 +134,19 @@ func (c *routeCountingAgentControl) ProviderNames() []string {
 
 type routeCountingAgentProvider struct {
 	coreagent.UnimplementedProvider
-	name            string
-	sessions        map[string]*coreagent.Session
-	turns           map[string]*coreagent.Turn
-	capabilities    *coreagent.ProviderCapabilities
-	capabilitiesErr error
-	createTurnReqs  []coreagent.CreateTurnRequest
-	listSessionReqs []coreagent.ListSessionsRequest
-	listTurnReqs    []coreagent.ListTurnsRequest
-	turnIDOverride  string
-	cancelStatus    coreagent.ExecutionStatus
-	getSessionCalls int
-	getTurnCalls    int
+	name              string
+	sessions          map[string]*coreagent.Session
+	turns             map[string]*coreagent.Turn
+	capabilities      *coreagent.ProviderCapabilities
+	capabilitiesErr   error
+	createSessionReqs []coreagent.CreateSessionRequest
+	createTurnReqs    []coreagent.CreateTurnRequest
+	listSessionReqs   []coreagent.ListSessionsRequest
+	listTurnReqs      []coreagent.ListTurnsRequest
+	turnIDOverride    string
+	cancelStatus      coreagent.ExecutionStatus
+	getSessionCalls   int
+	getTurnCalls      int
 }
 
 func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
@@ -157,12 +158,14 @@ func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
 }
 
 func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	p.createSessionReqs = append(p.createSessionReqs, req)
 	session := &coreagent.Session{
 		ID:           req.SessionID,
 		ProviderName: p.name,
 		Model:        req.Model,
 		ClientRef:    req.ClientRef,
 		State:        coreagent.SessionStateActive,
+		Metadata:     mapsCloneAny(req.Metadata),
 		CreatedBy:    req.CreatedBy,
 	}
 	p.sessions[session.ID] = session
@@ -206,6 +209,23 @@ func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req coreage
 		sessions = sessions[:req.Limit]
 	}
 	return sessions, nil
+}
+
+func (p *routeCountingAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	session := p.sessions[strings.TrimSpace(req.SessionID)]
+	if session == nil {
+		return nil, core.ErrNotFound
+	}
+	if req.ClientRef != "" {
+		session.ClientRef = req.ClientRef
+	}
+	if req.State != "" {
+		session.State = req.State
+	}
+	if req.Metadata != nil {
+		session.Metadata = mapsCloneAny(req.Metadata)
+	}
+	return cloneRouteSession(session), nil
 }
 
 func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
@@ -305,7 +325,19 @@ func cloneRouteSession(session *coreagent.Session) *coreagent.Session {
 		return nil
 	}
 	cloned := *session
+	cloned.Metadata = mapsCloneAny(session.Metadata)
 	return &cloned
+}
+
+func mapsCloneAny(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 func cloneRouteTurn(turn *coreagent.Turn) *coreagent.Turn {
@@ -337,6 +369,143 @@ func TestAgentRouteCacheEvictsLeastRecentlyUsed(t *testing.T) {
 	}
 	if got, ok := cache.get("new"); !ok || got.ProviderName != "alpha" {
 		t.Fatalf("cache.get(new) = %+v, %t, want retained alpha", got, ok)
+	}
+}
+
+func TestCreateSessionForwardsSessionStartWhenProviderSupportsIt(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.capabilities = &coreagent.ProviderCapabilities{SupportsSessionStart: true}
+	sessionStart := &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{
+		ID:      "load-memory",
+		Type:    "command",
+		Command: []string{"bash", "-lc", "printf context"},
+		CWD:     "/tmp",
+		Timeout: "5s",
+		Env:     map[string]string{"MEMORY_ROOT": "/tmp/memory"},
+		Output:  coreagent.SessionStartHookOutput{AdditionalContext: true, Metadata: true},
+	}}}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		SessionStart: map[string]*coreagent.SessionStartConfig{"alpha": sessionStart},
+	})
+	sessionStart.Hooks[0].Command[0] = "mutated"
+	sessionStart.Hooks[0].Env["MEMORY_ROOT"] = "mutated"
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if len(provider.createSessionReqs) != 1 {
+		t.Fatalf("CreateSession calls = %d, want 1", len(provider.createSessionReqs))
+	}
+	got := provider.createSessionReqs[0].SessionStart
+	want := &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{
+		ID:      "load-memory",
+		Type:    "command",
+		Command: []string{"bash", "-lc", "printf context"},
+		CWD:     "/tmp",
+		Timeout: "5s",
+		Env:     map[string]string{"MEMORY_ROOT": "/tmp/memory"},
+		Output:  coreagent.SessionStartHookOutput{AdditionalContext: true, Metadata: true},
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SessionStart = %#v, want %#v", got, want)
+	}
+}
+
+func TestCreateSessionRejectsSessionStartWhenProviderDoesNotSupportIt(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		SessionStart: map[string]*coreagent.SessionStartConfig{"alpha": &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{ID: "setup", Type: "command", Command: []string{"true"}}}}},
+	})
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if !errors.Is(err, ErrAgentSessionStartUnsupported) {
+		t.Fatalf("CreateSession error = %v, want ErrAgentSessionStartUnsupported", err)
+	}
+	if len(provider.createSessionReqs) != 0 {
+		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestCreateSessionRejectsReservedLifecycleMetadata(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Metadata:     map[string]any{"__gestalt.lifecycle.sessionStart.results.setup": "spoofed"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "reserved for Gestalt lifecycle data") {
+		t.Fatalf("CreateSession error = %v, want reserved lifecycle metadata error", err)
+	}
+	if len(provider.createSessionReqs) != 0 {
+		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestUpdateSessionPreservesReservedLifecycleMetadata(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Metadata: map[string]any{
+			"caller": "original",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	provider.sessions[session.ID].Metadata["__gestalt.lifecycle.sessionStart.results.setup"] = map[string]any{"exitCode": 0}
+
+	updated, err := manager.UpdateSession(context.Background(), p, coreagent.ManagerUpdateSessionRequest{
+		SessionID: session.ID,
+		Metadata:  map[string]any{"caller": "updated"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateSession: %v", err)
+	}
+	if updated.Metadata["caller"] != "updated" {
+		t.Fatalf("caller metadata = %#v, want updated", updated.Metadata["caller"])
+	}
+	if updated.Metadata["__gestalt.lifecycle.sessionStart.results.setup"] == nil {
+		t.Fatalf("reserved lifecycle metadata was not preserved: %#v", updated.Metadata)
 	}
 }
 

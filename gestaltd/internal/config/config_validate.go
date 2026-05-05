@@ -791,6 +791,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.Default {
 		return fmt.Errorf("config validation: plugins.%s.default is not supported on plugins", name)
 	}
+	if entry.Lifecycle != nil {
+		return fmt.Errorf("config validation: plugins.%s.lifecycle is only supported on providers.agent.*", name)
+	}
 	entry.MountPath = strings.TrimSpace(entry.MountPath)
 	entry.UI = strings.TrimSpace(entry.UI)
 	if entry.IndexedDB != nil {
@@ -1023,6 +1026,9 @@ func validateAgentConfig(cfg *Config) error {
 				return err
 			}
 		}
+		if err := validateAgentProviderLifecycleConfig("providers.agent."+name+".lifecycle", entry.Lifecycle); err != nil {
+			return err
+		}
 		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
@@ -1220,6 +1226,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
+	if entry.Lifecycle != nil {
+		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
+	}
 	if entry.Execution != nil {
 		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
 	}
@@ -1274,6 +1283,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
+	if entry.Lifecycle != nil {
+		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
+	}
 	if entry.Execution != nil {
 		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
 	}
@@ -1284,6 +1296,75 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
 	}
 	return nil
+}
+
+func validateAgentProviderLifecycleConfig(subject string, lifecycle *AgentProviderLifecycleConfig) error {
+	if lifecycle == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(lifecycle.SessionStart))
+	for i := range lifecycle.SessionStart {
+		hook := &lifecycle.SessionStart[i]
+		hookSubject := fmt.Sprintf("%s.sessionStart[%d]", subject, i)
+		hook.ID = strings.TrimSpace(hook.ID)
+		if hook.ID == "" {
+			return fmt.Errorf("config validation: %s.id is required", hookSubject)
+		}
+		if !validSessionStartHookID(hook.ID) {
+			return fmt.Errorf("config validation: %s.id must contain only letters, numbers, underscores, or dashes", hookSubject)
+		}
+		if _, ok := seen[hook.ID]; ok {
+			return fmt.Errorf("config validation: %s.id duplicates %q", hookSubject, hook.ID)
+		}
+		seen[hook.ID] = struct{}{}
+		hook.Type = strings.TrimSpace(hook.Type)
+		if hook.Type == "" {
+			hook.Type = "command"
+		}
+		if hook.Type != "command" {
+			return fmt.Errorf("config validation: %s.type %q is not supported; use %q", hookSubject, hook.Type, "command")
+		}
+		if len(hook.Command) == 0 || strings.TrimSpace(hook.Command[0]) == "" {
+			return fmt.Errorf("config validation: %s.command is required", hookSubject)
+		}
+		hook.Command[0] = strings.TrimSpace(hook.Command[0])
+		hook.CWD = strings.TrimSpace(hook.CWD)
+		hook.Timeout = strings.TrimSpace(hook.Timeout)
+		if hook.Timeout != "" {
+			duration, err := ParseDuration(hook.Timeout)
+			if err != nil {
+				return fmt.Errorf("config validation: %s.timeout: %w", hookSubject, err)
+			}
+			if duration <= 0 {
+				return fmt.Errorf("config validation: %s.timeout must be greater than 0", hookSubject)
+			}
+		}
+		if hook.Env != nil {
+			trimmed := make(map[string]string, len(hook.Env))
+			for key, value := range hook.Env {
+				key = strings.TrimSpace(key)
+				if key == "" {
+					return fmt.Errorf("config validation: %s.env keys must be non-empty", hookSubject)
+				}
+				trimmed[key] = value
+			}
+			hook.Env = trimmed
+		}
+	}
+	return nil
+}
+
+func validSessionStartHookID(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func normalizeExecutionConfig(subject string, execution *ExecutionConfig, allowLifecycle bool) error {

@@ -579,6 +579,8 @@ pub struct AgentProviderCapabilities {
     pub bounded_list_hydration: bool,
     #[prost(enumeration = "AgentToolSourceMode", repeated, tag = "10")]
     pub supported_tool_sources: ::prost::alloc::vec::Vec<i32>,
+    #[prost(bool, tag = "11")]
+    pub supports_session_start: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderCapabilitiesRequest {}
@@ -646,6 +648,40 @@ pub struct CreateAgentProviderSessionRequest {
     pub created_by: ::core::option::Option<AgentActor>,
     #[prost(message, optional, tag = "8")]
     pub subject: ::core::option::Option<AgentSubjectContext>,
+    #[prost(message, optional, tag = "9")]
+    pub session_start: ::core::option::Option<AgentSessionStartConfig>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentSessionStartConfig {
+    #[prost(message, repeated, tag = "1")]
+    pub hooks: ::prost::alloc::vec::Vec<AgentSessionStartHook>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentSessionStartHook {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "3")]
+    pub command: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "4")]
+    pub cwd: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub timeout: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "6")]
+    pub env: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(message, optional, tag = "7")]
+    pub output: ::core::option::Option<AgentSessionStartHookOutput>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentSessionStartHookOutput {
+    #[prost(bool, tag = "1")]
+    pub additional_context: bool,
+    #[prost(bool, tag = "2")]
+    pub metadata: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderSessionRequest {

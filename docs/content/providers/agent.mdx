@@ -62,6 +62,40 @@ provider entry. Gestalt exposes the selected store to the provider process as
 the standard SDK `GESTALT_INDEXEDDB_SOCKET`, but the provider still owns the
 canonical session, turn, interaction, and event records stored there.
 
+### Session start hooks
+
+Providers that advertise `supports_session_start` can receive deployer-defined
+command hooks when Gestalt creates a new session. Hooks run once for a newly
+created session and fail session creation if the command exits non-zero or times
+out.
+
+```yaml
+providers:
+  agent:
+    claude:
+      source: ./providers/agent/claude/manifest.yaml
+      lifecycle:
+        sessionStart:
+          - id: load-memory
+            type: command
+            command: ["bash", "-lc", "./scripts/load-agent-context.sh"]
+            cwd: ./agent-context
+            timeout: 10s
+            env:
+              MEMORY_BUCKET: valon-agent-memory
+            output:
+              additionalContext: true
+              metadata: true
+```
+
+`command` is an argv array; Gestalt resolves relative `cwd` values against the
+config file and passes an absolute path to the provider. Providers run hooks
+with a small default environment plus the explicit `env` map. When
+`additionalContext` is true, stdout is prepended to future turns in the session.
+When `metadata` is true, stdout/stderr are stored under the reserved
+`__gestalt.lifecycle.sessionStart.results.<hookId>` session metadata namespace.
+Callers cannot set keys in `__gestalt.lifecycle.*` themselves.
+
 If you want the provider to run in a hosted sandbox instead of directly on the
 `gestaltd` host, add `execution.mode: hosted` and `execution.runtime` to that
 same `providers.agent.<name>` entry:
