@@ -127,6 +127,47 @@ func TestSlogAuditSink_DeniedEntry(t *testing.T) {
 	}
 }
 
+func TestSlogAuditSink_RunAsDelegationFields(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	sink := invocation.NewSlogAuditSink(&buf)
+
+	entry := core.AuditEntry{
+		Timestamp:        time.Now(),
+		RequestID:        "req-run-as",
+		Source:           "agent",
+		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind:      "service_account",
+		AgentSubjectID:   principal.UserSubjectID("user-42"),
+		AgentSubjectKind: string(principal.KindUser),
+		AgentDisplayName: "Hugh",
+		AgentAuthSource:  "slack",
+		RunAsSubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		RunAsSubjectKind: "service_account",
+		RunAsAuthSource:  "github_app_webhook",
+		Provider:         "github",
+		Operation:        "bot.createPullRequest",
+		Allowed:          true,
+	}
+
+	sink.Log(context.Background(), entry)
+
+	var record map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &record); err != nil {
+		t.Fatalf("failed to parse JSON log output: %v", err)
+	}
+	if record["agent_subject_id"] != principal.UserSubjectID("user-42") {
+		t.Fatalf("agent_subject_id = %v", record["agent_subject_id"])
+	}
+	if record["run_as_subject_id"] != entry.RunAsSubjectID {
+		t.Fatalf("run_as_subject_id = %v", record["run_as_subject_id"])
+	}
+	if record["run_as_auth_source"] != "github_app_webhook" {
+		t.Fatalf("run_as_auth_source = %v", record["run_as_auth_source"])
+	}
+}
+
 func TestSlogAuditSink_WithSpanContext(t *testing.T) {
 	t.Parallel()
 

@@ -38,6 +38,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		Instance:       strings.TrimSpace(target.Instance),
 		CredentialMode: core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
 		Unavailable:    normalizeUnavailableToolTarget(target.Unavailable),
+		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
 	}
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
@@ -73,6 +74,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.Instance = strings.TrimSpace(target.Instance)
 	target.CredentialMode = core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode)))
 	target.Unavailable = normalizeUnavailableToolTarget(target.Unavailable)
+	target.RunAs = core.NormalizeRunAsSubject(target.RunAs)
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
 			return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")

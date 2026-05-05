@@ -39,11 +39,17 @@ func ensureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
 
 type requestMetaCtxKey struct{}
 type auditEntryCtxKey struct{}
+type runAsAuditCtxKey struct{}
 
 type RequestMeta struct {
 	ClientIP   string
 	RemoteAddr string
 	UserAgent  string
+}
+
+type RunAsAuditContext struct {
+	AgentSubject *core.RunAsSubject
+	RunAsSubject *core.RunAsSubject
 }
 
 type CredentialContext struct {
@@ -91,6 +97,25 @@ func withAuditEntry(ctx context.Context, entry *core.AuditEntry) context.Context
 func auditEntryFromContext(ctx context.Context) *core.AuditEntry {
 	entry, _ := ctx.Value(auditEntryCtxKey{}).(*core.AuditEntry)
 	return entry
+}
+
+func WithRunAsAudit(ctx context.Context, agentSubject, runAsSubject *core.RunAsSubject) context.Context {
+	runAsSubject = core.NormalizeRunAsSubject(runAsSubject)
+	if runAsSubject == nil {
+		return ctx
+	}
+	audit := RunAsAuditContext{
+		AgentSubject: core.NormalizeRunAsSubject(agentSubject),
+		RunAsSubject: runAsSubject,
+	}
+	return context.WithValue(ctx, runAsAuditCtxKey{}, audit)
+}
+
+func RunAsAuditFromContext(ctx context.Context) RunAsAuditContext {
+	audit, _ := ctx.Value(runAsAuditCtxKey{}).(RunAsAuditContext)
+	audit.AgentSubject = core.NormalizeRunAsSubject(audit.AgentSubject)
+	audit.RunAsSubject = core.NormalizeRunAsSubject(audit.RunAsSubject)
+	return audit
 }
 
 func WithCredentialContext(ctx context.Context, cred CredentialContext) context.Context {

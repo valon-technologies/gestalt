@@ -5150,6 +5150,45 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 	}
 }
 
+func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Plugins: map[string]*ProviderEntry{
+			"slack": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Invokes: []PluginInvocationDependency{{
+					Plugin:         "github",
+					Operation:      "bot.createPullRequest",
+					CredentialMode: providermanifestv1.ConnectionModeNone,
+					RunAs: &PluginInvocationRunAsConfig{
+						GitHubAppInstallation: &PluginInvocationRunAsGitHubAppInstallationConfig{
+							InstallationID: 99,
+							Owner:          " acme ",
+							Repo:           " widgets ",
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	if err := ValidateStructure(cfg); err != nil {
+		t.Fatalf("ValidateStructure() error = %v", err)
+	}
+	subject := cfg.Plugins["slack"].Invokes[0].RunAsSubject()
+	if subject == nil {
+		t.Fatal("RunAsSubject() = nil, want subject")
+	}
+	if subject.SubjectID != "service_account:github_app_installation:99:repo:acme/widgets" {
+		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
+	}
+	if subject.SubjectKind != "service_account" || subject.AuthSource != "github_app_webhook" {
+		t.Fatalf("RunAsSubject() = %#v, want service account github app source", subject)
+	}
+}
+
 func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
 	t.Parallel()
 
@@ -5172,6 +5211,34 @@ func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "credentialRefresh.refreshInterval") {
 		t.Fatalf("ValidateStructure() error = %v, want credentialRefresh.refreshInterval", err)
+	}
+}
+
+func TestValidateStructureRejectsPluginInvokeRunAsOnSurface(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Plugins: map[string]*ProviderEntry{
+			"slack": {
+				Source: ProviderSource{Path: "./manifest.yaml"},
+				Invokes: []PluginInvocationDependency{{
+					Plugin:  "github",
+					Surface: string(SpecSurfaceGraphQL),
+					RunAs: &PluginInvocationRunAsConfig{
+						Subject: &PluginInvocationRunAsSubjectConfig{
+							ID:   "service_account:github_app_installation:99:repo:acme/widgets",
+							Kind: "service_account",
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil || !strings.Contains(err.Error(), "runAs requires an exact operation") {
+		t.Fatalf("ValidateStructure() error = %v, want runAs exact operation error", err)
 	}
 }
 

@@ -546,7 +546,7 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	refs, err = m.applyCallerInvokeCredentialModes(req.CallerPluginName, refs)
+	refs, err = m.applyCallerInvokePolicies(req.CallerPluginName, refs)
 	if err != nil {
 		return nil, err
 	}
@@ -773,7 +773,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	toolRefs, err = m.applyCallerInvokeCredentialModes(req.CallerPluginName, toolRefs)
+	toolRefs, err = m.applyCallerInvokePolicies(req.CallerPluginName, toolRefs)
 	if err != nil {
 		return nil, err
 	}
@@ -1699,6 +1699,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		Connection:     connection,
 		Instance:       sessionInstance,
 		CredentialMode: credentialMode,
+		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -1741,6 +1742,7 @@ type agentToolTargetKey struct {
 	connection     string
 	instance       string
 	credentialMode core.ConnectionMode
+	runAsSubjectID string
 }
 
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
@@ -1751,6 +1753,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 		connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		instance:       strings.TrimSpace(ref.Instance),
 		credentialMode: ref.CredentialMode,
+		runAsSubjectID: runAsSubjectID(ref.RunAs),
 	}
 }
 
@@ -1762,6 +1765,7 @@ func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKe
 		connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		instance:       strings.TrimSpace(target.Instance),
 		credentialMode: target.CredentialMode,
+		runAsSubjectID: runAsSubjectID(target.RunAs),
 	}
 }
 
@@ -1770,8 +1774,8 @@ func (k agentToolTargetKey) String() string {
 		return strings.Join([]string{"system", k.system, k.operation}, "/")
 	}
 	parts := []string{k.plugin, k.operation}
-	if k.connection != "" || k.instance != "" || k.credentialMode != "" {
-		parts = append(parts, k.connection, k.instance, string(k.credentialMode))
+	if k.connection != "" || k.instance != "" || k.credentialMode != "" || k.runAsSubjectID != "" {
+		parts = append(parts, k.connection, k.instance, string(k.credentialMode), k.runAsSubjectID)
 	}
 	return strings.Join(parts, "/")
 }
@@ -2515,6 +2519,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		Instance:       strings.TrimSpace(ref.Instance),
 		CredentialMode: ref.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -2607,6 +2612,7 @@ func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 		Connection:     target.Connection,
 		Instance:       target.Instance,
 		CredentialMode: target.CredentialMode,
+		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
 	}
 }
 
@@ -3058,6 +3064,7 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		ref.Instance = strings.TrimSpace(ref.Instance)
 		ref.Title = strings.TrimSpace(ref.Title)
 		ref.Description = strings.TrimSpace(ref.Description)
+		ref.RunAs = core.NormalizeRunAsSubject(ref.RunAs)
 		credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
 		if err != nil {
 			return nil, err
@@ -3073,8 +3080,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			if ref.Operation == "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, idx)
 			}
-			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.Title != "" || ref.Description != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, title, or description", invocation.ErrInvalidInvocation, idx)
+			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.Title != "" || ref.Description != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, runAs, title, or description", invocation.ErrInvalidInvocation, idx)
 			}
 			out = append(out, ref)
 			continue
@@ -3083,8 +3090,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
 		}
 		if ref.Plugin == agentToolSearchAllPlugin {
-			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, title, or description", invocation.ErrProviderNotFound, idx)
+			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, title, or description", invocation.ErrProviderNotFound, idx)
 			}
 		}
 		out = append(out, ref)
@@ -3092,12 +3099,13 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
-func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
+func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	callerPluginName = strings.TrimSpace(callerPluginName)
 	if len(refs) == 0 || m == nil {
 		return refs, nil
 	}
 	modes := make(map[string]core.ConnectionMode)
+	runAsSubjects := make(map[string]*core.RunAsSubject)
 	if callerPluginName != "" {
 		for _, invoke := range m.pluginInvokes[callerPluginName] {
 			if strings.TrimSpace(invoke.Surface) != "" {
@@ -3115,6 +3123,9 @@ func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs
 			if mode != "" {
 				modes[agentToolInvokeKey(pluginName, operation)] = mode
 			}
+			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
+				runAsSubjects[agentToolInvokeKey(pluginName, operation)] = runAs
+			}
 		}
 	}
 	out := append([]coreagent.ToolRef(nil), refs...)
@@ -3123,29 +3134,74 @@ func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs
 		if out[i].CredentialMode != "" && callerPluginName == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
 		}
+		if out[i].RunAs != nil && callerPluginName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		}
 		if operation == "" {
 			if out[i].CredentialMode != "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires an exact operation", invocation.ErrAuthorizationDenied, i)
 			}
-			continue
-		}
-		mode, ok := modes[agentToolInvokeKey(out[i].Plugin, operation)]
-		if !ok {
-			if out[i].CredentialMode != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
+			if out[i].RunAs != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires an exact operation", invocation.ErrAuthorizationDenied, i)
 			}
 			continue
 		}
-		if out[i].CredentialMode != "" && out[i].CredentialMode != mode {
+		key := agentToolInvokeKey(out[i].Plugin, operation)
+		mode, hasMode := modes[key]
+		runAs, hasRunAs := runAsSubjects[key]
+		if !hasMode && !hasRunAs {
+			if out[i].CredentialMode != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
+			}
+			if out[i].RunAs != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+			}
+			continue
+		}
+		if hasMode && out[i].CredentialMode != "" && out[i].CredentialMode != mode {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, i, out[i].CredentialMode, mode)
 		}
-		out[i].CredentialMode = mode
+		if !hasMode && out[i].CredentialMode != "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
+		}
+		if hasRunAs && out[i].RunAs != nil && !runAsSubjectsEqual(out[i].RunAs, runAs) {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+		}
+		if !hasRunAs && out[i].RunAs != nil {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+		}
+		if hasMode {
+			out[i].CredentialMode = mode
+		}
+		if hasRunAs {
+			out[i].RunAs = runAs
+		}
 	}
 	return out, nil
 }
 
 func agentToolInvokeKey(pluginName, operation string) string {
 	return strings.TrimSpace(pluginName) + "\x00" + strings.TrimSpace(operation)
+}
+
+func runAsSubjectID(subject *core.RunAsSubject) string {
+	if subject == nil {
+		return ""
+	}
+	return strings.TrimSpace(core.NormalizeRunAsSubject(subject).SubjectID)
+}
+
+func runAsSubjectsEqual(left, right *core.RunAsSubject) bool {
+	left = core.NormalizeRunAsSubject(left)
+	right = core.NormalizeRunAsSubject(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return strings.TrimSpace(left.SubjectID) == strings.TrimSpace(right.SubjectID) &&
+		strings.TrimSpace(left.SubjectKind) == strings.TrimSpace(right.SubjectKind) &&
+		strings.TrimSpace(left.CredentialSubjectID) == strings.TrimSpace(right.CredentialSubjectID) &&
+		strings.TrimSpace(left.DisplayName) == strings.TrimSpace(right.DisplayName) &&
+		strings.TrimSpace(left.AuthSource) == strings.TrimSpace(right.AuthSource)
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {

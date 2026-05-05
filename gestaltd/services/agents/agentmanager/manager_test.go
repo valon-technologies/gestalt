@@ -1882,6 +1882,55 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 	}
 }
 
+func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "bot.createPullRequest",
+				Title: "Create pull request",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind: "service_account",
+		AuthSource:  "github_app_webhook",
+	}
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:    "github",
+				Operation: "bot.createPullRequest",
+				RunAs:     runAs,
+			}},
+		},
+	})
+
+	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slack",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "github",
+			Operation: "bot.createPullRequest",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
+	}
+	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
+		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
+	}
+}
+
 func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 	t.Parallel()
 
@@ -1925,6 +1974,63 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 					Plugin:         "slack",
 					Operation:      "events.reply",
 					CredentialMode: core.ConnectionModeNone,
+				}},
+			})
+			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+				t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
+			}
+		})
+	}
+}
+
+func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "bot.createPullRequest",
+				Title: "Create pull request",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind: "service_account",
+		AuthSource:  "github_app_webhook",
+	}
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:    "github",
+				Operation: "bot.getPullRequest",
+				RunAs:     runAs,
+			}},
+		},
+	})
+
+	for _, tc := range []struct {
+		name             string
+		callerPluginName string
+	}{
+		{name: "public request"},
+		{name: "caller without matching invoke", callerPluginName: "slack"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
+				SubjectID: principal.UserSubjectID("user-1"),
+			}, coreagent.ResolveToolsRequest{
+				CallerPluginName: tc.callerPluginName,
+				ToolRefs: []coreagent.ToolRef{{
+					Plugin:    "github",
+					Operation: "bot.createPullRequest",
+					RunAs:     runAs,
 				}},
 			})
 			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
