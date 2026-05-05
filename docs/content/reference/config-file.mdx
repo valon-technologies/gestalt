@@ -1387,7 +1387,9 @@ plugins:
 ```
 
 Use `exposure: internal` for deployer-owned accounts that only provider code
-should call. The platform connection supplies the upstream token; the target
+should call. This is separate from `mode: platform`: `mode` decides who owns the
+credential, while `exposure` decides whether public callers can select the
+binding. The platform connection supplies the upstream token; the target
 provider should still enforce any domain-specific policy, such as the expected
 mailbox address and the operation allowlist.
 
@@ -1399,7 +1401,7 @@ const invoker = new gestalt.PluginInvoker(request);
 await invoker.invoke(
   "gmail",
   "messages.list",
-  { q: "to:athena-implementation@valon.com newer_than:7d" },
+  { q: "to:group@example.com newer_than:7d" },
   { connection: "platform" },
 );
 ```
