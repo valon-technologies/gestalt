@@ -3113,6 +3113,151 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	}
 }
 
+func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalogGrant(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	cfg := validConfig()
+	cfg.Server.Agent.DefaultToolNarrowingThreshold = &threshold
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = append(factories.Builtins,
+		&coretesting.StubIntegration{
+			N:        "linear",
+			DN:       "Linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "linear",
+				DisplayName: "Linear",
+				Operations: []catalog.CatalogOperation{{
+					ID:       "issues",
+					Method:   http.MethodGet,
+					Title:    "Issues",
+					ReadOnly: true,
+				}},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"provider":  "linear",
+					"operation": operation,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		&coretesting.StubIntegration{
+			N:        "github",
+			DN:       "GitHub",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "github",
+				DisplayName: "GitHub",
+				Operations: []catalog.CatalogOperation{{
+					ID:       "issues",
+					Method:   http.MethodGet,
+					Title:    "Issues",
+					ReadOnly: true,
+				}},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"provider":  "github",
+					"operation": operation,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+	)
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := runtimehost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "linear",
+		Operations: []string{"issues"},
+	}, {
+		Plugin:     "github",
+		Operations: []string{"issues"},
+	}, {
+		Plugin: "managed",
+	}})
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := principal.WithPrincipal(context.Background(), p)
+
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-configured-narrowing",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "configured-narrowing-linear",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn returned nil turn")
+	}
+
+	provider.mu.Lock()
+	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(listResponses) != 1 {
+		t.Fatalf("list response count = %d, want 1", len(listResponses))
+	}
+	tools := listResponses[0].GetTools()
+	if len(tools) != 1 || tools[0].GetRef().GetPlugin() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
+		t.Fatalf("listed tools = %#v, want only linear issues from configured narrowing", tools)
+	}
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) {
+		t.Fatalf("tool callback bodies = %#v, want linear execution", toolBodies)
+	}
+}
+
 func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *testing.T) {
 	t.Parallel()
 

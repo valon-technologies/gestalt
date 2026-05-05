@@ -29,6 +29,38 @@ func (p *catalogCountingProvider) Catalog() *catalog.Catalog {
 	return p.CatalogVal
 }
 
+type unavailableAgentCatalogTestProvider struct {
+	*catalogCountingProvider
+	err error
+}
+
+func (p *unavailableAgentCatalogTestProvider) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return nil, p.err
+}
+
+func agentCatalogTestProvider(name, displayName string, operations ...string) *catalogCountingProvider {
+	catalogOperations := make([]catalog.CatalogOperation, 0, len(operations))
+	for _, operation := range operations {
+		catalogOperations = append(catalogOperations, catalog.CatalogOperation{
+			ID:       operation,
+			Title:    operation,
+			ReadOnly: true,
+		})
+	}
+	return &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        name,
+			DN:       displayName,
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        name,
+				DisplayName: displayName,
+				Operations:  catalogOperations,
+			},
+		},
+	}
+}
+
 func newAgentManagerTestRunGrants(t testing.TB) *agentgrant.Manager {
 	t.Helper()
 	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
@@ -891,6 +923,436 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	}
 	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
 		t.Fatalf("grant tool refs = %#v, want global broad catalog ref", got)
+	}
+}
+
+func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProvider(t *testing.T) {
+	t.Parallel()
+
+	threshold := 1
+	linear := agentCatalogTestProvider("linear", "Linear", "issues")
+	github := agentCatalogTestProvider("github", "GitHub", "issues", "pull_requests")
+	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestRunGrants(t)
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear, github),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		RunGrants:                     grants,
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
+	}
+	if got := req.ToolRefs; len(got) != 1 || got[0].Plugin != "linear" || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want linear provider ref", got)
+	}
+	grant, err := grants.Resolve(req.RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != "linear" || got[0].Operation != "" {
+		t.Fatalf("grant tool refs = %#v, want linear provider ref", got)
+	}
+
+	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: grant.ToolSource,
+		ToolRefs:   grant.ToolRefs,
+	})
+	if err != nil {
+		t.Fatalf("ListTools narrowed grant: %v", err)
+	}
+	if len(listed.Tools) != 1 || listed.Tools[0].Target.Plugin != "linear" || listed.Tools[0].Target.Operation != "issues" {
+		t.Fatalf("ListTools narrowed grant = %#v, want only linear issues", listed.Tools)
+	}
+}
+
+func TestManagerCreateTurnKeepsImplicitWildcardForSmallCatalogs(t *testing.T) {
+	t.Parallel()
+
+	threshold := 10
+	linear := agentCatalogTestProvider("linear", "Linear", "issues")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for small catalog", got)
+	}
+}
+
+func TestManagerCreateTurnDoesNotEnumerateCatalogsWhenNoProviderMentionMatches(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	linear := agentCatalogTestProvider("linear", "Linear", "issues")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me my tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if linear.catalogCalls != 0 {
+		t.Fatalf("linear catalog calls = %d, want no enumeration without a provider mention", linear.catalogCalls)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard without provider mention", got)
+	}
+}
+
+func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	docs := agentCatalogTestProvider("docs", "Docs", "search")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, docs),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "open a doc"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if docs.catalogCalls != 0 {
+		t.Fatalf("docs catalog calls = %d, want no enumeration for non-exact provider mention", docs.catalogCalls)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for non-exact provider mention", got)
+	}
+}
+
+func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	linear := agentCatalogTestProvider("linear", "Linear", "issues")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		CallerPluginName: "slack",
+		SessionID:        session.ID,
+		Model:            "test-model",
+		Messages:         []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for caller plugin default", got)
+	}
+	if linear.catalogCalls != 0 {
+		t.Fatalf("linear catalog calls = %d, want caller plugin default to skip narrowing probes", linear.catalogCalls)
+	}
+}
+
+func TestManagerCreateTurnNarrowsFromLatestUserTextOnly(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	linear := agentCatalogTestProvider("linear", "Linear", "issues")
+	github := agentCatalogTestProvider("github", "GitHub", "issues")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear, github),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages: []coreagent.Message{
+			{Role: "user", Text: "linear was mentioned earlier"},
+			{Role: "assistant", Text: "linear is still in assistant text"},
+			{
+				Role: "user",
+				Parts: []coreagent.MessagePart{
+					{Type: coreagent.MessagePartTypeJSON, Text: "linear should be ignored"},
+					{Type: coreagent.MessagePartTypeToolResult, ToolResult: &coreagent.ToolResultPart{Content: "linear should be ignored"}},
+					{Type: coreagent.MessagePartTypeText, Text: "show me github issues"},
+				},
+				Metadata: map[string]any{"provider": "linear"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != "github" || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want github from latest user text part only", got)
+	}
+}
+
+func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderCannotBeProbed(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			DN:       "Linear",
+			ConnMode: core.ConnectionModeNone,
+		},
+	}
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want fail-open broad wildcard", got)
+	}
+}
+
+func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	linear := &unavailableAgentCatalogTestProvider{
+		catalogCountingProvider: &catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "linear",
+				DN:       "Linear",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+		err: invocation.ErrNoCredential,
+	}
+	github := agentCatalogTestProvider("github", "GitHub", "issues")
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear, github),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when mentioned provider is unavailable", got)
+	}
+}
+
+func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderHasNoVisibleCandidates(t *testing.T) {
+	t.Parallel()
+
+	threshold := 0
+	hidden := false
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			DN:       "Linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:      "admin",
+				Title:   "Admin",
+				Visible: &hidden,
+			}}},
+		},
+	}
+	alpha := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, linear),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		DefaultToolNarrowingThreshold: &threshold,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "show me linear"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when provider has no visible candidates", got)
 	}
 }
 

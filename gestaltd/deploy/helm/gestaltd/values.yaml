@@ -97,6 +97,10 @@ config:
     # baseUrl: "${GESTALT_BASE_URL}"
     providers:
       indexeddb: main
+    # Controls when implicit default agent catalog grants are narrowed to
+    # exactly mentioned providers. Omitted uses the gestaltd default.
+    # agent:
+    #   defaultToolNarrowingThreshold: 200
   providers:
     indexeddb:
       main:

@@ -149,6 +149,8 @@ server:
   runtime:
     defaultHostedProvider: modal
     relayBaseUrl: https://gestalt.example.com
+  agent:
+    defaultToolNarrowingThreshold: 200
   providers:
     authorization: indexeddb
     authentication: oidc
@@ -180,6 +182,8 @@ authorization:
 
 `runtime.defaultHostedProvider` selects the runtime provider used when a plugin or agent opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
+`agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
+
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
@@ -203,6 +207,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
+| `agent.defaultToolNarrowingThreshold` | `200` | Visible catalog size above which implicit default agent catalog grants may be narrowed to exactly mentioned providers. Set `0` to narrow whenever a matching provider has any visible tools. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. The only supported value is `indexeddb`, which stores attachment state in the configured host IndexedDB for shared and load-balanced servers. |
 | `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |

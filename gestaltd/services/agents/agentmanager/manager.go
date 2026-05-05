@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -49,6 +50,7 @@ const (
 	agentToolListDefaultPageSize = 100
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
+	agentDefaultToolNarrowingK   = 200
 	maxAgentRouteCacheEntries    = 20_000
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
@@ -117,20 +119,26 @@ type Config struct {
 	PluginInvokes     map[string][]invocation.PluginInvocationDependency
 	AgentConnections  map[string][]string
 	RouteStore        RouteStore
+	// DefaultToolNarrowingThreshold controls when implicit default wildcard
+	// catalog grants are narrowed to exactly mentioned providers. Nil uses the
+	// package default; zero means narrow whenever any visible catalog candidate
+	// exists.
+	DefaultToolNarrowingThreshold *int
 }
 
 type Manager struct {
-	providers         *registry.ProviderMap[core.Provider]
-	agent             AgentControl
-	workflowTools     WorkflowSystemTools
-	runGrants         *agentgrant.Manager
-	invoker           invocation.Invoker
-	authorizer        authorization.RuntimeAuthorizer
-	defaultConnection map[string]string
-	catalogConnection map[string]string
-	pluginInvokes     map[string][]invocation.PluginInvocationDependency
-	agentConnections  map[string][]string
-	routeStore        RouteStore
+	providers                     *registry.ProviderMap[core.Provider]
+	agent                         AgentControl
+	workflowTools                 WorkflowSystemTools
+	runGrants                     *agentgrant.Manager
+	invoker                       invocation.Invoker
+	authorizer                    authorization.RuntimeAuthorizer
+	defaultConnection             map[string]string
+	catalogConnection             map[string]string
+	pluginInvokes                 map[string][]invocation.PluginInvocationDependency
+	agentConnections              map[string][]string
+	routeStore                    RouteStore
+	defaultToolNarrowingThreshold int
 	// Route caches are process-local accelerators; the route store is the durable provider index.
 	routeMu       sync.Mutex
 	sessionRoutes agentRouteCache
@@ -150,9 +158,22 @@ func New(cfg Config) *Manager {
 		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		routeStore:        cfg.RouteStore,
-		sessionRoutes:     newAgentRouteCache(),
-		turnRoutes:        newAgentRouteCache(),
+		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
+			cfg.DefaultToolNarrowingThreshold,
+		),
+		sessionRoutes: newAgentRouteCache(),
+		turnRoutes:    newAgentRouteCache(),
 	}
+}
+
+func effectiveAgentToolNarrowingThreshold(configured *int) int {
+	if configured == nil {
+		return agentDefaultToolNarrowingK
+	}
+	if *configured < 0 {
+		return 0
+	}
+	return *configured
 }
 
 func cloneStringSliceMap(src map[string][]string) map[string][]string {
@@ -765,7 +786,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !req.ToolRefsSet && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
 		toolSource = coreagent.ToolSourceModeMCPCatalog
-		toolRefs = []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}
+		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, req)
 	}
 	var tools []coreagent.Tool
 	if toolSource == coreagent.ToolSourceModeMCPCatalog {
@@ -1756,22 +1777,54 @@ func (k agentToolTargetKey) String() string {
 }
 
 func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, []agentToolUnavailableCandidate, error) {
+	candidates := make([]agentToolSearchCandidate, 0)
+	unavailable := make([]agentToolUnavailableCandidate, 0)
+	err := m.visitToolSearchCandidates(ctx, p, refs, query, skipUnavailable, true,
+		func(candidate agentToolSearchCandidate) (bool, error) {
+			candidates = append(candidates, candidate)
+			return true, nil
+		},
+		func(candidate agentToolUnavailableCandidate) (bool, error) {
+			unavailable = append(unavailable, candidate)
+			return true, nil
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	ranked, err := rankAgentToolSearchCandidates(query, candidates)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ranked, unavailable, nil
+}
+
+func (m *Manager) visitToolSearchCandidates(
+	ctx context.Context,
+	p *principal.Principal,
+	refs []coreagent.ToolRef,
+	query string,
+	skipUnavailable bool,
+	allowQueryProviderNarrowing bool,
+	visitCandidate func(agentToolSearchCandidate) (bool, error),
+	visitUnavailable func(agentToolUnavailableCandidate) (bool, error),
+) error {
 	scope := newAgentToolSearchScope(refs)
 	providerNames := scope.providerNames()
 	if len(providerNames) == 0 {
 		if !scope.all {
-			return nil, nil, nil
+			return nil
 		}
 		providerNames = m.providers.List()
 	}
 	query = strings.TrimSpace(query)
-	if scope.all {
+	if scope.all && allowQueryProviderNarrowing {
 		if mentioned := mentionedAgentToolSearchProviders(query, providerNames); len(mentioned) > 0 {
 			providerNames = mentioned
 		}
 	}
-	candidates := make([]agentToolSearchCandidate, 0)
-	unavailable := make([]agentToolUnavailableCandidate, 0)
+	seenCandidates := false
+	seenUnavailable := false
 	var firstUnavailableErr error
 	for _, pluginName := range providerNames {
 		pluginName = strings.TrimSpace(pluginName)
@@ -1783,7 +1836,7 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
-			return nil, nil, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
+			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
 		if !m.allowProvider(ctx, p, pluginName) {
 			continue
@@ -1799,11 +1852,20 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 						firstUnavailableErr = err
 					}
 					if principal.AllowsProviderPermission(p, pluginName) {
-						unavailable = append(unavailable, unavailableAgentToolCandidate(searchRef, err))
+						seenUnavailable = true
+						if visitUnavailable != nil {
+							keepGoing, visitErr := visitUnavailable(unavailableAgentToolCandidate(searchRef, err))
+							if visitErr != nil {
+								return visitErr
+							}
+							if !keepGoing {
+								return nil
+							}
+						}
 					}
 					continue
 				}
-				return nil, nil, err
+				return err
 			}
 			for j := range searchCatalogs {
 				searchCatalog := searchCatalogs[j]
@@ -1833,24 +1895,30 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 					}
 					ref.Plugin = pluginName
 					ref.Operation = operation
-					candidates = append(candidates, agentToolSearchCandidate{
+					seenCandidates = true
+					if visitCandidate == nil {
+						continue
+					}
+					keepGoing, visitErr := visitCandidate(agentToolSearchCandidate{
 						ref:             ref,
 						catalog:         cat,
 						operation:       op,
 						skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef),
 					})
+					if visitErr != nil {
+						return visitErr
+					}
+					if !keepGoing {
+						return nil
+					}
 				}
 			}
 		}
 	}
-	if len(candidates) == 0 && len(unavailable) == 0 && !scope.all && firstUnavailableErr != nil {
-		return nil, nil, firstUnavailableErr
+	if !seenCandidates && !seenUnavailable && !scope.all && firstUnavailableErr != nil {
+		return firstUnavailableErr
 	}
-	ranked, err := rankAgentToolSearchCandidates(query, candidates)
-	if err != nil {
-		return nil, nil, err
-	}
-	return ranked, unavailable, nil
+	return nil
 }
 
 func agentToolSearchUnavailable(err error) bool {
@@ -2678,6 +2746,180 @@ func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider
 		return coreagent.ToolSourceModeMCPCatalog
 	}
 	return coreagent.ToolSourceModeUnspecified
+}
+
+func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) []coreagent.ToolRef {
+	broadRefs := []coreagent.ToolRef{{Plugin: agentToolSearchAllPlugin}}
+	if m == nil || m.providers == nil {
+		return broadRefs
+	}
+	if strings.TrimSpace(req.CallerPluginName) != "" {
+		return broadRefs
+	}
+	latestUserText := latestAgentUserMessageText(req.Messages)
+	if strings.TrimSpace(latestUserText) == "" {
+		return broadRefs
+	}
+	mentionedProviders := m.exactMentionedAgentToolProviders(ctx, p, latestUserText)
+	if len(mentionedProviders) == 0 {
+		return broadRefs
+	}
+	largeCatalog, err := m.agentToolCandidateCountExceeds(ctx, p, broadRefs, m.defaultToolNarrowingThreshold)
+	if err != nil || !largeCatalog {
+		return broadRefs
+	}
+
+	narrowedRefs := make([]coreagent.ToolRef, 0, len(mentionedProviders))
+	for _, pluginName := range mentionedProviders {
+		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{Plugin: pluginName}}, 0)
+		if err != nil {
+			return broadRefs
+		}
+		if hasCandidate {
+			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{Plugin: pluginName})
+		}
+	}
+	if len(narrowedRefs) == 0 {
+		return broadRefs
+	}
+	return narrowedRefs
+}
+
+func latestAgentUserMessageText(messages []coreagent.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if !strings.EqualFold(strings.TrimSpace(msg.Role), "user") {
+			continue
+		}
+		parts := make([]string, 0, 1+len(msg.Parts))
+		if text := strings.TrimSpace(msg.Text); text != "" {
+			parts = append(parts, text)
+		}
+		for j := range msg.Parts {
+			part := msg.Parts[j]
+			if part.Type != coreagent.MessagePartTypeText {
+				continue
+			}
+			if text := strings.TrimSpace(part.Text); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
+}
+
+func (m *Manager) exactMentionedAgentToolProviders(ctx context.Context, p *principal.Principal, text string) []string {
+	normalizedText := normalizeAgentToolMentionText(text)
+	if normalizedText == "" || m == nil || m.providers == nil {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, pluginName := range m.providers.List() {
+		pluginName = strings.TrimSpace(pluginName)
+		if pluginName == "" {
+			continue
+		}
+		prov, err := m.providers.Get(pluginName)
+		if err != nil {
+			continue
+		}
+		if !m.allowsAgentProvider(ctx, p, pluginName) {
+			continue
+		}
+		aliases := []string{pluginName}
+		if displayName := strings.TrimSpace(prov.DisplayName()); displayName != "" {
+			aliases = append(aliases, displayName)
+		}
+		for _, alias := range aliases {
+			if exactAgentToolMention(normalizedText, alias) {
+				out = append(out, pluginName)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func exactAgentToolMention(normalizedText, alias string) bool {
+	normalizedAlias := normalizeAgentToolMentionText(alias)
+	if normalizedAlias == "" {
+		return false
+	}
+	return strings.Contains(" "+normalizedText+" ", " "+normalizedAlias+" ")
+}
+
+func normalizeAgentToolMentionText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastSeparator := true
+	for _, r := range value {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+			lastSeparator = false
+		default:
+			if !lastSeparator {
+				b.WriteByte(' ')
+				lastSeparator = true
+			}
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func (m *Manager) agentToolCandidateCountExceeds(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, threshold int) (bool, error) {
+	if threshold < 0 {
+		threshold = 0
+	}
+	count := 0
+	exceeded := false
+	visit := func() (bool, error) {
+		count++
+		if count > threshold {
+			exceeded = true
+			return false, nil
+		}
+		return true, nil
+	}
+	err := m.visitToolSearchCandidates(ctx, p, refs, "", true, false,
+		func(agentToolSearchCandidate) (bool, error) {
+			return visit()
+		},
+		func(agentToolUnavailableCandidate) (bool, error) {
+			return visit()
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	return exceeded, nil
+}
+
+func (m *Manager) agentToolVisibleCandidateCountExceeds(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, threshold int) (bool, error) {
+	if threshold < 0 {
+		threshold = 0
+	}
+	count := 0
+	exceeded := false
+	err := m.visitToolSearchCandidates(ctx, p, refs, "", true, false,
+		func(agentToolSearchCandidate) (bool, error) {
+			count++
+			if count > threshold {
+				exceeded = true
+				return false, nil
+			}
+			return true, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return false, err
+	}
+	return exceeded, nil
 }
 
 func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) []core.AccessPermission {

@@ -5411,6 +5411,64 @@ server:
 	})
 }
 
+func TestLoadConfig_ServerAgentDefaultToolNarrowingThreshold(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit zero is preserved", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  agent:
+    defaultToolNarrowingThreshold: 0
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.Agent.DefaultToolNarrowingThreshold == nil {
+			t.Fatal("defaultToolNarrowingThreshold = nil, want explicit zero")
+		}
+		if got := *cfg.Server.Agent.DefaultToolNarrowingThreshold; got != 0 {
+			t.Fatalf("defaultToolNarrowingThreshold = %d, want 0", got)
+		}
+	})
+
+	t.Run("positive value is parsed", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  agent:
+    defaultToolNarrowingThreshold: 123
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Server.Agent.DefaultToolNarrowingThreshold == nil {
+			t.Fatal("defaultToolNarrowingThreshold = nil, want parsed value")
+		}
+		if got := *cfg.Server.Agent.DefaultToolNarrowingThreshold; got != 123 {
+			t.Fatalf("defaultToolNarrowingThreshold = %d, want 123", got)
+		}
+	})
+
+	t.Run("negative value rejected", func(t *testing.T) {
+		t.Parallel()
+		path := mustWriteConfigFile(t, `
+server:
+  agent:
+    defaultToolNarrowingThreshold: -1
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("expected error for negative defaultToolNarrowingThreshold")
+		}
+		if !strings.Contains(err.Error(), "server.agent.defaultToolNarrowingThreshold") {
+			t.Fatalf("Load error = %v, want server.agent.defaultToolNarrowingThreshold", err)
+		}
+	})
+}
+
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
 
