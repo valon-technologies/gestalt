@@ -1098,17 +1098,18 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		PluginInvokes:     agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
-		Providers:         providers,
-		Agent:             prepared.Deps.AgentRuntime,
-		WorkflowTools:     workflowTools,
-		RunGrants:         prepared.Deps.AgentRunGrants,
-		Invoker:           sharedInvoker,
-		Authorizer:        authz,
-		DefaultConnection: connMaps.DefaultConnection,
-		CatalogConnection: connMaps.APIConnection,
-		PluginInvokes:     agentPluginInvokes(cfg),
-		AgentConnections:  agentConnectionBindings(cfg),
-		RouteStore:        agentRouteStore,
+		Providers:                     providers,
+		Agent:                         prepared.Deps.AgentRuntime,
+		WorkflowTools:                 workflowTools,
+		RunGrants:                     prepared.Deps.AgentRunGrants,
+		Invoker:                       sharedInvoker,
+		Authorizer:                    authz,
+		DefaultConnection:             connMaps.DefaultConnection,
+		CatalogConnection:             connMaps.APIConnection,
+		PluginInvokes:                 agentPluginInvokes(cfg),
+		AgentConnections:              agentConnectionBindings(cfg),
+		RouteStore:                    agentRouteStore,
+		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)

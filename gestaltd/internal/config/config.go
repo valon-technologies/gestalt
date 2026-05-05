@@ -1472,10 +1472,15 @@ type ServerConfig struct {
 	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
+	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
 	Dev           DevConfig                `yaml:"dev,omitempty"`
 	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+}
+
+type ServerAgentConfig struct {
+	DefaultToolNarrowingThreshold *int `yaml:"defaultToolNarrowingThreshold,omitempty"`
 }
 
 type DevConfig struct {
