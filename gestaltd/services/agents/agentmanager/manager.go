@@ -1502,16 +1502,20 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 
 	if query == "" {
 		sort.SliceStable(out, func(i, j int) bool {
-			if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(out[i]), listedAgentToolUnavailable(out[j]); leftUnavailable != rightUnavailable {
-				return !leftUnavailable
-			}
-			if out[i].MCPName != out[j].MCPName {
-				return out[i].MCPName < out[j].MCPName
-			}
-			return out[i].ToolID < out[j].ToolID
+			return listedAgentToolSortLess(out[i], out[j])
 		})
+	} else {
+		stableNames, err := m.stableListedAgentToolNames(ctx, p, refs)
+		if err != nil {
+			return nil, err
+		}
+		for i := range out {
+			if name := stableNames[agentToolTargetKeyFromTarget(out[i].Target)]; name != "" {
+				out[i].MCPName = name
+			}
+		}
 	}
-	assignUniqueListedAgentToolNames(out)
+	assignStableUniqueListedAgentToolNames(out)
 	tools, nextPageToken := paginateListedAgentTools(out, pageSize, pageOffset)
 	return &coreagent.ListToolsResponse{
 		Tools:         tools,
@@ -1948,6 +1952,70 @@ func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUn
 
 func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
 	return tool.Target.Unavailable != nil
+}
+
+func (m *Manager) stableListedAgentToolNames(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) (map[agentToolTargetKey]string, error) {
+	out := make([]coreagent.ListedTool, 0, len(refs))
+	seen := map[agentToolTargetKey]struct{}{}
+	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range systemTools {
+		key := agentToolTargetKeyFromTarget(systemTools[i].Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		listed, err := listedAgentSystemTool(systemTools[i])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, listed)
+	}
+	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, "", true)
+	if err != nil {
+		return nil, err
+	}
+	for i := range candidates {
+		listed, err := m.listedAgentPluginCandidateTool(candidates[i])
+		if err != nil {
+			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
+				continue
+			}
+			if candidates[i].skipUnavailable && agentToolSearchUnavailable(err) {
+				continue
+			}
+			return nil, err
+		}
+		key := agentToolTargetKeyFromTarget(listed.Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, listed)
+	}
+	for i := range unavailable {
+		listed, err := m.listedUnavailableAgentPluginTool(unavailable[i])
+		if err != nil {
+			return nil, err
+		}
+		key := agentToolTargetKeyFromTarget(listed.Target)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, listed)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return listedAgentToolSortLess(out[i], out[j])
+	})
+	assignUniqueListedAgentToolNames(out)
+	names := make(map[agentToolTargetKey]string, len(out))
+	for i := range out {
+		names[agentToolTargetKeyFromTarget(out[i].Target)] = out[i].MCPName
+	}
+	return names, nil
 }
 
 func unavailableAgentToolReason(err error) string {
@@ -2616,9 +2684,41 @@ func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 }
 
 func assignUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
+	order := make([]int, len(tools))
+	for i := range tools {
+		order[i] = i
+	}
+	assignUniqueListedAgentToolNamesInOrder(tools, order)
+}
+
+func assignStableUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
+	order := make([]int, len(tools))
+	for i := range tools {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return listedAgentToolSortLess(tools[order[i]], tools[order[j]])
+	})
+	assignUniqueListedAgentToolNamesInOrder(tools, order)
+}
+
+func listedAgentToolSortLess(a, b coreagent.ListedTool) bool {
+	if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(a), listedAgentToolUnavailable(b); leftUnavailable != rightUnavailable {
+		return !leftUnavailable
+	}
+	if a.MCPName != b.MCPName {
+		return a.MCPName < b.MCPName
+	}
+	return a.ToolID < b.ToolID
+}
+
+func assignUniqueListedAgentToolNamesInOrder(tools []coreagent.ListedTool, order []int) {
 	used := make(map[string]struct{}, len(tools))
 	nextSuffix := make(map[string]int, len(tools))
-	for i := range tools {
+	for _, i := range order {
+		if i < 0 || i >= len(tools) {
+			continue
+		}
 		base := strings.TrimSpace(tools[i].MCPName)
 		if base == "" {
 			base = "tool"

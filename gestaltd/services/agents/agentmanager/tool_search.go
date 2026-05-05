@@ -12,6 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
+const agentToolSearchMetadataTextMaxBytes = 1200
+
 type agentToolSearchDocument struct {
 	Plugin      string `json:"plugin"`
 	Operation   string `json:"operation"`
@@ -160,7 +162,15 @@ func agentToolSearchMetadataText(candidate agentToolSearchCandidate) string {
 		doc.Parameters,
 		doc.Tags,
 	}
-	return strings.Join(uniqueAgentToolSearchTokens(strings.Join(parts, " ")), " ")
+	return truncateAgentToolSearchMetadataText(strings.Join(uniqueAgentToolSearchTokens(strings.Join(parts, " ")), " "))
+}
+
+func truncateAgentToolSearchMetadataText(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= agentToolSearchMetadataTextMaxBytes {
+		return value
+	}
+	return strings.TrimSpace(value[:agentToolSearchMetadataTextMaxBytes-3]) + "..."
 }
 
 func agentToolSearchParameterText(op catalog.CatalogOperation) string {

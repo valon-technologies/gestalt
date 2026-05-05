@@ -2247,9 +2247,8 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		t.Fatalf("ListTools response = %#v, want three tools on one final page", listResp)
 	}
 	names := []string{listResp.Tools[0].MCPName, listResp.Tools[1].MCPName, listResp.Tools[2].MCPName}
-	slices.Sort(names)
 	if strings.Join(names, ",") != "roadmap__sync,roadmap__sync_2,roadmap__sync_2_2" {
-		t.Fatalf("listed MCP names = %#v, want unique sanitized names", names)
+		t.Fatalf("listed MCP names = %#v, want stable sorted unique names", names)
 	}
 	var tool coreagent.ListedTool
 	for i := range listResp.Tools {
@@ -2268,15 +2267,18 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		PageSize:     10,
+		PageSize:     1,
 		Query:        "loud roadmap",
 		RunGrant:     grant,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with query: %v", err)
 	}
-	if len(queryResp.Tools) != 3 || queryResp.Tools[0].Ref.Operation != "sync!" {
-		t.Fatalf("ListTools query response = %#v, want ranked sync! first", queryResp)
+	if len(queryResp.Tools) != 1 || queryResp.NextPageToken != "1" || queryResp.Tools[0].Ref.Operation != "sync!" {
+		t.Fatalf("ListTools query response = %#v, want first ranked page with sync!", queryResp)
+	}
+	if queryResp.Tools[0].MCPName != "roadmap__sync_2" {
+		t.Fatalf("query-ranked MCP name = %q, want stable duplicate name roadmap__sync_2", queryResp.Tools[0].MCPName)
 	}
 	if strings.Join(queryResp.Tools[0].Tags, ",") != "loud" || !strings.Contains(queryResp.Tools[0].SearchText, "loud") {
 		t.Fatalf("listed query metadata = tags %#v search %q", queryResp.Tools[0].Tags, queryResp.Tools[0].SearchText)
