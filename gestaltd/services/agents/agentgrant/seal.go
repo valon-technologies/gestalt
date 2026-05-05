@@ -16,10 +16,12 @@ import (
 )
 
 const (
-	sealVersion          = "v1"
-	sealPurposeToolID    = "agent-tool-id"
-	sealPurposeToolScope = "agent-tool-scope"
-	toolIDPrefix         = "agt_tool_"
+	sealVersion                = "v1"
+	sealPurposeToolID          = "agent-tool-id-v2"
+	sealPurposeToolScope       = "agent-tool-scope-v2"
+	legacySealPurposeToolID    = "agent-tool-id"
+	legacySealPurposeToolScope = "agent-tool-scope"
+	toolIDPrefix               = "agt_tool_"
 )
 
 type toolBinding struct {
@@ -63,7 +65,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	var binding toolBinding
-	if err := m.openValue(sealPurposeToolID, strings.TrimPrefix(id, toolIDPrefix), &binding); err != nil {
+	if err := m.openValueAny([]string{sealPurposeToolID, legacySealPurposeToolID}, strings.TrimPrefix(id, toolIDPrefix), &binding); err != nil {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	target := binding.Target
@@ -142,6 +144,24 @@ func (m *Manager) openValue(purpose, token string, value any) error {
 		return fmt.Errorf("decode agent grant payload: %w", err)
 	}
 	return nil
+}
+
+func (m *Manager) openValueAny(purposes []string, token string, value any) error {
+	var lastErr error
+	for _, purpose := range purposes {
+		if strings.TrimSpace(purpose) == "" {
+			continue
+		}
+		if err := m.openValue(purpose, token, value); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("agent grant payload purpose is invalid")
 }
 
 func (m *Manager) sealer(purpose string) (cipher.AEAD, error) {
