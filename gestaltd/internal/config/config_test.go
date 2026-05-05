@@ -45,6 +45,91 @@ func withDefaultConfigAPIVersion(content string) string {
 	return "\napiVersion: " + ConfigAPIVersion + "\n" + strings.TrimLeft(content, "\r\n")
 }
 
+func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
+	t.Parallel()
+
+	baseAuth := ConnectionAuthDef{
+		Type:         providermanifestv1.AuthTypeOAuth2,
+		GrantType:    "refresh_token",
+		TokenURL:     "https://oauth2.example.test/token",
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		RefreshToken: "refresh-token",
+	}
+	cases := []struct {
+		name    string
+		conn    ConnectionDef
+		wantErr string
+	}{
+		{
+			name: "platform refresh_token accepted",
+			conn: ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: baseAuth},
+		},
+		{
+			name:    "non-platform refresh_token rejected",
+			conn:    ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: baseAuth},
+			wantErr: "oauth2 refresh_token requires mode platform",
+		},
+		{
+			name: "missing refresh token rejected",
+			conn: func() ConnectionDef {
+				auth := baseAuth
+				auth.RefreshToken = ""
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+			}(),
+			wantErr: "auth.refreshToken is required for oauth2 refresh_token",
+		},
+		{
+			name: "unsupported grant rejected",
+			conn: func() ConnectionDef {
+				auth := baseAuth
+				auth.GrantType = "password"
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+			}(),
+			wantErr: "auth.grantType is only supported for oauth2 client_credentials or refresh_token",
+		},
+		{
+			name: "refresh token without refresh_token grant rejected",
+			conn: func() ConnectionDef {
+				auth := baseAuth
+				auth.GrantType = ""
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+			}(),
+			wantErr: "auth.refreshToken is only supported for oauth2 refresh_token",
+		},
+		{
+			name: "refresh token with client credentials rejected",
+			conn: func() ConnectionDef {
+				auth := baseAuth
+				auth.GrantType = "client_credentials"
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+			}(),
+			wantErr: "auth.refreshToken is only supported for oauth2 refresh_token",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn := tc.conn
+			cfg := &Config{Connections: map[string]*ConnectionDef{"platform-mailbox": &conn}}
+			err := ValidateStructure(cfg)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatal("ValidateStructure: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateStructure: %v", err)
+			}
+		})
+	}
+}
+
 func mustSelectedProvider(t *testing.T, cfg *Config, kind HostProviderKind) (string, *ProviderEntry) {
 	t.Helper()
 	name, entry, err := cfg.SelectedHostProvider(kind)

@@ -1352,6 +1352,40 @@ providers:
             connection: model
 ```
 
+Platform OAuth2 connections can also use a deployer-owned refresh token when a
+real service mailbox or upstream account must be used instead of client
+credentials:
+
+```yaml
+connections:
+  gmail-platform-mailbox:
+    mode: platform
+    auth:
+      type: oauth2
+      grantType: refresh_token
+      tokenUrl: https://oauth2.googleapis.com/token
+      clientId:
+        secret:
+          provider: secrets
+          name: google-oauth-client-id
+      clientSecret:
+        secret:
+          provider: secrets
+          name: google-oauth-client-secret
+      refreshToken:
+        secret:
+          provider: secrets
+          name: gmail-platform-mailbox-refresh-token
+
+plugins:
+  gmail:
+    source: ./plugins/gmail/manifest.yaml
+    connections:
+      platform:
+        ref: gmail-platform-mailbox
+        exposure: internal
+```
+
 The effective connection is resolved from the most specific declaration first.
 A manifest surface can name a connection with `spec.surfaces.<surface>.connection`,
 and declarative REST operations can name a connection directly. If no surface
@@ -1406,7 +1440,8 @@ Every connection `auth` block uses the same shape. `type` selects the auth strat
 | Field | Default | Description |
 | --- | --- | --- |
 | `type` | | Authentication strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
-| `grantType` | | OAuth2 grant type. Only `client_credentials` is currently supported, and only on `mode: platform` connections. |
+| `grantType` | | OAuth2 grant type. `client_credentials` and `refresh_token` are supported on `mode: platform` connections. |
+| `refreshToken` | | OAuth2 refresh token for `grantType: refresh_token` platform connections. Use a secret ref for production deployments. |
 | `authorizationUrl` | | OAuth2 authorization endpoint. |
 | `tokenUrl` | | OAuth2 token endpoint. |
 | `clientId` | | OAuth2 client identifier. |

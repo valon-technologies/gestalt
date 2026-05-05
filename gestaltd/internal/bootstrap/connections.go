@@ -225,21 +225,28 @@ func staticConnectionRuntimeInfo(integration, connection string, conn config.Con
 		info.Token = token
 		return info, nil
 	case providermanifestv1.AuthTypeOAuth2:
-		if strings.TrimSpace(authConfig.GrantType) != "client_credentials" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials", integration, connection)
+		grantType := strings.TrimSpace(authConfig.GrantType)
+		if grantType != "client_credentials" && grantType != "refresh_token" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials or refresh_token", integration, connection)
 		}
 		if strings.TrimSpace(authConfig.TokenURL) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.tokenUrl is required", integration, connection)
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.tokenUrl is required", integration, connection, grantType)
 		}
 		if strings.TrimSpace(authConfig.ClientID) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientId is required", integration, connection)
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.clientId is required", integration, connection, grantType)
 		}
 		if strings.TrimSpace(authConfig.ClientSecret) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 client_credentials: auth.clientSecret is required", integration, connection)
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.clientSecret is required", integration, connection, grantType)
+		}
+		if grantType == "refresh_token" && strings.TrimSpace(authConfig.RefreshToken) == "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 refresh_token: auth.refreshToken is required", integration, connection)
+		}
+		if grantType != "refresh_token" && strings.TrimSpace(authConfig.RefreshToken) != "" {
+			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.refreshToken is only supported for refresh_token", integration, connection, grantType)
 		}
 		return info, nil
 	default:
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials", integration, connection)
+		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials/refresh_token", integration, connection)
 	}
 }
 
@@ -281,6 +288,7 @@ func ExternalCredentialAuthConfig(auth config.ConnectionAuthDef) core.ExternalCr
 		Token:                auth.Token,
 		TokenPrefix:          auth.TokenPrefix,
 		GrantType:            auth.GrantType,
+		RefreshToken:         auth.RefreshToken,
 		TokenURL:             auth.TokenURL,
 		ClientID:             auth.ClientID,
 		ClientSecret:         auth.ClientSecret,
@@ -563,7 +571,8 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *declarative.Definition, deps Deps) (OAuthHandler, error) {
 	switch conn.Auth.Type {
 	case "", providermanifestv1.AuthTypeOAuth2:
-		if strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
+		switch strings.TrimSpace(conn.Auth.GrantType) {
+		case "client_credentials", "refresh_token":
 			return nil, nil
 		}
 		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)

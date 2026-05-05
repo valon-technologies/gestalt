@@ -288,6 +288,26 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(core.ErrMCPOnly)
 	}
 
+	if strings.TrimSpace(conn) != "" {
+		operationConnection, err := ResolveOperationConnection(execProv, opMeta.ID, params)
+		if err != nil {
+			return fail(err)
+		}
+		operationConnection = core.ResolveConnectionAlias(operationConnection)
+		explicitConnection := core.ResolveConnectionAlias(conn)
+		overrideDenied := !OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideTargetsInternal := b.connectionIsInternal(providerName, explicitConnection)
+		if operationConnection != "" && operationConnection != explicitConnection && (overrideDenied || overrideTargetsInternal) {
+			return fail(fmt.Errorf(
+				"%w: operation %q on integration %q uses connection %q; omit the connection override or use that connection instead of %q",
+				ErrInvalidInvocation,
+				opMeta.ID,
+				providerName,
+				operationConnection,
+				conn,
+			))
+		}
+	}
 	if conn == "" {
 		conn = resolvedConnection
 	}
@@ -561,6 +581,14 @@ func (b *Broker) resolveConnectionExposure(providerName, connection string) core
 		}
 	}
 	return core.ConnectionExposureUser
+}
+
+func (b *Broker) connectionIsInternal(providerName, connection string) bool {
+	if b == nil || b.connectionRuntime == nil {
+		return false
+	}
+	info, ok := b.connectionRuntime(providerName, connection)
+	return ok && core.NormalizeConnectionExposure(info.Exposure) == core.ConnectionExposureInternal
 }
 
 func (b *Broker) connectionID(providerName, connection string) string {

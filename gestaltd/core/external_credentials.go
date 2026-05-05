@@ -34,6 +34,7 @@ type ExternalCredentialAuthConfig struct {
 	Token                string
 	TokenPrefix          string
 	GrantType            string
+	RefreshToken         string
 	TokenURL             string
 	ClientID             string
 	ClientSecret         string

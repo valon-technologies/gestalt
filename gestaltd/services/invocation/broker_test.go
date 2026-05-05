@@ -2,7 +2,9 @@ package invocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -308,6 +310,117 @@ func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *
 	}
 }
 
+func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "gmail",
+		Operations: []catalog.CatalogOperation{{
+			ID:     "gmail.users.messages.modify",
+			Method: "POST",
+		}},
+	}
+	executed := false
+	provider := &brokerOperationConnectionProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "gmail",
+			ConnMode:   core.ConnectionModeUser,
+			CatalogVal: cat,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				executed = true
+				return &core.OperationResult{Status: 200}, nil
+			},
+		},
+		operationConnections: map[string]string{"gmail.users.messages.modify": "default"},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+
+	_, err := broker.Invoke(
+		WithConnection(context.Background(), "platform"),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-gmail"), UserID: "u-gmail", Kind: principal.KindUser},
+		"gmail",
+		"",
+		"gmail.users.messages.modify",
+		nil,
+	)
+	if err == nil {
+		t.Fatal("Invoke succeeded, want connection override rejection")
+	}
+	if !errors.Is(err, ErrInvalidInvocation) {
+		t.Fatalf("Invoke error = %v, want ErrInvalidInvocation", err)
+	}
+	if !strings.Contains(err.Error(), `uses connection "default"`) {
+		t.Fatalf("Invoke error = %v, want operation connection detail", err)
+	}
+	if executed {
+		t.Fatal("Execute was called after rejected connection override")
+	}
+}
+
+func TestBrokerInvokeRejectsExplicitInternalConnectionOverride(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "gmail",
+		Operations: []catalog.CatalogOperation{{
+			ID:     "gmail.users.messages.modify",
+			Method: "POST",
+		}},
+	}
+	executed := false
+	provider := &brokerOperationConnectionProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "gmail",
+			ConnMode:   core.ConnectionModeUser,
+			CatalogVal: cat,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				executed = true
+				return &core.OperationResult{Status: 200}, nil
+			},
+		},
+		operationConnections: map[string]string{"gmail.users.messages.modify": "default"},
+		allowOverride:        true,
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionRuntime(ConnectionRuntimeMap{
+			"gmail": {
+				"default":  {Mode: core.ConnectionModeUser},
+				"platform": {Mode: core.ConnectionModePlatform, Exposure: core.ConnectionExposureInternal},
+			},
+		}.Resolve),
+	)
+
+	_, err := broker.Invoke(
+		WithConnection(context.Background(), "platform"),
+		&principal.Principal{SubjectID: principal.UserSubjectID("u-gmail"), UserID: "u-gmail", Kind: principal.KindUser},
+		"gmail",
+		"",
+		"gmail.users.messages.modify",
+		nil,
+	)
+	if err == nil {
+		t.Fatal("Invoke succeeded, want internal connection override rejection")
+	}
+	if !errors.Is(err, ErrInvalidInvocation) {
+		t.Fatalf("Invoke error = %v, want ErrInvalidInvocation", err)
+	}
+	if !strings.Contains(err.Error(), `instead of "platform"`) {
+		t.Fatalf("Invoke error = %v, want explicit platform connection detail", err)
+	}
+	if executed {
+		t.Fatal("Execute was called after rejected internal connection override")
+	}
+}
+
 type staticProviderOverrideResolver struct {
 	provider core.Provider
 }
@@ -320,6 +433,7 @@ type brokerOperationConnectionProvider struct {
 	*coretesting.StubIntegration
 	operationConnections map[string]string
 	selector             core.OperationConnectionSelector
+	allowOverride        bool
 }
 
 func (p *brokerOperationConnectionProvider) ConnectionForOperation(operation string) string {
@@ -341,4 +455,8 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 		return "", fmt.Errorf("unsupported selector value %q", selected)
 	}
 	return connection, nil
+}
+
+func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
+	return p.allowOverride
 }

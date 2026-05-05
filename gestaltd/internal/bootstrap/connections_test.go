@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -120,6 +122,34 @@ func TestBuildManualConnectionAuthMapIsSeparateFromOAuthHandlers(t *testing.T) {
 	}
 }
 
+func TestBuildConnectionAuthMapSkipsPlatformOAuthRefreshTokenHandler(t *testing.T) {
+	t.Parallel()
+
+	entry := &config.ProviderEntry{
+		Connections: map[string]*config.ConnectionDef{
+			"platform": {
+				Mode: providermanifestv1.ConnectionModePlatform,
+				Auth: config.ConnectionAuthDef{
+					Type:         providermanifestv1.AuthTypeOAuth2,
+					GrantType:    "refresh_token",
+					TokenURL:     "https://oauth2.googleapis.com/token",
+					ClientID:     "client-id",
+					ClientSecret: "client-secret",
+					RefreshToken: "refresh-token",
+				},
+			},
+		},
+	}
+
+	oauthHandlers, err := buildConnectionAuthMap("gmail", entry, nil, nil, nil, Deps{})
+	if err != nil {
+		t.Fatalf("buildConnectionAuthMap: %v", err)
+	}
+	if len(oauthHandlers) != 0 {
+		t.Fatalf("OAuth handlers = %+v, want none for platform refresh_token", oauthHandlers)
+	}
+}
+
 func TestBuildConnectionRuntimePlatformManualCredentialRefsRequireToken(t *testing.T) {
 	t.Parallel()
 
@@ -231,6 +261,77 @@ func TestBuildConnectionRuntimeClientCredentialsAuthConfig(t *testing.T) {
 	}
 	if info.AuthConfig.ClientID != "config-client-id" || info.AuthConfig.ClientSecret != "config-client-secret" {
 		t.Fatalf("AuthConfig client credentials = %q/%q", info.AuthConfig.ClientID, info.AuthConfig.ClientSecret)
+	}
+}
+
+func TestBuildConnectionRuntimePlatformRefreshTokenRefAuthConfig(t *testing.T) {
+	t.Parallel()
+
+	cfgPath := mustWriteConnectionRuntimeConfig(t, `
+providers:
+  secrets:
+    secrets:
+      source: env
+connections:
+  gmail-platform-mailbox:
+    mode: platform
+    auth:
+      type: oauth2
+      grantType: refresh_token
+      tokenUrl: https://oauth2.googleapis.com/token
+      clientId:
+        secret:
+          provider: secrets
+          name: google-oauth-client-id
+      clientSecret:
+        secret:
+          provider: secrets
+          name: google-oauth-client-secret
+      refreshToken:
+        secret:
+          provider: secrets
+          name: gmail-platform-mailbox-refresh-token
+      refreshParams:
+        audience: gmail-platform
+plugins:
+  gmail:
+    source: ./plugins/dummy/manifest.yaml
+    connections:
+      platform:
+        ref: gmail-platform-mailbox
+        exposure: internal
+`)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load() error = %v", err)
+	}
+	runtime, err := BuildConnectionRuntime(cfg)
+	if err != nil {
+		t.Fatalf("BuildConnectionRuntime() error = %v", err)
+	}
+	info, ok := runtime.Resolve("gmail", "platform")
+	if !ok {
+		t.Fatal("runtime.Resolve(gmail, platform) not found")
+	}
+	if info.Mode != core.ConnectionModePlatform || info.Exposure != core.ConnectionExposureInternal {
+		t.Fatalf("runtime mode/exposure = %q/%q, want platform/internal", info.Mode, info.Exposure)
+	}
+	auth := info.AuthConfig
+	if auth.GrantType != "refresh_token" || auth.TokenURL != "https://oauth2.googleapis.com/token" {
+		t.Fatalf("auth grant/url = %q/%q", auth.GrantType, auth.TokenURL)
+	}
+	if auth.RefreshParams["audience"] != "gmail-platform" {
+		t.Fatalf("refreshParams = %#v, want audience", auth.RefreshParams)
+	}
+	ref, ok, err := config.ParseSecretRefTransport(auth.RefreshToken)
+	if err != nil || !ok {
+		t.Fatalf("refreshToken secret ref parse = %#v/%v/%v, want secret ref", ref, ok, err)
+	}
+	if ref.Provider != "secrets" || ref.Name != "gmail-platform-mailbox-refresh-token" {
+		t.Fatalf("refreshToken secret ref = %#v", ref)
+	}
+	if _, ok, err := config.ParseSecretRefTransport(auth.ClientID); err != nil || !ok {
+		t.Fatalf("clientId secret ref parse ok=%v err=%v", ok, err)
 	}
 }
 
@@ -397,6 +498,75 @@ func TestBuildExternalCredentialsRuntimeConfigNodeResolvedConnectionsContract(t 
 	}
 }
 
+func TestBuildExternalCredentialsRuntimeConfigNodeIncludesPlatformRefreshTokenAuth(t *testing.T) {
+	t.Parallel()
+
+	node, err := buildExternalCredentialsRuntimeConfigNode("default", &config.ProviderEntry{
+		Config: mustConnectionTestYAMLNode(t, map[string]any{"indexeddb": "creds"}),
+	}, []byte{0x01, 0x02, 0x03}, &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"gmail": {
+				Connections: map[string]*config.ConnectionDef{
+					"platform": {
+						Mode: providermanifestv1.ConnectionModePlatform,
+						Auth: config.ConnectionAuthDef{
+							Type:         providermanifestv1.AuthTypeOAuth2,
+							GrantType:    "refresh_token",
+							TokenURL:     "https://oauth2.googleapis.com/token",
+							ClientID:     "client-id",
+							ClientSecret: "client-secret",
+							RefreshToken: "refresh-token",
+							RefreshParams: map[string]string{
+								"audience": "gmail-platform",
+							},
+						},
+						CredentialRefresh: &providermanifestv1.CredentialRefreshConfig{
+							RefreshInterval:     "15m",
+							RefreshBeforeExpiry: "30m",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildExternalCredentialsRuntimeConfigNode() error = %v", err)
+	}
+	raw, err := config.NodeToMap(node)
+	if err != nil {
+		t.Fatalf("NodeToMap() error = %v", err)
+	}
+	connections, ok := raw["resolvedConnections"].([]any)
+	if !ok {
+		t.Fatalf("resolvedConnections = %#v, want array", raw["resolvedConnections"])
+	}
+	var platform map[string]any
+	for _, candidate := range connections {
+		candidateMap, ok := candidate.(map[string]any)
+		if !ok {
+			t.Fatalf("resolvedConnections entry = %#v, want map", candidate)
+		}
+		if candidateMap["provider"] == "gmail" && candidateMap["connection"] == "platform" {
+			platform = candidateMap
+			break
+		}
+	}
+	if platform == nil {
+		t.Fatalf("gmail platform resolved connection missing from %#v", connections)
+	}
+	auth, ok := platform["auth"].(map[string]any)
+	if !ok {
+		t.Fatalf("auth = %#v, want map", platform["auth"])
+	}
+	if auth["grantType"] != "refresh_token" || auth["refreshToken"] != "refresh-token" {
+		t.Fatalf("auth = %#v, want refresh_token auth with refreshToken", auth)
+	}
+	refreshParams, ok := auth["refreshParams"].(map[string]any)
+	if !ok || refreshParams["audience"] != "gmail-platform" {
+		t.Fatalf("refreshParams = %#v, want audience", auth["refreshParams"])
+	}
+}
+
 func TestBuildExternalCredentialsRuntimeConfigNodeOmitsResolvedConnectionsWithoutCredentialRefresh(t *testing.T) {
 	t.Parallel()
 
@@ -504,6 +674,17 @@ func mustConnectionTestYAMLNode(t *testing.T, value any) yaml.Node {
 		return *node.Content[0]
 	}
 	return node
+}
+
+func mustWriteConnectionRuntimeConfig(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gestalt.yaml")
+	content = "\napiVersion: " + config.ConfigAPIVersion + "\n" + strings.TrimLeft(content, "\r\n")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	return path
 }
 
 func TestClientCredentialsTokenSourceCachesTokenWithoutExpiresIn(t *testing.T) {

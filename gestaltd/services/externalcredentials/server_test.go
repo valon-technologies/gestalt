@@ -67,6 +67,94 @@ func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T)
 	}
 }
 
+type authRoundTripExternalCredentialProvider struct {
+	validateAuth core.ExternalCredentialAuthConfig
+	resolveAuth  core.ExternalCredentialAuthConfig
+	exchangeAuth core.ExternalCredentialAuthConfig
+}
+
+func (*authRoundTripExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*authRoundTripExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*authRoundTripExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
+	return nil, core.ErrNotFound
+}
+
+func (*authRoundTripExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*authRoundTripExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*authRoundTripExternalCredentialProvider) DeleteCredential(context.Context, string) error {
+	return nil
+}
+
+func (p *authRoundTripExternalCredentialProvider) ValidateCredentialConfig(_ context.Context, req *core.ValidateExternalCredentialConfigRequest) error {
+	p.validateAuth = req.Auth
+	return nil
+}
+
+func (p *authRoundTripExternalCredentialProvider) ResolveCredential(_ context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
+	p.resolveAuth = req.Auth
+	return &core.ResolveExternalCredentialResponse{Token: "resolved-token"}, nil
+}
+
+func (p *authRoundTripExternalCredentialProvider) ExchangeCredential(_ context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
+	p.exchangeAuth = req.Auth
+	return &core.ExchangeExternalCredentialResponse{}, nil
+}
+
+func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *testing.T) {
+	t.Parallel()
+
+	provider := &authRoundTripExternalCredentialProvider{}
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
+	})
+	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	auth := core.ExternalCredentialAuthConfig{
+		Type:         "oauth2",
+		GrantType:    "refresh_token",
+		TokenURL:     "https://oauth2.example.test/token",
+		ClientID:     "client-id",
+		ClientSecret: "client-secret",
+		RefreshToken: "refresh-token",
+		RefreshParams: map[string]string{
+			"audience": "gmail-platform",
+		},
+	}
+
+	if err := remote.ValidateCredentialConfig(context.Background(), &core.ValidateExternalCredentialConfigRequest{Mode: core.ConnectionModePlatform, Auth: auth}); err != nil {
+		t.Fatalf("ValidateCredentialConfig: %v", err)
+	}
+	if _, err := remote.ResolveCredential(context.Background(), &core.ResolveExternalCredentialRequest{Mode: core.ConnectionModePlatform, Auth: auth}); err != nil {
+		t.Fatalf("ResolveCredential: %v", err)
+	}
+	if _, err := remote.ExchangeCredential(context.Background(), &core.ExchangeExternalCredentialRequest{Auth: auth}); err != nil {
+		t.Fatalf("ExchangeCredential: %v", err)
+	}
+	for label, got := range map[string]core.ExternalCredentialAuthConfig{
+		"validate": provider.validateAuth,
+		"resolve":  provider.resolveAuth,
+		"exchange": provider.exchangeAuth,
+	} {
+		if got.RefreshToken != "refresh-token" {
+			t.Fatalf("%s refreshToken = %q, want refresh-token", label, got.RefreshToken)
+		}
+		if got.RefreshParams["audience"] != "gmail-platform" {
+			t.Fatalf("%s refreshParams = %#v, want audience", label, got.RefreshParams)
+		}
+	}
+}
+
 type restoreTrackingExternalCredentialProvider struct {
 	putCalls     int
 	restoreCalls int
