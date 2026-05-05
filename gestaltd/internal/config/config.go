@@ -387,17 +387,18 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source          ProviderSource                 `yaml:"source"`
-	Config          yaml.Node                      `yaml:"config,omitempty"`
-	Default         bool                           `yaml:"default,omitempty"`
-	Env             map[string]string              `yaml:"env,omitempty"`
-	Egress          *ProviderEgressConfig          `yaml:"egress,omitempty"`
-	DisplayName     string                         `yaml:"displayName,omitempty"`
-	Description     string                         `yaml:"description,omitempty"`
-	IconFile        string                         `yaml:"iconFile,omitempty"`
-	RouteAuth       *RouteAuthDef                  `yaml:"-"`
-	SecuritySchemes map[string]*HTTPSecurityScheme `yaml:"securitySchemes,omitempty"`
-	HTTP            map[string]*HTTPBinding        `yaml:"http,omitempty"`
+	Source          ProviderSource                   `yaml:"source"`
+	Config          yaml.Node                        `yaml:"config,omitempty"`
+	Default         bool                             `yaml:"default,omitempty"`
+	Env             map[string]string                `yaml:"env,omitempty"`
+	Egress          *ProviderEgressConfig            `yaml:"egress,omitempty"`
+	DisplayName     string                           `yaml:"displayName,omitempty"`
+	Description     string                           `yaml:"description,omitempty"`
+	IconFile        string                           `yaml:"iconFile,omitempty"`
+	LocalHarness    *ProviderEntryLocalHarnessConfig `yaml:"localHarness,omitempty"`
+	RouteAuth       *RouteAuthDef                    `yaml:"-"`
+	SecuritySchemes map[string]*HTTPSecurityScheme   `yaml:"securitySchemes,omitempty"`
+	HTTP            map[string]*HTTPBinding          `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
 	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
@@ -436,6 +437,16 @@ type ProviderEntry struct {
 }
 
 type providerEntryFields ProviderEntry
+
+// ProviderEntryLocalHarnessConfig describes the local process harness used to
+// start an agent provider without the gestaltd server runtime.
+type ProviderEntryLocalHarnessConfig struct {
+	Command          string            `yaml:"command,omitempty"`
+	Args             []string          `yaml:"args,omitempty"`
+	Env              map[string]string `yaml:"env,omitempty"`
+	WorkingDirectory string            `yaml:"workingDirectory,omitempty"`
+	RequiredCommands []string          `yaml:"requiredCommands,omitempty"`
+}
 
 type ProviderEntryDevConfig struct {
 	Attach ProviderEntryDevAttachConfig `yaml:"attach,omitempty"`
@@ -880,8 +891,20 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
 	e.Execution = cloneExecutionConfig(e.Execution)
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
+	e.LocalHarness = cloneProviderEntryLocalHarnessConfig(e.LocalHarness)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
+}
+
+func cloneProviderEntryLocalHarnessConfig(src *ProviderEntryLocalHarnessConfig) *ProviderEntryLocalHarnessConfig {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Args = slices.Clone(src.Args)
+	dst.Env = maps.Clone(src.Env)
+	dst.RequiredCommands = slices.Clone(src.RequiredCommands)
+	return &dst
 }
 
 func cloneProviderEntryDevConfig(src *ProviderEntryDevConfig) *ProviderEntryDevConfig {
@@ -905,6 +928,11 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	}
 	if entry.Dev != nil {
 		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
+	}
+	if entry.LocalHarness != nil {
+		entry.LocalHarness.Command = strings.TrimSpace(entry.LocalHarness.Command)
+		entry.LocalHarness.WorkingDirectory = strings.TrimSpace(entry.LocalHarness.WorkingDirectory)
+		entry.LocalHarness.RequiredCommands = trimStringSlice(entry.LocalHarness.RequiredCommands)
 	}
 }
 
@@ -1825,6 +1853,34 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 // local env vars do not block the caller.
 func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
+}
+
+// ValidateSelectedAgentLocalHarnessEnvPaths fails if the selected local agent
+// harness references missing environment variables.
+func ValidateSelectedAgentLocalHarnessEnvPaths(paths []string, providerName string) error {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return nil
+	}
+	missingEnvSentinelContext, err := newMissingEnvSentinelPrefix()
+	if err != nil {
+		return err
+	}
+	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingSentinel, missingEnvSentinelContext)
+	if err != nil {
+		return err
+	}
+	providers := mappingValueNode(&root, "providers")
+	agentProviders := mappingValueNode(providers, "agent")
+	entry := mappingValueNode(agentProviders, providerName)
+	localHarness := mappingValueNode(entry, "localHarness")
+	if localHarness == nil {
+		return nil
+	}
+	if firstMissing := firstMissingEnvSentinel(localHarness, missingEnvSentinelContext); firstMissing != "" {
+		return fmt.Errorf("expanding providers.agent.%s.localHarness environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", providerName, firstMissing, firstMissing)
+	}
+	return nil
 }
 
 func normalizeConfigShape(cfg *Config) error {
@@ -2972,6 +3028,9 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 		return
 	}
 	resolveRelativeStringField(entry, "iconFile", baseDir)
+	if localHarness, ok := entry["localHarness"].(map[string]any); ok {
+		resolveRelativeStringField(localHarness, "workingDirectory", baseDir)
+	}
 	if source, ok := entry["source"].(map[string]any); ok {
 		resolveRelativeStringField(source, "path", baseDir)
 		return
@@ -3034,6 +3093,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
 		entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
+		if entry.LocalHarness != nil {
+			entry.LocalHarness.WorkingDirectory = resolveRelativePath(baseDir, entry.LocalHarness.WorkingDirectory)
+		}
 	}
 
 	for _, entry := range cfg.Providers.Authentication {

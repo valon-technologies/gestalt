@@ -23,6 +23,10 @@ on:
         description: 'Run tests on native targets'
         type: boolean
         default: true
+      bundle-gestaltd:
+        description: 'Bundle the gestaltd helper binary with the Rust binary'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,30 +45,43 @@ jobs:
             runs-on: macos-latest
             target: aarch64-apple-darwin
             suffix: macos-arm64
+            goos: darwin
+            goarch: arm64
           - name: macOS-x86_64
             runs-on: macos-latest
             target: x86_64-apple-darwin
             suffix: macos-x86_64
+            goos: darwin
+            goarch: amd64
           - name: Linux-x86_64
             runs-on: ubuntu-latest
             target: x86_64-unknown-linux-musl
             suffix: linux-x86_64
             cross: true
+            goos: linux
+            goarch: amd64
           - name: Linux-ARM64
             runs-on: ubuntu-latest
             target: aarch64-unknown-linux-musl
             suffix: linux-arm64
             cross: true
+            goos: linux
+            goarch: arm64
           - name: Linux-ARMv7
             runs-on: ubuntu-latest
             target: armv7-unknown-linux-musleabihf
             suffix: linux-armv7
             cross: true
+            goos: linux
+            goarch: arm
+            goarm: '7'
           - name: Windows-x86_64
             runs-on: windows-latest
             target: x86_64-pc-windows-msvc
             suffix: windows-x86_64
             windows: true
+            goos: windows
+            goarch: amd64
 
     runs-on: ${{ matrix.platform.runs-on }}
 
@@ -94,6 +111,13 @@ jobs:
         run: |
           command -v cross >/dev/null 2>&1 || cargo install cross --version 0.2.5
 
+      - name: Install Go toolchain
+        if: ${{ inputs.bundle-gestaltd }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
+
       - name: Build (native)
         if: ${{ !matrix.platform.cross }}
         working-directory: ${{ inputs.working-directory }}
@@ -120,13 +144,41 @@ jobs:
         timeout-minutes: ${{ matrix.platform.windows && 15 || 5 }}
         run: cargo test --release --target ${{ matrix.platform.target }}
 
+      - name: Build gestaltd helper
+        if: ${{ inputs.bundle-gestaltd }}
+        shell: bash
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.platform.goos }}
+          GOARCH: ${{ matrix.platform.goarch }}
+          GOARM: ${{ matrix.platform.goarm }}
+        run: |
+          mkdir -p helper
+          version="${GITHUB_REF_NAME##*/}"
+          ext=""
+          if [ "$GOOS" = "windows" ]; then
+            ext=".exe"
+          fi
+          (
+            cd gestaltd
+            go build \
+              -ldflags "-X main.version=${version}" \
+              -o "../helper/gestaltd${ext}" \
+              ./cmd/gestaltd
+          )
+
       - name: Package binary (Unix)
         if: ${{ inputs.package && !matrix.platform.windows }}
         run: |
           mkdir -p dist
           cp ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }} dist/
+          files="${{ inputs.binary-name }}"
+          if [ "${{ inputs.bundle-gestaltd }}" = "true" ]; then
+            cp helper/gestaltd dist/
+            files="${files} gestaltd"
+          fi
           cd dist
-          tar -czvf ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz ${{ inputs.binary-name }}
+          tar -czvf ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz ${files}
           shasum -a 256 ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz > ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz.sha256
 
       - name: Package binary (Windows)
@@ -135,8 +187,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist
           Copy-Item ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}.exe dist/
+          $archivePaths = @("${{ inputs.binary-name }}.exe")
+          if ("${{ inputs.bundle-gestaltd }}" -eq "true") {
+            Copy-Item helper/gestaltd.exe dist/
+            $archivePaths += "gestaltd.exe"
+          }
           Set-Location dist
-          Compress-Archive -Path ${{ inputs.binary-name }}.exe -DestinationPath ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip
+          Compress-Archive -Path $archivePaths -DestinationPath ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip
           $hash = (Get-FileHash ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip -Algorithm SHA256).Hash.ToLower()
           "$hash  ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip" | Out-File -Encoding ascii ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip.sha256
 

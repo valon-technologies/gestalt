@@ -4,9 +4,31 @@ use serde_json::Value;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 use support::*;
+
+#[cfg(unix)]
+fn write_fake_gestaltd(dir: &Path, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = dir.join("gestaltd");
+    std::fs::write(&path, script).unwrap();
+    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions).unwrap();
+}
+
+fn prepend_path(dir: &Path) -> String {
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![dir.to_path_buf()];
+    paths.extend(std::env::split_paths(&existing));
+    std::env::join_paths(paths)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned()
+}
 
 const SESSION_JSON: &str = r#"{
     "id":"session-1",
@@ -785,7 +807,14 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .args([
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
         .write_stdin("display events\n")
         .assert()
         .success()
@@ -870,7 +899,14 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -941,7 +977,14 @@ fn test_cli_tty_can_disable_mouse_capture() {
     let mut session = spawn_tty_cli_with_size_and_env(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
         24,
         100,
         &[("GESTALT_CLI_DISABLE_MOUSE", "1")],
@@ -1104,7 +1147,14 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1227,7 +1277,14 @@ fn test_cli_tty_groups_tool_activity_rows() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1321,7 +1378,14 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1466,7 +1530,14 @@ fn test_cli_tty_help_and_prompt_history() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1544,7 +1615,14 @@ fn test_cli_tty_ctrl_j_inserts_multiline_prompt() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1572,7 +1650,14 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     let mut session = spawn_tty_cli_with_size(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
         15,
         80,
     );
@@ -1616,7 +1701,14 @@ fn test_cli_tty_ctrl_d_exits_empty_prompt() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1681,7 +1773,14 @@ fn test_cli_tty_ctrl_l_redraw_preserves_transcript_and_input() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1719,7 +1818,14 @@ fn test_cli_tty_resize_redraws_isolated_session() {
     let mut session = spawn_tty_cli_with_size(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
         8,
         100,
     );
@@ -1801,7 +1907,14 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1884,7 +1997,14 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
     let mut session = spawn_tty_cli_with_size(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
         8,
         30,
     );
@@ -1989,7 +2109,14 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -2128,7 +2255,14 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -2254,7 +2388,14 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        &[
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -2394,6 +2535,134 @@ fn test_cli_resume_fails_without_active_agent_session() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cli_agent_defaults_to_local_helper_and_preserves_status() {
+    let home = tempfile::tempdir().unwrap();
+    let helper_dir = tempfile::tempdir().unwrap();
+    let args_path = home.path().join("helper-args.txt");
+    write_fake_gestaltd(
+        helper_dir.path(),
+        r#"#!/bin/sh
+printf 'helper stdout\n'
+printf 'helper stderr\n' >&2
+printf '%s\n' "$*" > "$GESTALT_HELPER_ARGS"
+exit 7
+"#,
+    );
+
+    cli_command(home.path())
+        .env("PATH", prepend_path(helper_dir.path()))
+        .env("GESTALT_HELPER_ARGS", &args_path)
+        .args(["agent", "--config", "config.yaml", "--provider", "local"])
+        .assert()
+        .code(7)
+        .stdout(predicate::str::contains("helper stdout"))
+        .stderr(predicate::str::contains("helper stderr"));
+
+    let helper_args = std::fs::read_to_string(args_path).unwrap();
+    assert_eq!(
+        helper_args,
+        "agent launch --config config.yaml --provider local\n"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cli_agent_default_local_ignores_gestalt_url_env() {
+    let home = tempfile::tempdir().unwrap();
+    let helper_dir = tempfile::tempdir().unwrap();
+    write_fake_gestaltd(
+        helper_dir.path(),
+        r#"#!/bin/sh
+printf 'local helper\n'
+exit 0
+"#,
+    );
+
+    cli_command(home.path())
+        .env("PATH", prepend_path(helper_dir.path()))
+        .env("GESTALT_URL", "http://127.0.0.1:9")
+        .args(["agent"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local helper"));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cli_agent_doctor_allows_provider_after_subcommand() {
+    let home = tempfile::tempdir().unwrap();
+    let helper_dir = tempfile::tempdir().unwrap();
+    let args_path = home.path().join("doctor-args.txt");
+    write_fake_gestaltd(
+        helper_dir.path(),
+        r#"#!/bin/sh
+printf '%s\n' "$*" > "$GESTALT_HELPER_ARGS"
+exit 0
+"#,
+    );
+
+    cli_command(home.path())
+        .env("PATH", prepend_path(helper_dir.path()))
+        .env("GESTALT_HELPER_ARGS", &args_path)
+        .args([
+            "agent",
+            "doctor",
+            "--provider",
+            "local",
+            "--config",
+            "config.yaml",
+        ])
+        .assert()
+        .success();
+
+    let helper_args = std::fs::read_to_string(args_path).unwrap();
+    assert_eq!(
+        helper_args,
+        "agent doctor --config config.yaml --provider local\n"
+    );
+}
+
+#[test]
+fn test_cli_agent_local_reports_missing_helper() {
+    let home = tempfile::tempdir().unwrap();
+    let empty_path = tempfile::tempdir().unwrap();
+
+    cli_command(home.path())
+        .env("PATH", empty_path.path())
+        .args(["agent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "failed to start gestaltd local agent helper",
+        ));
+}
+
+#[test]
+fn test_cli_agent_local_rejects_cloud_session_flags() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["agent", "--tool", "tracker:searchItems"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--tool is not supported in local agent mode",
+        ));
+}
+
+#[test]
+fn test_cli_agent_local_rejects_resource_subcommands() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["agent", "--local", "sessions", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "agent resource subcommands do not support --local",
+        ));
+}
+
+#[test]
 fn test_cli_rejects_interactive_agent_flags_with_subcommands() {
     let home = tempfile::tempdir().unwrap();
     cli_command(home.path())
@@ -2456,7 +2725,14 @@ fn test_cli_agent_model_slash_lists_configured_providers() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .args([
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
         .write_stdin("/model\n")
         .assert()
         .success()
@@ -2525,7 +2801,14 @@ fn test_cli_agent_model_slash_sets_future_turn_model() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .args([
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
         .write_stdin("/model gpt-5.5\nhello\n")
         .assert()
         .success()
@@ -2782,7 +3065,14 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .args([
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
         .write_stdin("approve deployment\nY\n")
         .assert()
         .success()

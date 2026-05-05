@@ -3,6 +3,8 @@ use colored::Colorize;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+use std::path::PathBuf;
+use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -33,6 +35,78 @@ const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL: &str = "blocked_or_terminal";
 const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
+
+pub fn launch_local(provider: Option<&str>, config_paths: &[String]) -> Result<()> {
+    run_local_agent_helper("launch", provider, config_paths)
+}
+
+pub fn doctor_local(provider: Option<&str>, config_paths: &[String]) -> Result<()> {
+    run_local_agent_helper("doctor", provider, config_paths)
+}
+
+fn run_local_agent_helper(
+    action: &str,
+    provider: Option<&str>,
+    config_paths: &[String],
+) -> Result<()> {
+    let helper = find_gestaltd_helper()?;
+    let mut cmd = ProcessCommand::new(&helper);
+    cmd.arg("agent").arg(action);
+    for config_path in config_paths {
+        cmd.arg("--config").arg(config_path);
+    }
+    if let Some(provider) = provider {
+        cmd.arg("--provider").arg(provider);
+    }
+    let status = cmd
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| {
+            format!(
+                "failed to start gestaltd local agent helper at {}",
+                helper.display()
+            )
+        })?;
+    if status.success() {
+        return Ok(());
+    }
+    std::process::exit(helper_exit_code(status));
+}
+
+fn helper_exit_code(status: ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+    1
+}
+
+fn find_gestaltd_helper() -> Result<PathBuf> {
+    let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
+    if let Some(parent) = current_exe.parent() {
+        let sibling = parent.join(helper_binary_name());
+        if sibling.exists() {
+            return Ok(sibling);
+        }
+    }
+    Ok(PathBuf::from(helper_binary_name()))
+}
+
+fn helper_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "gestaltd.exe"
+    } else {
+        "gestaltd"
+    }
+}
 
 pub fn create_session(
     client: &ApiClient,
