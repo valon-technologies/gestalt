@@ -121,6 +121,16 @@ func workspacePathContains(parent, child string) bool {
 }
 
 func CanonicalGitRepositoryIdentity(raw string) (string, error) {
+	return canonicalGitRepositoryIdentity(raw, false)
+}
+
+// CanonicalGitRepositoryAllowlistIdentity normalizes configured repository
+// identities, which may already be stored without a transport scheme.
+func CanonicalGitRepositoryAllowlistIdentity(raw string) (string, error) {
+	return canonicalGitRepositoryIdentity(raw, true)
+}
+
+func canonicalGitRepositoryIdentity(raw string, allowSchemeLess bool) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("git URL is required")
@@ -135,6 +145,9 @@ func CanonicalGitRepositoryIdentity(raw string) (string, error) {
 	if parsed.Scheme == "" {
 		if strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, ".") {
 			return "", fmt.Errorf("local git paths are not allowed; use file:// with an explicit allowlist")
+		}
+		if !allowSchemeLess {
+			return "", fmt.Errorf("git URL scheme is required")
 		}
 		return canonicalGitIdentity("", raw)
 	}

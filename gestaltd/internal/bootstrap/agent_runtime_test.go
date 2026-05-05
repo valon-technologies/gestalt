@@ -345,6 +345,9 @@ func (p *workspaceAgentProvider) GetCapabilities(context.Context, coreagent.GetC
 
 func (p *workspaceAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
 	p.updateReqs = append(p.updateReqs, req)
+	if p.sessions != nil && req.State == coreagent.SessionStateArchived {
+		delete(p.sessions, strings.TrimSpace(req.SessionID))
+	}
 	return &coreagent.Session{
 		ID:           req.SessionID,
 		ProviderName: "simple",
@@ -610,6 +613,15 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID
 	}
 	if got := pool.sessionBackend("existing-session"); got != nil {
 		t.Fatalf("provider returned session backend = %#v, want nil", got)
+	}
+	if got := len(agentProvider.updateReqs); got != 1 {
+		t.Fatalf("provider update requests len = %d, want 1", got)
+	}
+	if got := agentProvider.updateReqs[0].SessionID; got != "existing-session" {
+		t.Fatalf("provider cleanup session id = %q, want existing-session", got)
+	}
+	if _, ok := agentProvider.sessions["existing-session"]; ok {
+		t.Fatal("provider session still exists after mismatch cleanup")
 	}
 }
 

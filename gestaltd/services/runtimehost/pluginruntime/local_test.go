@@ -185,6 +185,36 @@ func TestLocalProviderPreparesGitWorkspaceAndCleansUpWithSession(t *testing.T) {
 	}
 }
 
+func TestLocalProviderRejectsSchemeLessGitWorkspaceURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runtime := NewLocalProvider()
+	t.Cleanup(func() {
+		_ = runtime.Close()
+	})
+	session, err := runtime.StartSession(ctx, StartSessionRequest{PluginName: "workspace-test"})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	_, err = runtime.PrepareWorkspace(ctx, PrepareWorkspaceRequest{
+		SessionID:      session.ID,
+		AgentSessionID: "agent-session-1",
+		Workspace: &Workspace{
+			CWD: "app",
+			Checkouts: []WorkspaceGitCheckout{{
+				URL:  "github.com/valon-technologies/app",
+				Path: "app",
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "scheme is required") {
+		t.Fatalf("PrepareWorkspace error = %v, want scheme required", err)
+	}
+}
+
 func TestLocalProviderRejectsTraversalWorkspaceID(t *testing.T) {
 	t.Parallel()
 

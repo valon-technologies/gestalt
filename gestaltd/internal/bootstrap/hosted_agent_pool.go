@@ -134,6 +134,9 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 		if sessionID == "" {
 			err = fmt.Errorf("agent provider returned session without id")
 		} else if sessionID != strings.TrimSpace(req.SessionID) {
+			if cleanupErr := archivePreparedWorkspaceProviderSession(ctx, backend, req, sessionID); cleanupErr != nil {
+				slog.Warn("failed to archive hosted agent provider session after workspace create validation error", "provider", p.name, "session", sessionID, "error", cleanupErr)
+			}
 			err = fmt.Errorf("agent provider returned session id %q, want %q", sessionID, req.SessionID)
 		}
 	}
@@ -154,6 +157,19 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 		p.recordSessionBackend(req.SessionID, backend)
 	}
 	return session, nil
+}
+
+func archivePreparedWorkspaceProviderSession(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.CreateSessionRequest, sessionID string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if backend == nil || backend.provider == nil || sessionID == "" {
+		return nil
+	}
+	_, err := backend.provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
+		SessionID: sessionID,
+		State:     coreagent.SessionStateArchived,
+		Subject:   req.Subject,
+	})
+	return err
 }
 
 func (p *hostedAgentProviderPool) SupportsWorkspaceRequests() bool {
@@ -263,7 +279,7 @@ func workspaceRepositoryAllowed(identity string, allowed []string) bool {
 			}
 			continue
 		}
-		allowedIdentity, err := coreagent.CanonicalGitRepositoryIdentity(candidate)
+		allowedIdentity, err := coreagent.CanonicalGitRepositoryAllowlistIdentity(candidate)
 		if err != nil {
 			allowedIdentity = candidate
 		}

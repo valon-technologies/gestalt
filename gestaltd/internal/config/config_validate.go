@@ -1167,7 +1167,7 @@ func normalizeHostedRuntimeWorkspaceConfig(subject string, workspace *HostedRunt
 			return fmt.Errorf("config validation: %s.runtime.workspace.git.allowedRepositories[%d] is required", subject, i)
 		}
 		if !strings.Contains(repo, "*") {
-			identity, err := coreagent.CanonicalGitRepositoryIdentity(repo)
+			identity, err := coreagent.CanonicalGitRepositoryAllowlistIdentity(repo)
 			if err != nil {
 				return fmt.Errorf("config validation: %s.runtime.workspace.git.allowedRepositories[%d]: %w", subject, i, err)
 			}
