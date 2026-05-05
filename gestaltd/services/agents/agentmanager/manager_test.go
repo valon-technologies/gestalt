@@ -432,7 +432,15 @@ func TestCreateSessionRejectsSessionStartWhenProviderDoesNotSupportIt(t *testing
 			names:       []string{"alpha"},
 			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
 		},
-		SessionStart: map[string]*coreagent.SessionStartConfig{"alpha": &coreagent.SessionStartConfig{Hooks: []coreagent.SessionStartHook{{ID: "setup", Type: "command", Command: []string{"true"}}}}},
+		SessionStart: map[string]*coreagent.SessionStartConfig{
+			"alpha": {
+				Hooks: []coreagent.SessionStartHook{{
+					ID:      "setup",
+					Type:    "command",
+					Command: []string{"true"},
+				}},
+			},
+		},
 	})
 
 	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
