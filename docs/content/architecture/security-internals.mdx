@@ -30,9 +30,11 @@ Manual connections store the user-provided credential as the access token with a
 
 ### Refresh
 
-Refresh is on-demand during invocation, not a background job. If a token expires within 5 minutes and has a refresh token, the broker attempts a refresh. Concurrent attempts for the same token are deduplicated via singleflight.
+By default, refresh happens on demand during invocation. If a token expires within 5 minutes and has a refresh token, the broker asks the external credentials provider to resolve a fresh runtime credential. Concurrent attempts for the same token are deduplicated via singleflight.
 
-On success: new tokens encrypted and stored, `refresh_error_count` reset. On failure: error count incremented. If the token is still technically valid, it's used anyway. If expired, the invocation fails. The persisted error count lets operators spot tokens stuck in a failure loop.
+Connections that declare `credentialRefresh` can also be maintained proactively by a supporting external credentials provider. Gestalt passes the resolved connection auth and refresh cadence to the provider as metadata; the provider owns the scheduler and persistence behavior.
+
+On refresh success: new tokens are encrypted and stored, and refresh failure state is reset. On transient failure: the existing credential is preserved, and if the access token is still technically valid it can still be used. If the token is expired or the upstream provider returns a terminal invalid grant, invocation requires reconnect. Persisted failure state lets operators spot tokens stuck in a failure loop.
 
 ### Revocation
 
