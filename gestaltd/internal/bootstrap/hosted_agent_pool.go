@@ -96,6 +96,18 @@ func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProvider
 }
 
 func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	if req.Workspace != nil && strings.TrimSpace(req.IdempotencyKey) != "" {
+		session, err := p.GetSession(ctx, coreagent.GetSessionRequest{
+			SessionID: req.SessionID,
+			Subject:   req.Subject,
+		})
+		if err == nil {
+			return session, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+	}
 	preferred := p.sessionBackend(req.SessionID)
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
 	if err != nil {
@@ -117,7 +129,15 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 		providerReq.PreparedWorkspace = prepared
 	}
 	session, err := backend.provider.CreateSession(ctx, providerReq)
-	if err != nil && providerReq.PreparedWorkspace != nil && strings.TrimSpace(providerReq.IdempotencyKey) == "" {
+	if err == nil && providerReq.PreparedWorkspace != nil {
+		sessionID := strings.TrimSpace(sessionIDForSession(session))
+		if sessionID == "" {
+			err = fmt.Errorf("agent provider returned session without id")
+		} else if sessionID != strings.TrimSpace(req.SessionID) {
+			err = fmt.Errorf("agent provider returned session id %q, want %q", sessionID, req.SessionID)
+		}
+	}
+	if err != nil && providerReq.PreparedWorkspace != nil {
 		if cleanupErr := p.removeAgentWorkspace(ctx, backend, req.SessionID); cleanupErr != nil {
 			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "session", req.SessionID, "error", cleanupErr)
 		}

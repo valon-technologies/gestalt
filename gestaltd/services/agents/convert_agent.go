@@ -77,25 +77,6 @@ func agentSubjectContextToProto(subject coreagent.SubjectContext) *proto.AgentSu
 	}
 }
 
-func agentWorkspaceToProto(workspace *coreagent.Workspace) *proto.AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspace{
-		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		Cwd:       workspace.CWD,
-	}
-	for i := range workspace.Checkouts {
-		checkout := workspace.Checkouts[i]
-		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return out
-}
-
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
 	if workspace == nil {
 		return nil
@@ -124,16 +105,6 @@ func preparedAgentWorkspaceToProto(workspace *coreagent.PreparedWorkspace) *prot
 	return &proto.PreparedAgentWorkspace{
 		Root: workspace.Root,
 		Cwd:  workspace.CWD,
-	}
-}
-
-func preparedAgentWorkspaceFromProto(workspace *proto.PreparedAgentWorkspace) *coreagent.PreparedWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	return &coreagent.PreparedWorkspace{
-		Root: workspace.GetRoot(),
-		CWD:  workspace.GetCwd(),
 	}
 }
 

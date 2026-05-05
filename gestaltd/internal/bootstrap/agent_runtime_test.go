@@ -300,8 +300,10 @@ type workspaceAgentProvider struct {
 	coreagent.UnimplementedProvider
 	supportPreparedWorkspace bool
 	createErr                error
+	createSessionID          string
 	createReqs               []coreagent.CreateSessionRequest
 	updateReqs               []coreagent.UpdateSessionRequest
+	sessions                 map[string]*coreagent.Session
 }
 
 func (p *workspaceAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
@@ -309,13 +311,32 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req coreagent.
 	if p.createErr != nil {
 		return nil, p.createErr
 	}
-	return &coreagent.Session{
-		ID:           req.SessionID,
+	sessionID := strings.TrimSpace(p.createSessionID)
+	if sessionID == "" {
+		sessionID = req.SessionID
+	}
+	session := &coreagent.Session{
+		ID:           sessionID,
 		ProviderName: "simple",
 		Model:        req.Model,
 		State:        coreagent.SessionStateActive,
 		CreatedBy:    req.CreatedBy,
-	}, nil
+	}
+	if p.sessions == nil {
+		p.sessions = map[string]*coreagent.Session{}
+	}
+	p.sessions[session.ID] = session
+	cloned := *session
+	return &cloned, nil
+}
+
+func (p *workspaceAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	session := p.sessions[strings.TrimSpace(req.SessionID)]
+	if session == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := *session
+	return &cloned, nil
 }
 
 func (p *workspaceAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
@@ -483,6 +504,112 @@ func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t
 	}
 	if got := pool.sessionBackend("agent-session-1"); got != nil {
 		t.Fatalf("session backend after cleanup = %#v, want nil", got)
+	}
+}
+
+func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepare(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	first, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession first: %v", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace")
+	}
+	runtimeProvider.prepareWorkspace = func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+		return nil, errors.New("prepare should not run for idempotent replay")
+	}
+	second, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "other",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "other",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession replay: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("replayed session ID = %q, want %q", second.ID, first.ID)
+	}
+	if len(agentProvider.createReqs) != 1 {
+		t.Fatalf("provider create requests len = %d, want 1", len(agentProvider.createReqs))
+	}
+	if len(runtimeProvider.removeWorkspaceReqs) != 0 {
+		t.Fatalf("RemoveWorkspace calls = %d, want 0", len(runtimeProvider.removeWorkspaceReqs))
+	}
+	if _, err := os.Stat(prepared.Root); err != nil {
+		t.Fatalf("workspace root after replay stat: %v", err)
+	}
+}
+
+func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{
+		supportPreparedWorkspace: true,
+		createSessionID:          "existing-session",
+	}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent provider returned session id") {
+		t.Fatalf("CreateSession error = %v, want session id mismatch", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace before mismatch")
+	}
+	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
+	}
+	if got := pool.sessionBackend("agent-session-1"); got != nil {
+		t.Fatalf("session backend after mismatch = %#v, want nil", got)
+	}
+	if got := pool.sessionBackend("existing-session"); got != nil {
+		t.Fatalf("provider returned session backend = %#v, want nil", got)
 	}
 }
 
