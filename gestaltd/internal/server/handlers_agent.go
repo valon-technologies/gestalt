@@ -588,6 +588,9 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeStreamError := func(err error) {
+		if agentTurnEventStreamContextDone(ctx, err) {
+			return
+		}
 		slog.ErrorContext(ctx, "agent turn event stream failed", "turn_id", turnID, "error", err)
 		info := agentTurnEventInfo{
 			TurnID:     turnID,
@@ -660,6 +663,21 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			pageFull = writeEvents(events)
 		}
 	}
+}
+
+func agentTurnEventStreamContextDone(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if ctx != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Request) {
