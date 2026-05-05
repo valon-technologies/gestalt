@@ -102,6 +102,36 @@ func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing
 	}
 }
 
+func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-metadata-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+			return nil, agentmanager.ErrAgentSessionMetadataInvalid
+		},
+	}, tokens)
+
+	_, err = server.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+		InvocationToken: token,
+		ProviderName:    "managed",
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
+}
+
 func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	t.Parallel()
 

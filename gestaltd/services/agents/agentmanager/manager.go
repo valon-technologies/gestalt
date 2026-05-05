@@ -43,6 +43,7 @@ var (
 	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
 	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
 	ErrAgentSessionStartUnsupported    = errors.New("agent provider does not support session start hooks")
+	ErrAgentSessionMetadataInvalid     = errors.New("agent session metadata is invalid")
 	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
 )
 
@@ -3373,7 +3374,7 @@ func errAgentSessionStartUnsupported(providerName string) error {
 func validateAgentSessionUserMetadata(metadata map[string]any) error {
 	for key := range metadata {
 		if isReservedLifecycleMetadataKey(key) {
-			return fmt.Errorf("agent session metadata key %q is reserved for Gestalt lifecycle data", key)
+			return fmt.Errorf("%w: key %q is reserved for Gestalt lifecycle data", ErrAgentSessionMetadataInvalid, key)
 		}
 	}
 	return nil

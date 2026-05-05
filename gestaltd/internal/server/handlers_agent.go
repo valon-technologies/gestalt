@@ -1368,6 +1368,7 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
 		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
 		errors.Is(err, agentmanager.ErrAgentInteractionRequired),
+		errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid),
 		errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound):

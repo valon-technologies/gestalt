@@ -463,7 +463,7 @@ func TestCreateSessionRejectsReservedLifecycleMetadata(t *testing.T) {
 		ProviderName: "alpha",
 		Metadata:     map[string]any{"__gestalt.lifecycle.sessionStart.results.setup": "spoofed"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "reserved for Gestalt lifecycle data") {
+	if !errors.Is(err, ErrAgentSessionMetadataInvalid) || !strings.Contains(err.Error(), "reserved for Gestalt lifecycle data") {
 		t.Fatalf("CreateSession error = %v, want reserved lifecycle metadata error", err)
 	}
 	if len(provider.createSessionReqs) != 0 {
