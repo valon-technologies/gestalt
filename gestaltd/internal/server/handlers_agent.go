@@ -31,7 +31,7 @@ const defaultAgentTurnEventLimit = 100
 const maxAgentTurnEventLimit = 1000
 const agentTurnEventStreamUntilTerminal = "terminal"
 const agentTurnEventStreamUntilBlockedOrTerminal = "blocked_or_terminal"
-const agentTurnEventStreamHeartbeatInterval = 15 * time.Second
+const defaultAgentTurnEventStreamHeartbeatInterval = 15 * time.Second
 
 type agentMessageRequest struct {
 	Role     string                    `json:"role,omitempty"`
@@ -588,6 +588,9 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeStreamError := func(err error) {
+		if agentTurnEventStreamContextDone(ctx, err) {
+			return
+		}
 		slog.ErrorContext(ctx, "agent turn event stream failed", "turn_id", turnID, "error", err)
 		info := agentTurnEventInfo{
 			TurnID:     turnID,
@@ -649,7 +652,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if time.Since(lastWrite) >= agentTurnEventStreamHeartbeatInterval {
+			if time.Since(lastWrite) >= s.agentStreamHeartbeat {
 				writeHeartbeat("keepalive")
 			}
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
@@ -660,6 +663,19 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			pageFull = writeEvents(events)
 		}
 	}
+}
+
+func agentTurnEventStreamContextDone(ctx context.Context, err error) bool {
+	if err == nil || ctx == nil {
+		return false
+	}
+	ctxErr := ctx.Err()
+	if ctxErr == nil {
+		return false
+	}
+	return errors.Is(err, ctxErr) ||
+		errors.Is(err, context.Canceled) && errors.Is(ctxErr, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) && errors.Is(ctxErr, context.DeadlineExceeded)
 }
 
 func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Request) {

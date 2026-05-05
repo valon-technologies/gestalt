@@ -4,6 +4,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+func (s *Server) mountAuthenticatedStreamRoutes(r chi.Router) {
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+		r.Get("/agent/turns/{turnID}/events/stream", s.streamAgentTurnEvents)
+	})
+}
+
 func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
@@ -56,7 +63,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Get("/{turnID}", s.getAgentTurn)
 			r.Post("/{turnID}/cancel", s.cancelAgentTurn)
 			r.Get("/{turnID}/events", s.listAgentTurnEvents)
-			r.Get("/{turnID}/events/stream", s.streamAgentTurnEvents)
 			r.Get("/{turnID}/interactions", s.listAgentTurnInteractions)
 			r.Post("/{turnID}/interactions/{interactionID}/resolve", s.resolveAgentInteraction)
 		})

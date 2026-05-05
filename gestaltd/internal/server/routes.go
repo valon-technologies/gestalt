@@ -168,14 +168,19 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 
 func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.Timeout(60 * time.Second))
-		s.mountAuthRoutes(r)
-		s.mountProviderDevPublicRoutes(r)
-		s.mountAuthenticatedRoutes(r)
+		s.mountAuthenticatedStreamRoutes(r)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(s.apiRouteTimeout))
+			s.mountAuthRoutes(r)
+			s.mountProviderDevPublicRoutes(r)
+			s.mountAuthenticatedRoutes(r)
+		})
 		r.NotFound(apiNotFound)
 		r.MethodNotAllowed(apiMethodNotAllowed)
 	})
 }
+
+const defaultAPIRouteTimeout = 60 * time.Second
 
 func apiNotFound(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, fmt.Sprintf("API route %q not found", r.URL.Path))
