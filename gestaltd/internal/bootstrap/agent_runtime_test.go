@@ -2154,6 +2154,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 				Title:       "Sync roadmap loudly",
 				Description: "Sync roadmap tasks with a colliding MCP name",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+				Tags:        []string{"loud"},
 			},
 			{
 				ID:          "sync_2",
@@ -2262,6 +2263,23 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	}
 	if tool.InputSchemaJSON == "" || tool.Annotations.ReadOnlyHint == nil || !*tool.Annotations.ReadOnlyHint {
 		t.Fatalf("listed tool schema/annotations = %#v", tool)
+	}
+	queryResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		PageSize:     10,
+		Query:        "loud roadmap",
+		RunGrant:     grant,
+	})
+	if err != nil {
+		t.Fatalf("ListTools with query: %v", err)
+	}
+	if len(queryResp.Tools) != 3 || queryResp.Tools[0].Ref.Operation != "sync!" {
+		t.Fatalf("ListTools query response = %#v, want ranked sync! first", queryResp)
+	}
+	if strings.Join(queryResp.Tools[0].Tags, ",") != "loud" || !strings.Contains(queryResp.Tools[0].SearchText, "loud") {
+		t.Fatalf("listed query metadata = tags %#v search %q", queryResp.Tools[0].Tags, queryResp.Tools[0].SearchText)
 	}
 
 	emptyGrant, err := runGrants.Mint(agentgrant.Grant{

@@ -1463,7 +1463,8 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 
-	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, "", true)
+	query := strings.TrimSpace(req.Query)
+	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1499,15 +1500,17 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 
-	sort.SliceStable(out, func(i, j int) bool {
-		if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(out[i]), listedAgentToolUnavailable(out[j]); leftUnavailable != rightUnavailable {
-			return !leftUnavailable
-		}
-		if out[i].MCPName != out[j].MCPName {
-			return out[i].MCPName < out[j].MCPName
-		}
-		return out[i].ToolID < out[j].ToolID
-	})
+	if query == "" {
+		sort.SliceStable(out, func(i, j int) bool {
+			if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(out[i]), listedAgentToolUnavailable(out[j]); leftUnavailable != rightUnavailable {
+				return !leftUnavailable
+			}
+			if out[i].MCPName != out[j].MCPName {
+				return out[i].MCPName < out[j].MCPName
+			}
+			return out[i].ToolID < out[j].ToolID
+		})
+	}
 	assignUniqueListedAgentToolNames(out)
 	tools, nextPageToken := paginateListedAgentTools(out, pageSize, pageOffset)
 	return &coreagent.ListToolsResponse{
@@ -2539,6 +2542,8 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		MCPName:          agentToolMCPName(target),
 		Title:            name,
 		Description:      description,
+		Tags:             append([]string(nil), candidate.operation.Tags...),
+		SearchText:       agentToolSearchMetadataText(candidate),
 		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(candidate.operation),
 		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),

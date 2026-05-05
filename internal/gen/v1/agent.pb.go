@@ -2971,6 +2971,8 @@ type ListedAgentTool struct {
 	OutputSchema  string                 `protobuf:"bytes,6,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
 	Annotations   *OperationAnnotations  `protobuf:"bytes,7,opt,name=annotations,proto3" json:"annotations,omitempty"`
 	Ref           *AgentToolRef          `protobuf:"bytes,8,opt,name=ref,proto3" json:"ref,omitempty"`
+	Tags          []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	SearchText    string                 `protobuf:"bytes,10,opt,name=search_text,json=searchText,proto3" json:"search_text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3061,6 +3063,20 @@ func (x *ListedAgentTool) GetRef() *AgentToolRef {
 	return nil
 }
 
+func (x *ListedAgentTool) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *ListedAgentTool) GetSearchText() string {
+	if x != nil {
+		return x.SearchText
+	}
+	return ""
+}
+
 type ListAgentToolsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -3068,6 +3084,7 @@ type ListAgentToolsRequest struct {
 	PageSize      int32                  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken     string                 `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	RunGrant      string                 `protobuf:"bytes,6,opt,name=run_grant,json=runGrant,proto3" json:"run_grant,omitempty"`
+	Query         string                 `protobuf:"bytes,7,opt,name=query,proto3" json:"query,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3133,6 +3150,13 @@ func (x *ListAgentToolsRequest) GetPageToken() string {
 func (x *ListAgentToolsRequest) GetRunGrant() string {
 	if x != nil {
 		return x.RunGrant
+	}
+	return ""
+}
+
+func (x *ListAgentToolsRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
 	}
 	return ""
 }
@@ -4579,7 +4603,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"tool_grant\"F\n" +
 	"\x18ExecuteAgentToolResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\"\xbe\x02\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\"\xf3\x02\n" +
 	"\x0fListedAgentTool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bmcp_name\x18\x02 \x01(\tR\amcpName\x12\x14\n" +
@@ -4588,7 +4612,11 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\finput_schema\x18\x05 \x01(\tR\vinputSchema\x12#\n" +
 	"\routput_schema\x18\x06 \x01(\tR\foutputSchema\x12K\n" +
 	"\vannotations\x18\a \x01(\v2).gestalt.provider.v1.OperationAnnotationsR\vannotations\x123\n" +
-	"\x03ref\x18\b \x01(\v2!.gestalt.provider.v1.AgentToolRefR\x03ref\"\xba\x01\n" +
+	"\x03ref\x18\b \x01(\v2!.gestalt.provider.v1.AgentToolRefR\x03ref\x12\x12\n" +
+	"\x04tags\x18\t \x03(\tR\x04tags\x12\x1f\n" +
+	"\vsearch_text\x18\n" +
+	" \x01(\tR\n" +
+	"searchText\"\xd0\x01\n" +
 	"\x15ListAgentToolsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -4596,7 +4624,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1b\n" +
-	"\trun_grant\x18\x06 \x01(\tR\brunGrantJ\x04\b\x05\x10\x06R\n" +
+	"\trun_grant\x18\x06 \x01(\tR\brunGrant\x12\x14\n" +
+	"\x05query\x18\a \x01(\tR\x05queryJ\x04\b\x05\x10\x06R\n" +
 	"tool_grant\"|\n" +
 	"\x16ListAgentToolsResponse\x12:\n" +
 	"\x05tools\x18\x01 \x03(\v2$.gestalt.provider.v1.ListedAgentToolR\x05tools\x12&\n" +

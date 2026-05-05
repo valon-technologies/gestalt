@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
@@ -127,6 +128,8 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 				MCPName:         "linear__issues_create",
 				Title:           "Create issue",
 				Description:     "Create a Linear issue",
+				Tags:            []string{"issue", "ticket"},
+				SearchText:      "linear issue ticket create",
 				InputSchemaJSON: `{"type":"object"}`,
 				Annotations:     core.CapabilityAnnotations{ReadOnlyHint: &readOnly},
 				Ref: coreagent.ToolRef{
@@ -148,6 +151,7 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 		PageSize:  10,
 		PageToken: " 0 ",
 		RunGrant:  " grant-token ",
+		Query:     " issue ticket ",
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -158,12 +162,18 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 	if captured.PageSize != 10 || captured.PageToken != "0" || captured.RunGrant != "grant-token" {
 		t.Fatalf("captured paging/grant = %#v", captured)
 	}
+	if captured.Query != "issue ticket" {
+		t.Fatalf("captured query = %q, want issue ticket", captured.Query)
+	}
 	if resp.GetNextPageToken() != "10" || len(resp.GetTools()) != 1 {
 		t.Fatalf("ListTools response = %#v", resp)
 	}
 	tool := resp.GetTools()[0]
 	if tool.GetMcpName() != "linear__issues_create" || tool.GetInputSchema() != `{"type":"object"}` {
 		t.Fatalf("listed tool = %#v", tool)
+	}
+	if strings.Join(tool.GetTags(), ",") != "issue,ticket" || tool.GetSearchText() != "linear issue ticket create" {
+		t.Fatalf("listed tool metadata = tags %#v search %q", tool.GetTags(), tool.GetSearchText())
 	}
 	if tool.GetAnnotations() == nil || !tool.GetAnnotations().GetReadOnlyHint() {
 		t.Fatalf("annotations = %#v, want read_only_hint", tool.GetAnnotations())

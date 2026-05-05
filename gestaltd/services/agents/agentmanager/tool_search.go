@@ -150,6 +150,19 @@ func agentToolSearchDoc(candidate agentToolSearchCandidate) agentToolSearchDocum
 	}
 }
 
+func agentToolSearchMetadataText(candidate agentToolSearchCandidate) string {
+	doc := agentToolSearchDoc(candidate)
+	parts := []string{
+		doc.Plugin,
+		doc.Operation,
+		doc.Title,
+		doc.Description,
+		doc.Parameters,
+		doc.Tags,
+	}
+	return strings.Join(uniqueAgentToolSearchTokens(strings.Join(parts, " ")), " ")
+}
+
 func agentToolSearchParameterText(op catalog.CatalogOperation) string {
 	parts := make([]string, 0, len(op.Parameters)*3)
 	for _, param := range op.Parameters {

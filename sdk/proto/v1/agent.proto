@@ -366,6 +366,8 @@ message ListedAgentTool {
   string output_schema = 6;
   OperationAnnotations annotations = 7;
   AgentToolRef ref = 8;
+  repeated string tags = 9;
+  string search_text = 10;
 }
 
 message ListAgentToolsRequest {
@@ -377,6 +379,7 @@ message ListAgentToolsRequest {
   int32 page_size = 3;
   string page_token = 4;
   string run_grant = 6;
+  string query = 7;
 }
 
 message ListAgentToolsResponse {

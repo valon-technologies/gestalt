@@ -382,6 +382,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 		TurnID:       requestedTurnID,
 		PageSize:     req.PageSize,
 		PageToken:    strings.TrimSpace(req.PageToken),
+		Query:        strings.TrimSpace(req.Query),
 		ToolRefs:     append([]coreagent.ToolRef(nil), grant.ToolRefs...),
 		ToolSource:   toolSource,
 	})
