@@ -1,18 +1,23 @@
 package pluginruntime
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -74,8 +79,9 @@ func NewLocalProvider(opts ...LocalOption) *LocalProvider {
 
 func (p *LocalProvider) Support(context.Context) (Support, error) {
 	return Support{
-		CanHostPlugins: true,
-		EgressMode:     EgressModeHostname,
+		CanHostPlugins:           true,
+		EgressMode:               EgressModeHostname,
+		SupportsPrepareWorkspace: true,
 	}, nil
 }
 
@@ -194,6 +200,78 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 		_ = p.sessionLogs.MarkSessionStopped(context.Background(), p.runtimeProviderName, req.SessionID, time.Now().UTC())
 	}
 	return errors.Join(errs...)
+}
+
+func (p *LocalProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
+	if p == nil {
+		return nil, fmt.Errorf("plugin runtime is not configured")
+	}
+	if err := validateWorkspaceID(req.AgentSessionID); err != nil {
+		return nil, fmt.Errorf("agent session id: %w", err)
+	}
+	workspace, err := normalizeRuntimeWorkspace(req.Workspace)
+	if err != nil {
+		return nil, err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session, err := p.sessionLocked(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	root := filepath.Join(session.rootDir, "workspaces", req.AgentSessionID)
+	spec, err := json.Marshal(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("marshal workspace spec: %w", err)
+	}
+	marker := filepath.Join(root, ".gestalt-workspace.json")
+	if existing, err := os.ReadFile(marker); err == nil {
+		if !bytes.Equal(existing, spec) {
+			return nil, fmt.Errorf("workspace for agent session %q was already prepared with a different spec", req.AgentSessionID)
+		}
+		return preparedLocalWorkspace(root, workspace.CWD)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("read workspace marker: %w", err)
+	}
+	if err := os.RemoveAll(root); err != nil {
+		return nil, fmt.Errorf("remove partial workspace: %w", err)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return nil, fmt.Errorf("create workspace root: %w", err)
+	}
+	for _, checkout := range workspace.Checkouts {
+		if err := prepareLocalGitCheckout(ctx, root, checkout); err != nil {
+			_ = os.RemoveAll(root)
+			return nil, err
+		}
+	}
+	prepared, err := preparedLocalWorkspace(root, workspace.CWD)
+	if err != nil {
+		_ = os.RemoveAll(root)
+		return nil, err
+	}
+	if err := os.WriteFile(marker, spec, 0o644); err != nil {
+		_ = os.RemoveAll(root)
+		return nil, fmt.Errorf("write workspace marker: %w", err)
+	}
+	return prepared, nil
+}
+
+func (p *LocalProvider) RemoveWorkspace(_ context.Context, req RemoveWorkspaceRequest) error {
+	if p == nil {
+		return nil
+	}
+	if err := validateWorkspaceID(req.AgentSessionID); err != nil {
+		return fmt.Errorf("agent session id: %w", err)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session, err := p.sessionLocked(req.SessionID)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(session.rootDir, "workspaces", req.AgentSessionID))
 }
 
 func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
@@ -331,6 +409,116 @@ func (p *LocalProvider) sessionLocked(sessionID string) (*localSession, error) {
 		return nil, fmt.Errorf("plugin runtime session %q is not available", sessionID)
 	}
 	return session, nil
+}
+
+func normalizeRuntimeWorkspace(src *Workspace) (*coreagent.Workspace, error) {
+	if src == nil {
+		return nil, fmt.Errorf("workspace is required")
+	}
+	workspace := &coreagent.Workspace{
+		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(src.Checkouts)),
+		CWD:       src.CWD,
+	}
+	for _, checkout := range src.Checkouts {
+		workspace.Checkouts = append(workspace.Checkouts, coreagent.WorkspaceGitCheckout{
+			URL:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	normalized, err := coreagent.NormalizeWorkspace(workspace)
+	if err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func validateWorkspaceID(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("is required")
+	}
+	if value == "." || value == ".." || filepath.Clean(value) != value {
+		return fmt.Errorf("must be a single path segment")
+	}
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return fmt.Errorf("contains unsupported character %q", r)
+	}
+	return nil
+}
+
+func prepareLocalGitCheckout(ctx context.Context, root string, checkout coreagent.WorkspaceGitCheckout) error {
+	target, err := localWorkspaceChild(root, checkout.Path)
+	if err != nil {
+		return fmt.Errorf("workspace checkout %q: %w", checkout.Path, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return fmt.Errorf("create checkout parent: %w", err)
+	}
+	if err := runLocalGit(ctx, "", "clone", checkout.URL, target); err != nil {
+		return fmt.Errorf("clone %q: %w", checkout.URL, err)
+	}
+	if checkout.Ref == "" {
+		return nil
+	}
+	if err := runLocalGit(ctx, target, "fetch", "origin", checkout.Ref); err != nil {
+		return fmt.Errorf("fetch %q: %w", checkout.Ref, err)
+	}
+	if err := runLocalGit(ctx, target, "checkout", "--detach", "FETCH_HEAD"); err != nil {
+		return fmt.Errorf("checkout %q: %w", checkout.Ref, err)
+	}
+	return nil
+}
+
+func runLocalGit(ctx context.Context, dir string, args ...string) error {
+	gitArgs := append([]string{"-c", "protocol.file.allow=always"}, args...)
+	cmd := exec.CommandContext(ctx, "git", gitArgs...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func preparedLocalWorkspace(root string, cwd string) (*PreparedWorkspace, error) {
+	rootReal, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace root: %w", err)
+	}
+	cwdPath, err := localWorkspaceChild(root, cwd)
+	if err != nil {
+		return nil, fmt.Errorf("workspace cwd: %w", err)
+	}
+	cwdReal, err := filepath.EvalSymlinks(cwdPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace cwd: %w", err)
+	}
+	if !localPathWithin(rootReal, cwdReal) {
+		return nil, fmt.Errorf("workspace cwd escapes workspace root")
+	}
+	return &PreparedWorkspace{Root: rootReal, CWD: cwdReal}, nil
+}
+
+func localWorkspaceChild(root string, rel string) (string, error) {
+	clean := filepath.Clean(filepath.Join(root, filepath.FromSlash(rel)))
+	if !localPathWithin(root, clean) {
+		return "", fmt.Errorf("path escapes workspace root")
+	}
+	return clean, nil
+}
+
+func localPathWithin(parent string, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func cloneSession(session *localSession) *Session {

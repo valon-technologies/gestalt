@@ -14,8 +14,9 @@ const (
 )
 
 type PluginRuntimeSupport struct {
-	CanHostPlugins bool
-	EgressMode     PluginRuntimeEgressMode
+	CanHostPlugins           bool
+	EgressMode               PluginRuntimeEgressMode
+	SupportsPrepareWorkspace bool
 }
 
 type PluginRuntimeSessionLifecycle struct {
@@ -43,6 +44,37 @@ type StartPluginRuntimeSessionRequest struct {
 	Image         string
 	Metadata      map[string]string
 	ImagePullAuth *PluginRuntimeImagePullAuth
+}
+
+type AgentWorkspace struct {
+	Checkouts []AgentWorkspaceGitCheckout
+	CWD       string
+}
+
+type AgentWorkspaceGitCheckout struct {
+	URL  string
+	Ref  string
+	Path string
+}
+
+type PreparedAgentWorkspace struct {
+	Root string
+	CWD  string
+}
+
+type PreparePluginRuntimeWorkspaceRequest struct {
+	SessionID      string
+	AgentSessionID string
+	Workspace      *AgentWorkspace
+}
+
+type PreparePluginRuntimeWorkspaceResponse struct {
+	Workspace *PreparedAgentWorkspace
+}
+
+type RemovePluginRuntimeWorkspaceRequest struct {
+	SessionID      string
+	AgentSessionID string
 }
 
 type StartHostedPluginRequest struct {
@@ -73,4 +105,11 @@ type PluginRuntimeProvider interface {
 	ListSessions(ctx context.Context) ([]PluginRuntimeSession, error)
 	StopSession(ctx context.Context, sessionID string) error
 	StartPlugin(ctx context.Context, req StartHostedPluginRequest) (HostedPlugin, error)
+}
+
+// PluginRuntimeWorkspaceProvider can be implemented by runtime providers that
+// prepare per-agent workspaces before a hosted agent provider session starts.
+type PluginRuntimeWorkspaceProvider interface {
+	PrepareWorkspace(ctx context.Context, req PreparePluginRuntimeWorkspaceRequest) (PreparePluginRuntimeWorkspaceResponse, error)
+	RemoveWorkspace(ctx context.Context, req RemovePluginRuntimeWorkspaceRequest) error
 }

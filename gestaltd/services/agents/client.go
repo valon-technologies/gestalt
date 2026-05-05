@@ -92,14 +92,15 @@ func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSes
 		return nil, err
 	}
 	resp, err := r.client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      req.SessionID,
-		IdempotencyKey: req.IdempotencyKey,
-		Model:          req.Model,
-		ClientRef:      req.ClientRef,
-		Metadata:       metadata,
-		CreatedBy:      agentActorToProto(req.CreatedBy),
-		Subject:        agentSubjectContextToProto(req.Subject),
-		SessionStart:   sessionStartConfigToProto(req.SessionStart),
+		SessionId:         req.SessionID,
+		IdempotencyKey:    req.IdempotencyKey,
+		Model:             req.Model,
+		ClientRef:         req.ClientRef,
+		Metadata:          metadata,
+		CreatedBy:         agentActorToProto(req.CreatedBy),
+		Subject:           agentSubjectContextToProto(req.Subject),
+		SessionStart:      sessionStartConfigToProto(req.SessionStart),
+		PreparedWorkspace: preparedAgentWorkspaceToProto(req.PreparedWorkspace),
 	})
 	if err != nil {
 		return nil, err

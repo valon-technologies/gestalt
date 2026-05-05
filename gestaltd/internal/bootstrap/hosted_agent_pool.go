@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +101,28 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 	if err != nil {
 		return nil, err
 	}
-	session, err := backend.provider.CreateSession(ctx, req)
+	providerReq := req
+	if req.Workspace != nil {
+		p.recordSessionBackend(req.SessionID, backend)
+		prepared, err := p.prepareAgentWorkspace(ctx, backend, req)
+		if err != nil {
+			if cleanupErr := p.removeAgentWorkspace(ctx, backend, req.SessionID); cleanupErr != nil {
+				slog.Warn("failed to clean up prepared hosted agent workspace after prepare error", "provider", p.name, "session", req.SessionID, "error", cleanupErr)
+			}
+			p.deleteSessionBackend(req.SessionID)
+			release()
+			return nil, err
+		}
+		providerReq.Workspace = nil
+		providerReq.PreparedWorkspace = prepared
+	}
+	session, err := backend.provider.CreateSession(ctx, providerReq)
+	if err != nil && providerReq.PreparedWorkspace != nil && strings.TrimSpace(providerReq.IdempotencyKey) == "" {
+		if cleanupErr := p.removeAgentWorkspace(ctx, backend, req.SessionID); cleanupErr != nil {
+			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "session", req.SessionID, "error", cleanupErr)
+		}
+		p.deleteSessionBackend(req.SessionID)
+	}
 	release()
 	p.maybeProbeAfterCallError(backend, err)
 	if err != nil {
@@ -111,6 +134,168 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 		p.recordSessionBackend(req.SessionID, backend)
 	}
 	return session, nil
+}
+
+func (p *hostedAgentProviderPool) SupportsWorkspaceRequests() bool {
+	return true
+}
+
+func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, req coreagent.CreateSessionRequest) (*coreagent.PreparedWorkspace, error) {
+	if p == nil || p.launch == nil || p.launch.runtimeConfig.Workspace == nil {
+		return nil, fmt.Errorf("%w: provider %q has no workspace policy", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
+	}
+	if err := validateWorkspacePolicy(req.Workspace, p.launch.runtimeConfig.Workspace); err != nil {
+		return nil, err
+	}
+	caps, err := backend.provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	if caps == nil || !caps.SupportsPreparedWorkspace {
+		return nil, fmt.Errorf("%w: provider %q does not accept prepared workspaces", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
+	}
+	support, err := backend.runtimeProvider.Support(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get runtime support: %w", err)
+	}
+	if !support.SupportsPrepareWorkspace {
+		return nil, fmt.Errorf("%w: runtime provider for %q does not prepare workspaces", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
+	}
+	workspaceProvider, ok := backend.runtimeProvider.(pluginruntime.WorkspaceProvider)
+	if !ok {
+		return nil, fmt.Errorf("%w: runtime provider for %q does not implement workspace preparation", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
+	}
+
+	prepareCtx := ctx
+	cancel := func() {}
+	timeout := hostedAgentWorkspacePrepareTimeout(p.launch.runtimeConfig.Workspace)
+	if timeout > 0 {
+		prepareCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	defer cancel()
+	prepared, err := workspaceProvider.PrepareWorkspace(prepareCtx, pluginruntime.PrepareWorkspaceRequest{
+		SessionID:      backend.runtimeSessionID,
+		AgentSessionID: req.SessionID,
+		Workspace:      runtimeWorkspaceFromCore(req.Workspace),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("prepare hosted agent workspace: %w", err)
+	}
+	return validatePreparedAgentWorkspace(prepared)
+}
+
+func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, agentSessionID string) error {
+	workspaceProvider, ok := backend.runtimeProvider.(pluginruntime.WorkspaceProvider)
+	if !ok {
+		return nil
+	}
+	return workspaceProvider.RemoveWorkspace(ctx, pluginruntime.RemoveWorkspaceRequest{
+		SessionID:      backend.runtimeSessionID,
+		AgentSessionID: agentSessionID,
+	})
+}
+
+func hostedAgentWorkspacePrepareTimeout(cfg *config.HostedRuntimeWorkspaceConfig) time.Duration {
+	const defaultTimeout = 10 * time.Minute
+	if cfg == nil || strings.TrimSpace(cfg.PrepareTimeout) == "" {
+		return defaultTimeout
+	}
+	timeout, err := config.ParseDuration(cfg.PrepareTimeout)
+	if err != nil || timeout <= 0 {
+		return defaultTimeout
+	}
+	return timeout
+}
+
+func validateWorkspacePolicy(workspace *coreagent.Workspace, policy *config.HostedRuntimeWorkspaceConfig) error {
+	if workspace == nil {
+		return nil
+	}
+	allowed := []string(nil)
+	if policy != nil && policy.Git != nil {
+		allowed = policy.Git.AllowedRepositories
+	}
+	if len(allowed) == 0 {
+		return fmt.Errorf("%w: workspace git allowedRepositories is required", agentmanager.ErrAgentWorkspaceUnsupported)
+	}
+	for i, checkout := range workspace.Checkouts {
+		identity, err := coreagent.CanonicalGitRepositoryIdentity(checkout.URL)
+		if err != nil {
+			return fmt.Errorf("%w: checkout[%d].url: %v", agentmanager.ErrAgentWorkspaceInvalid, i, err)
+		}
+		if !workspaceRepositoryAllowed(identity, allowed) {
+			return fmt.Errorf("%w: repository %q is not allowed", agentmanager.ErrAgentWorkspaceUnsupported, identity)
+		}
+	}
+	return nil
+}
+
+func workspaceRepositoryAllowed(identity string, allowed []string) bool {
+	identity = strings.TrimSpace(identity)
+	for _, candidate := range allowed {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if strings.Contains(candidate, "*") {
+			if ok, err := path.Match(candidate, identity); err == nil && ok {
+				return true
+			}
+			continue
+		}
+		allowedIdentity, err := coreagent.CanonicalGitRepositoryIdentity(candidate)
+		if err != nil {
+			allowedIdentity = candidate
+		}
+		if allowedIdentity == identity {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeWorkspaceFromCore(workspace *coreagent.Workspace) *pluginruntime.Workspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &pluginruntime.Workspace{
+		Checkouts: make([]pluginruntime.WorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		CWD:       workspace.CWD,
+	}
+	for _, checkout := range workspace.Checkouts {
+		out.Checkouts = append(out.Checkouts, pluginruntime.WorkspaceGitCheckout{
+			URL:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return out
+}
+
+func validatePreparedAgentWorkspace(workspace *pluginruntime.PreparedWorkspace) (*coreagent.PreparedWorkspace, error) {
+	if workspace == nil {
+		return nil, fmt.Errorf("prepared workspace is required")
+	}
+	root := strings.TrimSpace(workspace.Root)
+	cwd := strings.TrimSpace(workspace.CWD)
+	if root == "" || cwd == "" {
+		return nil, fmt.Errorf("prepared workspace root and cwd are required")
+	}
+	if !filepath.IsAbs(root) || !filepath.IsAbs(cwd) {
+		return nil, fmt.Errorf("prepared workspace root and cwd must be absolute")
+	}
+	if !preparedWorkspacePathWithin(root, cwd) {
+		return nil, fmt.Errorf("prepared workspace cwd must be inside root")
+	}
+	return &coreagent.PreparedWorkspace{Root: root, CWD: cwd}, nil
+}
+
+func preparedWorkspacePathWithin(root string, cwd string) bool {
+	rel, err := filepath.Rel(root, cwd)
+	if err != nil {
+		return false
+	}
+	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
@@ -224,7 +409,18 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req coreage
 	release()
 	p.maybeProbeAfterCallError(acquired, err)
 	if err == nil {
-		p.recordSession(session, acquired)
+		if req.State == coreagent.SessionStateArchived || sessionState(session) == coreagent.SessionStateArchived {
+			cleanupID := strings.TrimSpace(req.SessionID)
+			if fromSession := sessionIDForSession(session); fromSession != "" {
+				cleanupID = fromSession
+			}
+			if cleanupErr := p.removeAgentWorkspace(ctx, acquired, cleanupID); cleanupErr != nil {
+				slog.Warn("failed to clean up prepared hosted agent workspace after archive", "provider", p.name, "session", cleanupID, "error", cleanupErr)
+			}
+			p.deleteSessionBackend(cleanupID)
+		} else {
+			p.recordSession(session, acquired)
+		}
 	}
 	return session, err
 }
@@ -1573,6 +1769,13 @@ func sessionIDForSession(session *coreagent.Session) string {
 		return ""
 	}
 	return session.ID
+}
+
+func sessionState(session *coreagent.Session) coreagent.SessionState {
+	if session == nil {
+		return ""
+	}
+	return session.State
 }
 
 func turnIDForTurn(turn *coreagent.Turn) string {

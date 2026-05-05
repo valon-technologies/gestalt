@@ -66,6 +66,7 @@ func (s *ManagerServer) CreateSession(ctx context.Context, req *proto.AgentManag
 		Model:          strings.TrimSpace(req.GetModel()),
 		ClientRef:      strings.TrimSpace(req.GetClientRef()),
 		Metadata:       mapFromStruct(req.GetMetadata()),
+		Workspace:      agentWorkspaceFromProto(req.GetWorkspace()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -346,9 +347,9 @@ func agentManagerStatusError(err error) error {
 		return existing.Err()
 	}
 	switch {
-	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid):
+	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid), errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
 		return status.Error(codes.InvalidArgument, err.Error())

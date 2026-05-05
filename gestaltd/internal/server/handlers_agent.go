@@ -80,12 +80,24 @@ type agentToolRefRequest struct {
 }
 
 type agentSessionCreateRequest struct {
-	ProviderName   string         `json:"provider,omitempty"`
-	Model          string         `json:"model,omitempty"`
-	ClientRef      string         `json:"clientRef,omitempty"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
-	ModelOptions   map[string]any `json:"modelOptions,omitempty"`
-	IdempotencyKey string         `json:"idempotencyKey,omitempty"`
+	ProviderName   string                 `json:"provider,omitempty"`
+	Model          string                 `json:"model,omitempty"`
+	ClientRef      string                 `json:"clientRef,omitempty"`
+	Metadata       map[string]any         `json:"metadata,omitempty"`
+	ModelOptions   map[string]any         `json:"modelOptions,omitempty"`
+	IdempotencyKey string                 `json:"idempotencyKey,omitempty"`
+	Workspace      *agentWorkspaceRequest `json:"workspace,omitempty"`
+}
+
+type agentWorkspaceRequest struct {
+	Checkouts []agentWorkspaceGitCheckoutRequest `json:"checkouts,omitempty"`
+	CWD       string                             `json:"cwd,omitempty"`
+}
+
+type agentWorkspaceGitCheckoutRequest struct {
+	URL  string `json:"url,omitempty"`
+	Ref  string `json:"ref,omitempty"`
+	Path string `json:"path,omitempty"`
 }
 
 type agentSessionUpdateRequest struct {
@@ -138,15 +150,16 @@ type agentProviderInfo struct {
 }
 
 type agentProviderCapabilitiesInfo struct {
-	StreamingText        bool     `json:"streamingText,omitempty"`
-	ToolCalls            bool     `json:"toolCalls,omitempty"`
-	ParallelToolCalls    bool     `json:"parallelToolCalls,omitempty"`
-	StructuredOutput     bool     `json:"structuredOutput,omitempty"`
-	Interactions         bool     `json:"interactions,omitempty"`
-	ResumableTurns       bool     `json:"resumableTurns,omitempty"`
-	ReasoningSummaries   bool     `json:"reasoningSummaries,omitempty"`
-	BoundedListHydration bool     `json:"boundedListHydration,omitempty"`
-	SupportedToolSources []string `json:"supportedToolSources,omitempty"`
+	StreamingText             bool     `json:"streamingText,omitempty"`
+	ToolCalls                 bool     `json:"toolCalls,omitempty"`
+	ParallelToolCalls         bool     `json:"parallelToolCalls,omitempty"`
+	StructuredOutput          bool     `json:"structuredOutput,omitempty"`
+	Interactions              bool     `json:"interactions,omitempty"`
+	ResumableTurns            bool     `json:"resumableTurns,omitempty"`
+	ReasoningSummaries        bool     `json:"reasoningSummaries,omitempty"`
+	SupportsPreparedWorkspace bool     `json:"supportsPreparedWorkspace,omitempty"`
+	BoundedListHydration      bool     `json:"boundedListHydration,omitempty"`
+	SupportedToolSources      []string `json:"supportedToolSources,omitempty"`
 }
 
 type agentHarnessResolveRequest struct {
@@ -258,6 +271,7 @@ func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		Model:          strings.TrimSpace(req.Model),
 		ClientRef:      strings.TrimSpace(req.ClientRef),
 		Metadata:       maps.Clone(req.Metadata),
+		Workspace:      agentWorkspaceRequestToCore(req.Workspace),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", "", nil, err)
@@ -1140,6 +1154,24 @@ func agentExecutionStatusFromRequest(value string) (coreagent.ExecutionStatus, e
 	}
 }
 
+func agentWorkspaceRequestToCore(workspace *agentWorkspaceRequest) *coreagent.Workspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &coreagent.Workspace{
+		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		CWD:       workspace.CWD,
+	}
+	for _, checkout := range workspace.Checkouts {
+		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
+			URL:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return out
+}
+
 func agentSessionInfoFromCore(session *coreagent.Session) agentSessionInfo {
 	return agentSessionInfoFromCoreView(session, false)
 }
@@ -1169,15 +1201,16 @@ func agentProviderCapabilitiesInfoFromCore(caps *coreagent.ProviderCapabilities)
 		return nil
 	}
 	return &agentProviderCapabilitiesInfo{
-		StreamingText:        caps.StreamingText,
-		ToolCalls:            caps.ToolCalls,
-		ParallelToolCalls:    caps.ParallelToolCalls,
-		StructuredOutput:     caps.StructuredOutput,
-		Interactions:         caps.Interactions,
-		ResumableTurns:       caps.ResumableTurns,
-		ReasoningSummaries:   caps.ReasoningSummaries,
-		BoundedListHydration: caps.BoundedListHydration,
-		SupportedToolSources: agentToolSourceModesInfoFromCore(caps.SupportedToolSources),
+		StreamingText:             caps.StreamingText,
+		ToolCalls:                 caps.ToolCalls,
+		ParallelToolCalls:         caps.ParallelToolCalls,
+		StructuredOutput:          caps.StructuredOutput,
+		Interactions:              caps.Interactions,
+		ResumableTurns:            caps.ResumableTurns,
+		ReasoningSummaries:        caps.ReasoningSummaries,
+		SupportsPreparedWorkspace: caps.SupportsPreparedWorkspace,
+		BoundedListHydration:      caps.BoundedListHydration,
+		SupportedToolSources:      agentToolSourceModesInfoFromCore(caps.SupportedToolSources),
 	}
 }
 
@@ -1359,7 +1392,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
 		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported),
-		errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported):
+		errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported),
+		errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())
@@ -1369,6 +1403,7 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
 		errors.Is(err, agentmanager.ErrAgentInteractionRequired),
 		errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid),
+		errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid),
 		errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound):

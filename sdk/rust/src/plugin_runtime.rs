@@ -98,6 +98,20 @@ where
         self.provider.stop_session(request).await
     }
 
+    async fn prepare_workspace(
+        &self,
+        request: GrpcRequest<pb::PreparePluginRuntimeWorkspaceRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::PreparePluginRuntimeWorkspaceResponse>, Status> {
+        self.provider.prepare_workspace(request).await
+    }
+
+    async fn remove_workspace(
+        &self,
+        request: GrpcRequest<pb::RemovePluginRuntimeWorkspaceRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        self.provider.remove_workspace(request).await
+    }
+
     async fn start_plugin(
         &self,
         request: GrpcRequest<pb::StartHostedPluginRequest>,

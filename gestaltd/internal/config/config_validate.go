@@ -16,6 +16,7 @@ import (
 
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
@@ -1135,6 +1136,50 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	if runtimeCfg.Metadata != nil {
 		runtimeCfg.Metadata = trimmed
 	}
+	if err := normalizeHostedRuntimeWorkspaceConfig(subject, runtimeCfg.Workspace); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeHostedRuntimeWorkspaceConfig(subject string, workspace *HostedRuntimeWorkspaceConfig) error {
+	if workspace == nil {
+		return nil
+	}
+	workspace.PrepareTimeout = strings.TrimSpace(workspace.PrepareTimeout)
+	if workspace.PrepareTimeout != "" {
+		duration, err := ParseDuration(workspace.PrepareTimeout)
+		if err != nil {
+			return fmt.Errorf("config validation: %s.runtime.workspace.prepareTimeout: %w", subject, err)
+		}
+		if duration <= 0 {
+			return fmt.Errorf("config validation: %s.runtime.workspace.prepareTimeout must be greater than 0", subject)
+		}
+	}
+	if workspace.Git == nil {
+		return nil
+	}
+	allowed := make([]string, 0, len(workspace.Git.AllowedRepositories))
+	seen := map[string]struct{}{}
+	for i, repo := range workspace.Git.AllowedRepositories {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			return fmt.Errorf("config validation: %s.runtime.workspace.git.allowedRepositories[%d] is required", subject, i)
+		}
+		if !strings.Contains(repo, "*") {
+			identity, err := coreagent.CanonicalGitRepositoryIdentity(repo)
+			if err != nil {
+				return fmt.Errorf("config validation: %s.runtime.workspace.git.allowedRepositories[%d]: %w", subject, i, err)
+			}
+			repo = identity
+		}
+		if _, ok := seen[repo]; ok {
+			return fmt.Errorf("config validation: %s.runtime.workspace.git.allowedRepositories[%d] duplicates %q", subject, i, repo)
+		}
+		seen[repo] = struct{}{}
+		allowed = append(allowed, repo)
+	}
+	workspace.Git.AllowedRepositories = allowed
 	return nil
 }
 

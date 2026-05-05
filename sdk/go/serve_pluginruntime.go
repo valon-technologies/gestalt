@@ -5,6 +5,8 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -65,6 +67,29 @@ func (s pluginRuntimeProviderServer) StopSession(ctx context.Context, req *proto
 	return &emptypb.Empty{}, nil
 }
 
+func (s pluginRuntimeProviderServer) PrepareWorkspace(ctx context.Context, req *proto.PreparePluginRuntimeWorkspaceRequest) (*proto.PreparePluginRuntimeWorkspaceResponse, error) {
+	workspaceProvider, ok := s.provider.(PluginRuntimeWorkspaceProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "runtime prepare workspace is not implemented")
+	}
+	resp, err := workspaceProvider.PrepareWorkspace(ctx, preparePluginRuntimeWorkspaceRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("runtime prepare workspace", err)
+	}
+	return preparePluginRuntimeWorkspaceResponseToProto(resp), nil
+}
+
+func (s pluginRuntimeProviderServer) RemoveWorkspace(ctx context.Context, req *proto.RemovePluginRuntimeWorkspaceRequest) (*emptypb.Empty, error) {
+	workspaceProvider, ok := s.provider.(PluginRuntimeWorkspaceProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "runtime remove workspace is not implemented")
+	}
+	if err := workspaceProvider.RemoveWorkspace(ctx, removePluginRuntimeWorkspaceRequestFromProto(req)); err != nil {
+		return nil, providerRPCError("runtime remove workspace", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (s pluginRuntimeProviderServer) StartPlugin(ctx context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
 	plugin, err := s.provider.StartPlugin(ctx, startHostedPluginRequestFromProto(req))
 	if err != nil {
@@ -75,8 +100,9 @@ func (s pluginRuntimeProviderServer) StartPlugin(ctx context.Context, req *proto
 
 func pluginRuntimeSupportToProto(support PluginRuntimeSupport) *proto.PluginRuntimeSupport {
 	return &proto.PluginRuntimeSupport{
-		CanHostPlugins: support.CanHostPlugins,
-		EgressMode:     pluginRuntimeEgressModeToProto(support.EgressMode),
+		CanHostPlugins:           support.CanHostPlugins,
+		EgressMode:               pluginRuntimeEgressModeToProto(support.EgressMode),
+		SupportsPrepareWorkspace: support.SupportsPrepareWorkspace,
 	}
 }
 
@@ -148,6 +174,83 @@ func startHostedPluginRequestFromProto(req *proto.StartHostedPluginRequest) Star
 		AllowedHosts:  append([]string(nil), req.GetAllowedHosts()...),
 		DefaultAction: req.GetDefaultAction(),
 		HostBinary:    req.GetHostBinary(),
+	}
+}
+
+func preparePluginRuntimeWorkspaceRequestFromProto(req *proto.PreparePluginRuntimeWorkspaceRequest) PreparePluginRuntimeWorkspaceRequest {
+	if req == nil {
+		return PreparePluginRuntimeWorkspaceRequest{}
+	}
+	return PreparePluginRuntimeWorkspaceRequest{
+		SessionID:      req.GetSessionId(),
+		AgentSessionID: req.GetAgentSessionId(),
+		Workspace:      agentWorkspaceFromProto(req.GetWorkspace()),
+	}
+}
+
+func removePluginRuntimeWorkspaceRequestFromProto(req *proto.RemovePluginRuntimeWorkspaceRequest) RemovePluginRuntimeWorkspaceRequest {
+	if req == nil {
+		return RemovePluginRuntimeWorkspaceRequest{}
+	}
+	return RemovePluginRuntimeWorkspaceRequest{
+		SessionID:      req.GetSessionId(),
+		AgentSessionID: req.GetAgentSessionId(),
+	}
+}
+
+func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *AgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &AgentWorkspace{
+		Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
+		CWD:       workspace.GetCwd(),
+	}
+	for _, checkout := range workspace.GetCheckouts() {
+		if checkout == nil {
+			continue
+		}
+		out.Checkouts = append(out.Checkouts, AgentWorkspaceGitCheckout{
+			URL:  checkout.GetUrl(),
+			Ref:  checkout.GetRef(),
+			Path: checkout.GetPath(),
+		})
+	}
+	return out
+}
+
+func agentWorkspaceToProto(workspace *AgentWorkspace) *proto.AgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &proto.AgentWorkspace{
+		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		Cwd:       workspace.CWD,
+	}
+	for i := range workspace.Checkouts {
+		checkout := workspace.Checkouts[i]
+		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
+			Url:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return out
+}
+
+func preparePluginRuntimeWorkspaceResponseToProto(resp PreparePluginRuntimeWorkspaceResponse) *proto.PreparePluginRuntimeWorkspaceResponse {
+	return &proto.PreparePluginRuntimeWorkspaceResponse{
+		Workspace: preparedAgentWorkspaceToProto(resp.Workspace),
+	}
+}
+
+func preparedAgentWorkspaceToProto(workspace *PreparedAgentWorkspace) *proto.PreparedAgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	return &proto.PreparedAgentWorkspace{
+		Root: workspace.Root,
+		Cwd:  workspace.CWD,
 	}
 }
 

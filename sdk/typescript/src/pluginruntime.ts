@@ -9,6 +9,7 @@ import {
 import {
   HostedPluginSchema,
   ListPluginRuntimeSessionsResponseSchema,
+  PreparePluginRuntimeWorkspaceResponseSchema,
   PluginRuntimeEgressMode,
   PluginRuntimeProvider as PluginRuntimeProviderService,
   PluginRuntimeSessionSchema,
@@ -16,6 +17,8 @@ import {
   type GetPluginRuntimeSessionRequest,
   type HostedPlugin,
   type ListPluginRuntimeSessionsRequest,
+  type PreparePluginRuntimeWorkspaceRequest,
+  type RemovePluginRuntimeWorkspaceRequest,
   type PluginRuntimeSession,
   type PluginRuntimeSupport,
   type StartHostedPluginRequest,
@@ -29,6 +32,8 @@ export type {
   GetPluginRuntimeSessionRequest,
   HostedPlugin,
   ListPluginRuntimeSessionsRequest,
+  PreparePluginRuntimeWorkspaceRequest,
+  RemovePluginRuntimeWorkspaceRequest,
   PluginRuntimeSession,
   PluginRuntimeSupport,
   StartHostedPluginRequest,
@@ -49,6 +54,12 @@ export interface PluginRuntimeProviderOptions extends RuntimeProviderOptions {
     request: ListPluginRuntimeSessionsRequest,
   ) => MaybePromise<MessageInitShape<typeof PluginRuntimeSessionSchema>[]>;
   stopSession: (request: StopPluginRuntimeSessionRequest) => MaybePromise<void>;
+  prepareWorkspace?: (
+    request: PreparePluginRuntimeWorkspaceRequest,
+  ) => MaybePromise<MessageInitShape<typeof PreparePluginRuntimeWorkspaceResponseSchema>>;
+  removeWorkspace?: (
+    request: RemovePluginRuntimeWorkspaceRequest,
+  ) => MaybePromise<void>;
   startPlugin: (
     request: StartHostedPluginRequest,
   ) => MaybePromise<MessageInitShape<typeof HostedPluginSchema>>;
@@ -62,6 +73,8 @@ export class PluginRuntimeProvider extends RuntimeProvider {
   private readonly getSessionHandler: PluginRuntimeProviderOptions["getSession"];
   private readonly listSessionsHandler: PluginRuntimeProviderOptions["listSessions"];
   private readonly stopSessionHandler: PluginRuntimeProviderOptions["stopSession"];
+  private readonly prepareWorkspaceHandler: PluginRuntimeProviderOptions["prepareWorkspace"];
+  private readonly removeWorkspaceHandler: PluginRuntimeProviderOptions["removeWorkspace"];
   private readonly startPluginHandler: PluginRuntimeProviderOptions["startPlugin"];
 
   constructor(options: PluginRuntimeProviderOptions) {
@@ -71,6 +84,8 @@ export class PluginRuntimeProvider extends RuntimeProvider {
     this.getSessionHandler = options.getSession;
     this.listSessionsHandler = options.listSessions;
     this.stopSessionHandler = options.stopSession;
+    this.prepareWorkspaceHandler = options.prepareWorkspace;
+    this.removeWorkspaceHandler = options.removeWorkspace;
     this.startPluginHandler = options.startPlugin;
   }
 
@@ -98,6 +113,30 @@ export class PluginRuntimeProvider extends RuntimeProvider {
 
   async stopSession(request: StopPluginRuntimeSessionRequest): Promise<void> {
     await this.stopSessionHandler(request);
+  }
+
+  async prepareWorkspace(
+    request: PreparePluginRuntimeWorkspaceRequest,
+  ): Promise<MessageInitShape<typeof PreparePluginRuntimeWorkspaceResponseSchema>> {
+    if (!this.prepareWorkspaceHandler) {
+      throw new ConnectError(
+        "plugin runtime provider prepare workspace is not implemented",
+        Code.Unimplemented,
+      );
+    }
+    return await this.prepareWorkspaceHandler(request);
+  }
+
+  async removeWorkspace(
+    request: RemovePluginRuntimeWorkspaceRequest,
+  ): Promise<void> {
+    if (!this.removeWorkspaceHandler) {
+      throw new ConnectError(
+        "plugin runtime provider remove workspace is not implemented",
+        Code.Unimplemented,
+      );
+    }
+    await this.removeWorkspaceHandler(request);
   }
 
   async startPlugin(
@@ -169,6 +208,20 @@ export function createPluginRuntimeProviderService(
       );
       return create(EmptySchema);
     },
+    async prepareWorkspace(request) {
+      return create(
+        PreparePluginRuntimeWorkspaceResponseSchema,
+        await invokePluginRuntimeProvider("prepare workspace", () =>
+          provider.prepareWorkspace(request),
+        ),
+      );
+    },
+    async removeWorkspace(request) {
+      await invokePluginRuntimeProvider("remove workspace", () =>
+        provider.removeWorkspace(request),
+      );
+      return create(EmptySchema);
+    },
     async startPlugin(request) {
       return create(
         HostedPluginSchema,
@@ -187,6 +240,9 @@ async function invokePluginRuntimeProvider<T>(
   try {
     return await fn();
   } catch (error) {
+    if (error instanceof ConnectError) {
+      throw error;
+    }
     throw new ConnectError(
       `plugin runtime provider ${label}: ${errorMessage(error)}`,
       Code.Unknown,

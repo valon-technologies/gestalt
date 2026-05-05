@@ -6,13 +6,15 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { AgentWorkspace, PreparedAgentWorkspace } from "./agent_pb";
+import { file_v1_agent } from "./agent_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/pluginruntime.proto.
  */
 export const file_v1_pluginruntime: GenFile = /*@__PURE__*/
-  fileDesc("ChZ2MS9wbHVnaW5ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIqABChRQbHVnaW5SdW50aW1lU3VwcG9ydBIYChBjYW5faG9zdF9wbHVnaW5zGAEgASgIEkEKC2VncmVzc19tb2RlGAMgASgOMiwuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lRWdyZXNzTW9kZUoECAIQA0oECAQQBUoECAUQBkoECAYQB1ITaG9zdF9zZXJ2aWNlX2FjY2VzcyKhAgoUUGx1Z2luUnVudGltZVNlc3Npb24SCgoCaWQYASABKAkSDQoFc3RhdGUYAiABKAkSSQoIbWV0YWRhdGEYAyADKAsyNy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uLk1ldGFkYXRhRW50cnkSRQoJbGlmZWN5Y2xlGAQgASgLMjIuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lU2Vzc2lvbkxpZmVjeWNsZRIUCgxzdGF0ZV9yZWFzb24YBSABKAkSFQoNc3RhdGVfbWVzc2FnZRgGIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiuQEKHVBsdWdpblJ1bnRpbWVTZXNzaW9uTGlmZWN5Y2xlEi4KCnN0YXJ0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKFHJlY29tbWVuZGVkX2RyYWluX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI4ChpQbHVnaW5SdW50aW1lSW1hZ2VQdWxsQXV0aBIaChJkb2NrZXJfY29uZmlnX2pzb24YASABKAkiyAIKIFN0YXJ0UGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0EhMKC3BsdWdpbl9uYW1lGAEgASgJEhAKCHRlbXBsYXRlGAIgASgJEg0KBWltYWdlGAMgASgJElUKCG1ldGFkYXRhGAQgAygLMkMuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdC5NZXRhZGF0YUVudHJ5EkgKD2ltYWdlX3B1bGxfYXV0aBgGIAEoCzIvLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUltYWdlUHVsbEF1dGgaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQIBRAGUhZpbWFnZV9wdWxsX2NyZWRlbnRpYWxzIjQKHkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIiIKIExpc3RQbHVnaW5SdW50aW1lU2Vzc2lvbnNSZXF1ZXN0ImAKIUxpc3RQbHVnaW5SdW50aW1lU2Vzc2lvbnNSZXNwb25zZRI7CghzZXNzaW9ucxgBIAMoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24iNQofU3RvcFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIqMCChhTdGFydEhvc3RlZFBsdWdpblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRITCgtwbHVnaW5fbmFtZRgCIAEoCRIPCgdjb21tYW5kGAMgASgJEgwKBGFyZ3MYBCADKAkSQwoDZW52GAUgAygLMjYuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydEhvc3RlZFBsdWdpblJlcXVlc3QuRW52RW50cnkSFQoNYWxsb3dlZF9ob3N0cxgHIAMoCRIWCg5kZWZhdWx0X2FjdGlvbhgIIAEoCRITCgtob3N0X2JpbmFyeRgJIAEoCRoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQIBhAHSgQIChALIlgKDEhvc3RlZFBsdWdpbhIKCgJpZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhMKC3BsdWdpbl9uYW1lGAMgASgJEhMKC2RpYWxfdGFyZ2V0GAQgASgJIqoBChVQbHVnaW5SdW50aW1lTG9nRW50cnkSOwoGc3RyZWFtGAEgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lTG9nU3RyZWFtEg8KB21lc3NhZ2UYAiABKAkSLwoLb2JzZXJ2ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9zZXEYBCABKAMibgoeQXBwZW5kUGx1Z2luUnVudGltZUxvZ3NSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSOAoEbG9ncxgCIAMoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUxvZ0VudHJ5IjMKH0FwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVzcG9uc2USEAoIbGFzdF9zZXEYASABKAMquAEKF1BsdWdpblJ1bnRpbWVFZ3Jlc3NNb2RlEioKJlBMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX1VOU1BFQ0lGSUVEEAASIwofUExVR0lOX1JVTlRJTUVfRUdSRVNTX01PREVfTk9ORRABEiMKH1BMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX0NJRFIQAhInCiNQTFVHSU5fUlVOVElNRV9FR1JFU1NfTU9ERV9IT1NUTkFNRRADKrYBChZQbHVnaW5SdW50aW1lTG9nU3RyZWFtEikKJVBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fVU5TUEVDSUZJRUQQABIkCiBQTFVHSU5fUlVOVElNRV9MT0dfU1RSRUFNX1NURE9VVBABEiQKIFBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fU1RERVJSEAISJQohUExVR0lOX1JVTlRJTUVfTE9HX1NUUkVBTV9SVU5USU1FEAMyjwEKFFBsdWdpblJ1bnRpbWVMb2dIb3N0EncKCkFwcGVuZExvZ3MSMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVxdWVzdBo0Lmdlc3RhbHQucHJvdmlkZXIudjEuQXBwZW5kUGx1Z2luUnVudGltZUxvZ3NSZXNwb25zZTKFBQoVUGx1Z2luUnVudGltZVByb3ZpZGVyEk8KCkdldFN1cHBvcnQSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTdXBwb3J0EnAKDFN0YXJ0U2Vzc2lvbhI1Lmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uEmwKCkdldFNlc3Npb24SMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBopLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24SfQoMTGlzdFNlc3Npb25zEjUuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0UGx1Z2luUnVudGltZVNlc3Npb25zUmVxdWVzdBo2Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdFBsdWdpblJ1bnRpbWVTZXNzaW9uc1Jlc3BvbnNlElsKC1N0b3BTZXNzaW9uEjQuZ2VzdGFsdC5wcm92aWRlci52MS5TdG9wUGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5El8KC1N0YXJ0UGx1Z2luEi0uZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydEhvc3RlZFBsdWdpblJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkhvc3RlZFBsdWdpbkI9WjtnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L2ludGVybmFsL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("ChZ2MS9wbHVnaW5ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIsQBChRQbHVnaW5SdW50aW1lU3VwcG9ydBIYChBjYW5faG9zdF9wbHVnaW5zGAEgASgIEkEKC2VncmVzc19tb2RlGAMgASgOMiwuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lRWdyZXNzTW9kZRIiChpzdXBwb3J0c19wcmVwYXJlX3dvcmtzcGFjZRgHIAEoCEoECAIQA0oECAQQBUoECAUQBkoECAYQB1ITaG9zdF9zZXJ2aWNlX2FjY2VzcyKhAgoUUGx1Z2luUnVudGltZVNlc3Npb24SCgoCaWQYASABKAkSDQoFc3RhdGUYAiABKAkSSQoIbWV0YWRhdGEYAyADKAsyNy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uLk1ldGFkYXRhRW50cnkSRQoJbGlmZWN5Y2xlGAQgASgLMjIuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lU2Vzc2lvbkxpZmVjeWNsZRIUCgxzdGF0ZV9yZWFzb24YBSABKAkSFQoNc3RhdGVfbWVzc2FnZRgGIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiuQEKHVBsdWdpblJ1bnRpbWVTZXNzaW9uTGlmZWN5Y2xlEi4KCnN0YXJ0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjgKFHJlY29tbWVuZGVkX2RyYWluX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI4ChpQbHVnaW5SdW50aW1lSW1hZ2VQdWxsQXV0aBIaChJkb2NrZXJfY29uZmlnX2pzb24YASABKAkiyAIKIFN0YXJ0UGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0EhMKC3BsdWdpbl9uYW1lGAEgASgJEhAKCHRlbXBsYXRlGAIgASgJEg0KBWltYWdlGAMgASgJElUKCG1ldGFkYXRhGAQgAygLMkMuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdC5NZXRhZGF0YUVudHJ5EkgKD2ltYWdlX3B1bGxfYXV0aBgGIAEoCzIvLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUltYWdlUHVsbEF1dGgaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQIBRAGUhZpbWFnZV9wdWxsX2NyZWRlbnRpYWxzIjQKHkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIiIKIExpc3RQbHVnaW5SdW50aW1lU2Vzc2lvbnNSZXF1ZXN0ImAKIUxpc3RQbHVnaW5SdW50aW1lU2Vzc2lvbnNSZXNwb25zZRI7CghzZXNzaW9ucxgBIAMoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24iNQofU3RvcFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIowBCiRQcmVwYXJlUGx1Z2luUnVudGltZVdvcmtzcGFjZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIYChBhZ2VudF9zZXNzaW9uX2lkGAIgASgJEjYKCXdvcmtzcGFjZRgDIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRXb3Jrc3BhY2UiZwolUHJlcGFyZVBsdWdpblJ1bnRpbWVXb3Jrc3BhY2VSZXNwb25zZRI+Cgl3b3Jrc3BhY2UYASABKAsyKy5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXBhcmVkQWdlbnRXb3Jrc3BhY2UiUwojUmVtb3ZlUGx1Z2luUnVudGltZVdvcmtzcGFjZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIYChBhZ2VudF9zZXNzaW9uX2lkGAIgASgJIqMCChhTdGFydEhvc3RlZFBsdWdpblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRITCgtwbHVnaW5fbmFtZRgCIAEoCRIPCgdjb21tYW5kGAMgASgJEgwKBGFyZ3MYBCADKAkSQwoDZW52GAUgAygLMjYuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydEhvc3RlZFBsdWdpblJlcXVlc3QuRW52RW50cnkSFQoNYWxsb3dlZF9ob3N0cxgHIAMoCRIWCg5kZWZhdWx0X2FjdGlvbhgIIAEoCRITCgtob3N0X2JpbmFyeRgJIAEoCRoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQIBhAHSgQIChALIlgKDEhvc3RlZFBsdWdpbhIKCgJpZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhMKC3BsdWdpbl9uYW1lGAMgASgJEhMKC2RpYWxfdGFyZ2V0GAQgASgJIqoBChVQbHVnaW5SdW50aW1lTG9nRW50cnkSOwoGc3RyZWFtGAEgASgOMisuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lTG9nU3RyZWFtEg8KB21lc3NhZ2UYAiABKAkSLwoLb2JzZXJ2ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCnNvdXJjZV9zZXEYBCABKAMibgoeQXBwZW5kUGx1Z2luUnVudGltZUxvZ3NSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSOAoEbG9ncxgCIAMoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUxvZ0VudHJ5IjMKH0FwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVzcG9uc2USEAoIbGFzdF9zZXEYASABKAMquAEKF1BsdWdpblJ1bnRpbWVFZ3Jlc3NNb2RlEioKJlBMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX1VOU1BFQ0lGSUVEEAASIwofUExVR0lOX1JVTlRJTUVfRUdSRVNTX01PREVfTk9ORRABEiMKH1BMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX0NJRFIQAhInCiNQTFVHSU5fUlVOVElNRV9FR1JFU1NfTU9ERV9IT1NUTkFNRRADKrYBChZQbHVnaW5SdW50aW1lTG9nU3RyZWFtEikKJVBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fVU5TUEVDSUZJRUQQABIkCiBQTFVHSU5fUlVOVElNRV9MT0dfU1RSRUFNX1NURE9VVBABEiQKIFBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fU1RERVJSEAISJQohUExVR0lOX1JVTlRJTUVfTE9HX1NUUkVBTV9SVU5USU1FEAMyjwEKFFBsdWdpblJ1bnRpbWVMb2dIb3N0EncKCkFwcGVuZExvZ3MSMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVxdWVzdBo0Lmdlc3RhbHQucHJvdmlkZXIudjEuQXBwZW5kUGx1Z2luUnVudGltZUxvZ3NSZXNwb25zZTL2BgoVUGx1Z2luUnVudGltZVByb3ZpZGVyEk8KCkdldFN1cHBvcnQSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTdXBwb3J0EnAKDFN0YXJ0U2Vzc2lvbhI1Lmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uEmwKCkdldFNlc3Npb24SMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBopLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24SfQoMTGlzdFNlc3Npb25zEjUuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0UGx1Z2luUnVudGltZVNlc3Npb25zUmVxdWVzdBo2Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdFBsdWdpblJ1bnRpbWVTZXNzaW9uc1Jlc3BvbnNlElsKC1N0b3BTZXNzaW9uEjQuZ2VzdGFsdC5wcm92aWRlci52MS5TdG9wUGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EokBChBQcmVwYXJlV29ya3NwYWNlEjkuZ2VzdGFsdC5wcm92aWRlci52MS5QcmVwYXJlUGx1Z2luUnVudGltZVdvcmtzcGFjZVJlcXVlc3QaOi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXBhcmVQbHVnaW5SdW50aW1lV29ya3NwYWNlUmVzcG9uc2USYwoPUmVtb3ZlV29ya3NwYWNlEjguZ2VzdGFsdC5wcm92aWRlci52MS5SZW1vdmVQbHVnaW5SdW50aW1lV29ya3NwYWNlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJfCgtTdGFydFBsdWdpbhItLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRIb3N0ZWRQbHVnaW5SZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5Ib3N0ZWRQbHVnaW5CPVo7Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9pbnRlcm5hbC9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp, file_v1_agent]);
 
 /**
  * @generated from message gestalt.provider.v1.PluginRuntimeSupport
@@ -27,6 +29,11 @@ export type PluginRuntimeSupport = Message<"gestalt.provider.v1.PluginRuntimeSup
    * @generated from field: gestalt.provider.v1.PluginRuntimeEgressMode egress_mode = 3;
    */
   egressMode: PluginRuntimeEgressMode;
+
+  /**
+   * @generated from field: bool supports_prepare_workspace = 7;
+   */
+  supportsPrepareWorkspace: boolean;
 };
 
 /**
@@ -224,6 +231,72 @@ export const StopPluginRuntimeSessionRequestSchema: GenMessage<StopPluginRuntime
   messageDesc(file_v1_pluginruntime, 8);
 
 /**
+ * @generated from message gestalt.provider.v1.PreparePluginRuntimeWorkspaceRequest
+ */
+export type PreparePluginRuntimeWorkspaceRequest = Message<"gestalt.provider.v1.PreparePluginRuntimeWorkspaceRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string agent_session_id = 2;
+   */
+  agentSessionId: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentWorkspace workspace = 3;
+   */
+  workspace?: AgentWorkspace | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.PreparePluginRuntimeWorkspaceRequest.
+ * Use `create(PreparePluginRuntimeWorkspaceRequestSchema)` to create a new message.
+ */
+export const PreparePluginRuntimeWorkspaceRequestSchema: GenMessage<PreparePluginRuntimeWorkspaceRequest> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 9);
+
+/**
+ * @generated from message gestalt.provider.v1.PreparePluginRuntimeWorkspaceResponse
+ */
+export type PreparePluginRuntimeWorkspaceResponse = Message<"gestalt.provider.v1.PreparePluginRuntimeWorkspaceResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.PreparedAgentWorkspace workspace = 1;
+   */
+  workspace?: PreparedAgentWorkspace | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.PreparePluginRuntimeWorkspaceResponse.
+ * Use `create(PreparePluginRuntimeWorkspaceResponseSchema)` to create a new message.
+ */
+export const PreparePluginRuntimeWorkspaceResponseSchema: GenMessage<PreparePluginRuntimeWorkspaceResponse> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 10);
+
+/**
+ * @generated from message gestalt.provider.v1.RemovePluginRuntimeWorkspaceRequest
+ */
+export type RemovePluginRuntimeWorkspaceRequest = Message<"gestalt.provider.v1.RemovePluginRuntimeWorkspaceRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string agent_session_id = 2;
+   */
+  agentSessionId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RemovePluginRuntimeWorkspaceRequest.
+ * Use `create(RemovePluginRuntimeWorkspaceRequestSchema)` to create a new message.
+ */
+export const RemovePluginRuntimeWorkspaceRequestSchema: GenMessage<RemovePluginRuntimeWorkspaceRequest> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 11);
+
+/**
  * StartHostedPluginRequest describes the plugin process to launch inside a
  * runtime session. The runtime backend owns allocation and injection of the
  * plugin's listener endpoint and returns a host-reachable dial target in the
@@ -278,7 +351,7 @@ export type StartHostedPluginRequest = Message<"gestalt.provider.v1.StartHostedP
  * Use `create(StartHostedPluginRequestSchema)` to create a new message.
  */
 export const StartHostedPluginRequestSchema: GenMessage<StartHostedPluginRequest> = /*@__PURE__*/
-  messageDesc(file_v1_pluginruntime, 9);
+  messageDesc(file_v1_pluginruntime, 12);
 
 /**
  * @generated from message gestalt.provider.v1.HostedPlugin
@@ -310,7 +383,7 @@ export type HostedPlugin = Message<"gestalt.provider.v1.HostedPlugin"> & {
  * Use `create(HostedPluginSchema)` to create a new message.
  */
 export const HostedPluginSchema: GenMessage<HostedPlugin> = /*@__PURE__*/
-  messageDesc(file_v1_pluginruntime, 10);
+  messageDesc(file_v1_pluginruntime, 13);
 
 /**
  * @generated from message gestalt.provider.v1.PluginRuntimeLogEntry
@@ -342,7 +415,7 @@ export type PluginRuntimeLogEntry = Message<"gestalt.provider.v1.PluginRuntimeLo
  * Use `create(PluginRuntimeLogEntrySchema)` to create a new message.
  */
 export const PluginRuntimeLogEntrySchema: GenMessage<PluginRuntimeLogEntry> = /*@__PURE__*/
-  messageDesc(file_v1_pluginruntime, 11);
+  messageDesc(file_v1_pluginruntime, 14);
 
 /**
  * @generated from message gestalt.provider.v1.AppendPluginRuntimeLogsRequest
@@ -364,7 +437,7 @@ export type AppendPluginRuntimeLogsRequest = Message<"gestalt.provider.v1.Append
  * Use `create(AppendPluginRuntimeLogsRequestSchema)` to create a new message.
  */
 export const AppendPluginRuntimeLogsRequestSchema: GenMessage<AppendPluginRuntimeLogsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_pluginruntime, 12);
+  messageDesc(file_v1_pluginruntime, 15);
 
 /**
  * @generated from message gestalt.provider.v1.AppendPluginRuntimeLogsResponse
@@ -381,7 +454,7 @@ export type AppendPluginRuntimeLogsResponse = Message<"gestalt.provider.v1.Appen
  * Use `create(AppendPluginRuntimeLogsResponseSchema)` to create a new message.
  */
 export const AppendPluginRuntimeLogsResponseSchema: GenMessage<AppendPluginRuntimeLogsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_pluginruntime, 13);
+  messageDesc(file_v1_pluginruntime, 16);
 
 /**
  * @generated from enum gestalt.provider.v1.PluginRuntimeEgressMode
@@ -502,6 +575,22 @@ export const PluginRuntimeProvider: GenService<{
   stopSession: {
     methodKind: "unary";
     input: typeof StopPluginRuntimeSessionRequestSchema;
+    output: typeof EmptySchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.PluginRuntimeProvider.PrepareWorkspace
+   */
+  prepareWorkspace: {
+    methodKind: "unary";
+    input: typeof PreparePluginRuntimeWorkspaceRequestSchema;
+    output: typeof PreparePluginRuntimeWorkspaceResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.PluginRuntimeProvider.RemoveWorkspace
+   */
+  removeWorkspace: {
+    methodKind: "unary";
+    input: typeof RemovePluginRuntimeWorkspaceRequestSchema;
     output: typeof EmptySchema;
   },
   /**

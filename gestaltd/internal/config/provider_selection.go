@@ -128,6 +128,7 @@ type EffectiveHostedRuntime struct {
 	Image         string
 	ImagePullAuth *HostedRuntimeImagePullAuth
 	Metadata      map[string]string
+	Workspace     *HostedRuntimeWorkspaceConfig
 }
 
 type EffectiveExecution struct {
@@ -360,6 +361,7 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 		Image:         strings.TrimSpace(runtimeCfg.Image),
 		ImagePullAuth: cloneHostedRuntimeImagePullAuth(runtimeCfg.ImagePullAuth),
 		Metadata:      maps.Clone(runtimeCfg.Metadata),
+		Workspace:     cloneHostedRuntimeWorkspaceConfig(runtimeCfg.Workspace),
 	}
 	return EffectiveExecution{Mode: ExecutionModeHosted, Hosted: runtime}, nil
 }

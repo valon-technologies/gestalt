@@ -1427,6 +1427,7 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 		Image:         strings.TrimSpace(runtimeCfg.Image),
 		ImagePullAuth: hostedRuntimeConfigImagePullAuth(runtimeCfg.ImagePullAuth),
 		Metadata:      maps.Clone(runtimeCfg.Metadata),
+		Workspace:     hostedRuntimeWorkspaceConfig(runtimeCfg.Workspace),
 	}
 	return effective
 }
@@ -1438,6 +1439,21 @@ func hostedRuntimeConfigImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *
 	return &config.HostedRuntimeImagePullAuth{
 		DockerConfigJSON: auth.DockerConfigJSON,
 	}
+}
+
+func hostedRuntimeWorkspaceConfig(workspace *config.HostedRuntimeWorkspaceConfig) *config.HostedRuntimeWorkspaceConfig {
+	if workspace == nil {
+		return nil
+	}
+	out := &config.HostedRuntimeWorkspaceConfig{
+		PrepareTimeout: workspace.PrepareTimeout,
+	}
+	if workspace.Git != nil {
+		out.Git = &config.HostedRuntimeWorkspaceGitConfig{
+			AllowedRepositories: slices.Clone(workspace.Git.AllowedRepositories),
+		}
+	}
+	return out
 }
 
 func localHostedRuntimeConfig(runtimeConfig config.EffectiveHostedRuntime) config.EffectiveHostedRuntime {

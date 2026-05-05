@@ -322,6 +322,7 @@ impl AgentProviderGrpc for TestAgentProvider {
             resumable_turns: true,
             reasoning_summaries: false,
             supports_session_start: false,
+            supports_prepared_workspace: false,
             bounded_list_hydration: true,
             supported_tool_sources: vec![pb::AgentToolSourceMode::McpCatalog as i32],
         }))
