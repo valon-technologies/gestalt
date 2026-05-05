@@ -27,7 +27,7 @@ Access tokens, refresh tokens, pending connection state, and OAuth state paramet
 
 **API tokens.** Generated with 32 random bytes from `crypto/rand` and prefixed with `gst_api_`. The plaintext is returned once at creation time. Only the SHA-256 hash is stored. Default TTL is 30 days, configurable via `server.apiTokenTtl`.
 
-**Plugin tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt automatically refreshes tokens that expire within 5 minutes.
+**Plugin tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt refreshes expiring tokens on demand during invocation, and connections that declare `credentialRefresh` can be maintained proactively by a supporting external credentials provider.
 
 ## Request authentication
 
