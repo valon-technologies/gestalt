@@ -229,9 +229,9 @@ pub struct AgentArgs {
     #[arg(long, conflicts_with = "local")]
     pub cloud: bool,
 
-    /// Gestaltd config path for local agent launch; repeat to layer overrides
-    #[arg(long = "config")]
-    pub config: Vec<String>,
+    /// Agent harness name for local launch; defaults to the server-selected harness
+    #[arg(long)]
+    pub harness: Option<String>,
 
     /// Agent provider name for a new session
     #[arg(long)]
@@ -278,9 +278,9 @@ pub struct AgentDoctorArgs {
     #[arg(long)]
     pub provider: Option<String>,
 
-    /// Gestaltd config path for local agent launch; repeat to layer overrides
-    #[arg(long = "config")]
-    pub config: Vec<String>,
+    /// Agent harness name; defaults to the server-selected harness
+    #[arg(long)]
+    pub harness: Option<String>,
 }
 
 #[derive(Args)]

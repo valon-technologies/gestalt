@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
-use serde::{Deserialize, Deserializer, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{
     Arc,
@@ -29,6 +29,7 @@ mod tui;
 
 const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
 const PROVIDERS_PATH: &str = "/api/v1/agent/providers";
+const HARNESSES_RESOLVE_PATH: &str = "/api/v1/agent/harnesses/resolve";
 const TURNS_PATH: &str = "/api/v1/agent/turns";
 const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
@@ -36,39 +37,133 @@ const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL: &str = "blocked_or_terminal";
 const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
-pub fn launch_local(provider: Option<&str>, config_paths: &[String]) -> Result<()> {
-    run_local_agent_helper("launch", provider, config_paths)
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentHarnessResolveRequest<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    harness: Option<&'a str>,
 }
 
-pub fn doctor_local(provider: Option<&str>, config_paths: &[String]) -> Result<()> {
-    run_local_agent_helper("doctor", provider, config_paths)
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentHarnessPlan {
+    provider: String,
+    #[serde(default)]
+    harness: String,
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    env: Map<String, Value>,
+    #[serde(default)]
+    working_directory: String,
+    #[serde(default)]
+    required_commands: Vec<String>,
 }
 
-fn run_local_agent_helper(
-    action: &str,
+pub fn launch_local(
+    client: &ApiClient,
     provider: Option<&str>,
-    config_paths: &[String],
+    harness: Option<&str>,
 ) -> Result<()> {
-    let helper = find_gestaltd_helper()?;
-    let mut cmd = ProcessCommand::new(&helper);
-    cmd.arg("agent").arg(action);
-    for config_path in config_paths {
-        cmd.arg("--config").arg(config_path);
+    let plan = resolve_agent_harness(client, provider, harness)?;
+    let prepared = prepare_agent_harness(&plan)?;
+    launch_agent_harness(&plan, &prepared)
+}
+
+pub fn doctor_local(
+    client: &ApiClient,
+    provider: Option<&str>,
+    harness: Option<&str>,
+) -> Result<()> {
+    let plan = resolve_agent_harness(client, provider, harness)?;
+    let _ = prepare_agent_harness(&plan)?;
+    let harness_label = if plan.harness.trim().is_empty() {
+        plan.provider.clone()
+    } else {
+        format!("{}/{}", plan.provider, plan.harness)
+    };
+    println!("agent harness {:?} ok", harness_label);
+    Ok(())
+}
+
+fn resolve_agent_harness(
+    client: &ApiClient,
+    provider: Option<&str>,
+    harness: Option<&str>,
+) -> Result<AgentHarnessPlan> {
+    let body = AgentHarnessResolveRequest { provider, harness };
+    let resp = client
+        .post(HARNESSES_RESOLVE_PATH, &body)
+        .context("failed to resolve agent harness")?;
+    serde_json::from_value(resp).context("invalid agent harness response")
+}
+
+struct PreparedAgentHarness {
+    command: PathBuf,
+    env: Vec<String>,
+    working_directory: Option<PathBuf>,
+}
+
+fn prepare_agent_harness(plan: &AgentHarnessPlan) -> Result<PreparedAgentHarness> {
+    let env = effective_harness_env(&plan.env)?;
+    let working_directory = if plan.working_directory.trim().is_empty() {
+        None
+    } else {
+        let path = PathBuf::from(plan.working_directory.trim());
+        let metadata = std::fs::metadata(&path).with_context(|| {
+            format!(
+                "agent harness working directory {:?} is not accessible",
+                path.display().to_string()
+            )
+        })?;
+        if !metadata.is_dir() {
+            bail!(
+                "agent harness working directory {:?} is not a directory",
+                path.display().to_string()
+            );
+        }
+        Some(path)
+    };
+
+    for required in &plan.required_commands {
+        let required = required.trim();
+        if required.is_empty() {
+            continue;
+        }
+        find_command(required, working_directory.as_deref(), &env)
+            .with_context(|| format!("required command {:?} is not available", required))?;
     }
-    if let Some(provider) = provider {
-        cmd.arg("--provider").arg(provider);
+    let command = find_command(plan.command.trim(), working_directory.as_deref(), &env)
+        .with_context(|| format!("agent harness command {:?} is not available", plan.command))?;
+    Ok(PreparedAgentHarness {
+        command,
+        env: env_list(env),
+        working_directory,
+    })
+}
+
+fn launch_agent_harness(plan: &AgentHarnessPlan, prepared: &PreparedAgentHarness) -> Result<()> {
+    let mut cmd = ProcessCommand::new(&prepared.command);
+    cmd.args(&plan.args);
+    if let Some(working_directory) = &prepared.working_directory {
+        cmd.current_dir(working_directory);
     }
+    cmd.env_clear();
+    cmd.envs(
+        prepared
+            .env
+            .iter()
+            .filter_map(|entry| entry.split_once('=')),
+    );
     let status = cmd
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .with_context(|| {
-            format!(
-                "failed to start gestaltd local agent helper at {}",
-                helper.display()
-            )
-        })?;
+        .with_context(|| format!("failed to start agent harness {:?}", plan.provider))?;
     if status.success() {
         return Ok(());
     }
@@ -89,22 +184,103 @@ fn helper_exit_code(status: ExitStatus) -> i32 {
     1
 }
 
-fn find_gestaltd_helper() -> Result<PathBuf> {
-    let current_exe = std::env::current_exe().context("failed to resolve current executable")?;
-    if let Some(parent) = current_exe.parent() {
-        let sibling = parent.join(helper_binary_name());
-        if sibling.exists() {
-            return Ok(sibling);
-        }
+fn effective_harness_env(
+    overlay: &Map<String, Value>,
+) -> Result<std::collections::BTreeMap<String, String>> {
+    let mut env: std::collections::BTreeMap<String, String> = std::env::vars().collect();
+    for (key, value) in overlay {
+        let Some(value) = value.as_str() else {
+            bail!("agent harness env {:?} must be a string", key);
+        };
+        env.insert(key.clone(), value.to_string());
     }
-    Ok(PathBuf::from(helper_binary_name()))
+    Ok(env)
 }
 
-fn helper_binary_name() -> &'static str {
-    if cfg!(windows) {
-        "gestaltd.exe"
-    } else {
-        "gestaltd"
+fn env_list(env: std::collections::BTreeMap<String, String>) -> Vec<String> {
+    env.into_iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect()
+}
+
+fn find_command(
+    command: &str,
+    working_directory: Option<&Path>,
+    env: &std::collections::BTreeMap<String, String>,
+) -> Result<PathBuf> {
+    if command.trim().is_empty() {
+        bail!("command is required");
+    }
+    let candidate = PathBuf::from(command);
+    if has_path_separator(command) {
+        let resolved = if candidate.is_absolute() {
+            candidate
+        } else if let Some(working_directory) = working_directory {
+            working_directory.join(candidate)
+        } else {
+            std::env::current_dir()
+                .context("failed to resolve current directory")?
+                .join(candidate)
+        };
+        if is_executable_file(&resolved) {
+            return Ok(resolved);
+        }
+        bail!("{command} not found");
+    }
+
+    let path_value = env.get("PATH").map(String::as_str).unwrap_or("");
+    for dir in std::env::split_paths(path_value) {
+        let dir = if dir.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            dir
+        };
+        let dir = if !dir.is_absolute() {
+            working_directory
+                .map(|working_directory| working_directory.join(&dir))
+                .unwrap_or(dir)
+        } else {
+            dir
+        };
+        let resolved = dir.join(command);
+        if is_executable_file(&resolved) {
+            return Ok(resolved);
+        }
+        #[cfg(windows)]
+        {
+            let resolved = dir.join(format!("{command}.exe"));
+            if is_executable_file(&resolved) {
+                return Ok(resolved);
+            }
+        }
+    }
+    bail!("{command} not found in PATH");
+}
+
+fn has_path_separator(command: &str) -> bool {
+    command.contains('/')
+        || if cfg!(windows) {
+            command.contains('\\')
+        } else {
+            false
+        }
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
     }
 }
 

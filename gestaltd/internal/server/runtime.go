@@ -89,6 +89,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		ConnectionAuth:        result.ConnectionAuth,
 		ManualConnectionAuth:  result.ManualConnectionAuth,
 		PluginDefs:            cfg.Plugins,
+		AgentDefs:             cfg.Providers.Agent,
 		Authorizer:            result.Authorizer,
 		AuthorizationProvider: result.AuthorizationProvider,
 		PublicBaseURL:         cfg.Server.BaseURL,

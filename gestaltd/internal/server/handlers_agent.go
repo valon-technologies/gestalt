@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -146,6 +147,21 @@ type agentProviderCapabilitiesInfo struct {
 	ReasoningSummaries   bool     `json:"reasoningSummaries,omitempty"`
 	BoundedListHydration bool     `json:"boundedListHydration,omitempty"`
 	SupportedToolSources []string `json:"supportedToolSources,omitempty"`
+}
+
+type agentHarnessResolveRequest struct {
+	ProviderName string `json:"provider,omitempty"`
+	HarnessName  string `json:"harness,omitempty"`
+}
+
+type agentHarnessPlanInfo struct {
+	Provider         string            `json:"provider"`
+	Harness          string            `json:"harness,omitempty"`
+	Command          string            `json:"command"`
+	Args             []string          `json:"args,omitempty"`
+	Env              map[string]string `json:"env,omitempty"`
+	WorkingDirectory string            `json:"workingDirectory,omitempty"`
+	RequiredCommands []string          `json:"requiredCommands,omitempty"`
 }
 
 type agentTurnInfo struct {
@@ -307,6 +323,50 @@ func (s *Server) listAgentProviders(w http.ResponseWriter, r *http.Request) {
 		out.Providers = append(out.Providers, info)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	if s == nil || s.agent == nil {
+		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
+		return
+	}
+	var req agentHarnessResolveRequest
+	if r.Body != nil {
+		defer func() { _ = r.Body.Close() }()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	providerName, _, err := s.agent.ResolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		s.writeAgentManagerError(w, r, "provider", "", nil, err)
+		return
+	}
+	if !s.allowsAgentProvider(r.Context(), p, providerName) {
+		s.writeAgentManagerError(w, r, "provider", providerName, nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName))
+		return
+	}
+	entry := s.agentDefs[providerName]
+	effective, err := config.ResolveProviderEntryAgentHarness(providerName, entry, req.HarnessName)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	harness := effective.Harness
+	writeJSON(w, http.StatusOK, agentHarnessPlanInfo{
+		Provider:         effective.ProviderName,
+		Harness:          effective.HarnessName,
+		Command:          strings.TrimSpace(harness.Command),
+		Args:             append([]string(nil), harness.Args...),
+		Env:              maps.Clone(harness.Env),
+		WorkingDirectory: strings.TrimSpace(harness.WorkingDirectory),
+		RequiredCommands: append([]string(nil), harness.RequiredCommands...),
+	})
 }
 
 func (s *Server) getAgentSession(w http.ResponseWriter, r *http.Request) {
@@ -734,6 +794,16 @@ func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*pri
 		return nil, false
 	}
 	return p, true
+}
+
+func (s *Server) allowsAgentProvider(ctx context.Context, p *principal.Principal, providerName string) bool {
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return false
+	}
+	if s == nil || s.authorizer == nil {
+		return true
+	}
+	return s.authorizer.AllowProvider(ctx, p, providerName)
 }
 
 func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {

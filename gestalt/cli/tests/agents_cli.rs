@@ -10,24 +10,13 @@ use std::time::{Duration, Instant};
 use support::*;
 
 #[cfg(unix)]
-fn write_fake_gestaltd(dir: &Path, script: &str) {
+fn write_executable(path: &Path, script: &str) {
     use std::os::unix::fs::PermissionsExt;
 
-    let path = dir.join("gestaltd");
-    std::fs::write(&path, script).unwrap();
-    let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+    std::fs::write(path, script).unwrap();
+    let mut permissions = std::fs::metadata(path).unwrap().permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(path, permissions).unwrap();
-}
-
-fn prepend_path(dir: &Path) -> String {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths = vec![dir.to_path_buf()];
-    paths.extend(std::env::split_paths(&existing));
-    std::env::join_paths(paths)
-        .unwrap()
-        .to_string_lossy()
-        .into_owned()
 }
 
 const SESSION_JSON: &str = r#"{
@@ -717,7 +706,14 @@ fn test_cli_runs_interactive_agent_session() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
+        .args([
+            "agent",
+            "--cloud",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
         .args(["--tool", "tracker:searchItems"])
         .write_stdin("hello\\\nthere\n")
         .assert()
@@ -2536,106 +2532,157 @@ fn test_cli_resume_fails_without_active_agent_session() {
 
 #[test]
 #[cfg(unix)]
-fn test_cli_agent_defaults_to_local_helper_and_preserves_status() {
+fn test_cli_agent_defaults_to_resolved_harness_and_preserves_status() {
     let home = tempfile::tempdir().unwrap();
-    let helper_dir = tempfile::tempdir().unwrap();
-    let args_path = home.path().join("helper-args.txt");
-    write_fake_gestaltd(
-        helper_dir.path(),
+    let harness_path = home.path().join("harness.sh");
+    write_executable(
+        &harness_path,
         r#"#!/bin/sh
-printf 'helper stdout\n'
-printf 'helper stderr\n' >&2
-printf '%s\n' "$*" > "$GESTALT_HELPER_ARGS"
+printf 'harness stdout\n'
+printf 'harness stderr\n' >&2
+printf 'value=%s\n' "$HARNESS_VALUE"
 exit 7
 "#,
     );
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/harnesses/resolve",
+        StatusCode::OK
+    )
+    .match_body(Matcher::JsonString(
+        r#"{"provider":"local","harness":"fast"}"#.to_string(),
+    ))
+    .with_body(format!(
+        r#"{{
+            "provider":"local",
+            "harness":"fast",
+            "command":{},
+            "args":[],
+            "env":{{"HARNESS_VALUE":"from-server"}}
+        }}"#,
+        serde_json::to_string(harness_path.to_str().unwrap()).unwrap()
+    ))
+    .create();
 
     cli_command(home.path())
-        .env("PATH", prepend_path(helper_dir.path()))
-        .env("GESTALT_HELPER_ARGS", &args_path)
-        .args(["agent", "--config", "config.yaml", "--provider", "local"])
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent", "--provider", "local", "--harness", "fast"])
         .assert()
         .code(7)
-        .stdout(predicate::str::contains("helper stdout"))
-        .stderr(predicate::str::contains("helper stderr"));
+        .stdout(predicate::str::contains("harness stdout"))
+        .stdout(predicate::str::contains("value=from-server"))
+        .stderr(predicate::str::contains("harness stderr"));
 
-    let helper_args = std::fs::read_to_string(args_path).unwrap();
-    assert_eq!(
-        helper_args,
-        "agent launch --config config.yaml --provider local\n"
-    );
+    mock.assert();
 }
 
 #[test]
 #[cfg(unix)]
-fn test_cli_agent_default_local_ignores_gestalt_url_env() {
+fn test_cli_agent_default_local_uses_gestalt_url_env() {
     let home = tempfile::tempdir().unwrap();
-    let helper_dir = tempfile::tempdir().unwrap();
-    write_fake_gestaltd(
-        helper_dir.path(),
+    let harness_path = home.path().join("harness.sh");
+    write_executable(
+        &harness_path,
         r#"#!/bin/sh
-printf 'local helper\n'
+printf 'local harness\n'
 exit 0
 "#,
     );
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/harnesses/resolve",
+        StatusCode::OK
+    )
+    .match_body(Matcher::JsonString(r#"{}"#.to_string()))
+    .with_body(format!(
+        r#"{{"provider":"default-agent","harness":"default","command":{}}}"#,
+        serde_json::to_string(harness_path.to_str().unwrap()).unwrap()
+    ))
+    .create();
 
     cli_command(home.path())
-        .env("PATH", prepend_path(helper_dir.path()))
-        .env("GESTALT_URL", "http://127.0.0.1:9")
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .env("GESTALT_URL", server.url())
         .args(["agent"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("local helper"));
+        .stdout(predicate::str::contains("local harness"));
+
+    mock.assert();
 }
 
 #[test]
 #[cfg(unix)]
-fn test_cli_agent_doctor_allows_provider_after_subcommand() {
+fn test_cli_agent_doctor_allows_provider_and_harness_after_subcommand() {
     let home = tempfile::tempdir().unwrap();
-    let helper_dir = tempfile::tempdir().unwrap();
-    let args_path = home.path().join("doctor-args.txt");
-    write_fake_gestaltd(
-        helper_dir.path(),
-        r#"#!/bin/sh
-printf '%s\n' "$*" > "$GESTALT_HELPER_ARGS"
-exit 0
-"#,
-    );
+    let harness_path = home.path().join("harness.sh");
+    write_executable(&harness_path, "#!/bin/sh\nexit 0\n");
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/harnesses/resolve",
+        StatusCode::OK
+    )
+    .match_body(Matcher::JsonString(
+        r#"{"provider":"local","harness":"fast"}"#.to_string(),
+    ))
+    .with_body(format!(
+        r#"{{"provider":"local","harness":"fast","command":{}}}"#,
+        serde_json::to_string(harness_path.to_str().unwrap()).unwrap()
+    ))
+    .create();
 
     cli_command(home.path())
-        .env("PATH", prepend_path(helper_dir.path()))
-        .env("GESTALT_HELPER_ARGS", &args_path)
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
         .args([
             "agent",
             "doctor",
             "--provider",
             "local",
-            "--config",
-            "config.yaml",
+            "--harness",
+            "fast",
         ])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains("agent harness \"local/fast\" ok"));
 
-    let helper_args = std::fs::read_to_string(args_path).unwrap();
-    assert_eq!(
-        helper_args,
-        "agent doctor --config config.yaml --provider local\n"
-    );
+    mock.assert();
 }
 
 #[test]
-fn test_cli_agent_local_reports_missing_helper() {
+fn test_cli_agent_local_reports_missing_harness_command() {
     let home = tempfile::tempdir().unwrap();
-    let empty_path = tempfile::tempdir().unwrap();
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/harnesses/resolve",
+        StatusCode::OK
+    )
+    .with_body(r#"{"provider":"local","harness":"default","command":"missing-harness-command"}"#)
+    .create();
 
     cli_command(home.path())
-        .env("PATH", empty_path.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
         .args(["agent"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to start gestaltd local agent helper",
+            "agent harness command \"missing-harness-command\" is not available",
         ));
+
+    mock.assert();
 }
 
 #[test]
