@@ -359,7 +359,13 @@ func TestManagerCachesProviderRoutesForOwnedSessionAndTurn(t *testing.T) {
 		},
 		RunGrants: newAgentManagerTestRunGrants(t),
 	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+		Identity: &core.UserIdentity{
+			Email:       "ada@example.com",
+			DisplayName: "Ada Lovelace",
+		},
+	}
 
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
 		ProviderName: "alpha",
@@ -435,7 +441,13 @@ func TestManagerUsesDurableProviderRoutesAcrossManagers(t *testing.T) {
 		RunGrants:  newAgentManagerTestRunGrants(t),
 		RouteStore: newTestRouteStore(t, db),
 	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+		Identity: &core.UserIdentity{
+			Email:       "ada@example.com",
+			DisplayName: "Ada Lovelace",
+		},
+	}
 
 	session, err := managerA.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
 		ProviderName: "alpha",
@@ -885,7 +897,13 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 		},
 		RunGrants: grants,
 	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+		Identity: &core.UserIdentity{
+			Email:       "ada@example.com",
+			DisplayName: "Ada Lovelace",
+		},
+	}
 
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
 		ProviderName: "alpha",

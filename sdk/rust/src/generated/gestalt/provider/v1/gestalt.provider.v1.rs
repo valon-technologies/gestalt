@@ -240,6 +240,15 @@ pub struct SubjectContext {
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
 }
+/// ExternalIdentityContext identifies the caller in a provider-owned external
+/// identity namespace, as discovered from that caller's stored connection.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalIdentityContext {
+    #[prost(string, tag = "1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub id: ::prost::alloc::string::String,
+}
 /// StringList is a helper map value for repeated HTTP header and query values.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StringList {
@@ -286,6 +295,12 @@ pub struct RequestContext {
     pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub host: ::core::option::Option<HostContext>,
+    /// Original agent caller when an agent tool executes with delegated run-as identity.
+    #[prost(message, optional, tag = "6")]
+    pub agent_subject: ::core::option::Option<SubjectContext>,
+    /// The original agent caller's provider-owned external identity, when known.
+    #[prost(message, optional, tag = "7")]
+    pub agent_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.

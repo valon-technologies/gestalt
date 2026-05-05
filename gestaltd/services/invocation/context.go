@@ -52,6 +52,11 @@ type RunAsAuditContext struct {
 	RunAsSubject *core.RunAsSubject
 }
 
+type ExternalIdentityContext struct {
+	Type string
+	ID   string
+}
+
 type CredentialContext struct {
 	Mode       core.ConnectionMode
 	SubjectID  string
@@ -66,6 +71,7 @@ type HostContext struct {
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
+type agentExternalIdentityCtxKey struct{}
 type accessCtxKey struct{}
 type hostCtxKey struct{}
 type workflowCtxKey struct{}
@@ -125,6 +131,22 @@ func WithCredentialContext(ctx context.Context, cred CredentialContext) context.
 func CredentialContextFromContext(ctx context.Context) CredentialContext {
 	cred, _ := ctx.Value(credentialCtxKey{}).(CredentialContext)
 	return cred
+}
+
+func WithAgentExternalIdentityContext(ctx context.Context, identity ExternalIdentityContext) context.Context {
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	if identity.Type == "" || identity.ID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, agentExternalIdentityCtxKey{}, identity)
+}
+
+func AgentExternalIdentityContextFromContext(ctx context.Context) ExternalIdentityContext {
+	identity, _ := ctx.Value(agentExternalIdentityCtxKey{}).(ExternalIdentityContext)
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	return identity
 }
 
 func WithAccessContext(ctx context.Context, access AccessContext) context.Context {
