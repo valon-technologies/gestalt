@@ -1386,6 +1386,30 @@ plugins:
         exposure: internal
 ```
 
+Use `exposure: internal` for deployer-owned accounts that only provider code
+should call. The platform connection supplies the upstream token; the target
+provider should still enforce any domain-specific policy, such as the expected
+mailbox address and the operation allowlist.
+
+Internal callers select that binding when invoking the target plugin:
+
+```ts
+const invoker = new gestalt.PluginInvoker(request);
+
+await invoker.invoke(
+  "gmail",
+  "messages.list",
+  { q: "to:athena-implementation@valon.com newer_than:7d" },
+  { connection: "platform" },
+);
+```
+
+If the target provider deliberately manages its own upstream credentials, such
+as by minting a short-lived Google domain-wide-delegation token from provider
+config, declare the nested grant with `credentialMode: none` instead. That skips
+Gestalt credential resolution for the call and leaves token minting and policy
+enforcement to the provider.
+
 The effective connection is resolved from the most specific declaration first.
 A manifest surface can name a connection with `spec.surfaces.<surface>.connection`,
 and declarative REST operations can name a connection directly. If no surface
