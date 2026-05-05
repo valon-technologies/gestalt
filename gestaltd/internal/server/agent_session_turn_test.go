@@ -1640,7 +1640,7 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	}
 }
 
-func TestAgentTurnEventStreamClosesQuietlyOnContextCancellation(t *testing.T) {
+func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
@@ -1730,22 +1730,23 @@ func TestAgentTurnEventStreamClosesQuietlyOnContextCancellation(t *testing.T) {
 	provider.listTurnEventsErr = context.Canceled
 	provider.mu.Unlock()
 
-	var body strings.Builder
+	var errorFrame string
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
 			t.Fatalf("read stream body: %v", err)
 		}
-		body.WriteString(line)
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "data: ") {
+			errorFrame = strings.TrimPrefix(line, "data: ")
+			break
+		}
 	}
 	if streamCtx.Err() != nil {
-		t.Fatal("stream did not close before context deadline")
+		t.Fatal("stream error frame did not arrive before context deadline")
 	}
-	if strings.Contains(body.String(), "stream.error") || strings.Contains(body.String(), "agent event stream failed") {
-		t.Fatalf("stream body = %q, did not expect public stream error", body.String())
+	if !strings.Contains(errorFrame, `"type":"stream.error"`) {
+		t.Fatalf("stream error frame = %s, want stream.error event", errorFrame)
 	}
 }
 

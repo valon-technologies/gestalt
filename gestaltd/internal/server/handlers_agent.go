@@ -666,18 +666,16 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func agentTurnEventStreamContextDone(ctx context.Context, err error) bool {
-	if err == nil {
+	if err == nil || ctx == nil {
 		return false
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
+	ctxErr := ctx.Err()
+	if ctxErr == nil {
+		return false
 	}
-	if ctx != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
-			return true
-		}
-	}
-	return false
+	return errors.Is(err, ctxErr) ||
+		errors.Is(err, context.Canceled) && errors.Is(ctxErr, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) && errors.Is(ctxErr, context.DeadlineExceeded)
 }
 
 func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Request) {
