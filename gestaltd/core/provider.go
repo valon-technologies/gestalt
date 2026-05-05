@@ -139,3 +139,27 @@ type DiscoveryConfig struct {
 	NamePath  string
 	Metadata  map[string]string
 }
+
+type PostConnectConfig struct {
+	Request          PostConnectRequestConfig
+	SourcePath       string
+	Success          *PostConnectSuccessCheck
+	ExternalIdentity *PostConnectExternalIdentityConfig
+	Metadata         map[string]string
+}
+
+type PostConnectRequestConfig struct {
+	Method  string
+	URL     string
+	Headers map[string]string
+}
+
+type PostConnectSuccessCheck struct {
+	Path   string
+	Equals any
+}
+
+type PostConnectExternalIdentityConfig struct {
+	Type string
+	ID   string
+}

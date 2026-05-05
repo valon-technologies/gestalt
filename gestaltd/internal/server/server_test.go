@@ -15708,6 +15708,149 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 	})
 
+	t.Run("declarative post-connect stores external identity relationship", func(t *testing.T) {
+		t.Parallel()
+
+		identitySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Fatalf("identity request method = %q, want GET", r.Method)
+			}
+			if got := r.Header.Get("Authorization"); got != "Bearer pagerduty-token" {
+				t.Fatalf("identity Authorization = %q, want bearer token", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"user":{"id":"P12345","email":"user@example.com"}}`)
+		}))
+		testutil.CloseOnCleanup(t, identitySrv)
+
+		svc := testutil.NewStubServices(t)
+		externalIdentityID := testExternalIdentityResourceID("pagerduty_identity", "user:P12345")
+		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
+		baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
+		if err != nil {
+			t.Fatalf("authorization.New: %v", err)
+		}
+		authz := mustProviderBackedAuthorizer(t, baseAuthz, authzProvider)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://identity.pagerduty.com/oauth/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "pagerduty-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		prov := &declarative.Base{
+			IntegrationName:    "pagerduty",
+			IntegrationDisplay: "PagerDuty",
+			IntegrationDesc:    "PagerDuty",
+			ConnMode:           core.ConnectionModeUser,
+			HTTPClient:         identitySrv.Client(),
+			PostConnectConfigs: map[string]*core.PostConnectConfig{
+				"default": {
+					Request: core.PostConnectRequestConfig{
+						Method: http.MethodGet,
+						URL:    identitySrv.URL,
+					},
+					SourcePath: "user",
+					ExternalIdentity: &core.PostConnectExternalIdentityConfig{
+						Type: "pagerduty_identity",
+						ID:   "user:{id}",
+					},
+					Metadata: map[string]string{
+						"pagerduty.user_id": "id",
+					},
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "pagerduty-user@example.com"}, nil
+				},
+			}
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.DefaultConnection = map[string]string{"pagerduty": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("pagerduty", handler)
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.AuthorizationProvider = authzProvider
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		startBody := bytes.NewBufferString(`{"integration":"pagerduty"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer session-token")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 200 from start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		noRedirect := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusSeeOther {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "pagerduty-user@example.com")
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+		if len(tokens) == 0 {
+			t.Fatal("expected token to be stored")
+		}
+		var metadata map[string]string
+		if err := json.Unmarshal([]byte(tokens[0].MetadataJSON), &metadata); err != nil {
+			t.Fatalf("unmarshal metadata: %v", err)
+		}
+		if !reflect.DeepEqual(metadata, map[string]string{
+			"pagerduty.user_id":              "P12345",
+			"gestalt.external_identity.type": "pagerduty_identity",
+			"gestalt.external_identity.id":   "user:P12345",
+		}) {
+			t.Fatalf("stored metadata = %+v", metadata)
+		}
+		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+			Relation: authorization.ProviderExternalIdentityRelationAssume,
+			Resource: &core.ResourceRef{
+				Type: authorization.ProviderResourceTypeExternalIdentity,
+				Id:   externalIdentityID,
+			},
+		})
+		if err != nil {
+			t.Fatalf("ReadRelationships after connect: %v", err)
+		}
+		if len(respAuthz.GetRelationships()) != 1 {
+			t.Fatalf("relationships after connect = %+v, want one", respAuthz.GetRelationships())
+		}
+		if got := respAuthz.GetRelationships()[0].GetSubject().GetId(); got != principal.UserSubjectID(u.ID) {
+			t.Fatalf("linked subject = %q, want %q", got, principal.UserSubjectID(u.ID))
+		}
+	})
+
 	t.Run("selection_required", func(t *testing.T) {
 		t.Parallel()
 

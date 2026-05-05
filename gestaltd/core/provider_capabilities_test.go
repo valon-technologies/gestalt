@@ -37,6 +37,7 @@ type postConnectProbeProvider struct {
 	coretesting.StubIntegration
 	supports bool
 	called   bool
+	err      error
 }
 
 func (p *postConnectProbeProvider) SupportsPostConnect() bool {
@@ -45,6 +46,9 @@ func (p *postConnectProbeProvider) SupportsPostConnect() bool {
 
 func (p *postConnectProbeProvider) PostConnect(context.Context, *core.ExternalCredential) (map[string]string, error) {
 	p.called = true
+	if p.err != nil {
+		return nil, p.err
+	}
 	return map[string]string{"ok": "true"}, nil
 }
 
@@ -91,6 +95,22 @@ func TestCapabilityHelpersRespectExplicitSupportFlags(t *testing.T) {
 	}
 	if postConnect.called {
 		t.Fatal("explicit false support should prevent PostConnect from being called")
+	}
+
+	unsupportedPostConnect := &postConnectProbeProvider{
+		StubIntegration: coretesting.StubIntegration{N: "post-connect"},
+		supports:        true,
+		err:             core.ErrPostConnectUnsupported,
+	}
+	metadata, supported, err = core.PostConnect(context.Background(), unsupportedPostConnect, &core.ExternalCredential{})
+	if err != nil {
+		t.Fatalf("PostConnect unsupported connection: %v", err)
+	}
+	if supported {
+		t.Fatal("expected provider-level unsupported post-connect to report unsupported")
+	}
+	if metadata != nil {
+		t.Fatalf("expected nil metadata, got %#v", metadata)
 	}
 }
 

@@ -354,6 +354,7 @@ func cloneConnectionDef(src ConnectionDef) ConnectionDef {
 	dst.Auth = cloneConnectionAuthDef(src.Auth)
 	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
+	dst.PostConnect = providermanifestv1.CloneProviderPostConnect(src.PostConnect)
 	return dst
 }
 

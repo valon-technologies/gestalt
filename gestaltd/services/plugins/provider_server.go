@@ -103,9 +103,12 @@ func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnect
 	if !core.SupportsPostConnect(s.provider) {
 		return nil, status.Error(codes.Unimplemented, "provider does not support post connect")
 	}
-	metadata, _, err := core.PostConnect(ctx, s.provider, postConnectCredentialFromProto(req.GetToken()))
+	metadata, supported, err := core.PostConnect(ctx, s.provider, postConnectCredentialFromProto(req.GetToken()))
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "post connect: %v", err)
+	}
+	if !supported {
+		return nil, status.Error(codes.Unimplemented, "provider does not support post connect for credential")
 	}
 	return &proto.PostConnectResponse{Metadata: metadata}, nil
 }

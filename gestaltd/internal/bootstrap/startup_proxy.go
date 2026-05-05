@@ -169,6 +169,13 @@ func (p *startupProviderProxy) SupportsHTTPSubject() bool {
 	}
 	return core.SupportsHTTPSubject(provider)
 }
+func (p *startupProviderProxy) SupportsPostConnect() bool {
+	provider := p.resolved()
+	if provider == nil {
+		return len(p.spec.PostConnectConfigs) > 0
+	}
+	return core.SupportsPostConnect(provider)
+}
 func (p *startupProviderProxy) Catalog() *catalog.Catalog {
 	if p.spec.Catalog == nil {
 		return nil
@@ -203,6 +210,24 @@ func (p *startupProviderProxy) ResolveHTTPSubject(ctx context.Context, req *core
 	}
 	subject, _, err := core.ResolveHTTPSubject(ctx, provider, req)
 	return subject, err
+}
+
+func (p *startupProviderProxy) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
+	done, err := p.beginWorkflowWait(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metadata, supported, err := core.PostConnect(ctx, provider, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
 }
 
 func (p *startupProviderProxy) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {

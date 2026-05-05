@@ -344,6 +344,14 @@ func (p *falsePositivePostConnectProvider) PostConnect(_ context.Context, _ *cor
 	return nil, core.ErrPostConnectUnsupported
 }
 
+type unsupportedPostConnectProvider struct {
+	*fakeProvider
+}
+
+func (p *unsupportedPostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
+	return nil, core.ErrPostConnectUnsupported
+}
+
 func TestMergedPostConnectSkipsProvidersThatAdvertiseNoSupport(t *testing.T) {
 	t.Parallel()
 
@@ -367,6 +375,43 @@ func TestMergedPostConnectSkipsProvidersThatAdvertiseNoSupport(t *testing.T) {
 
 	got, supported, err := core.PostConnect(context.Background(), merged, &core.ExternalCredential{
 		Integration: "slack",
+		Connection:  "default",
+		AccessToken: "tok",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected core.PostConnect to report support")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
+	}
+}
+
+func TestMergedPostConnectSkipsUnsupportedProviderForConnection(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]string{
+		"gestalt.external_identity.type": "pagerduty_identity",
+		"gestalt.external_identity.id":   "user:P12345",
+	}
+
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &unsupportedPostConnectProvider{
+			fakeProvider: &fakeProvider{name: "first"},
+		}},
+		composite.BoundProvider{Provider: &fakePostConnectProvider{
+			fakeProvider: &fakeProvider{name: "pagerduty"},
+			metadata:     want,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, supported, err := core.PostConnect(context.Background(), merged, &core.ExternalCredential{
+		Integration: "pagerduty",
 		Connection:  "default",
 		AccessToken: "tok",
 	})

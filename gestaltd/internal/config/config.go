@@ -1529,16 +1529,17 @@ func (s ServerConfig) ManagementBaseURL() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection.
 type ConnectionDef struct {
-	Ref               string                                `yaml:"ref,omitempty"`
-	DisplayName       string                                `yaml:"displayName,omitempty"`
-	Mode              providermanifestv1.ConnectionMode     `yaml:"mode"`
-	Exposure          providermanifestv1.ConnectionExposure `yaml:"exposure,omitempty"`
-	Auth              ConnectionAuthDef                     `yaml:"auth"`
-	ConnectionParams  map[string]ConnectionParamDef         `yaml:"params"`
-	CredentialRefresh *CredentialRefreshDef                 `yaml:"credentialRefresh,omitempty"`
-	Discovery         *providermanifestv1.ProviderDiscovery `yaml:"-"`
-	ConnectionID      string                                `yaml:"-"`
-	BindingResolved   bool                                  `yaml:"-"`
+	Ref               string                                  `yaml:"ref,omitempty"`
+	DisplayName       string                                  `yaml:"displayName,omitempty"`
+	Mode              providermanifestv1.ConnectionMode       `yaml:"mode"`
+	Exposure          providermanifestv1.ConnectionExposure   `yaml:"exposure,omitempty"`
+	Auth              ConnectionAuthDef                       `yaml:"auth"`
+	ConnectionParams  map[string]ConnectionParamDef           `yaml:"params"`
+	CredentialRefresh *CredentialRefreshDef                   `yaml:"credentialRefresh,omitempty"`
+	Discovery         *providermanifestv1.ProviderDiscovery   `yaml:"-"`
+	PostConnect       *providermanifestv1.ProviderPostConnect `yaml:"-"`
+	ConnectionID      string                                  `yaml:"-"`
+	BindingResolved   bool                                    `yaml:"-"`
 }
 
 type CredentialRefreshDef = providermanifestv1.CredentialRefreshConfig
@@ -1715,6 +1716,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	}
 	if src.Discovery != nil {
 		dst.Discovery = src.Discovery
+	}
+	if src.PostConnect != nil {
+		dst.PostConnect = providermanifestv1.CloneProviderPostConnect(src.PostConnect)
 	}
 	if src.ConnectionID != "" {
 		dst.ConnectionID = src.ConnectionID

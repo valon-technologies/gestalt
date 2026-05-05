@@ -2393,6 +2393,121 @@ paths:
 	}
 }
 
+func TestSpecLoadedOpenAPIProviderSupportsPostConnectOnNonSurfaceConnection(t *testing.T) {
+	t.Parallel()
+
+	var gotAuth atomic.Value
+	var gotHeader atomic.Value
+	identitySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth.Store(r.Header.Get("Authorization"))
+		gotHeader.Store(r.Header.Get("X-Identity"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"user":{"id":"U123"}}`))
+	}))
+	t.Cleanup(identitySrv.Close)
+
+	root := t.TempDir()
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+	openapiPath := filepath.Join(root, "openapi.yaml")
+	openapiDoc := `openapi: "3.1.0"
+info:
+  title: Example
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com
+paths:
+  /items:
+    get:
+      operationId: list_items
+      responses:
+        "200":
+          description: OK
+`
+	if err := os.WriteFile(openapiPath, []byte(openapiDoc), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
+	}
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Kind:        providermanifestv1.KindPlugin,
+					DisplayName: "Example",
+					Description: "OpenAPI example",
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							OpenAPI: &providermanifestv1.OpenAPISurface{
+								Document:   "openapi.yaml",
+								Connection: "api",
+							},
+						},
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"api": {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+							},
+							"identity": {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+								PostConnect: &providermanifestv1.ProviderPostConnect{
+									Request: providermanifestv1.ProviderPostConnectRequest{
+										Method: http.MethodGet,
+										URL:    identitySrv.URL,
+										Headers: map[string]string{
+											"X-Identity": "true",
+										},
+									},
+									SourcePath: "user",
+									Metadata: map[string]string{
+										"identity.user_id": "id",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get(example): %v", err)
+	}
+
+	metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
+		Integration:  "example",
+		Connection:   "identity",
+		AccessToken:  "identity-token",
+		RefreshToken: "refresh-token",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected post-connect support for identity connection")
+	}
+	if got := metadata["identity.user_id"]; got != "U123" {
+		t.Fatalf("identity.user_id = %q, want U123", got)
+	}
+	if got, _ := gotAuth.Load().(string); got != "Bearer identity-token" {
+		t.Fatalf("Authorization = %q, want bearer token", got)
+	}
+	if got, _ := gotHeader.Load().(string); got != "true" {
+		t.Fatalf("X-Identity = %q, want true", got)
+	}
+}
+
 func TestHybridExecutableProviderAppliesAllowedOperationsToStaticAndOpenAPICatalogs(t *testing.T) {
 	t.Parallel()
 

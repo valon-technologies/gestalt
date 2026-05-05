@@ -47,6 +47,7 @@ type ResolvedConnectionDef struct {
 	Auth              ConnectionAuthDef
 	Params            map[string]ConnectionParamDef
 	Discovery         *providermanifestv1.ProviderDiscovery
+	PostConnect       *providermanifestv1.ProviderPostConnect
 	CredentialRefresh *CredentialRefreshDef
 	Source            ResolvedConnectionSource
 }
@@ -60,6 +61,7 @@ func (r ResolvedConnectionDef) ConnectionDef() ConnectionDef {
 		Auth:              r.Auth,
 		ConnectionParams:  r.Params,
 		Discovery:         r.Discovery,
+		PostConnect:       providermanifestv1.CloneProviderPostConnect(r.PostConnect),
 		CredentialRefresh: r.CredentialRefresh,
 		ConnectionID:      r.ConnectionID,
 	}
@@ -590,6 +592,9 @@ func ResolveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *providerma
 			if def.Discovery != nil {
 				conn.Discovery = def.Discovery
 			}
+			if def.PostConnect != nil {
+				conn.PostConnect = providermanifestv1.CloneProviderPostConnect(def.PostConnect)
+			}
 		}
 	}
 	if plugin != nil {
@@ -642,6 +647,7 @@ func resolvedConnectionDef(name string, conn ConnectionDef, source ResolvedConne
 		Auth:              conn.Auth,
 		Params:            conn.ConnectionParams,
 		Discovery:         conn.Discovery,
+		PostConnect:       providermanifestv1.CloneProviderPostConnect(conn.PostConnect),
 		CredentialRefresh: conn.CredentialRefresh,
 		Source:            source,
 	}

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -2157,6 +2158,26 @@ func cloneStaticProviderSpec(spec pluginservice.StaticProviderSpec) pluginservic
 	if spec.DiscoveryConfig != nil {
 		discovery := *spec.DiscoveryConfig
 		out.DiscoveryConfig = &discovery
+	}
+	if spec.PostConnectConfigs != nil {
+		out.PostConnectConfigs = make(map[string]*core.PostConnectConfig, len(spec.PostConnectConfigs))
+		for name, cfg := range spec.PostConnectConfigs {
+			if cfg == nil {
+				continue
+			}
+			clone := *cfg
+			clone.Request.Headers = maps.Clone(cfg.Request.Headers)
+			if cfg.Success != nil {
+				success := *cfg.Success
+				clone.Success = &success
+			}
+			if cfg.ExternalIdentity != nil {
+				externalIdentity := *cfg.ExternalIdentity
+				clone.ExternalIdentity = &externalIdentity
+			}
+			clone.Metadata = maps.Clone(cfg.Metadata)
+			out.PostConnectConfigs[name] = &clone
+		}
 	}
 	return out
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime"
+	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -548,6 +550,9 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 		if conn == nil {
 			continue
 		}
+		if err := validateProviderPostConnect(fmt.Sprintf("provider.connections.%s.postConnect", name), conn.PostConnect, provider); err != nil {
+			return err
+		}
 		if err := validateProviderAuth(fmt.Sprintf("provider.connections.%s.auth", name), conn.Auth); err != nil {
 			return err
 		}
@@ -595,6 +600,60 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 	for _, check := range checks {
 		if check.present {
 			return fmt.Errorf("%s is no longer supported for executable providers", check.field)
+		}
+	}
+	return nil
+}
+
+func validateProviderPostConnect(path string, postConnect *providermanifestv1.ProviderPostConnect, provider *providermanifestv1.Spec) error {
+	if postConnect == nil {
+		return nil
+	}
+	if provider == nil || !provider.IsManifestBacked() {
+		return fmt.Errorf("%s requires a declarative, OpenAPI, GraphQL, or MCP surface", path)
+	}
+	method := strings.ToUpper(strings.TrimSpace(postConnect.Request.Method))
+	switch method {
+	case http.MethodGet, http.MethodPost:
+	default:
+		return fmt.Errorf("%s.request.method must be GET or POST", path)
+	}
+	rawURL := strings.TrimSpace(postConnect.Request.URL)
+	if rawURL == "" {
+		return fmt.Errorf("%s.request.url is required", path)
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || !parsed.IsAbs() || parsed.Scheme != "https" || parsed.Host == "" {
+		return fmt.Errorf("%s.request.url must be an absolute https URL", path)
+	}
+	for key, value := range postConnect.Request.Headers {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("%s.request.headers keys must be non-empty", path)
+		}
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s.request.headers.%s is required", path, key)
+		}
+	}
+	if postConnect.Success != nil && strings.TrimSpace(postConnect.Success.Path) == "" {
+		return fmt.Errorf("%s.success.path is required", path)
+	}
+	if postConnect.ExternalIdentity != nil {
+		if strings.TrimSpace(postConnect.ExternalIdentity.Type) == "" {
+			return fmt.Errorf("%s.externalIdentity.type is required", path)
+		}
+		if strings.TrimSpace(postConnect.ExternalIdentity.ID) == "" {
+			return fmt.Errorf("%s.externalIdentity.id is required", path)
+		}
+	}
+	if postConnect.ExternalIdentity == nil && len(postConnect.Metadata) == 0 {
+		return fmt.Errorf("%s must declare externalIdentity or metadata", path)
+	}
+	for key, value := range postConnect.Metadata {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("%s.metadata keys must be non-empty", path)
+		}
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s.metadata.%s is required", path, key)
 		}
 	}
 	return nil

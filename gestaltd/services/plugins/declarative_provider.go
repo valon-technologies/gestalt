@@ -26,6 +26,7 @@ type declarativeOptions struct {
 	operationConnections map[string]string
 	connectionSelectors  map[string]core.OperationConnectionSelector
 	operationLocks       map[string]bool
+	egressCheck          func(string) error
 }
 
 type DeclarativeProviderOption func(*declarativeOptions)
@@ -56,6 +57,10 @@ func WithDeclarativeOperationConnections(connections map[string]string, selector
 		opts.connectionSelectors = cloneOperationConnectionSelectors(selectors)
 		opts.operationLocks = maps.Clone(locks)
 	}
+}
+
+func WithDeclarativeEgressCheck(fn func(string) error) DeclarativeProviderOption {
+	return func(opts *declarativeOptions) { opts.egressCheck = fn }
 }
 
 type DeclarativeProvider struct {
@@ -108,7 +113,9 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		RequestContentType:          declarativeJSONContentType,
 		ConnectionDefs:              ConnectionParamDefsFromManifest(params),
 		DiscoveryDef:                DiscoveryConfigFromManifest(discovery),
+		PostConnectConfigs:          PostConnectConfigsFromManifestConnections(manifest.Spec.Connections),
 		CredentialFieldDefs:         declarativeCredentialFields(auth),
+		CheckEgress:                 options.egressCheck,
 		NoRetry:                     true,
 	}
 	if auth != nil {
