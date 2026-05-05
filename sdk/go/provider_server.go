@@ -276,6 +276,20 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			AuthSource:  subject.GetAuthSource(),
 		})
 	}
+	if subject := reqCtx.GetAgentSubject(); subject != nil {
+		ctx = WithAgentSubject(ctx, Subject{
+			ID:          subject.GetId(),
+			Kind:        subject.GetKind(),
+			DisplayName: subject.GetDisplayName(),
+			AuthSource:  subject.GetAuthSource(),
+		})
+	}
+	if identity := reqCtx.GetAgentExternalIdentity(); identity != nil {
+		ctx = WithAgentExternalIdentity(ctx, ExternalIdentity{
+			Type: identity.GetType(),
+			ID:   identity.GetId(),
+		})
+	}
 	if credential := reqCtx.GetCredential(); credential != nil {
 		ctx = WithCredential(ctx, Credential{
 			Mode:       credential.GetMode(),

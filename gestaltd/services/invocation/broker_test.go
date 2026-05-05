@@ -421,6 +421,88 @@ func TestBrokerInvokeRejectsExplicitInternalConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestBrokerAgentExternalIdentitySkipsIncompleteConnectionMatchForFallback(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	broker := NewBroker(nil, svc.Users, svc.ExternalCredentials)
+	subjectID := principal.UserSubjectID("agent-user")
+
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
+		SubjectID:    subjectID,
+		Integration:  "github",
+		Connection:   "workspace",
+		AccessToken:  "invalid-token",
+		MetadataJSON: `{"gestalt.external_identity.id":"222"}`,
+	}); err != nil {
+		t.Fatalf("PutCredential invalid: %v", err)
+	}
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
+		SubjectID:    subjectID,
+		Integration:  "github",
+		Connection:   "fallback",
+		AccessToken:  "valid-token",
+		MetadataJSON: `{"gestalt.external_identity.type":"github_user","gestalt.external_identity.id":"333"}`,
+	}); err != nil {
+		t.Fatalf("PutCredential fallback: %v", err)
+	}
+
+	identity, err := broker.agentExternalIdentity(context.Background(), subjectID, "github", "workspace")
+	if err != nil {
+		t.Fatalf("agentExternalIdentity: %v", err)
+	}
+	if identity.Type != "github_user" || identity.ID != "333" {
+		t.Fatalf("identity = %#v, want github_user/333", identity)
+	}
+}
+
+func TestBrokerInvokeGraphQLEnrichesAgentExternalIdentity(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	agentSubjectID := principal.UserSubjectID("agent-user")
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
+		SubjectID:    agentSubjectID,
+		Integration:  "github",
+		AccessToken:  "github-token",
+		MetadataJSON: `{"gestalt.external_identity.type":"github_user","gestalt.external_identity.id":"222"}`,
+	}); err != nil {
+		t.Fatalf("PutCredential: %v", err)
+	}
+
+	var captured ExternalIdentityContext
+	provider := &brokerGraphQLProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+		},
+		invokeGraphQLFn: func(ctx context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
+			captured = AgentExternalIdentityContextFromContext(ctx)
+			return &core.OperationResult{Status: 200}, nil
+		},
+	}
+	broker := NewBroker(testutil.NewProviderRegistry(t, provider), svc.Users, svc.ExternalCredentials)
+
+	ctx := WithRunAsAudit(
+		context.Background(),
+		&core.RunAsSubject{SubjectID: agentSubjectID, CredentialSubjectID: agentSubjectID, SubjectKind: string(principal.KindUser)},
+		&core.RunAsSubject{SubjectID: "service_account:github-bot", CredentialSubjectID: "service_account:github-bot", SubjectKind: "service_account"},
+	)
+	_, err := broker.InvokeGraphQL(
+		ctx,
+		&principal.Principal{SubjectID: "service_account:github-bot", CredentialSubjectID: "service_account:github-bot"},
+		"github",
+		"",
+		core.GraphQLRequest{Document: "query { viewer { login } }"},
+	)
+	if err != nil {
+		t.Fatalf("InvokeGraphQL: %v", err)
+	}
+	if captured.Type != "github_user" || captured.ID != "222" {
+		t.Fatalf("agent external identity = %#v, want github_user/222", captured)
+	}
+}
+
 type staticProviderOverrideResolver struct {
 	provider core.Provider
 }
@@ -459,4 +541,16 @@ func (p *brokerOperationConnectionProvider) ResolveConnectionForOperation(operat
 
 func (p *brokerOperationConnectionProvider) OperationConnectionOverrideAllowed(string, map[string]any) bool {
 	return p.allowOverride
+}
+
+type brokerGraphQLProvider struct {
+	*coretesting.StubIntegration
+	invokeGraphQLFn func(context.Context, core.GraphQLRequest, string) (*core.OperationResult, error)
+}
+
+func (p *brokerGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	if p.invokeGraphQLFn != nil {
+		return p.invokeGraphQLFn(ctx, request, token)
+	}
+	return &core.OperationResult{Status: 200}, nil
 }

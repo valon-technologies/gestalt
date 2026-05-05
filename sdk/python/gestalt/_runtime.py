@@ -16,7 +16,7 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _telemetry
-from ._api import Access, Credential, Host, Request, Subject
+from ._api import Access, Credential, ExternalIdentity, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
@@ -1009,7 +1009,13 @@ def _plugin_request(request: Any) -> Request:
     return Request(
         token=getattr(request, "token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
-        subject=_subject_from_proto(getattr(request, "context", None)),
+        subject=_subject_from_proto(getattr(request, "context", None), "subject"),
+        agent_subject=_subject_from_proto(
+            getattr(request, "context", None), "agent_subject"
+        ),
+        agent_external_identity=_external_identity_from_proto(
+            getattr(request, "context", None)
+        ),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
         host=_host_from_proto(getattr(request, "context", None)),
@@ -1048,10 +1054,10 @@ def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
     }
 
 
-def _subject_from_proto(request_context: Any) -> Subject:
+def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
     if request_context is None:
         return Subject()
-    subject = getattr(request_context, "subject", None)
+    subject = getattr(request_context, field_name, None)
     if subject is None:
         return Subject()
     return Subject(
@@ -1059,6 +1065,18 @@ def _subject_from_proto(request_context: Any) -> Subject:
         kind=getattr(subject, "kind", ""),
         display_name=getattr(subject, "display_name", ""),
         auth_source=getattr(subject, "auth_source", ""),
+    )
+
+
+def _external_identity_from_proto(request_context: Any) -> ExternalIdentity:
+    if request_context is None:
+        return ExternalIdentity()
+    identity = getattr(request_context, "agent_external_identity", None)
+    if identity is None:
+        return ExternalIdentity()
+    return ExternalIdentity(
+        type=getattr(identity, "type", ""),
+        id=getattr(identity, "id", ""),
     )
 
 

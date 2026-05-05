@@ -173,6 +173,13 @@ message SubjectContext {
   string auth_source = 4;
 }
 
+// ExternalIdentityContext identifies the caller in a provider-owned external
+// identity namespace, as discovered from that caller's stored connection.
+message ExternalIdentityContext {
+  string type = 1;
+  string id = 2;
+}
+
 // StringList is a helper map value for repeated HTTP header and query values.
 message StringList {
   repeated string values = 1;
@@ -205,6 +212,10 @@ message RequestContext {
   AccessContext access = 3;
   google.protobuf.Struct workflow = 4;
   HostContext host = 5;
+  // Original agent caller when an agent tool executes with delegated run-as identity.
+  SubjectContext agent_subject = 6;
+  // The original agent caller's provider-owned external identity, when known.
+  ExternalIdentityContext agent_external_identity = 7;
 }
 
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional

@@ -123,6 +123,12 @@ type Subject struct {
 	AuthSource  string
 }
 
+// ExternalIdentity identifies the caller in a provider-owned identity namespace.
+type ExternalIdentity struct {
+	Type string
+	ID   string
+}
+
 // Credential describes the resolved credential used to authorize a request.
 type Credential struct {
 	Mode       string
@@ -150,6 +156,8 @@ type OperationResult struct {
 
 type connectionParamsKey struct{}
 type subjectKey struct{}
+type agentSubjectKey struct{}
+type agentExternalIdentityKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
 type hostKey struct{}
@@ -180,6 +188,40 @@ func WithSubject(ctx context.Context, subject Subject) context.Context {
 func SubjectFromContext(ctx context.Context) Subject {
 	subject, _ := ctx.Value(subjectKey{}).(Subject)
 	return subject
+}
+
+// WithAgentSubject returns a child context carrying the original agent caller
+// when an agent tool executes under a delegated identity.
+func WithAgentSubject(ctx context.Context, subject Subject) context.Context {
+	return context.WithValue(ctx, agentSubjectKey{}, subject)
+}
+
+// AgentSubjectFromContext extracts the original agent caller for delegated
+// agent tool requests. It returns the zero value when the request was not
+// delegated from an agent.
+func AgentSubjectFromContext(ctx context.Context) Subject {
+	subject, _ := ctx.Value(agentSubjectKey{}).(Subject)
+	return subject
+}
+
+// WithAgentExternalIdentity returns a child context carrying the original agent
+// caller's provider-owned external identity, when the host can derive one.
+func WithAgentExternalIdentity(ctx context.Context, identity ExternalIdentity) context.Context {
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	if identity.Type == "" || identity.ID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, agentExternalIdentityKey{}, identity)
+}
+
+// AgentExternalIdentityFromContext returns the original agent caller's
+// provider-owned external identity, when available.
+func AgentExternalIdentityFromContext(ctx context.Context) ExternalIdentity {
+	identity, _ := ctx.Value(agentExternalIdentityKey{}).(ExternalIdentity)
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	return identity
 }
 
 // WithCredential returns a child context carrying the resolved credential

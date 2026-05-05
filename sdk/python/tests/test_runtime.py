@@ -352,6 +352,7 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.connection_param("region"), "us-east-1")
         self.assertIsNone(request.connection_param("missing"))
         self.assertEqual(request.subject.id, "")
+        self.assertEqual(request.agent_subject.id, "")
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.workflow, {})
@@ -400,6 +401,9 @@ class MainEntrypointTests(unittest.TestCase):
                 "token": request.token,
                 "subject_id": request.subject.id,
                 "subject_kind": request.subject.kind,
+                "agent_subject_id": request.agent_subject.id,
+                "agent_external_type": request.agent_external_identity.type,
+                "agent_external_id": request.agent_external_identity.id,
                 "credential_mode": request.credential.mode,
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
@@ -509,6 +513,16 @@ class MainEntrypointTests(unittest.TestCase):
                         kind="user",
                         auth_source="api_token",
                     ),
+                    agent_subject=plugin_pb2.SubjectContext(
+                        id="user:user-456",
+                        kind="user",
+                        display_name="Grace Hopper",
+                        auth_source="slack",
+                    ),
+                    agent_external_identity=plugin_pb2.ExternalIdentityContext(
+                        type="github_identity",
+                        id="user:12345678",
+                    ),
                     credential=plugin_pb2.CredentialContext(
                         mode="user",
                         subject_id="user:user-123",
@@ -593,6 +607,9 @@ class MainEntrypointTests(unittest.TestCase):
                 "token": "secret-token",
                 "subject_id": "user:user-123",
                 "subject_kind": "user",
+                "agent_subject_id": "user:user-456",
+                "agent_external_type": "github_identity",
+                "agent_external_id": "user:12345678",
                 "credential_mode": "user",
                 "credential_subject_id": "user:user-123",
                 "access_policy": "sample_policy",

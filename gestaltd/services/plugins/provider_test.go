@@ -384,6 +384,60 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	}
 }
 
+func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
+	t.Parallel()
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
+		Kind:      principal.Kind("service_account"),
+		Source:    principal.SourceAPIToken,
+	})
+	ctx = invocation.WithRunAsAudit(ctx, &core.RunAsSubject{
+		SubjectID:           "user:user-123",
+		SubjectKind:         "user",
+		CredentialSubjectID: "user:user-123",
+		DisplayName:         "Ada Lovelace",
+		AuthSource:          "slack",
+	}, &core.RunAsSubject{
+		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectKind: "service_account",
+		AuthSource:  "github_app_webhook",
+	})
+
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetAgentSubject() == nil {
+		t.Fatal("expected agent subject context")
+	}
+	if got := reqCtx.GetAgentSubject().GetDisplayName(); got != "Ada Lovelace" {
+		t.Fatalf("agent subject display name = %q, want Ada Lovelace", got)
+	}
+}
+
+func TestRequestContextProto_IncludesAgentExternalIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithAgentExternalIdentityContext(context.Background(), invocation.ExternalIdentityContext{
+		Type: "github_identity",
+		ID:   "user:12345678",
+	})
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetAgentExternalIdentity() == nil {
+		t.Fatal("expected agent external identity context")
+	}
+	if got := reqCtx.GetAgentExternalIdentity().GetType(); got != "github_identity" {
+		t.Fatalf("agent external identity type = %q, want github_identity", got)
+	}
+	if got := reqCtx.GetAgentExternalIdentity().GetId(); got != "user:12345678" {
+		t.Fatalf("agent external identity id = %q, want user:12345678", got)
+	}
+}
+
 func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 	t.Parallel()
 

@@ -290,6 +290,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 host: Some(HostContext {
                     public_base_url: "https://gestalt.example.test".to_string(),
                 }),
+                ..Default::default()
             }),
         })
         .await
@@ -330,6 +331,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 host: Some(HostContext {
                     public_base_url: "https://gestalt.example.test".to_string(),
                 }),
+                ..Default::default()
             }),
         })
         .await

@@ -27,6 +27,9 @@ type stubOutput struct {
 	Operation           string `json:"operation"`
 	SubjectID           string `json:"subject_id"`
 	SubjectKind         string `json:"subject_kind"`
+	AgentSubjectID      string `json:"agent_subject_id,omitempty"`
+	AgentExternalType   string `json:"agent_external_type,omitempty"`
+	AgentExternalID     string `json:"agent_external_id,omitempty"`
 	CredentialMode      string `json:"credential_mode"`
 	CredentialSubjectID string `json:"credential_subject_id"`
 	AccessPolicy        string `json:"access_policy"`
@@ -92,6 +95,9 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		Operation:           "test_op",
 		SubjectID:           req.Subject.ID,
 		SubjectKind:         req.Subject.Kind,
+		AgentSubjectID:      req.AgentSubject.ID,
+		AgentExternalType:   req.AgentExternalIdentity.Type,
+		AgentExternalID:     req.AgentExternalIdentity.ID,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
 		AccessPolicy:        req.Access.Policy,
@@ -390,7 +396,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","agent_subject_id":"user:user-456","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -402,6 +408,14 @@ func TestProviderServerExecute(t *testing.T) {
 					Subject: &proto.SubjectContext{
 						Id:   "user:user-123",
 						Kind: "user",
+					},
+					AgentSubject: &proto.SubjectContext{
+						Id:   "user:user-456",
+						Kind: "user",
+					},
+					AgentExternalIdentity: &proto.ExternalIdentityContext{
+						Type: "github_identity",
+						Id:   "user:12345678",
 					},
 					Credential: &proto.CredentialContext{
 						Mode:      "user",

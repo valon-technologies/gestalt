@@ -391,8 +391,17 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 	if publicBaseURL != "" {
 		out.Host = &proto.HostContext{PublicBaseUrl: publicBaseURL}
 	}
+	if audit := invocation.RunAsAuditFromContext(ctx); audit.AgentSubject != nil {
+		out.AgentSubject = runAsSubjectContextProto(audit.AgentSubject)
+	}
+	if identity := invocation.AgentExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
+		out.AgentExternalIdentity = &proto.ExternalIdentityContext{
+			Type: identity.Type,
+			Id:   identity.ID,
+		}
+	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil {
 		return nil, nil
 	}
 	return &out, nil
@@ -466,4 +475,17 @@ func subjectDisplayName(p *principal.Principal) string {
 		return ""
 	}
 	return p.Identity.DisplayName
+}
+
+func runAsSubjectContextProto(subject *core.RunAsSubject) *proto.SubjectContext {
+	subject = core.NormalizeRunAsSubject(subject)
+	if subject == nil {
+		return nil
+	}
+	return &proto.SubjectContext{
+		Id:          subject.SubjectID,
+		Kind:        subject.SubjectKind,
+		DisplayName: subject.DisplayName,
+		AuthSource:  subject.AuthSource,
+	}
 }

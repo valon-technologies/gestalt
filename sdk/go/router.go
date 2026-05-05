@@ -16,14 +16,16 @@ import (
 
 // Request carries execution-scoped metadata into typed handlers.
 type Request struct {
-	Token            string
-	ConnectionParams map[string]string
-	Subject          Subject
-	Credential       Credential
-	Access           Access
-	Host             Host
-	IdempotencyKey   string
-	invocationToken  string
+	Token                 string
+	ConnectionParams      map[string]string
+	Subject               Subject
+	AgentSubject          Subject
+	AgentExternalIdentity ExternalIdentity
+	Credential            Credential
+	Access                Access
+	Host                  Host
+	IdempotencyKey        string
+	invocationToken       string
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -224,14 +226,16 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 	}
 	result := protectedOperationResult(operation, func() (*OperationResult, error) {
 		return handler(ctx, provider, params, Request{
-			Token:            token,
-			ConnectionParams: ConnectionParams(ctx),
-			Subject:          SubjectFromContext(ctx),
-			Credential:       CredentialFromContext(ctx),
-			Access:           AccessFromContext(ctx),
-			Host:             HostContextFromContext(ctx),
-			IdempotencyKey:   IdempotencyKeyFromContext(ctx),
-			invocationToken:  invocationTokenFromContext(ctx),
+			Token:                 token,
+			ConnectionParams:      ConnectionParams(ctx),
+			Subject:               SubjectFromContext(ctx),
+			AgentSubject:          AgentSubjectFromContext(ctx),
+			AgentExternalIdentity: AgentExternalIdentityFromContext(ctx),
+			Credential:            CredentialFromContext(ctx),
+			Access:                AccessFromContext(ctx),
+			Host:                  HostContextFromContext(ctx),
+			IdempotencyKey:        IdempotencyKeyFromContext(ctx),
+			invocationToken:       invocationTokenFromContext(ctx),
 		})
 	})
 	if result == nil {
