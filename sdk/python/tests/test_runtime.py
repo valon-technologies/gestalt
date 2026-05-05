@@ -38,6 +38,7 @@ from gestalt import (
     WarningsProvider,
     WorkflowProvider,
     _bootstrap,
+    _grpc_transport,
     _runtime,
 )
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
@@ -202,6 +203,20 @@ class ProviderSocketTargetTests(unittest.TestCase):
             "unsupported provider socket target scheme 'tls'",
         ):
             _runtime._parse_provider_socket_target("tls://127.0.0.1:50051")
+
+
+class InternalGrpcTransportTests(unittest.TestCase):
+    def test_internal_channels_raise_message_size_limits(self) -> None:
+        options = dict(_grpc_transport._INTERNAL_CHANNEL_OPTIONS)
+
+        self.assertEqual(
+            options["grpc.max_receive_message_length"],
+            _grpc_transport.INTERNAL_GRPC_MAX_MESSAGE_BYTES,
+        )
+        self.assertEqual(
+            options["grpc.max_send_message_length"],
+            _grpc_transport.INTERNAL_GRPC_MAX_MESSAGE_BYTES,
+        )
 
 
 class RuntimeServeTransportTests(unittest.TestCase):

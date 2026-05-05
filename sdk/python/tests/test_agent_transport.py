@@ -249,7 +249,19 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                     "page_size": request.page_size,
                     "page_token": request.page_token,
                     "run_grant": request.run_grant,
-                }
+            }
+        )
+        if request.page_token == "large":
+            return agent_pb2.ListAgentToolsResponse(
+                tools=[
+                    agent_pb2.ListedAgentTool(
+                        id="tool-large",
+                        mcp_name="large__tool",
+                        title="Large tool",
+                        description="x" * (5 * 1024 * 1024),
+                        input_schema='{"type":"object"}',
+                    )
+                ]
             )
         return agent_pb2.ListAgentToolsResponse(
             tools=[
@@ -823,6 +835,19 @@ class AgentTransportTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_agent_host_accepts_large_internal_responses(self) -> None:
+        with AgentHost() as host:
+            list_response = host.list_tools(
+                agent_pb2.ListAgentToolsRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    page_token="large",
+                )
+            )
+
+        self.assertEqual(list_response.tools[0].id, "tool-large")
+        self.assertEqual(len(list_response.tools[0].description), 5 * 1024 * 1024)
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:

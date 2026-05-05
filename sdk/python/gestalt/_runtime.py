@@ -19,6 +19,7 @@ from . import _telemetry
 from ._api import Access, Credential, ExternalIdentity, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
+from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import ConnectedToken, Plugin, _module_plugin
@@ -196,7 +197,8 @@ def serve(
         bind_target = f"unix:{address}"
 
     server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
+        futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS),
+        options=INTERNAL_GRPC_MESSAGE_OPTIONS,
     )
     servable = _servable_target(target, runtime_kind=runtime_kind)
     _register_services(server=server, servable=servable)
