@@ -547,6 +547,8 @@ def _register_plugin_runtime_services(server: Any, provider: PluginProvider) -> 
                 "GetSession",
                 "ListSessions",
                 "StopSession",
+                "PrepareWorkspace",
+                "RemoveWorkspace",
                 "StartPlugin",
             ),
         ),

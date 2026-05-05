@@ -77,6 +77,37 @@ func agentSubjectContextToProto(subject coreagent.SubjectContext) *proto.AgentSu
 	}
 }
 
+func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &coreagent.Workspace{
+		Checkouts: make([]coreagent.WorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
+		CWD:       workspace.GetCwd(),
+	}
+	for _, checkout := range workspace.GetCheckouts() {
+		if checkout == nil {
+			continue
+		}
+		out.Checkouts = append(out.Checkouts, coreagent.WorkspaceGitCheckout{
+			URL:  checkout.GetUrl(),
+			Ref:  checkout.GetRef(),
+			Path: checkout.GetPath(),
+		})
+	}
+	return out
+}
+
+func preparedAgentWorkspaceToProto(workspace *coreagent.PreparedWorkspace) *proto.PreparedAgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	return &proto.PreparedAgentWorkspace{
+		Root: workspace.Root,
+		Cwd:  workspace.CWD,
+	}
+}
+
 func agentToolToProto(tool coreagent.Tool) (*proto.ResolvedAgentTool, error) {
 	schema, err := structFromMap(tool.ParametersSchema)
 	if err != nil {
@@ -442,16 +473,17 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		return nil
 	}
 	return &coreagent.ProviderCapabilities{
-		StreamingText:        value.GetStreamingText(),
-		ToolCalls:            value.GetToolCalls(),
-		ParallelToolCalls:    value.GetParallelToolCalls(),
-		StructuredOutput:     value.GetStructuredOutput(),
-		Interactions:         value.GetInteractions(),
-		ResumableTurns:       value.GetResumableTurns(),
-		ReasoningSummaries:   value.GetReasoningSummaries(),
-		SupportsSessionStart: value.GetSupportsSessionStart(),
-		BoundedListHydration: value.GetBoundedListHydration(),
-		SupportedToolSources: agentToolSourceModesFromProto(value.GetSupportedToolSources()),
+		StreamingText:             value.GetStreamingText(),
+		ToolCalls:                 value.GetToolCalls(),
+		ParallelToolCalls:         value.GetParallelToolCalls(),
+		StructuredOutput:          value.GetStructuredOutput(),
+		Interactions:              value.GetInteractions(),
+		ResumableTurns:            value.GetResumableTurns(),
+		ReasoningSummaries:        value.GetReasoningSummaries(),
+		SupportsSessionStart:      value.GetSupportsSessionStart(),
+		SupportsPreparedWorkspace: value.GetSupportsPreparedWorkspace(),
+		BoundedListHydration:      value.GetBoundedListHydration(),
+		SupportedToolSources:      agentToolSourceModesFromProto(value.GetSupportedToolSources()),
 	}
 }
 

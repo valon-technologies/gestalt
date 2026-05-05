@@ -557,6 +557,11 @@ providers:
         runtime:
           provider: modal
           image: ghcr.io/valon/gestalt-python-runtime:latest
+          workspace:
+            prepareTimeout: 10m
+            git:
+              allowedRepositories:
+                - github.com/valon-technologies/*
           pool:
             minReadyInstances: 1
             maxReadyInstances: 4
@@ -587,6 +592,13 @@ of launching it directly on the `gestaltd` host. Tool callbacks still route
 back through the host agent socket, and `egress.allowedHosts` remains the
 operator-facing egress policy.
 
+When hosted agents accept caller-supplied workspaces,
+`execution.runtime.workspace` controls the pre-session checkout step. Gestalt
+validates the requested repositories against `workspace.git.allowedRepositories`,
+then asks the selected runtime provider to prepare the checkout before calling
+the agent provider's `CreateSession`. `workspace.prepareTimeout` defaults to
+`10m`.
+
 Local `gestalt agent` launches the selected provider's configured harness on
 the operator's machine. `defaultHarness` selects a named entry under
 `harnesses`; each harness has `command`, optional `args`, optional `env`,
@@ -606,7 +618,7 @@ through the platform shell.
 | `env` | Extra environment variables passed to the provider process. |
 | `defaultHarness` | Optional default local harness name used by `gestalt agent` and `gestalt agent doctor` when `--harness` is omitted. |
 | `harnesses` | Optional named local harness configs for `gestalt agent`. Each harness can define `command`, `args`, `env`, `workingDirectory`, `requiredCommands`, and `install` guidance. |
-| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
+| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, `workspace`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `workspace.prepareTimeout` bounds runtime workspace preparation, and `workspace.git.allowedRepositories` is an allowlist of canonical Git repository identities or path-style wildcards such as `github.com/valon-technologies/*`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `workflows`

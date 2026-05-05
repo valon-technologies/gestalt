@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -293,6 +294,483 @@ func (p *routingAgentProvider) GetTurn(ctx context.Context, req coreagent.GetTur
 		return nil, core.ErrNotFound
 	}
 	return p.getTurn(ctx, req)
+}
+
+type workspaceAgentProvider struct {
+	coreagent.UnimplementedProvider
+	supportPreparedWorkspace bool
+	createErr                error
+	createSessionID          string
+	createReqs               []coreagent.CreateSessionRequest
+	updateReqs               []coreagent.UpdateSessionRequest
+	sessions                 map[string]*coreagent.Session
+}
+
+func (p *workspaceAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	p.createReqs = append(p.createReqs, req)
+	if p.createErr != nil {
+		return nil, p.createErr
+	}
+	sessionID := strings.TrimSpace(p.createSessionID)
+	if sessionID == "" {
+		sessionID = req.SessionID
+	}
+	session := &coreagent.Session{
+		ID:           sessionID,
+		ProviderName: "simple",
+		Model:        req.Model,
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    req.CreatedBy,
+	}
+	if p.sessions == nil {
+		p.sessions = map[string]*coreagent.Session{}
+	}
+	p.sessions[session.ID] = session
+	cloned := *session
+	return &cloned, nil
+}
+
+func (p *workspaceAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	session := p.sessions[strings.TrimSpace(req.SessionID)]
+	if session == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := *session
+	return &cloned, nil
+}
+
+func (p *workspaceAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{SupportsPreparedWorkspace: p.supportPreparedWorkspace}, nil
+}
+
+func (p *workspaceAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	p.updateReqs = append(p.updateReqs, req)
+	if p.sessions != nil && req.State == coreagent.SessionStateArchived {
+		delete(p.sessions, strings.TrimSpace(req.SessionID))
+	}
+	return &coreagent.Session{
+		ID:           req.SessionID,
+		ProviderName: "simple",
+		State:        req.State,
+		CreatedBy:    coreagent.Actor{SubjectID: "user:user-1"},
+	}, nil
+}
+
+func (p *workspaceAgentProvider) Ping(context.Context) error {
+	return nil
+}
+
+type workspaceRuntimeProvider struct {
+	*pluginruntime.LocalProvider
+	supportPrepareWorkspace bool
+	prepareWorkspace        func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error)
+	removeWorkspaceReqs     []pluginruntime.RemoveWorkspaceRequest
+}
+
+func (p *workspaceRuntimeProvider) Support(ctx context.Context) (pluginruntime.Support, error) {
+	support, err := p.LocalProvider.Support(ctx)
+	if err != nil {
+		return support, err
+	}
+	support.SupportsPrepareWorkspace = p.supportPrepareWorkspace
+	return support, nil
+}
+
+func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+	if p.prepareWorkspace != nil {
+		return p.prepareWorkspace(ctx, req)
+	}
+	return p.LocalProvider.PrepareWorkspace(ctx, req)
+}
+
+func (p *workspaceRuntimeProvider) RemoveWorkspace(ctx context.Context, req pluginruntime.RemoveWorkspaceRequest) error {
+	p.removeWorkspaceReqs = append(p.removeWorkspaceReqs, req)
+	return p.LocalProvider.RemoveWorkspace(ctx, req)
+}
+
+func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	session, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if session == nil || session.ID != "agent-session-1" {
+		t.Fatalf("session = %#v", session)
+	}
+	if len(agentProvider.createReqs) != 1 {
+		t.Fatalf("create requests len = %d, want 1", len(agentProvider.createReqs))
+	}
+	providerReq := agentProvider.createReqs[0]
+	if providerReq.Workspace != nil {
+		t.Fatalf("provider received raw workspace: %#v", providerReq.Workspace)
+	}
+	if providerReq.PreparedWorkspace == nil {
+		t.Fatal("provider did not receive prepared workspace")
+	}
+	if !filepath.IsAbs(providerReq.PreparedWorkspace.Root) || !filepath.IsAbs(providerReq.PreparedWorkspace.CWD) {
+		t.Fatalf("prepared workspace = %#v, want absolute paths", providerReq.PreparedWorkspace)
+	}
+	data, err := os.ReadFile(filepath.Join(providerReq.PreparedWorkspace.CWD, "README.md"))
+	if err != nil {
+		t.Fatalf("read prepared checkout: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "workspace fixture" {
+		t.Fatalf("README = %q", data)
+	}
+	if got := pool.sessionBackend("agent-session-1"); got == nil || got.runtimeSessionID != runtimeSession.ID {
+		t.Fatalf("session backend = %#v, want runtime session %q", got, runtimeSession.ID)
+	}
+}
+
+func TestHostedAgentPoolRejectsWorkspaceWithoutProviderCapability(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if !errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported) {
+		t.Fatalf("CreateSession error = %v, want ErrAgentWorkspaceUnsupported", err)
+	}
+	if len(agentProvider.createReqs) != 0 {
+		t.Fatalf("provider create requests len = %d, want 0", len(agentProvider.createReqs))
+	}
+}
+
+func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{
+		supportPreparedWorkspace: true,
+		createErr:                errors.New("provider create failed"),
+	}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider create failed") {
+		t.Fatalf("CreateSession error = %v, want provider create failed", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace before failure")
+	}
+	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
+	}
+	if got := pool.sessionBackend("agent-session-1"); got != nil {
+		t.Fatalf("session backend after cleanup = %#v, want nil", got)
+	}
+}
+
+func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepare(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	first, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession first: %v", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace")
+	}
+	runtimeProvider.prepareWorkspace = func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+		return nil, errors.New("prepare should not run for idempotent replay")
+	}
+	second, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "other",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "other",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession replay: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("replayed session ID = %q, want %q", second.ID, first.ID)
+	}
+	if len(agentProvider.createReqs) != 1 {
+		t.Fatalf("provider create requests len = %d, want 1", len(agentProvider.createReqs))
+	}
+	if len(runtimeProvider.removeWorkspaceReqs) != 0 {
+		t.Fatalf("RemoveWorkspace calls = %d, want 0", len(runtimeProvider.removeWorkspaceReqs))
+	}
+	if _, err := os.Stat(prepared.Root); err != nil {
+		t.Fatalf("workspace root after replay stat: %v", err)
+	}
+}
+
+func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{
+		supportPreparedWorkspace: true,
+		createSessionID:          "existing-session",
+	}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workspace-create-1",
+		CreatedBy:      coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "agent provider returned session id") {
+		t.Fatalf("CreateSession error = %v, want session id mismatch", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace before mismatch")
+	}
+	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
+	}
+	if got := pool.sessionBackend("agent-session-1"); got != nil {
+		t.Fatalf("session backend after mismatch = %#v, want nil", got)
+	}
+	if got := pool.sessionBackend("existing-session"); got != nil {
+		t.Fatalf("provider returned session backend = %#v, want nil", got)
+	}
+	if got := len(agentProvider.updateReqs); got != 1 {
+		t.Fatalf("provider update requests len = %d, want 1", got)
+	}
+	if got := agentProvider.updateReqs[0].SessionID; got != "existing-session" {
+		t.Fatalf("provider cleanup session id = %q, want existing-session", got)
+	}
+	if _, ok := agentProvider.sessions["existing-session"]; ok {
+		t.Fatal("provider session still exists after mismatch cleanup")
+	}
+}
+
+func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	runtimeProvider.prepareWorkspace = func(context.Context, pluginruntime.PrepareWorkspaceRequest) (*pluginruntime.PreparedWorkspace, error) {
+		return &pluginruntime.PreparedWorkspace{Root: "/tmp/gestalt-workspace-root", CWD: "/tmp/outside-workspace"}, nil
+	}
+	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "prepared workspace cwd must be inside root") {
+		t.Fatalf("CreateSession error = %v, want invalid prepared workspace", err)
+	}
+	if len(runtimeProvider.removeWorkspaceReqs) != 1 {
+		t.Fatalf("RemoveWorkspace calls = %d, want 1", len(runtimeProvider.removeWorkspaceReqs))
+	}
+	if got := pool.sessionBackend("agent-session-1"); got != nil {
+		t.Fatalf("session backend after prepare failure = %#v, want nil", got)
+	}
+}
+
+func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repo := createAgentRuntimeWorkspaceRepo(t)
+	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
+	agentProvider := &workspaceAgentProvider{supportPreparedWorkspace: true}
+	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
+	t.Cleanup(func() { _ = pool.Close() })
+
+	_, err := pool.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		CreatedBy: coreagent.Actor{SubjectID: "user:user-1"},
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "file://" + filepath.ToSlash(repo),
+				Path: "app",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	prepared := agentProvider.createReqs[0].PreparedWorkspace
+	if prepared == nil {
+		t.Fatal("provider did not receive prepared workspace")
+	}
+	if _, err := os.Stat(prepared.Root); err != nil {
+		t.Fatalf("workspace root before archive stat: %v", err)
+	}
+	_, err = pool.UpdateSession(ctx, coreagent.UpdateSessionRequest{
+		SessionID: "agent-session-1",
+		State:     coreagent.SessionStateArchived,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSession archive: %v", err)
+	}
+	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("workspace root after archive stat error = %v, want not exist", statErr)
+	}
+	if got := pool.sessionBackend("agent-session-1"); got != nil {
+		t.Fatalf("session backend after archive = %#v, want nil", got)
+	}
+}
+
+func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, runtimeProvider pluginruntime.Provider, runtimeSession *pluginruntime.Session, allowedRepos ...string) *hostedAgentProviderPool {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	return &hostedAgentProviderPool{
+		name: "simple",
+		launch: &hostedAgentProviderLaunch{
+			name: "simple",
+			runtimeConfig: config.EffectiveHostedRuntime{
+				Workspace: &config.HostedRuntimeWorkspaceConfig{
+					PrepareTimeout: "10s",
+					Git: &config.HostedRuntimeWorkspaceGitConfig{
+						AllowedRepositories: allowedRepos,
+					},
+				},
+			},
+		},
+		policy:              config.HostedRuntimeLifecyclePolicy{MaxReadyInstances: 1},
+		ctx:                 ctx,
+		cancel:              cancel,
+		backends:            []*hostedAgentPoolBackend{{id: 1, provider: agentProvider, runtimeProvider: runtimeProvider, runtimeSessionID: runtimeSession.ID, runtimeSession: runtimeSession, liveTurns: map[string]struct{}{}}},
+		sessionBackends:     map[string]*hostedAgentPoolBackend{},
+		turnBackends:        map[string]*hostedAgentPoolBackend{},
+		interactionBackends: map[string]*hostedAgentPoolBackend{},
+	}
+}
+
+func startWorkspaceRuntimeSession(t *testing.T, ctx context.Context, supportsWorkspace bool) (*workspaceRuntimeProvider, *pluginruntime.Session) {
+	t.Helper()
+	runtimeProvider := &workspaceRuntimeProvider{
+		LocalProvider:           pluginruntime.NewLocalProvider(),
+		supportPrepareWorkspace: supportsWorkspace,
+	}
+	session, err := runtimeProvider.StartSession(ctx, pluginruntime.StartSessionRequest{PluginName: "agent"})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	return runtimeProvider, session
+}
+
+func createAgentRuntimeWorkspaceRepo(t *testing.T) string {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("MkdirAll(repo): %v", err)
+	}
+	runAgentRuntimeWorkspaceGit(t, repo, "init")
+	runAgentRuntimeWorkspaceGit(t, repo, "config", "user.email", "workspace@example.invalid")
+	runAgentRuntimeWorkspaceGit(t, repo, "config", "user.name", "Workspace Test")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("workspace fixture\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(README): %v", err)
+	}
+	runAgentRuntimeWorkspaceGit(t, repo, "add", "README.md")
+	runAgentRuntimeWorkspaceGit(t, repo, "commit", "-m", "initial")
+	return repo
+}
+
+func runAgentRuntimeWorkspaceGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
 }
 
 func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {

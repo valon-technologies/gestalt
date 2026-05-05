@@ -6543,6 +6543,47 @@ pub mod plugin_runtime_provider_client {
             self.inner.unary(req, path, codec).await
         }
         ///
+        pub async fn prepare_workspace(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PreparePluginRuntimeWorkspaceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PreparePluginRuntimeWorkspaceResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/PrepareWorkspace",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "PrepareWorkspace",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn remove_workspace(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RemovePluginRuntimeWorkspaceRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/RemoveWorkspace",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "RemoveWorkspace",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
         pub async fn start_plugin(
             &mut self,
             request: impl tonic::IntoRequest<super::StartHostedPluginRequest>,
@@ -6603,6 +6644,19 @@ pub mod plugin_runtime_provider_server {
         async fn stop_session(
             &self,
             request: tonic::Request<super::StopPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        ///
+        async fn prepare_workspace(
+            &self,
+            request: tonic::Request<super::PreparePluginRuntimeWorkspaceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PreparePluginRuntimeWorkspaceResponse>,
+            tonic::Status,
+        >;
+        ///
+        async fn remove_workspace(
+            &self,
+            request: tonic::Request<super::RemovePluginRuntimeWorkspaceRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
         ///
         async fn start_plugin(
@@ -6873,6 +6927,92 @@ pub mod plugin_runtime_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = StopSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/PrepareWorkspace" => {
+                    #[allow(non_camel_case_types)]
+                    struct PrepareWorkspaceSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::PreparePluginRuntimeWorkspaceRequest>
+                        for PrepareWorkspaceSvc<T>
+                    {
+                        type Response = super::PreparePluginRuntimeWorkspaceResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PreparePluginRuntimeWorkspaceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::prepare_workspace(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PrepareWorkspaceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/RemoveWorkspace" => {
+                    #[allow(non_camel_case_types)]
+                    struct RemoveWorkspaceSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::RemovePluginRuntimeWorkspaceRequest>
+                        for RemoveWorkspaceSvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::RemovePluginRuntimeWorkspaceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::remove_workspace(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = RemoveWorkspaceSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

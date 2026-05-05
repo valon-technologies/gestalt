@@ -544,6 +544,29 @@ pub struct AgentSubjectContext {
     pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentWorkspace {
+    #[prost(message, repeated, tag = "1")]
+    pub checkouts: ::prost::alloc::vec::Vec<AgentWorkspaceGitCheckout>,
+    #[prost(string, tag = "2")]
+    pub cwd: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentWorkspaceGitCheckout {
+    #[prost(string, tag = "1")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub r#ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub path: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreparedAgentWorkspace {
+    #[prost(string, tag = "1")]
+    pub root: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub cwd: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentTool {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
@@ -596,6 +619,8 @@ pub struct AgentProviderCapabilities {
     pub supported_tool_sources: ::prost::alloc::vec::Vec<i32>,
     #[prost(bool, tag = "11")]
     pub supports_session_start: bool,
+    #[prost(bool, tag = "12")]
+    pub supports_prepared_workspace: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderCapabilitiesRequest {}
@@ -665,6 +690,8 @@ pub struct CreateAgentProviderSessionRequest {
     pub subject: ::core::option::Option<AgentSubjectContext>,
     #[prost(message, optional, tag = "9")]
     pub session_start: ::core::option::Option<AgentSessionStartConfig>,
+    #[prost(message, optional, tag = "10")]
+    pub prepared_workspace: ::core::option::Option<PreparedAgentWorkspace>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSessionStartConfig {
@@ -1056,6 +1083,8 @@ pub struct AgentManagerCreateSessionRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub workspace: ::core::option::Option<AgentWorkspace>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerGetSessionRequest {
@@ -2113,6 +2142,8 @@ pub struct PluginRuntimeSupport {
     pub can_host_plugins: bool,
     #[prost(enumeration = "PluginRuntimeEgressMode", tag = "3")]
     pub egress_mode: i32,
+    #[prost(bool, tag = "7")]
+    pub supports_prepare_workspace: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginRuntimeSession {
@@ -2178,6 +2209,27 @@ pub struct ListPluginRuntimeSessionsResponse {
 pub struct StopPluginRuntimeSessionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreparePluginRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub workspace: ::core::option::Option<AgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PreparePluginRuntimeWorkspaceResponse {
+    #[prost(message, optional, tag = "1")]
+    pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RemovePluginRuntimeWorkspaceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub agent_session_id: ::prost::alloc::string::String,
 }
 /// StartHostedPluginRequest describes the plugin process to launch inside a
 /// runtime session. The runtime backend owns allocation and injection of the

@@ -24,9 +24,10 @@ _sym_db = _symbol_database.Default()
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from . import agent_pb2 as v1_dot_agent__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16v1/pluginruntime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbc\x01\n\x14PluginRuntimeSupport\x12(\n\x10\x63\x61n_host_plugins\x18\x01 \x01(\x08R\x0e\x63\x61nHostPlugins\x12M\n\x0b\x65gress_mode\x18\x03 \x01(\x0e\x32,.gestalt.provider.v1.PluginRuntimeEgressModeR\negressModeJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07R\x13host_service_access\"\xe8\x02\n\x14PluginRuntimeSession\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n\x05state\x18\x02 \x01(\tR\x05state\x12S\n\x08metadata\x18\x03 \x03(\x0b\x32\x37.gestalt.provider.v1.PluginRuntimeSession.MetadataEntryR\x08metadata\x12P\n\tlifecycle\x18\x04 \x01(\x0b\x32\x32.gestalt.provider.v1.PluginRuntimeSessionLifecycleR\tlifecycle\x12!\n\x0cstate_reason\x18\x05 \x01(\tR\x0bstateReason\x12#\n\rstate_message\x18\x06 \x01(\tR\x0cstateMessage\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\xe3\x01\n\x1dPluginRuntimeSessionLifecycle\x12\x39\n\nstarted_at\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tstartedAt\x12L\n\x14recommended_drain_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x12recommendedDrainAt\x12\x39\n\nexpires_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\"J\n\x1aPluginRuntimeImagePullAuth\x12,\n\x12\x64ocker_config_json\x18\x01 \x01(\tR\x10\x64ockerConfigJson\"\x8a\x03\n StartPluginRuntimeSessionRequest\x12\x1f\n\x0bplugin_name\x18\x01 \x01(\tR\npluginName\x12\x1a\n\x08template\x18\x02 \x01(\tR\x08template\x12\x14\n\x05image\x18\x03 \x01(\tR\x05image\x12_\n\x08metadata\x18\x04 \x03(\x0b\x32\x43.gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntryR\x08metadata\x12W\n\x0fimage_pull_auth\x18\x06 \x01(\x0b\x32/.gestalt.provider.v1.PluginRuntimeImagePullAuthR\rimagePullAuth\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01J\x04\x08\x05\x10\x06R\x16image_pull_credentials\"?\n\x1eGetPluginRuntimeSessionRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\"\"\n ListPluginRuntimeSessionsRequest\"j\n!ListPluginRuntimeSessionsResponse\x12\x45\n\x08sessions\x18\x01 \x03(\x0b\x32).gestalt.provider.v1.PluginRuntimeSessionR\x08sessions\"@\n\x1fStopPluginRuntimeSessionRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\"\x83\x03\n\x18StartHostedPluginRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1f\n\x0bplugin_name\x18\x02 \x01(\tR\npluginName\x12\x18\n\x07\x63ommand\x18\x03 \x01(\tR\x07\x63ommand\x12\x12\n\x04\x61rgs\x18\x04 \x03(\tR\x04\x61rgs\x12H\n\x03\x65nv\x18\x05 \x03(\x0b\x32\x36.gestalt.provider.v1.StartHostedPluginRequest.EnvEntryR\x03\x65nv\x12#\n\rallowed_hosts\x18\x07 \x03(\tR\x0c\x61llowedHosts\x12%\n\x0e\x64\x65\x66\x61ult_action\x18\x08 \x01(\tR\rdefaultAction\x12\x1f\n\x0bhost_binary\x18\t \x01(\tR\nhostBinary\x1a\x36\n\x08\x45nvEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01J\x04\x08\x06\x10\x07J\x04\x08\n\x10\x0b\"\x7f\n\x0cHostedPlugin\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n\nsession_id\x18\x02 \x01(\tR\tsessionId\x12\x1f\n\x0bplugin_name\x18\x03 \x01(\tR\npluginName\x12\x1f\n\x0b\x64ial_target\x18\x04 \x01(\tR\ndialTarget\"\xd2\x01\n\x15PluginRuntimeLogEntry\x12\x43\n\x06stream\x18\x01 \x01(\x0e\x32+.gestalt.provider.v1.PluginRuntimeLogStreamR\x06stream\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message\x12;\n\x0bobserved_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\nobservedAt\x12\x1d\n\nsource_seq\x18\x04 \x01(\x03R\tsourceSeq\"\x7f\n\x1e\x41ppendPluginRuntimeLogsRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12>\n\x04logs\x18\x02 \x03(\x0b\x32*.gestalt.provider.v1.PluginRuntimeLogEntryR\x04logs\"<\n\x1f\x41ppendPluginRuntimeLogsResponse\x12\x19\n\x08last_seq\x18\x01 \x01(\x03R\x07lastSeq*\xb8\x01\n\x17PluginRuntimeEgressMode\x12*\n&PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED\x10\x00\x12#\n\x1fPLUGIN_RUNTIME_EGRESS_MODE_NONE\x10\x01\x12#\n\x1fPLUGIN_RUNTIME_EGRESS_MODE_CIDR\x10\x02\x12\'\n#PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME\x10\x03*\xb6\x01\n\x16PluginRuntimeLogStream\x12)\n%PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED\x10\x00\x12$\n PLUGIN_RUNTIME_LOG_STREAM_STDOUT\x10\x01\x12$\n PLUGIN_RUNTIME_LOG_STREAM_STDERR\x10\x02\x12%\n!PLUGIN_RUNTIME_LOG_STREAM_RUNTIME\x10\x03\x32\x8f\x01\n\x14PluginRuntimeLogHost\x12w\n\nAppendLogs\x12\x33.gestalt.provider.v1.AppendPluginRuntimeLogsRequest\x1a\x34.gestalt.provider.v1.AppendPluginRuntimeLogsResponse2\x85\x05\n\x15PluginRuntimeProvider\x12O\n\nGetSupport\x12\x16.google.protobuf.Empty\x1a).gestalt.provider.v1.PluginRuntimeSupport\x12p\n\x0cStartSession\x12\x35.gestalt.provider.v1.StartPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12l\n\nGetSession\x12\x33.gestalt.provider.v1.GetPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12}\n\x0cListSessions\x12\x35.gestalt.provider.v1.ListPluginRuntimeSessionsRequest\x1a\x36.gestalt.provider.v1.ListPluginRuntimeSessionsResponse\x12[\n\x0bStopSession\x12\x34.gestalt.provider.v1.StopPluginRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12_\n\x0bStartPlugin\x12-.gestalt.provider.v1.StartHostedPluginRequest\x1a!.gestalt.provider.v1.HostedPluginB=Z;github.com/valon-technologies/gestalt/internal/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16v1/pluginruntime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\"\xfa\x01\n\x14PluginRuntimeSupport\x12(\n\x10\x63\x61n_host_plugins\x18\x01 \x01(\x08R\x0e\x63\x61nHostPlugins\x12M\n\x0b\x65gress_mode\x18\x03 \x01(\x0e\x32,.gestalt.provider.v1.PluginRuntimeEgressModeR\negressMode\x12<\n\x1asupports_prepare_workspace\x18\x07 \x01(\x08R\x18supportsPrepareWorkspaceJ\x04\x08\x02\x10\x03J\x04\x08\x04\x10\x05J\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07R\x13host_service_access\"\xe8\x02\n\x14PluginRuntimeSession\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n\x05state\x18\x02 \x01(\tR\x05state\x12S\n\x08metadata\x18\x03 \x03(\x0b\x32\x37.gestalt.provider.v1.PluginRuntimeSession.MetadataEntryR\x08metadata\x12P\n\tlifecycle\x18\x04 \x01(\x0b\x32\x32.gestalt.provider.v1.PluginRuntimeSessionLifecycleR\tlifecycle\x12!\n\x0cstate_reason\x18\x05 \x01(\tR\x0bstateReason\x12#\n\rstate_message\x18\x06 \x01(\tR\x0cstateMessage\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\xe3\x01\n\x1dPluginRuntimeSessionLifecycle\x12\x39\n\nstarted_at\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tstartedAt\x12L\n\x14recommended_drain_at\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x12recommendedDrainAt\x12\x39\n\nexpires_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\"J\n\x1aPluginRuntimeImagePullAuth\x12,\n\x12\x64ocker_config_json\x18\x01 \x01(\tR\x10\x64ockerConfigJson\"\x8a\x03\n StartPluginRuntimeSessionRequest\x12\x1f\n\x0bplugin_name\x18\x01 \x01(\tR\npluginName\x12\x1a\n\x08template\x18\x02 \x01(\tR\x08template\x12\x14\n\x05image\x18\x03 \x01(\tR\x05image\x12_\n\x08metadata\x18\x04 \x03(\x0b\x32\x43.gestalt.provider.v1.StartPluginRuntimeSessionRequest.MetadataEntryR\x08metadata\x12W\n\x0fimage_pull_auth\x18\x06 \x01(\x0b\x32/.gestalt.provider.v1.PluginRuntimeImagePullAuthR\rimagePullAuth\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01J\x04\x08\x05\x10\x06R\x16image_pull_credentials\"?\n\x1eGetPluginRuntimeSessionRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\"\"\n ListPluginRuntimeSessionsRequest\"j\n!ListPluginRuntimeSessionsResponse\x12\x45\n\x08sessions\x18\x01 \x03(\x0b\x32).gestalt.provider.v1.PluginRuntimeSessionR\x08sessions\"@\n\x1fStopPluginRuntimeSessionRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\"\xb2\x01\n$PreparePluginRuntimeWorkspaceRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12(\n\x10\x61gent_session_id\x18\x02 \x01(\tR\x0e\x61gentSessionId\x12\x41\n\tworkspace\x18\x03 \x01(\x0b\x32#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\"r\n%PreparePluginRuntimeWorkspaceResponse\x12I\n\tworkspace\x18\x01 \x01(\x0b\x32+.gestalt.provider.v1.PreparedAgentWorkspaceR\tworkspace\"n\n#RemovePluginRuntimeWorkspaceRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12(\n\x10\x61gent_session_id\x18\x02 \x01(\tR\x0e\x61gentSessionId\"\x83\x03\n\x18StartHostedPluginRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1f\n\x0bplugin_name\x18\x02 \x01(\tR\npluginName\x12\x18\n\x07\x63ommand\x18\x03 \x01(\tR\x07\x63ommand\x12\x12\n\x04\x61rgs\x18\x04 \x03(\tR\x04\x61rgs\x12H\n\x03\x65nv\x18\x05 \x03(\x0b\x32\x36.gestalt.provider.v1.StartHostedPluginRequest.EnvEntryR\x03\x65nv\x12#\n\rallowed_hosts\x18\x07 \x03(\tR\x0c\x61llowedHosts\x12%\n\x0e\x64\x65\x66\x61ult_action\x18\x08 \x01(\tR\rdefaultAction\x12\x1f\n\x0bhost_binary\x18\t \x01(\tR\nhostBinary\x1a\x36\n\x08\x45nvEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01J\x04\x08\x06\x10\x07J\x04\x08\n\x10\x0b\"\x7f\n\x0cHostedPlugin\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n\nsession_id\x18\x02 \x01(\tR\tsessionId\x12\x1f\n\x0bplugin_name\x18\x03 \x01(\tR\npluginName\x12\x1f\n\x0b\x64ial_target\x18\x04 \x01(\tR\ndialTarget\"\xd2\x01\n\x15PluginRuntimeLogEntry\x12\x43\n\x06stream\x18\x01 \x01(\x0e\x32+.gestalt.provider.v1.PluginRuntimeLogStreamR\x06stream\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message\x12;\n\x0bobserved_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\nobservedAt\x12\x1d\n\nsource_seq\x18\x04 \x01(\x03R\tsourceSeq\"\x7f\n\x1e\x41ppendPluginRuntimeLogsRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12>\n\x04logs\x18\x02 \x03(\x0b\x32*.gestalt.provider.v1.PluginRuntimeLogEntryR\x04logs\"<\n\x1f\x41ppendPluginRuntimeLogsResponse\x12\x19\n\x08last_seq\x18\x01 \x01(\x03R\x07lastSeq*\xb8\x01\n\x17PluginRuntimeEgressMode\x12*\n&PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED\x10\x00\x12#\n\x1fPLUGIN_RUNTIME_EGRESS_MODE_NONE\x10\x01\x12#\n\x1fPLUGIN_RUNTIME_EGRESS_MODE_CIDR\x10\x02\x12\'\n#PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME\x10\x03*\xb6\x01\n\x16PluginRuntimeLogStream\x12)\n%PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED\x10\x00\x12$\n PLUGIN_RUNTIME_LOG_STREAM_STDOUT\x10\x01\x12$\n PLUGIN_RUNTIME_LOG_STREAM_STDERR\x10\x02\x12%\n!PLUGIN_RUNTIME_LOG_STREAM_RUNTIME\x10\x03\x32\x8f\x01\n\x14PluginRuntimeLogHost\x12w\n\nAppendLogs\x12\x33.gestalt.provider.v1.AppendPluginRuntimeLogsRequest\x1a\x34.gestalt.provider.v1.AppendPluginRuntimeLogsResponse2\xf6\x06\n\x15PluginRuntimeProvider\x12O\n\nGetSupport\x12\x16.google.protobuf.Empty\x1a).gestalt.provider.v1.PluginRuntimeSupport\x12p\n\x0cStartSession\x12\x35.gestalt.provider.v1.StartPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12l\n\nGetSession\x12\x33.gestalt.provider.v1.GetPluginRuntimeSessionRequest\x1a).gestalt.provider.v1.PluginRuntimeSession\x12}\n\x0cListSessions\x12\x35.gestalt.provider.v1.ListPluginRuntimeSessionsRequest\x1a\x36.gestalt.provider.v1.ListPluginRuntimeSessionsResponse\x12[\n\x0bStopSession\x12\x34.gestalt.provider.v1.StopPluginRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12\x89\x01\n\x10PrepareWorkspace\x12\x39.gestalt.provider.v1.PreparePluginRuntimeWorkspaceRequest\x1a:.gestalt.provider.v1.PreparePluginRuntimeWorkspaceResponse\x12\x63\n\x0fRemoveWorkspace\x12\x38.gestalt.provider.v1.RemovePluginRuntimeWorkspaceRequest\x1a\x16.google.protobuf.Empty\x12_\n\x0bStartPlugin\x12-.gestalt.provider.v1.StartHostedPluginRequest\x1a!.gestalt.provider.v1.HostedPluginB=Z;github.com/valon-technologies/gestalt/internal/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -40,46 +41,52 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_STARTPLUGINRUNTIMESESSIONREQUEST_METADATAENTRY']._serialized_options = b'8\001'
   _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._loaded_options = None
   _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._serialized_options = b'8\001'
-  _globals['_PLUGINRUNTIMEEGRESSMODE']._serialized_start=2565
-  _globals['_PLUGINRUNTIMEEGRESSMODE']._serialized_end=2749
-  _globals['_PLUGINRUNTIMELOGSTREAM']._serialized_start=2752
-  _globals['_PLUGINRUNTIMELOGSTREAM']._serialized_end=2934
-  _globals['_PLUGINRUNTIMESUPPORT']._serialized_start=110
-  _globals['_PLUGINRUNTIMESUPPORT']._serialized_end=298
-  _globals['_PLUGINRUNTIMESESSION']._serialized_start=301
-  _globals['_PLUGINRUNTIMESESSION']._serialized_end=661
-  _globals['_PLUGINRUNTIMESESSION_METADATAENTRY']._serialized_start=602
-  _globals['_PLUGINRUNTIMESESSION_METADATAENTRY']._serialized_end=661
-  _globals['_PLUGINRUNTIMESESSIONLIFECYCLE']._serialized_start=664
-  _globals['_PLUGINRUNTIMESESSIONLIFECYCLE']._serialized_end=891
-  _globals['_PLUGINRUNTIMEIMAGEPULLAUTH']._serialized_start=893
-  _globals['_PLUGINRUNTIMEIMAGEPULLAUTH']._serialized_end=967
-  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST']._serialized_start=970
-  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1364
-  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST_METADATAENTRY']._serialized_start=602
-  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST_METADATAENTRY']._serialized_end=661
-  _globals['_GETPLUGINRUNTIMESESSIONREQUEST']._serialized_start=1366
-  _globals['_GETPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1429
-  _globals['_LISTPLUGINRUNTIMESESSIONSREQUEST']._serialized_start=1431
-  _globals['_LISTPLUGINRUNTIMESESSIONSREQUEST']._serialized_end=1465
-  _globals['_LISTPLUGINRUNTIMESESSIONSRESPONSE']._serialized_start=1467
-  _globals['_LISTPLUGINRUNTIMESESSIONSRESPONSE']._serialized_end=1573
-  _globals['_STOPPLUGINRUNTIMESESSIONREQUEST']._serialized_start=1575
-  _globals['_STOPPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1639
-  _globals['_STARTHOSTEDPLUGINREQUEST']._serialized_start=1642
-  _globals['_STARTHOSTEDPLUGINREQUEST']._serialized_end=2029
-  _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._serialized_start=1963
-  _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._serialized_end=2017
-  _globals['_HOSTEDPLUGIN']._serialized_start=2031
-  _globals['_HOSTEDPLUGIN']._serialized_end=2158
-  _globals['_PLUGINRUNTIMELOGENTRY']._serialized_start=2161
-  _globals['_PLUGINRUNTIMELOGENTRY']._serialized_end=2371
-  _globals['_APPENDPLUGINRUNTIMELOGSREQUEST']._serialized_start=2373
-  _globals['_APPENDPLUGINRUNTIMELOGSREQUEST']._serialized_end=2500
-  _globals['_APPENDPLUGINRUNTIMELOGSRESPONSE']._serialized_start=2502
-  _globals['_APPENDPLUGINRUNTIMELOGSRESPONSE']._serialized_end=2562
-  _globals['_PLUGINRUNTIMELOGHOST']._serialized_start=2937
-  _globals['_PLUGINRUNTIMELOGHOST']._serialized_end=3080
-  _globals['_PLUGINRUNTIMEPROVIDER']._serialized_start=3083
-  _globals['_PLUGINRUNTIMEPROVIDER']._serialized_end=3728
+  _globals['_PLUGINRUNTIMEEGRESSMODE']._serialized_start=3052
+  _globals['_PLUGINRUNTIMEEGRESSMODE']._serialized_end=3236
+  _globals['_PLUGINRUNTIMELOGSTREAM']._serialized_start=3239
+  _globals['_PLUGINRUNTIMELOGSTREAM']._serialized_end=3421
+  _globals['_PLUGINRUNTIMESUPPORT']._serialized_start=126
+  _globals['_PLUGINRUNTIMESUPPORT']._serialized_end=376
+  _globals['_PLUGINRUNTIMESESSION']._serialized_start=379
+  _globals['_PLUGINRUNTIMESESSION']._serialized_end=739
+  _globals['_PLUGINRUNTIMESESSION_METADATAENTRY']._serialized_start=680
+  _globals['_PLUGINRUNTIMESESSION_METADATAENTRY']._serialized_end=739
+  _globals['_PLUGINRUNTIMESESSIONLIFECYCLE']._serialized_start=742
+  _globals['_PLUGINRUNTIMESESSIONLIFECYCLE']._serialized_end=969
+  _globals['_PLUGINRUNTIMEIMAGEPULLAUTH']._serialized_start=971
+  _globals['_PLUGINRUNTIMEIMAGEPULLAUTH']._serialized_end=1045
+  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST']._serialized_start=1048
+  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1442
+  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST_METADATAENTRY']._serialized_start=680
+  _globals['_STARTPLUGINRUNTIMESESSIONREQUEST_METADATAENTRY']._serialized_end=739
+  _globals['_GETPLUGINRUNTIMESESSIONREQUEST']._serialized_start=1444
+  _globals['_GETPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1507
+  _globals['_LISTPLUGINRUNTIMESESSIONSREQUEST']._serialized_start=1509
+  _globals['_LISTPLUGINRUNTIMESESSIONSREQUEST']._serialized_end=1543
+  _globals['_LISTPLUGINRUNTIMESESSIONSRESPONSE']._serialized_start=1545
+  _globals['_LISTPLUGINRUNTIMESESSIONSRESPONSE']._serialized_end=1651
+  _globals['_STOPPLUGINRUNTIMESESSIONREQUEST']._serialized_start=1653
+  _globals['_STOPPLUGINRUNTIMESESSIONREQUEST']._serialized_end=1717
+  _globals['_PREPAREPLUGINRUNTIMEWORKSPACEREQUEST']._serialized_start=1720
+  _globals['_PREPAREPLUGINRUNTIMEWORKSPACEREQUEST']._serialized_end=1898
+  _globals['_PREPAREPLUGINRUNTIMEWORKSPACERESPONSE']._serialized_start=1900
+  _globals['_PREPAREPLUGINRUNTIMEWORKSPACERESPONSE']._serialized_end=2014
+  _globals['_REMOVEPLUGINRUNTIMEWORKSPACEREQUEST']._serialized_start=2016
+  _globals['_REMOVEPLUGINRUNTIMEWORKSPACEREQUEST']._serialized_end=2126
+  _globals['_STARTHOSTEDPLUGINREQUEST']._serialized_start=2129
+  _globals['_STARTHOSTEDPLUGINREQUEST']._serialized_end=2516
+  _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._serialized_start=2450
+  _globals['_STARTHOSTEDPLUGINREQUEST_ENVENTRY']._serialized_end=2504
+  _globals['_HOSTEDPLUGIN']._serialized_start=2518
+  _globals['_HOSTEDPLUGIN']._serialized_end=2645
+  _globals['_PLUGINRUNTIMELOGENTRY']._serialized_start=2648
+  _globals['_PLUGINRUNTIMELOGENTRY']._serialized_end=2858
+  _globals['_APPENDPLUGINRUNTIMELOGSREQUEST']._serialized_start=2860
+  _globals['_APPENDPLUGINRUNTIMELOGSREQUEST']._serialized_end=2987
+  _globals['_APPENDPLUGINRUNTIMELOGSRESPONSE']._serialized_start=2989
+  _globals['_APPENDPLUGINRUNTIMELOGSRESPONSE']._serialized_end=3049
+  _globals['_PLUGINRUNTIMELOGHOST']._serialized_start=3424
+  _globals['_PLUGINRUNTIMELOGHOST']._serialized_end=3567
+  _globals['_PLUGINRUNTIMEPROVIDER']._serialized_start=3570
+  _globals['_PLUGINRUNTIMEPROVIDER']._serialized_end=4456
 # @@protoc_insertion_point(module_scope)

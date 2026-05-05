@@ -226,6 +226,29 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 	return nil
 }
 
+func (p *executableProvider) PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error) {
+	resp, err := p.runtime.PrepareWorkspace(ctx, &proto.PreparePluginRuntimeWorkspaceRequest{
+		SessionId:      req.SessionID,
+		AgentSessionId: req.AgentSessionID,
+		Workspace:      workspaceToProto(req.Workspace),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("prepare runtime workspace: %w", err)
+	}
+	return preparedWorkspaceFromProto(resp.GetWorkspace()), nil
+}
+
+func (p *executableProvider) RemoveWorkspace(ctx context.Context, req RemoveWorkspaceRequest) error {
+	_, err := p.runtime.RemoveWorkspace(ctx, &proto.RemovePluginRuntimeWorkspaceRequest{
+		SessionId:      req.SessionID,
+		AgentSessionId: req.AgentSessionID,
+	})
+	if err != nil {
+		return fmt.Errorf("remove runtime workspace: %w", err)
+	}
+	return nil
+}
+
 func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
 	resp, err := p.runtime.StartPlugin(ctx, &proto.StartHostedPluginRequest{
 		SessionId:     req.SessionID,
@@ -297,8 +320,38 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 		return Support{}
 	}
 	return Support{
-		CanHostPlugins: src.GetCanHostPlugins(),
-		EgressMode:     egressModeFromProto(src.GetEgressMode()),
+		CanHostPlugins:           src.GetCanHostPlugins(),
+		EgressMode:               egressModeFromProto(src.GetEgressMode()),
+		SupportsPrepareWorkspace: src.GetSupportsPrepareWorkspace(),
+	}
+}
+
+func workspaceToProto(workspace *Workspace) *proto.AgentWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	out := &proto.AgentWorkspace{
+		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		Cwd:       workspace.CWD,
+	}
+	for i := range workspace.Checkouts {
+		checkout := workspace.Checkouts[i]
+		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
+			Url:  checkout.URL,
+			Ref:  checkout.Ref,
+			Path: checkout.Path,
+		})
+	}
+	return out
+}
+
+func preparedWorkspaceFromProto(workspace *proto.PreparedAgentWorkspace) *PreparedWorkspace {
+	if workspace == nil {
+		return nil
+	}
+	return &PreparedWorkspace{
+		Root: workspace.GetRoot(),
+		CWD:  workspace.GetCwd(),
 	}
 }
 

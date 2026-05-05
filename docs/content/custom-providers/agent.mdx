@@ -88,6 +88,49 @@ namespace across later `UpdateSession` calls. If a hook has
 `output.additional_context`, prepend stdout as provider-owned context to future
 turn prompts for that session.
 
+Providers that can launch a vendor harness from a pre-existing directory should
+advertise `supports_prepared_workspace`. They do not receive the caller's raw
+checkout request; Gestalt and the runtime provider turn that request into a
+prepared `root` and `cwd` first.
+
+```go
+func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+  return &proto.AgentProviderCapabilities{
+    SupportsPreparedWorkspace: true,
+  }, nil
+}
+
+func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+  prepared := req.GetPreparedWorkspace()
+  if prepared != nil {
+    // Launch the vendor harness with prepared.GetCwd() as its working directory.
+  }
+
+  return &proto.AgentSession{Id: req.GetSessionId()}, nil
+}
+```
+
+In TypeScript, the same fields are exposed as `supportsPreparedWorkspace` and
+`request.preparedWorkspace`:
+
+```ts
+export const provider = defineAgentProvider({
+  getCapabilities() {
+    return { supportsPreparedWorkspace: true };
+  },
+
+  async createSession(request) {
+    const cwd = request.preparedWorkspace?.cwd;
+    // Launch the vendor harness from cwd when it is present.
+    return {
+      id: request.sessionId,
+      providerName: "example",
+      state: AgentSessionState.ACTIVE,
+    };
+  },
+});
+```
+
 ## MCP Catalog Tools
 
 Agent providers opt in to Gestalt integration tools by advertising
@@ -321,6 +364,7 @@ events.
         Interactions:         true,
         ResumableTurns:       true,
         BoundedListHydration: true,
+        SupportsPreparedWorkspace: true,
       }, nil
     }
 
@@ -434,6 +478,7 @@ events.
                 interactions=True,
                 resumable_turns=True,
                 bounded_list_hydration=True,
+                supports_prepared_workspace=True,
             )
 
 
@@ -618,6 +663,7 @@ events.
                 interactions: true,
                 resumable_turns: true,
                 bounded_list_hydration: true,
+                supports_prepared_workspace: true,
                 ..Default::default()
             }))
         }
@@ -783,6 +829,7 @@ events.
           interactions: true,
           resumableTurns: true,
           boundedListHydration: true,
+          supportsPreparedWorkspace: true,
         };
       },
     });

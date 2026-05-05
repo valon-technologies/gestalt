@@ -49,6 +49,8 @@ type (
 	AgentTurn                                 = internal.AgentTurn
 	AgentTurnDisplay                          = internal.AgentTurnDisplay
 	AgentTurnEvent                            = internal.AgentTurnEvent
+	AgentWorkspace                            = internal.AgentWorkspace
+	AgentWorkspaceGitCheckout                 = internal.AgentWorkspaceGitCheckout
 	AuthorizationModel                        = internal.AuthorizationModel
 	AuthorizationModelAction                  = internal.AuthorizationModelAction
 	AuthorizationModelRelation                = internal.AuthorizationModelRelation
@@ -147,6 +149,9 @@ type (
 	OpenCursorRequest                         = internal.OpenCursorRequest
 	PauseWorkflowProviderEventTriggerRequest  = internal.PauseWorkflowProviderEventTriggerRequest
 	PauseWorkflowProviderScheduleRequest      = internal.PauseWorkflowProviderScheduleRequest
+	PreparedAgentWorkspace                    = internal.PreparedAgentWorkspace
+	PreparePluginRuntimeWorkspaceRequest      = internal.PreparePluginRuntimeWorkspaceRequest
+	PreparePluginRuntimeWorkspaceResponse     = internal.PreparePluginRuntimeWorkspaceResponse
 	ProviderLifecycleClient                   = internal.ProviderLifecycleClient
 	PublishWorkflowProviderEventRequest       = internal.PublishWorkflowProviderEventRequest
 	PutWorkflowExecutionReferenceRequest      = internal.PutWorkflowExecutionReferenceRequest
@@ -157,6 +162,7 @@ type (
 	RecordsResponse                           = internal.RecordsResponse
 	Relationship                              = internal.Relationship
 	RelationshipKey                           = internal.RelationshipKey
+	RemovePluginRuntimeWorkspaceRequest       = internal.RemovePluginRuntimeWorkspaceRequest
 	ResolveAgentProviderInteractionRequest    = internal.ResolveAgentProviderInteractionRequest
 	ResolveExternalCredentialRequest          = internal.ResolveExternalCredentialRequest
 	ResolveExternalCredentialResponse         = internal.ResolveExternalCredentialResponse

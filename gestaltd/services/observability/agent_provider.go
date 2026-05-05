@@ -119,6 +119,11 @@ func (p *observedAgentProvider) Unwrap() coreagent.Provider {
 	return p.delegate
 }
 
+func (p *observedAgentProvider) SupportsWorkspaceRequests() bool {
+	workspaceProvider, ok := p.delegate.(coreagent.WorkspaceProvider)
+	return ok && workspaceProvider.SupportsWorkspaceRequests()
+}
+
 func (p *observedAgentProvider) start(ctx context.Context, operation string) (context.Context, func(error)) {
 	startedAt := time.Now()
 	attrs := []attribute.KeyValue{

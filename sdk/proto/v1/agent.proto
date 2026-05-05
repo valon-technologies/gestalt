@@ -66,6 +66,22 @@ message AgentSubjectContext {
   string auth_source = 5;
 }
 
+message AgentWorkspace {
+  repeated AgentWorkspaceGitCheckout checkouts = 1;
+  string cwd = 2;
+}
+
+message AgentWorkspaceGitCheckout {
+  string url = 1;
+  string ref = 2;
+  string path = 3;
+}
+
+message PreparedAgentWorkspace {
+  string root = 1;
+  string cwd = 2;
+}
+
 message ResolvedAgentTool {
   reserved 4;
   reserved "target";
@@ -142,6 +158,7 @@ message AgentProviderCapabilities {
   bool bounded_list_hydration = 9;
   repeated AgentToolSourceMode supported_tool_sources = 10;
   bool supports_session_start = 11;
+  bool supports_prepared_workspace = 12;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
@@ -185,6 +202,7 @@ message CreateAgentProviderSessionRequest {
   AgentActor created_by = 7;
   AgentSubjectContext subject = 8;
   AgentSessionStartConfig session_start = 9;
+  PreparedAgentWorkspace prepared_workspace = 10;
 }
 
 message AgentSessionStartConfig {
@@ -435,6 +453,7 @@ message AgentManagerCreateSessionRequest {
   google.protobuf.Struct metadata = 5;
   string idempotency_key = 7;
   string invocation_token = 8;
+  AgentWorkspace workspace = 9;
 }
 
 message AgentManagerGetSessionRequest {

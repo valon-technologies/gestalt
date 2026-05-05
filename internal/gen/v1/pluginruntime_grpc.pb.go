@@ -122,12 +122,14 @@ var PluginRuntimeLogHost_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	PluginRuntimeProvider_GetSupport_FullMethodName   = "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport"
-	PluginRuntimeProvider_StartSession_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/StartSession"
-	PluginRuntimeProvider_GetSession_FullMethodName   = "/gestalt.provider.v1.PluginRuntimeProvider/GetSession"
-	PluginRuntimeProvider_ListSessions_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/ListSessions"
-	PluginRuntimeProvider_StopSession_FullMethodName  = "/gestalt.provider.v1.PluginRuntimeProvider/StopSession"
-	PluginRuntimeProvider_StartPlugin_FullMethodName  = "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin"
+	PluginRuntimeProvider_GetSupport_FullMethodName       = "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport"
+	PluginRuntimeProvider_StartSession_FullMethodName     = "/gestalt.provider.v1.PluginRuntimeProvider/StartSession"
+	PluginRuntimeProvider_GetSession_FullMethodName       = "/gestalt.provider.v1.PluginRuntimeProvider/GetSession"
+	PluginRuntimeProvider_ListSessions_FullMethodName     = "/gestalt.provider.v1.PluginRuntimeProvider/ListSessions"
+	PluginRuntimeProvider_StopSession_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/StopSession"
+	PluginRuntimeProvider_PrepareWorkspace_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/PrepareWorkspace"
+	PluginRuntimeProvider_RemoveWorkspace_FullMethodName  = "/gestalt.provider.v1.PluginRuntimeProvider/RemoveWorkspace"
+	PluginRuntimeProvider_StartPlugin_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin"
 )
 
 // PluginRuntimeProviderClient is the client API for PluginRuntimeProvider service.
@@ -139,6 +141,8 @@ type PluginRuntimeProviderClient interface {
 	GetSession(ctx context.Context, in *GetPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*PluginRuntimeSession, error)
 	ListSessions(ctx context.Context, in *ListPluginRuntimeSessionsRequest, opts ...grpc.CallOption) (*ListPluginRuntimeSessionsResponse, error)
 	StopSession(ctx context.Context, in *StopPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PrepareWorkspace(ctx context.Context, in *PreparePluginRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*PreparePluginRuntimeWorkspaceResponse, error)
+	RemoveWorkspace(ctx context.Context, in *RemovePluginRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	StartPlugin(ctx context.Context, in *StartHostedPluginRequest, opts ...grpc.CallOption) (*HostedPlugin, error)
 }
 
@@ -200,6 +204,26 @@ func (c *pluginRuntimeProviderClient) StopSession(ctx context.Context, in *StopP
 	return out, nil
 }
 
+func (c *pluginRuntimeProviderClient) PrepareWorkspace(ctx context.Context, in *PreparePluginRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*PreparePluginRuntimeWorkspaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PreparePluginRuntimeWorkspaceResponse)
+	err := c.cc.Invoke(ctx, PluginRuntimeProvider_PrepareWorkspace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginRuntimeProviderClient) RemoveWorkspace(ctx context.Context, in *RemovePluginRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, PluginRuntimeProvider_RemoveWorkspace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginRuntimeProviderClient) StartPlugin(ctx context.Context, in *StartHostedPluginRequest, opts ...grpc.CallOption) (*HostedPlugin, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HostedPlugin)
@@ -219,6 +243,8 @@ type PluginRuntimeProviderServer interface {
 	GetSession(context.Context, *GetPluginRuntimeSessionRequest) (*PluginRuntimeSession, error)
 	ListSessions(context.Context, *ListPluginRuntimeSessionsRequest) (*ListPluginRuntimeSessionsResponse, error)
 	StopSession(context.Context, *StopPluginRuntimeSessionRequest) (*emptypb.Empty, error)
+	PrepareWorkspace(context.Context, *PreparePluginRuntimeWorkspaceRequest) (*PreparePluginRuntimeWorkspaceResponse, error)
+	RemoveWorkspace(context.Context, *RemovePluginRuntimeWorkspaceRequest) (*emptypb.Empty, error)
 	StartPlugin(context.Context, *StartHostedPluginRequest) (*HostedPlugin, error)
 	mustEmbedUnimplementedPluginRuntimeProviderServer()
 }
@@ -244,6 +270,12 @@ func (UnimplementedPluginRuntimeProviderServer) ListSessions(context.Context, *L
 }
 func (UnimplementedPluginRuntimeProviderServer) StopSession(context.Context, *StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopSession not implemented")
+}
+func (UnimplementedPluginRuntimeProviderServer) PrepareWorkspace(context.Context, *PreparePluginRuntimeWorkspaceRequest) (*PreparePluginRuntimeWorkspaceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareWorkspace not implemented")
+}
+func (UnimplementedPluginRuntimeProviderServer) RemoveWorkspace(context.Context, *RemovePluginRuntimeWorkspaceRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveWorkspace not implemented")
 }
 func (UnimplementedPluginRuntimeProviderServer) StartPlugin(context.Context, *StartHostedPluginRequest) (*HostedPlugin, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartPlugin not implemented")
@@ -359,6 +391,42 @@ func _PluginRuntimeProvider_StopSession_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginRuntimeProvider_PrepareWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PreparePluginRuntimeWorkspaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginRuntimeProviderServer).PrepareWorkspace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginRuntimeProvider_PrepareWorkspace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginRuntimeProviderServer).PrepareWorkspace(ctx, req.(*PreparePluginRuntimeWorkspaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginRuntimeProvider_RemoveWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemovePluginRuntimeWorkspaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginRuntimeProviderServer).RemoveWorkspace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginRuntimeProvider_RemoveWorkspace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginRuntimeProviderServer).RemoveWorkspace(ctx, req.(*RemovePluginRuntimeWorkspaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginRuntimeProvider_StartPlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartHostedPluginRequest)
 	if err := dec(in); err != nil {
@@ -403,6 +471,14 @@ var PluginRuntimeProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopSession",
 			Handler:    _PluginRuntimeProvider_StopSession_Handler,
+		},
+		{
+			MethodName: "PrepareWorkspace",
+			Handler:    _PluginRuntimeProvider_PrepareWorkspace_Handler,
+		},
+		{
+			MethodName: "RemoveWorkspace",
+			Handler:    _PluginRuntimeProvider_RemoveWorkspace_Handler,
 		},
 		{
 			MethodName: "StartPlugin",

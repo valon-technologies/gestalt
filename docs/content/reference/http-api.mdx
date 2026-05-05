@@ -110,7 +110,10 @@ shape.
 | `POST` | `/api/v1/agent/turns/{turnID}/interactions/{interactionID}/resolve` | Resolve one pending interaction by submitting a `resolution` payload. |
 
 Session creation accepts `provider`, `model`, optional `clientRef`, optional
-`metadata`, and optional `idempotencyKey`.
+`metadata`, optional `workspace`, and optional `idempotencyKey`.
+`workspace.checkouts[]` entries contain `url`, optional `ref`, and relative
+`path`. `workspace.cwd` is also relative and must point inside one of the
+prepared checkouts.
 
 Turn creation accepts `model`, `messages`, optional `toolRefs`, optional
 `toolSource`, optional `responseSchema`, optional `metadata`, optional
@@ -302,6 +305,16 @@ curl -X POST http://localhost:8080/api/v1/agent/sessions \
     "provider": "managed",
     "model": "gpt-5.4",
     "clientRef": "roadmap-risk",
+    "workspace": {
+      "checkouts": [
+        {
+          "url": "https://github.com/valon-technologies/roadmap.git",
+          "ref": "main",
+          "path": "roadmap"
+        }
+      ],
+      "cwd": "roadmap"
+    },
     "metadata": {
       "ticket": "RD-42"
     }

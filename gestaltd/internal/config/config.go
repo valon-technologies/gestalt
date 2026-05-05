@@ -599,16 +599,26 @@ type ExecutionConfig struct {
 }
 
 type HostedRuntimeConfig struct {
-	Provider      string                      `yaml:"provider,omitempty"`
-	Template      string                      `yaml:"template,omitempty"`
-	Image         string                      `yaml:"image,omitempty"`
-	ImagePullAuth *HostedRuntimeImagePullAuth `yaml:"imagePullAuth,omitempty"`
-	Metadata      map[string]string           `yaml:"metadata,omitempty"`
-	Pool          *HostedRuntimePoolConfig    `yaml:"pool,omitempty"`
+	Provider      string                        `yaml:"provider,omitempty"`
+	Template      string                        `yaml:"template,omitempty"`
+	Image         string                        `yaml:"image,omitempty"`
+	ImagePullAuth *HostedRuntimeImagePullAuth   `yaml:"imagePullAuth,omitempty"`
+	Metadata      map[string]string             `yaml:"metadata,omitempty"`
+	Pool          *HostedRuntimePoolConfig      `yaml:"pool,omitempty"`
+	Workspace     *HostedRuntimeWorkspaceConfig `yaml:"workspace,omitempty"`
 }
 
 type HostedRuntimeImagePullAuth struct {
 	DockerConfigJSON string `yaml:"dockerConfigJson,omitempty"`
+}
+
+type HostedRuntimeWorkspaceConfig struct {
+	PrepareTimeout string                           `yaml:"prepareTimeout,omitempty"`
+	Git            *HostedRuntimeWorkspaceGitConfig `yaml:"git,omitempty"`
+}
+
+type HostedRuntimeWorkspaceGitConfig struct {
+	AllowedRepositories []string `yaml:"allowedRepositories,omitempty"`
 }
 
 type HostedRuntimePoolConfig struct {
@@ -1173,6 +1183,7 @@ func cloneHostedRuntimeConfig(src *HostedRuntimeConfig) *HostedRuntimeConfig {
 		ImagePullAuth: cloneHostedRuntimeImagePullAuth(src.ImagePullAuth),
 		Metadata:      maps.Clone(src.Metadata),
 		Pool:          cloneHostedRuntimePoolConfig(src.Pool),
+		Workspace:     cloneHostedRuntimeWorkspaceConfig(src.Workspace),
 	}
 }
 
@@ -1196,6 +1207,25 @@ func cloneHostedRuntimePoolConfig(src *HostedRuntimePoolConfig) *HostedRuntimePo
 		HealthCheckInterval: src.HealthCheckInterval,
 		RestartPolicy:       src.RestartPolicy,
 		DrainTimeout:        src.DrainTimeout,
+	}
+}
+
+func cloneHostedRuntimeWorkspaceConfig(src *HostedRuntimeWorkspaceConfig) *HostedRuntimeWorkspaceConfig {
+	if src == nil {
+		return nil
+	}
+	return &HostedRuntimeWorkspaceConfig{
+		PrepareTimeout: src.PrepareTimeout,
+		Git:            cloneHostedRuntimeWorkspaceGitConfig(src.Git),
+	}
+}
+
+func cloneHostedRuntimeWorkspaceGitConfig(src *HostedRuntimeWorkspaceGitConfig) *HostedRuntimeWorkspaceGitConfig {
+	if src == nil {
+		return nil
+	}
+	return &HostedRuntimeWorkspaceGitConfig{
+		AllowedRepositories: slices.Clone(src.AllowedRepositories),
 	}
 }
 

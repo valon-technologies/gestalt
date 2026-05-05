@@ -97,6 +97,40 @@ When `metadata` is true, stdout/stderr are stored under the reserved
 `__gestalt.lifecycle.sessionStart.results.<hookId>` session metadata namespace.
 Callers cannot set keys in `__gestalt.lifecycle.*` themselves.
 
+### Workspace setup
+
+Session callers can ask Gestalt to prepare one or more Git checkouts before the
+agent provider creates the provider-owned session:
+
+```json
+{
+  "provider": "claude",
+  "model": "sonnet",
+  "clientRef": "repo-investigation",
+  "workspace": {
+    "checkouts": [
+      {
+        "url": "https://github.com/valon-technologies/gestalt.git",
+        "ref": "main",
+        "path": "gestalt"
+      }
+    ],
+    "cwd": "gestalt"
+  }
+}
+```
+
+For hosted agent providers, `gestaltd` validates the request, selects a runtime
+session, asks the runtime provider to prepare the workspace inside that runtime,
+then calls the agent provider's `CreateSession` with only the prepared
+`root`/`cwd`. The repository exists before the vendor harness starts, and each
+agent session gets its own workspace path.
+
+This is separate from `sessionStart` hooks. Hooks still run as provider-owned
+session setup, but they should not be used to create the working directory that
+the agent process is launched from. Use hooks for context or metadata, and use
+`workspace` for checkout and cwd setup.
+
 If you want the provider to run in a hosted sandbox instead of directly on the
 `gestaltd` host, add `execution.mode: hosted` and `execution.runtime` to that
 same `providers.agent.<name>` entry:
@@ -111,6 +145,11 @@ providers:
         runtime:
           provider: modal
           image: ghcr.io/valon/gestalt-python-runtime:latest
+          workspace:
+            prepareTimeout: 10m
+            git:
+              allowedRepositories:
+                - github.com/valon-technologies/*
           pool:
             minReadyInstances: 1
             maxReadyInstances: 4
@@ -145,7 +184,17 @@ Example session request:
 {
   "provider": "simple",
   "model": "fast",
-  "clientRef": "roadmap-risk"
+  "clientRef": "roadmap-risk",
+  "workspace": {
+    "checkouts": [
+      {
+        "url": "https://github.com/valon-technologies/roadmap.git",
+        "ref": "main",
+        "path": "roadmap"
+      }
+    ],
+    "cwd": "roadmap"
+  }
 }
 ```
 

@@ -59,6 +59,8 @@ import {
 import {
   GetPluginRuntimeSessionRequestSchema,
   ListPluginRuntimeSessionsRequestSchema,
+  PreparePluginRuntimeWorkspaceRequestSchema,
+  RemovePluginRuntimeWorkspaceRequestSchema,
   StartHostedPluginRequestSchema,
   StartPluginRuntimeSessionRequestSchema,
   StopPluginRuntimeSessionRequestSchema,
@@ -1433,6 +1435,7 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
       return {
         canHostPlugins: true,
         egressMode: PluginRuntimeEgressMode.HOSTNAME,
+        supportsPrepareWorkspace: true,
       };
     },
     startSession(request) {
@@ -1451,6 +1454,15 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
       return [{ id: "plugin-session", state: "ready" }];
     },
     stopSession() {},
+    prepareWorkspace(request) {
+      return {
+        workspace: {
+          root: `/runtime/${request.agentSessionId}`,
+          cwd: `/runtime/${request.agentSessionId}/app`,
+        },
+      };
+    },
+    removeWorkspace() {},
     startPlugin(request) {
       return {
         id: "hosted-plugin-1",
@@ -1474,6 +1486,7 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
   const support = await (service.getSupport as any)(create(EmptySchema));
   expect(support.canHostPlugins).toBe(true);
   expect(support.egressMode).toBe(PluginRuntimeEgressMode.HOSTNAME);
+  expect(support.supportsPrepareWorkspace).toBe(true);
 
   const session = await (service.startSession as any)(
     create(StartPluginRuntimeSessionRequestSchema, {
@@ -1496,6 +1509,30 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
   );
   expect(sessions.sessions).toHaveLength(1);
   expect(sessions.sessions[0].id).toBe("plugin-session");
+
+  const prepared = await (service.prepareWorkspace as any)(
+    create(PreparePluginRuntimeWorkspaceRequestSchema, {
+      sessionId: "plugin-session",
+      agentSessionId: "agent-session-1",
+      workspace: {
+        cwd: "app",
+        checkouts: [{
+          url: "git@github.com:valon-technologies/app.git",
+          ref: "refs/heads/main",
+          path: "app",
+        }],
+      },
+    }),
+  );
+  expect(prepared.workspace?.cwd).toBe("/runtime/agent-session-1/app");
+
+  const removed = await (service.removeWorkspace as any)(
+    create(RemovePluginRuntimeWorkspaceRequestSchema, {
+      sessionId: "plugin-session",
+      agentSessionId: "agent-session-1",
+    }),
+  );
+  expect(removed.$typeName).toBe("google.protobuf.Empty");
 
   const hosted = await (service.startPlugin as any)(
     create(StartHostedPluginRequestSchema, {

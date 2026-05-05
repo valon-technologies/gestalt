@@ -36,8 +36,9 @@ const (
 )
 
 type Support struct {
-	CanHostPlugins bool
-	EgressMode     EgressMode
+	CanHostPlugins           bool
+	EgressMode               EgressMode
+	SupportsPrepareWorkspace bool
 }
 
 type Session struct {
@@ -73,6 +74,33 @@ type GetSessionRequest struct {
 
 type StopSessionRequest struct {
 	SessionID string
+}
+
+type Workspace struct {
+	Checkouts []WorkspaceGitCheckout
+	CWD       string
+}
+
+type WorkspaceGitCheckout struct {
+	URL  string
+	Ref  string
+	Path string
+}
+
+type PreparedWorkspace struct {
+	Root string
+	CWD  string
+}
+
+type PrepareWorkspaceRequest struct {
+	SessionID      string
+	AgentSessionID string
+	Workspace      *Workspace
+}
+
+type RemoveWorkspaceRequest struct {
+	SessionID      string
+	AgentSessionID string
 }
 
 // StartPluginRequest describes the plugin process to launch inside a runtime
@@ -121,4 +149,9 @@ type Provider interface {
 	StopSession(ctx context.Context, req StopSessionRequest) error
 	StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error)
 	Close() error
+}
+
+type WorkspaceProvider interface {
+	PrepareWorkspace(ctx context.Context, req PrepareWorkspaceRequest) (*PreparedWorkspace, error)
+	RemoveWorkspace(ctx context.Context, req RemoveWorkspaceRequest) error
 }

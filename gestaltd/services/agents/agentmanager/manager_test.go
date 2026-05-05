@@ -139,6 +139,7 @@ type routeCountingAgentProvider struct {
 	turns             map[string]*coreagent.Turn
 	capabilities      *coreagent.ProviderCapabilities
 	capabilitiesErr   error
+	supportsWorkspace bool
 	createSessionReqs []coreagent.CreateSessionRequest
 	createTurnReqs    []coreagent.CreateTurnRequest
 	listSessionReqs   []coreagent.ListSessionsRequest
@@ -170,6 +171,10 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req coreag
 	}
 	p.sessions[session.ID] = session
 	return cloneRouteSession(session), nil
+}
+
+func (p *routeCountingAgentProvider) SupportsWorkspaceRequests() bool {
+	return p.supportsWorkspace
 }
 
 func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
@@ -476,6 +481,140 @@ func TestCreateSessionRejectsReservedLifecycleMetadata(t *testing.T) {
 	}
 	if len(provider.createSessionReqs) != 0 {
 		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestCreateSessionRejectsReservedWorkspaceMetadata(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Metadata:     map[string]any{"workspacePath": "/tmp/spoofed"},
+	})
+	if !errors.Is(err, ErrAgentSessionMetadataInvalid) || !strings.Contains(err.Error(), "reserved for Gestalt workspace data") {
+		t.Fatalf("CreateSession error = %v, want reserved workspace metadata error", err)
+	}
+	if len(provider.createSessionReqs) != 0 {
+		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestCreateSessionRejectsWorkspaceWhenProviderCannotPrepare(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "git@github.com:valon-technologies/app.git",
+				Path: "app",
+			}},
+		},
+	})
+	if !errors.Is(err, ErrAgentWorkspaceUnsupported) {
+		t.Fatalf("CreateSession error = %v, want ErrAgentWorkspaceUnsupported", err)
+	}
+	if len(provider.createSessionReqs) != 0 {
+		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestCreateSessionValidatesWorkspaceBeforeProviderCreate(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.supportsWorkspace = true
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+
+	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Workspace: &coreagent.Workspace{
+			CWD: "../app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "git@github.com:valon-technologies/app.git",
+				Path: "app",
+			}},
+		},
+	})
+	if !errors.Is(err, ErrAgentWorkspaceInvalid) {
+		t.Fatalf("CreateSession error = %v, want ErrAgentWorkspaceInvalid", err)
+	}
+	if len(provider.createSessionReqs) != 0 {
+		t.Fatalf("CreateSession calls = %d, want 0", len(provider.createSessionReqs))
+	}
+}
+
+func TestCreateSessionUsesStableWorkspaceSessionIDWithIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.supportsWorkspace = true
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	req := coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "alpha",
+		IdempotencyKey: "workspace-create-1",
+		Model:          "test-model",
+		ClientRef:      "client-1",
+		Workspace: &coreagent.Workspace{
+			CWD: "app",
+			Checkouts: []coreagent.WorkspaceGitCheckout{{
+				URL:  "git@github.com:valon-technologies/app.git",
+				Ref:  "refs/heads/main",
+				Path: "app",
+			}},
+		},
+	}
+	first, err := manager.CreateSession(context.Background(), p, req)
+	if err != nil {
+		t.Fatalf("CreateSession first: %v", err)
+	}
+	second, err := manager.CreateSession(context.Background(), p, req)
+	if err != nil {
+		t.Fatalf("CreateSession second: %v", err)
+	}
+	if first.ID == "" || first.ID != second.ID {
+		t.Fatalf("session ids = %q, %q, want stable non-empty", first.ID, second.ID)
+	}
+	if len(provider.createSessionReqs) != 2 {
+		t.Fatalf("CreateSession calls = %d, want 2", len(provider.createSessionReqs))
+	}
+	if provider.createSessionReqs[0].SessionID != provider.createSessionReqs[1].SessionID {
+		t.Fatalf("provider session IDs = %q, %q, want stable", provider.createSessionReqs[0].SessionID, provider.createSessionReqs[1].SessionID)
+	}
+	if provider.createSessionReqs[0].Workspace == nil {
+		t.Fatal("provider did not receive manager workspace")
 	}
 }
 

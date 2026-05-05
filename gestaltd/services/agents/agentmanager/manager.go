@@ -43,6 +43,8 @@ var (
 	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
 	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
 	ErrAgentSessionStartUnsupported    = errors.New("agent provider does not support session start hooks")
+	ErrAgentWorkspaceUnsupported       = errors.New("agent provider does not support workspaces")
+	ErrAgentWorkspaceInvalid           = errors.New("agent workspace is invalid")
 	ErrAgentSessionMetadataInvalid     = errors.New("agent session metadata is invalid")
 	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
 )
@@ -646,12 +648,22 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err := validateAgentSessionUserMetadata(req.Metadata); err != nil {
 		return nil, err
 	}
+	workspace, err := coreagent.NormalizeWorkspace(req.Workspace)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrAgentWorkspaceInvalid, err)
+	}
+	if workspace != nil {
+		workspaceProvider, ok := provider.(coreagent.WorkspaceProvider)
+		if !ok || !workspaceProvider.SupportsWorkspaceRequests() {
+			return nil, errAgentWorkspaceUnsupported(providerName)
+		}
+	}
 	sessionStart, err := m.sessionStartForProvider(ctx, providerName, provider)
 	if err != nil {
 		return nil, err
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	sessionID := uuid.NewString()
+	sessionID := newAgentSessionID(providerName, subjectID, idempotencyKey, workspace != nil)
 	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
 		SessionID:      sessionID,
 		IdempotencyKey: idempotencyKey,
@@ -661,9 +673,10 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		CreatedBy:      agentActorFromPrincipal(p),
 		Subject:        agentSubjectFromPrincipal(p),
 		SessionStart:   sessionStart,
+		Workspace:      coreagent.CloneWorkspace(workspace),
 	})
 	if err != nil {
-		if sessionStart != nil {
+		if sessionStart != nil || workspace != nil {
 			return nil, err
 		}
 		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{
@@ -678,6 +691,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
 	if err != nil {
 		return nil, err
+	}
+	if workspace != nil && idempotencyKey != "" && strings.TrimSpace(normalized.ID) != sessionID {
+		return nil, fmt.Errorf("agent provider returned session id %q, want workspace idempotency id %q", normalized.ID, sessionID)
 	}
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
@@ -2440,6 +2456,15 @@ func newAgentTurnID(sessionID, idempotencyKey string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt:agent-turn:"+strings.TrimSpace(sessionID)+":"+idempotencyKey)).String()
 }
 
+func newAgentSessionID(providerName, subjectID, idempotencyKey string, workspace bool) string {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if !workspace || idempotencyKey == "" {
+		return uuid.NewString()
+	}
+	scope := "gestalt:agent-session-workspace:" + strings.TrimSpace(providerName) + ":" + strings.TrimSpace(subjectID) + ":" + idempotencyKey
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()
+}
+
 func sessionSortTime(session *coreagent.Session) *time.Time {
 	if session == nil {
 		return nil
@@ -3371,10 +3396,21 @@ func errAgentSessionStartUnsupported(providerName string) error {
 	return fmt.Errorf("%w: provider %q", ErrAgentSessionStartUnsupported, providerName)
 }
 
+func errAgentWorkspaceUnsupported(providerName string) error {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return ErrAgentWorkspaceUnsupported
+	}
+	return fmt.Errorf("%w: provider %q", ErrAgentWorkspaceUnsupported, providerName)
+}
+
 func validateAgentSessionUserMetadata(metadata map[string]any) error {
 	for key := range metadata {
 		if isReservedLifecycleMetadataKey(key) {
 			return fmt.Errorf("%w: key %q is reserved for Gestalt lifecycle data", ErrAgentSessionMetadataInvalid, key)
+		}
+		if isReservedWorkspaceMetadataKey(key) {
+			return fmt.Errorf("%w: key %q is reserved for Gestalt workspace data", ErrAgentSessionMetadataInvalid, key)
 		}
 	}
 	return nil
@@ -3396,6 +3432,15 @@ func mergeReservedLifecycleMetadata(metadata map[string]any, existing map[string
 func isReservedLifecycleMetadataKey(key string) bool {
 	key = strings.TrimSpace(key)
 	return key == "__gestalt.lifecycle" || strings.HasPrefix(key, "__gestalt.lifecycle.")
+}
+
+func isReservedWorkspaceMetadataKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "cwd", "workspacePath", "worktreePath", "__gestalt.workspace":
+		return true
+	default:
+		return strings.HasPrefix(strings.TrimSpace(key), "__gestalt.workspace.")
+	}
 }
 
 func errAgentBoundedListUnsupported(providerName string) error {

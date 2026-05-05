@@ -215,14 +215,32 @@ type Session struct {
 }
 
 type CreateSessionRequest struct {
-	SessionID      string
-	IdempotencyKey string
-	Model          string
-	ClientRef      string
-	Metadata       map[string]any
-	CreatedBy      Actor
-	Subject        SubjectContext
-	SessionStart   *SessionStartConfig
+	SessionID         string
+	IdempotencyKey    string
+	Model             string
+	ClientRef         string
+	Metadata          map[string]any
+	CreatedBy         Actor
+	Subject           SubjectContext
+	SessionStart      *SessionStartConfig
+	Workspace         *Workspace
+	PreparedWorkspace *PreparedWorkspace
+}
+
+type Workspace struct {
+	Checkouts []WorkspaceGitCheckout
+	CWD       string
+}
+
+type WorkspaceGitCheckout struct {
+	URL  string
+	Ref  string
+	Path string
+}
+
+type PreparedWorkspace struct {
+	Root string
+	CWD  string
 }
 
 type SessionStartConfig struct {
@@ -366,14 +384,15 @@ type ListTurnEventsRequest struct {
 type GetCapabilitiesRequest struct{}
 
 type ProviderCapabilities struct {
-	StreamingText        bool
-	ToolCalls            bool
-	ParallelToolCalls    bool
-	StructuredOutput     bool
-	Interactions         bool
-	ResumableTurns       bool
-	ReasoningSummaries   bool
-	SupportsSessionStart bool
+	StreamingText             bool
+	ToolCalls                 bool
+	ParallelToolCalls         bool
+	StructuredOutput          bool
+	Interactions              bool
+	ResumableTurns            bool
+	ReasoningSummaries        bool
+	SupportsSessionStart      bool
+	SupportsPreparedWorkspace bool
 	// BoundedListHydration means provider list APIs can apply Limit and SummaryOnly
 	// without hydrating every source record, while preserving the list ordering
 	// contract before applying Limit.
@@ -500,6 +519,7 @@ type ManagerCreateSessionRequest struct {
 	Model          string
 	ClientRef      string
 	Metadata       map[string]any
+	Workspace      *Workspace
 }
 
 type ManagerUpdateSessionRequest struct {
@@ -560,6 +580,11 @@ type Provider interface {
 	GetCapabilities(ctx context.Context, req GetCapabilitiesRequest) (*ProviderCapabilities, error)
 	Ping(ctx context.Context) error
 	Close() error
+}
+
+type WorkspaceProvider interface {
+	Provider
+	SupportsWorkspaceRequests() bool
 }
 
 type Host interface {

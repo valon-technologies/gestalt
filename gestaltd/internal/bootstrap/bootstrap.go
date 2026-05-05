@@ -484,6 +484,14 @@ func (p *agentProviderWithCleanup) Close() error {
 	return errors.Join(errs...)
 }
 
+func (p *agentProviderWithCleanup) SupportsWorkspaceRequests() bool {
+	if p == nil || p.Provider == nil {
+		return false
+	}
+	workspaceProvider, ok := p.Provider.(coreagent.WorkspaceProvider)
+	return ok && workspaceProvider.SupportsWorkspaceRequests()
+}
+
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
@@ -637,6 +645,14 @@ func (p *agentProviderWithTracking) Close() error {
 		return nil
 	}
 	return p.delegate.Close()
+}
+
+func (p *agentProviderWithTracking) SupportsWorkspaceRequests() bool {
+	if p == nil || p.delegate == nil {
+		return false
+	}
+	workspaceProvider, ok := p.delegate.(coreagent.WorkspaceProvider)
+	return ok && workspaceProvider.SupportsWorkspaceRequests()
 }
 
 type preparedCore struct {

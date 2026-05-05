@@ -76,6 +76,8 @@ The runtime surface is intentionally small but lifecycle-oriented:
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
 | `ListSessions` | Return sessions currently known to the runtime backend. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
+| `PrepareWorkspace` | Optional. Prepare a per-agent workspace inside an existing runtime session before the hosted agent provider creates a session. |
+| `RemoveWorkspace` | Optional. Remove a per-agent workspace by runtime session and agent session ID. |
 | `StartPlugin` | Start the hosted plugin with the provided env and return a host-reachable dial target. |
 
 In addition to the runtime-specific RPCs, the provider still implements the
@@ -109,8 +111,9 @@ the exported provider for the selected language.
 
     func (p *Provider) GetSupport(context.Context) (gestalt.PluginRuntimeSupport, error) {
         return gestalt.PluginRuntimeSupport{
-            CanHostPlugins: true,
-            EgressMode:     gestalt.PluginRuntimeEgressModeHostname,
+            CanHostPlugins:           true,
+            EgressMode:               gestalt.PluginRuntimeEgressModeHostname,
+            SupportsPrepareWorkspace: true,
         }, nil
     }
 
@@ -133,6 +136,19 @@ the exported provider for the selected language.
     }
 
     func (p *Provider) StopSession(context.Context, string) error {
+        return nil
+    }
+
+    func (p *Provider) PrepareWorkspace(context.Context, gestalt.PreparePluginRuntimeWorkspaceRequest) (gestalt.PreparePluginRuntimeWorkspaceResponse, error) {
+        return gestalt.PreparePluginRuntimeWorkspaceResponse{
+            Workspace: &gestalt.PreparedAgentWorkspace{
+                Root: "/sandboxes/runtime-session-1/workspaces/agent-session-1",
+                CWD:  "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo",
+            },
+        }, nil
+    }
+
+    func (p *Provider) RemoveWorkspace(context.Context, gestalt.RemovePluginRuntimeWorkspaceRequest) error {
         return nil
     }
 
@@ -167,10 +183,11 @@ the exported provider for the selected language.
             &self,
             _request: Request<()>,
         ) -> Result<Response<proto::PluginRuntimeSupport>, Status> {
-	            Ok(Response::new(proto::PluginRuntimeSupport {
-	                can_host_plugins: true,
-	                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
-	            }))
+            Ok(Response::new(proto::PluginRuntimeSupport {
+                can_host_plugins: true,
+                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
+                supports_prepare_workspace: true,
+            }))
         }
 
         async fn start_session(
@@ -215,6 +232,25 @@ the exported provider for the selected language.
             Ok(Response::new(()))
         }
 
+        async fn prepare_workspace(
+            &self,
+            _request: Request<proto::PreparePluginRuntimeWorkspaceRequest>,
+        ) -> Result<Response<proto::PreparePluginRuntimeWorkspaceResponse>, Status> {
+            Ok(Response::new(proto::PreparePluginRuntimeWorkspaceResponse {
+                workspace: Some(proto::PreparedAgentWorkspace {
+                    root: "/sandboxes/runtime-session-1/workspaces/agent-session-1".into(),
+                    cwd: "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo".into(),
+                }),
+            }))
+        }
+
+        async fn remove_workspace(
+            &self,
+            _request: Request<proto::RemovePluginRuntimeWorkspaceRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+
         async fn start_plugin(
             &self,
             request: Request<proto::StartHostedPluginRequest>,
@@ -244,10 +280,11 @@ the exported provider for the selected language.
 
     export const runtime = definePluginRuntimeProvider({
       getSupport() {
-	        return {
-	          canHostPlugins: true,
-	          egressMode: PluginRuntimeEgressMode.HOSTNAME,
-	        };
+        return {
+          canHostPlugins: true,
+          egressMode: PluginRuntimeEgressMode.HOSTNAME,
+          supportsPrepareWorkspace: true,
+        };
       },
 
       startSession() {
@@ -263,6 +300,17 @@ the exported provider for the selected language.
       },
 
       async stopSession() {},
+
+      prepareWorkspace() {
+        return {
+          workspace: {
+            root: "/sandboxes/runtime-session-1/workspaces/agent-session-1",
+            cwd: "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo",
+          },
+        };
+      },
+
+      async removeWorkspace() {},
 
       startPlugin(request) {
         return {
@@ -293,6 +341,14 @@ configuration. Runtime providers do not advertise host-service access.
 Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
 it is not equivalent to hostname-based policy. If your backend can only express
 network controls at firewall or CIDR granularity, advertise `cidr`.
+
+`supports_prepare_workspace` should only be true when `PrepareWorkspace` creates
+the requested checkout inside the same runtime session that will run the hosted
+agent provider, returns absolute `root` and `cwd` paths, and can remove that
+workspace through `RemoveWorkspace`.
+Rust providers that implement the generated tonic trait directly must still add
+`prepare_workspace` and `remove_workspace` methods; return `Status::unimplemented`
+when the runtime does not advertise `supports_prepare_workspace`.
 
 Hosted runtime providers should run provider images rather than expect Gestalt
 to upload a provider bundle into the session. The `StartSession` request carries

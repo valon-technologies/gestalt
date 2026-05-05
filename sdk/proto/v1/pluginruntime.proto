@@ -4,6 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "v1/agent.proto";
 
 option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
 
@@ -19,6 +20,7 @@ message PluginRuntimeSupport {
   reserved "host_service_access";
   bool can_host_plugins = 1;
   PluginRuntimeEgressMode egress_mode = 3;
+  bool supports_prepare_workspace = 7;
 }
 
 message PluginRuntimeSession {
@@ -62,6 +64,21 @@ message ListPluginRuntimeSessionsResponse {
 
 message StopPluginRuntimeSessionRequest {
   string session_id = 1;
+}
+
+message PreparePluginRuntimeWorkspaceRequest {
+  string session_id = 1;
+  string agent_session_id = 2;
+  AgentWorkspace workspace = 3;
+}
+
+message PreparePluginRuntimeWorkspaceResponse {
+  PreparedAgentWorkspace workspace = 1;
+}
+
+message RemovePluginRuntimeWorkspaceRequest {
+  string session_id = 1;
+  string agent_session_id = 2;
 }
 
 // StartHostedPluginRequest describes the plugin process to launch inside a
@@ -120,5 +137,7 @@ service PluginRuntimeProvider {
   rpc GetSession(GetPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
   rpc ListSessions(ListPluginRuntimeSessionsRequest) returns (ListPluginRuntimeSessionsResponse);
   rpc StopSession(StopPluginRuntimeSessionRequest) returns (google.protobuf.Empty);
+  rpc PrepareWorkspace(PreparePluginRuntimeWorkspaceRequest) returns (PreparePluginRuntimeWorkspaceResponse);
+  rpc RemoveWorkspace(RemovePluginRuntimeWorkspaceRequest) returns (google.protobuf.Empty);
   rpc StartPlugin(StartHostedPluginRequest) returns (HostedPlugin);
 }

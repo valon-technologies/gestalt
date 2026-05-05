@@ -111,6 +111,28 @@ The runtime provider is also responsible for the plugin's own listener endpoint.
 and return a **host-reachable** `dial_target`. Gestalt currently supports
 `unix://`, `tcp://`, and `tls://` dial targets.
 
+## Agent workspaces
+
+Hosted agent providers can request a prepared workspace when a caller creates an
+agent session. Gestalt does not clone repositories on the `gestaltd` host and
+does not ask the agent provider to clone them. Instead, it calls
+`PrepareWorkspace` on the selected runtime session before it calls the hosted
+agent provider's `CreateSession`.
+
+The runtime receives the runtime `session_id`, the agent `session_id`, and the
+normalized `AgentWorkspace` request. It prepares a per-agent-session directory
+inside the runtime, clones the requested repositories, and returns absolute
+`root` and `cwd` paths. The agent provider then launches the vendor harness from
+that prepared `cwd`. When a non-idempotent session create fails, or when the
+session is removed, Gestalt calls `RemoveWorkspace` so the runtime can clean up
+that per-agent workspace.
+
+Runtime providers that implement this must advertise
+`supports_prepare_workspace`. The local runtime prepares workspaces under the
+runtime session directory; hosted runtimes should prepare them inside the same
+sandbox that will run the agent provider so credentials, filesystem state, and
+cleanup all stay on one side of the runtime boundary.
+
 ## Local vs hosted backends
 
 Today there are two main runtime choices:

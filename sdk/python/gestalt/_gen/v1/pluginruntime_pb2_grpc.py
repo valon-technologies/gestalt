@@ -132,6 +132,16 @@ class PluginRuntimeProviderStub(object):
                 request_serializer=v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
+        self.PrepareWorkspace = channel.unary_unary(
+                '/gestalt.provider.v1.PluginRuntimeProvider/PrepareWorkspace',
+                request_serializer=v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceRequest.SerializeToString,
+                response_deserializer=v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceResponse.FromString,
+                _registered_method=True)
+        self.RemoveWorkspace = channel.unary_unary(
+                '/gestalt.provider.v1.PluginRuntimeProvider/RemoveWorkspace',
+                request_serializer=v1_dot_pluginruntime__pb2.RemovePluginRuntimeWorkspaceRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
         self.StartPlugin = channel.unary_unary(
                 '/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin',
                 request_serializer=v1_dot_pluginruntime__pb2.StartHostedPluginRequest.SerializeToString,
@@ -172,6 +182,18 @@ class PluginRuntimeProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PrepareWorkspace(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveWorkspace(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def StartPlugin(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -204,6 +226,16 @@ def add_PluginRuntimeProviderServicer_to_server(servicer, server):
             'StopSession': grpc.unary_unary_rpc_method_handler(
                     servicer.StopSession,
                     request_deserializer=v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'PrepareWorkspace': grpc.unary_unary_rpc_method_handler(
+                    servicer.PrepareWorkspace,
+                    request_deserializer=v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceRequest.FromString,
+                    response_serializer=v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceResponse.SerializeToString,
+            ),
+            'RemoveWorkspace': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveWorkspace,
+                    request_deserializer=v1_dot_pluginruntime__pb2.RemovePluginRuntimeWorkspaceRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'StartPlugin': grpc.unary_unary_rpc_method_handler(
@@ -346,6 +378,60 @@ class PluginRuntimeProvider(object):
             target,
             '/gestalt.provider.v1.PluginRuntimeProvider/StopSession',
             v1_dot_pluginruntime__pb2.StopPluginRuntimeSessionRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PrepareWorkspace(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.PluginRuntimeProvider/PrepareWorkspace',
+            v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceRequest.SerializeToString,
+            v1_dot_pluginruntime__pb2.PreparePluginRuntimeWorkspaceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveWorkspace(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.PluginRuntimeProvider/RemoveWorkspace',
+            v1_dot_pluginruntime__pb2.RemovePluginRuntimeWorkspaceRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
