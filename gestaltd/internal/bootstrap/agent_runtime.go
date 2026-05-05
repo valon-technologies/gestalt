@@ -592,8 +592,8 @@ func agentRunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *p
 		DisplayName:         strings.TrimSpace(runAs.DisplayName),
 		Kind:                principal.Kind(strings.TrimSpace(runAs.SubjectKind)),
 		Scopes:              append([]string(nil), base.Scopes...),
-		TokenPermissions:    clonePermissionSet(base.TokenPermissions),
-		ActionPermissions:   cloneActionPermissionSet(base.ActionPermissions),
+		TokenPermissions:    principal.ClonePermissionSet(base.TokenPermissions),
+		ActionPermissions:   principal.CloneActionPermissionSet(base.ActionPermissions),
 		Identity:            base.Identity,
 	}
 	principal.SetAuthSource(value, runAs.AuthSource)
@@ -615,36 +615,6 @@ func agentAuditSubjectFromPrincipal(p *principal.Principal) *core.RunAsSubject {
 		DisplayName:         strings.TrimSpace(p.DisplayName),
 		AuthSource:          p.AuthSource(),
 	})
-}
-
-func clonePermissionSet(in principal.PermissionSet) principal.PermissionSet {
-	if in == nil {
-		return nil
-	}
-	out := make(principal.PermissionSet, len(in))
-	for plugin, operations := range in {
-		cloned := make(map[string]struct{}, len(operations))
-		for operation := range operations {
-			cloned[operation] = struct{}{}
-		}
-		out[plugin] = cloned
-	}
-	return out
-}
-
-func cloneActionPermissionSet(in principal.ActionPermissionSet) principal.ActionPermissionSet {
-	if in == nil {
-		return nil
-	}
-	out := make(principal.ActionPermissionSet, len(in))
-	for resource, actions := range in {
-		cloned := make(map[string]struct{}, len(actions))
-		for action := range actions {
-			cloned[action] = struct{}{}
-		}
-		out[resource] = cloned
-	}
-	return out
 }
 
 func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {

@@ -1275,7 +1275,7 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 	if p == nil || p.TokenPermissions == nil {
 		return principal.PermissionsToAccessPermissions(nil)
 	}
-	permissions := cloneWorkflowPermissionSet(p.TokenPermissions)
+	permissions := principal.ClonePermissionSet(p.TokenPermissions)
 	if target.Agent != nil {
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
@@ -1331,25 +1331,6 @@ func (m *Manager) callerPluginDeclaresInvoke(callerPluginName, pluginName, opera
 		}
 	}
 	return false
-}
-
-func cloneWorkflowPermissionSet(src principal.PermissionSet) principal.PermissionSet {
-	if src == nil {
-		return nil
-	}
-	out := make(principal.PermissionSet, len(src))
-	for pluginName, operations := range src {
-		if operations == nil {
-			out[pluginName] = nil
-			continue
-		}
-		copied := make(map[string]struct{}, len(operations))
-		for operation := range operations {
-			copied[operation] = struct{}{}
-		}
-		out[pluginName] = copied
-	}
-	return out
 }
 
 func addWorkflowPermission(permissions principal.PermissionSet, pluginName, operation string) {

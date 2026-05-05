@@ -1742,7 +1742,7 @@ type agentToolTargetKey struct {
 	connection     string
 	instance       string
 	credentialMode core.ConnectionMode
-	runAsSubjectID string
+	runAs          core.RunAsSubject
 }
 
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
@@ -1753,7 +1753,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 		connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		instance:       strings.TrimSpace(ref.Instance),
 		credentialMode: ref.CredentialMode,
-		runAsSubjectID: runAsSubjectID(ref.RunAs),
+		runAs:          agentToolRunAsKey(ref.RunAs),
 	}
 }
 
@@ -1765,7 +1765,7 @@ func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKe
 		connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		instance:       strings.TrimSpace(target.Instance),
 		credentialMode: target.CredentialMode,
-		runAsSubjectID: runAsSubjectID(target.RunAs),
+		runAs:          agentToolRunAsKey(target.RunAs),
 	}
 }
 
@@ -1774,8 +1774,9 @@ func (k agentToolTargetKey) String() string {
 		return strings.Join([]string{"system", k.system, k.operation}, "/")
 	}
 	parts := []string{k.plugin, k.operation}
-	if k.connection != "" || k.instance != "" || k.credentialMode != "" || k.runAsSubjectID != "" {
-		parts = append(parts, k.connection, k.instance, string(k.credentialMode), k.runAsSubjectID)
+	runAsKey := agentToolRunAsKeyString(k.runAs)
+	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" {
+		parts = append(parts, k.connection, k.instance, string(k.credentialMode), runAsKey)
 	}
 	return strings.Join(parts, "/")
 }
@@ -3184,11 +3185,28 @@ func agentToolInvokeKey(pluginName, operation string) string {
 	return strings.TrimSpace(pluginName) + "\x00" + strings.TrimSpace(operation)
 }
 
-func runAsSubjectID(subject *core.RunAsSubject) string {
+func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {
 	if subject == nil {
+		return core.RunAsSubject{}
+	}
+	normalized := core.NormalizeRunAsSubject(subject)
+	if normalized == nil {
+		return core.RunAsSubject{}
+	}
+	return *normalized
+}
+
+func agentToolRunAsKeyString(subject core.RunAsSubject) string {
+	if subject == (core.RunAsSubject{}) {
 		return ""
 	}
-	return strings.TrimSpace(core.NormalizeRunAsSubject(subject).SubjectID)
+	return strings.Join([]string{
+		subject.SubjectID,
+		subject.SubjectKind,
+		subject.CredentialSubjectID,
+		subject.DisplayName,
+		subject.AuthSource,
+	}, "\x00")
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {

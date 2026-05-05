@@ -2039,3 +2039,42 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
+	t.Parallel()
+
+	base := coreagent.ToolRef{
+		Plugin:    "github",
+		Operation: "bot.createPullRequest",
+		RunAs: &core.RunAsSubject{
+			SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",
+			SubjectKind:         "service_account",
+			CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/widgets",
+			DisplayName:         "Toolshed app",
+			AuthSource:          "github_app_webhook",
+		},
+	}
+	same := base
+	same.RunAs = &core.RunAsSubject{
+		SubjectID:           " service_account:github_app_installation:99:repo:acme/widgets ",
+		SubjectKind:         " service_account ",
+		CredentialSubjectID: " service_account:github_app_installation:99:repo:acme/widgets ",
+		DisplayName:         " Toolshed app ",
+		AuthSource:          " github_app_webhook ",
+	}
+	differentMetadata := base
+	differentMetadata.RunAs = &core.RunAsSubject{
+		SubjectID:           base.RunAs.SubjectID,
+		SubjectKind:         base.RunAs.SubjectKind,
+		CredentialSubjectID: base.RunAs.CredentialSubjectID,
+		DisplayName:         "Another display name",
+		AuthSource:          base.RunAs.AuthSource,
+	}
+
+	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
+		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects")
+	}
+	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentMetadata) {
+		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs metadata")
+	}
+}
