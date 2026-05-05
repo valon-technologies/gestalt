@@ -121,7 +121,7 @@ func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) 
 	metadata, err := pcp.PostConnect(ctx, token)
 	if err != nil {
 		if errors.Is(err, ErrPostConnectUnsupported) {
-			return nil, true, nil
+			return nil, false, nil
 		}
 		return nil, true, err
 	}

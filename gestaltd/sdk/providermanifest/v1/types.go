@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -344,6 +345,30 @@ type ProviderDiscovery struct {
 	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
+type ProviderPostConnect struct {
+	Request          ProviderPostConnectRequest           `json:"request" yaml:"request"`
+	SourcePath       string                               `json:"sourcePath,omitempty" yaml:"sourcePath,omitempty"`
+	Success          *ProviderPostConnectSuccess          `json:"success,omitempty" yaml:"success,omitempty"`
+	ExternalIdentity *ProviderPostConnectExternalIdentity `json:"externalIdentity,omitempty" yaml:"externalIdentity,omitempty"`
+	Metadata         map[string]string                    `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+}
+
+type ProviderPostConnectRequest struct {
+	Method  string            `json:"method" yaml:"method"`
+	URL     string            `json:"url" yaml:"url"`
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+}
+
+type ProviderPostConnectSuccess struct {
+	Path   string `json:"path" yaml:"path"`
+	Equals any    `json:"equals" yaml:"equals"`
+}
+
+type ProviderPostConnectExternalIdentity struct {
+	Type string `json:"type" yaml:"type"`
+	ID   string `json:"id" yaml:"id"`
+}
+
 type ProviderConnectionParam struct {
 	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
@@ -378,6 +403,7 @@ type ManifestConnectionDef struct {
 	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Params            map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
 	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+	PostConnect       *ProviderPostConnect               `json:"postConnect,omitempty" yaml:"postConnect,omitempty"`
 	CredentialRefresh *CredentialRefreshConfig           `json:"credentialRefresh,omitempty" yaml:"credentialRefresh,omitempty"`
 }
 
@@ -715,9 +741,50 @@ func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]
 			continue
 		}
 		copyDef := *def
+		copyDef.Params = maps.Clone(def.Params)
+		copyDef.Discovery = cloneProviderDiscovery(def.Discovery)
+		copyDef.PostConnect = CloneProviderPostConnect(def.PostConnect)
+		copyDef.CredentialRefresh = cloneCredentialRefreshConfig(def.CredentialRefresh)
 		cloned[name] = &copyDef
 	}
 	return cloned
+}
+
+func cloneProviderDiscovery(src *ProviderDiscovery) *ProviderDiscovery {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Metadata = maps.Clone(src.Metadata)
+	return &dst
+}
+
+// CloneProviderPostConnect returns a deep copy of a provider post-connect
+// declaration.
+func CloneProviderPostConnect(src *ProviderPostConnect) *ProviderPostConnect {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Request.Headers = maps.Clone(src.Request.Headers)
+	if src.Success != nil {
+		success := *src.Success
+		dst.Success = &success
+	}
+	if src.ExternalIdentity != nil {
+		externalIdentity := *src.ExternalIdentity
+		dst.ExternalIdentity = &externalIdentity
+	}
+	dst.Metadata = maps.Clone(src.Metadata)
+	return &dst
+}
+
+func cloneCredentialRefreshConfig(src *CredentialRefreshConfig) *CredentialRefreshConfig {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
 }
 
 func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HTTPSecurityScheme {

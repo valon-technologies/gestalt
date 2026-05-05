@@ -399,8 +399,108 @@
         "discovery": {
           "$ref": "#/$defs/providerDiscovery"
         },
+        "postConnect": {
+          "$ref": "#/$defs/providerPostConnect"
+        },
         "credentialRefresh": {
           "$ref": "#/$defs/credentialRefreshConfig"
+        }
+      }
+    },
+    "providerPostConnect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request"
+      ],
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/providerPostConnectRequest"
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "success": {
+          "$ref": "#/$defs/providerPostConnectSuccess"
+        },
+        "externalIdentity": {
+          "$ref": "#/$defs/providerPostConnectExternalIdentity"
+        },
+        "metadata": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "providerPostConnectRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "url"
+      ],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "headers": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "providerPostConnectSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "equals"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "equals": {}
+      }
+    },
+    "providerPostConnectExternalIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

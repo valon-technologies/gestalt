@@ -602,12 +602,18 @@ func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provide
 		ExpiresAt:    tm.TokenExpiresAt,
 		MetadataJSON: tm.MetadataJSON,
 	}
-	metadata, _, err := core.PostConnect(ctx, prov, token)
+	metadata, supported, err := core.PostConnect(ctx, prov, token)
 	if err != nil {
 		return tm, err
 	}
+	if !supported {
+		return tm, nil
+	}
 	if metadata == nil {
 		slog.Warn("provider post-connect returned nil metadata", "integration", tm.Integration, "connection", tm.Connection, "instance", tm.Instance)
+	}
+	if len(metadata) == 0 {
+		return tm, nil
 	}
 	if err := validatePostConnectMetadata(metadata); err != nil {
 		return tm, err

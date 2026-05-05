@@ -3,16 +3,19 @@ package declarative
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 func testDefinition(name string) *Definition {
@@ -75,6 +78,97 @@ func TestBuildManualAuth(t *testing.T) {
 	}
 	if intg.Name() != "manual_api" {
 		t.Errorf("Name() = %q", intg.Name())
+	}
+}
+
+func TestBuildPostConnectMapsNestedSource(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer pagerduty-token" {
+			t.Fatalf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("Accept") != "application/vnd.pagerduty+json;version=2" {
+			t.Fatalf("Accept = %q, want PagerDuty API version", r.Header.Get("Accept"))
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("Content-Type = %q, want application/json", r.Header.Get("Content-Type"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"user":{"id":"P12345","email":"user@example.com"}}`))
+	}))
+	defer srv.Close()
+
+	prov, err := Build(testDefinition("pagerduty"), ConnectionDef{
+		PostConnect: map[string]*core.PostConnectConfig{
+			"default": {
+				Request: core.PostConnectRequestConfig{
+					Method: http.MethodGet,
+					URL:    srv.URL,
+					Headers: map[string]string{
+						"Accept":       "application/vnd.pagerduty+json;version=2",
+						"Content-Type": "application/json",
+					},
+				},
+				SourcePath: "user",
+				ExternalIdentity: &core.PostConnectExternalIdentityConfig{
+					Type: "pagerduty_identity",
+					ID:   "user:{id}",
+				},
+				Metadata: map[string]string{
+					"pagerduty.user_id": "id",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	metadata, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
+		Connection:  "default",
+		AccessToken: "pagerduty-token",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected post-connect support")
+	}
+	want := map[string]string{
+		"gestalt.external_identity.type": "pagerduty_identity",
+		"gestalt.external_identity.id":   "user:P12345",
+		"pagerduty.user_id":              "P12345",
+	}
+	if !reflect.DeepEqual(metadata, want) {
+		t.Fatalf("metadata = %#v, want %#v", metadata, want)
+	}
+}
+
+func TestBuildPostConnectAppliesEgressCheck(t *testing.T) {
+	t.Parallel()
+
+	prov, err := Build(testDefinition("pagerduty"), ConnectionDef{
+		PostConnect: map[string]*core.PostConnectConfig{
+			"default": {
+				Request: core.PostConnectRequestConfig{
+					Method: http.MethodGet,
+					URL:    "https://api.pagerduty.com/users/me",
+				},
+				Metadata: map[string]string{"pagerduty.user_id": "id"},
+			},
+		},
+	}, WithEgressCheck(func(string) error {
+		return egress.ErrEgressDenied
+	}))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	_, _, err = core.PostConnect(context.Background(), prov, &core.ExternalCredential{
+		Connection:  "default",
+		AccessToken: "pagerduty-token",
+	})
+	if !errors.Is(err, egress.ErrEgressDenied) {
+		t.Fatalf("PostConnect error = %v, want egress denied", err)
 	}
 }
 

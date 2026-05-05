@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -13,6 +14,7 @@ type ConnectionDef struct {
 	Mode             providermanifestv1.ConnectionMode
 	Auth             ConnectionAuthDef
 	ConnectionParams map[string]ConnectionParamDef
+	PostConnect      map[string]*core.PostConnectConfig
 }
 
 // ConnectionAuthDef is the auth material needed to construct a declarative

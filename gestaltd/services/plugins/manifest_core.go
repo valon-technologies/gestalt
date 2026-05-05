@@ -50,3 +50,48 @@ func DiscoveryConfigFromManifest(discovery *providermanifestv1.ProviderDiscovery
 		Metadata: maps.Clone(discovery.Metadata),
 	}
 }
+
+func PostConnectConfigsFromManifestConnections(connections map[string]*providermanifestv1.ManifestConnectionDef) map[string]*core.PostConnectConfig {
+	if len(connections) == 0 {
+		return nil
+	}
+	out := make(map[string]*core.PostConnectConfig)
+	for name, conn := range connections {
+		if conn == nil || conn.PostConnect == nil {
+			continue
+		}
+		out[name] = PostConnectConfigFromManifest(conn.PostConnect)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func PostConnectConfigFromManifest(postConnect *providermanifestv1.ProviderPostConnect) *core.PostConnectConfig {
+	if postConnect == nil {
+		return nil
+	}
+	cfg := &core.PostConnectConfig{
+		Request: core.PostConnectRequestConfig{
+			Method:  postConnect.Request.Method,
+			URL:     postConnect.Request.URL,
+			Headers: maps.Clone(postConnect.Request.Headers),
+		},
+		SourcePath: postConnect.SourcePath,
+		Metadata:   maps.Clone(postConnect.Metadata),
+	}
+	if postConnect.Success != nil {
+		cfg.Success = &core.PostConnectSuccessCheck{
+			Path:   postConnect.Success.Path,
+			Equals: postConnect.Success.Equals,
+		}
+	}
+	if postConnect.ExternalIdentity != nil {
+		cfg.ExternalIdentity = &core.PostConnectExternalIdentityConfig{
+			Type: postConnect.ExternalIdentity.Type,
+			ID:   postConnect.ExternalIdentity.ID,
+		}
+	}
+	return cfg
+}

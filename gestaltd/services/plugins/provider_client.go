@@ -20,16 +20,17 @@ import (
 )
 
 type StaticProviderSpec struct {
-	Name             string
-	DisplayName      string
-	Description      string
-	IconSVG          string
-	ConnectionMode   core.ConnectionMode
-	Catalog          *catalog.Catalog
-	AuthTypes        []string
-	ConnectionParams map[string]core.ConnectionParamDef
-	CredentialFields []core.CredentialFieldDef
-	DiscoveryConfig  *core.DiscoveryConfig
+	Name               string
+	DisplayName        string
+	Description        string
+	IconSVG            string
+	ConnectionMode     core.ConnectionMode
+	Catalog            *catalog.Catalog
+	AuthTypes          []string
+	ConnectionParams   map[string]core.ConnectionParamDef
+	CredentialFields   []core.CredentialFieldDef
+	DiscoveryConfig    *core.DiscoveryConfig
+	PostConnectConfigs map[string]*core.PostConnectConfig
 }
 
 type remoteProviderBase struct {
@@ -270,6 +271,9 @@ func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.Extern
 		Token: postConnectCredentialToProto(token),
 	})
 	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return nil, core.ErrPostConnectUnsupported
+		}
 		return nil, err
 	}
 	metadata := resp.GetMetadata()
