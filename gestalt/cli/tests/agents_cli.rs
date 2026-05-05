@@ -2686,6 +2686,50 @@ fn test_cli_agent_local_reports_missing_harness_command() {
 }
 
 #[test]
+fn test_cli_agent_local_reports_install_guidance_for_missing_command() {
+    let home = tempfile::tempdir().unwrap();
+    let mut server = Server::new();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/harnesses/resolve",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"{
+            "provider":"claude",
+            "harness":"default",
+            "command":"claude",
+            "requiredCommands":["claude"],
+            "install":{
+                "instructions":"Install Claude Code locally.",
+                "commands":[{"command":"npm","args":["install","-g","@anthropic-ai/claude-code"]}]
+            }
+        }"#,
+    )
+    .create();
+
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "required command \"claude\" is not available",
+        ))
+        .stderr(predicate::str::contains(
+            "Install instructions for agent harness \"claude/default\"",
+        ))
+        .stderr(predicate::str::contains(
+            "npm install -g @anthropic-ai/claude-code",
+        ));
+
+    mock.assert();
+}
+
+#[test]
 fn test_cli_agent_local_rejects_cloud_session_flags() {
     let home = tempfile::tempdir().unwrap();
     cli_command(home.path())

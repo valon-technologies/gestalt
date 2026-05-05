@@ -64,6 +64,7 @@ func ResolveProviderEntryAgentHarness(providerName string, entry *ProviderEntry,
 	cloned.Args = slices.Clone(harness.Args)
 	cloned.Env = maps.Clone(harness.Env)
 	cloned.RequiredCommands = slices.Clone(harness.RequiredCommands)
+	cloned.Install = cloneProviderEntryHarnessInstallConfig(harness.Install)
 	if strings.TrimSpace(cloned.Command) == "" {
 		return EffectiveAgentHarness{}, fmt.Errorf("providers.agent.%s.harnesses.%s.command is required", providerName, selectedName)
 	}

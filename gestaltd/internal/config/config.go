@@ -443,16 +443,32 @@ type providerEntryFields ProviderEntry
 // ProviderEntryHarnessConfig describes a process harness that can start an
 // agent provider outside gestaltd's hosted runtime.
 type ProviderEntryHarnessConfig struct {
-	Command          string            `yaml:"command,omitempty"`
-	Args             []string          `yaml:"args,omitempty"`
-	Env              map[string]string `yaml:"env,omitempty"`
-	WorkingDirectory string            `yaml:"workingDirectory,omitempty"`
-	RequiredCommands []string          `yaml:"requiredCommands,omitempty"`
+	Command          string                             `yaml:"command,omitempty"`
+	Args             []string                           `yaml:"args,omitempty"`
+	Env              map[string]string                  `yaml:"env,omitempty"`
+	WorkingDirectory string                             `yaml:"workingDirectory,omitempty"`
+	RequiredCommands []string                           `yaml:"requiredCommands,omitempty"`
+	Install          *ProviderEntryHarnessInstallConfig `yaml:"install,omitempty"`
 }
 
 // ProviderEntryLocalHarnessConfig is kept as a compatibility alias for configs
 // that still use providers.agent.<name>.localHarness.
 type ProviderEntryLocalHarnessConfig = ProviderEntryHarnessConfig
+
+// ProviderEntryHarnessInstallConfig describes optional local install guidance
+// for commands required by an agent harness.
+type ProviderEntryHarnessInstallConfig struct {
+	Instructions string                               `yaml:"instructions,omitempty"`
+	Commands     []ProviderEntryHarnessInstallCommand `yaml:"commands,omitempty"`
+}
+
+type ProviderEntryHarnessInstallCommand struct {
+	Description string            `yaml:"description,omitempty"`
+	Command     string            `yaml:"command,omitempty"`
+	Args        []string          `yaml:"args,omitempty"`
+	Shell       string            `yaml:"shell,omitempty"`
+	Env         map[string]string `yaml:"env,omitempty"`
+}
 
 type ProviderEntryDevConfig struct {
 	Attach ProviderEntryDevAttachConfig `yaml:"attach,omitempty"`
@@ -922,6 +938,20 @@ func cloneProviderEntryHarnessConfig(src *ProviderEntryHarnessConfig) *ProviderE
 	dst.Args = slices.Clone(src.Args)
 	dst.Env = maps.Clone(src.Env)
 	dst.RequiredCommands = slices.Clone(src.RequiredCommands)
+	dst.Install = cloneProviderEntryHarnessInstallConfig(src.Install)
+	return &dst
+}
+
+func cloneProviderEntryHarnessInstallConfig(src *ProviderEntryHarnessInstallConfig) *ProviderEntryHarnessInstallConfig {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Commands = slices.Clone(src.Commands)
+	for i := range dst.Commands {
+		dst.Commands[i].Args = slices.Clone(src.Commands[i].Args)
+		dst.Commands[i].Env = maps.Clone(src.Commands[i].Env)
+	}
 	return &dst
 }
 
@@ -968,6 +998,35 @@ func normalizeProviderEntryHarness(harness *ProviderEntryHarnessConfig) {
 	harness.Command = strings.TrimSpace(harness.Command)
 	harness.WorkingDirectory = strings.TrimSpace(harness.WorkingDirectory)
 	harness.RequiredCommands = trimStringSlice(harness.RequiredCommands)
+	normalizeProviderEntryHarnessInstall(harness.Install)
+}
+
+func normalizeProviderEntryHarnessInstall(install *ProviderEntryHarnessInstallConfig) {
+	if install == nil {
+		return
+	}
+	install.Instructions = strings.TrimSpace(install.Instructions)
+	out := install.Commands[:0]
+	for _, command := range install.Commands {
+		command.Description = strings.TrimSpace(command.Description)
+		command.Command = strings.TrimSpace(command.Command)
+		command.Shell = strings.TrimSpace(command.Shell)
+		command.Args = trimStringSlice(command.Args)
+		if command.Env != nil {
+			env := make(map[string]string, len(command.Env))
+			for key, value := range command.Env {
+				key = strings.TrimSpace(key)
+				if key != "" {
+					env[key] = value
+				}
+			}
+			command.Env = env
+		}
+		if command.Command != "" || command.Shell != "" {
+			out = append(out, command)
+		}
+	}
+	install.Commands = out
 }
 
 func trimStringSlice(values []string) []string {

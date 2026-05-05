@@ -1207,6 +1207,13 @@ func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
 						Env:              map[string]string{"OPENAI_BASE_URL": "https://example.test"},
 						WorkingDirectory: "/workspace/default",
 						RequiredCommands: []string{"hermes"},
+						Install: &config.ProviderEntryHarnessInstallConfig{
+							Instructions: "Install Hermes before running this harness.",
+							Commands: []config.ProviderEntryHarnessInstallCommand{{
+								Command: "npm",
+								Args:    []string{"install", "-g", "@example/hermes"},
+							}},
+						},
 					},
 					"no-tools": {
 						Command: "hermes",
@@ -1239,6 +1246,21 @@ func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
 	}
 	if defaultPlan["provider"] != "managed" || defaultPlan["harness"] != "default" || defaultPlan["command"] != "hermes" {
 		t.Fatalf("default plan = %#v", defaultPlan)
+	}
+	install, ok := defaultPlan["install"].(map[string]any)
+	if !ok {
+		t.Fatalf("default plan install = %#v, want object", defaultPlan["install"])
+	}
+	if install["instructions"] != "Install Hermes before running this harness." {
+		t.Fatalf("default plan install = %#v", install)
+	}
+	commands, ok := install["commands"].([]any)
+	if !ok || len(commands) != 1 {
+		t.Fatalf("default plan install commands = %#v, want one command", install["commands"])
+	}
+	installCommand, ok := commands[0].(map[string]any)
+	if !ok || installCommand["command"] != "npm" {
+		t.Fatalf("default plan install command = %#v", commands[0])
 	}
 
 	namedReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/harnesses/resolve", bytes.NewBufferString(`{"provider":"managed","harness":"no-tools"}`))

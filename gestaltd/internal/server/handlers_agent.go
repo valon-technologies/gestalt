@@ -155,13 +155,27 @@ type agentHarnessResolveRequest struct {
 }
 
 type agentHarnessPlanInfo struct {
-	Provider         string            `json:"provider"`
-	Harness          string            `json:"harness,omitempty"`
-	Command          string            `json:"command"`
-	Args             []string          `json:"args,omitempty"`
-	Env              map[string]string `json:"env,omitempty"`
-	WorkingDirectory string            `json:"workingDirectory,omitempty"`
-	RequiredCommands []string          `json:"requiredCommands,omitempty"`
+	Provider         string                   `json:"provider"`
+	Harness          string                   `json:"harness,omitempty"`
+	Command          string                   `json:"command"`
+	Args             []string                 `json:"args,omitempty"`
+	Env              map[string]string        `json:"env,omitempty"`
+	WorkingDirectory string                   `json:"workingDirectory,omitempty"`
+	RequiredCommands []string                 `json:"requiredCommands,omitempty"`
+	Install          *agentHarnessInstallInfo `json:"install,omitempty"`
+}
+
+type agentHarnessInstallInfo struct {
+	Instructions string                           `json:"instructions,omitempty"`
+	Commands     []agentHarnessInstallCommandInfo `json:"commands,omitempty"`
+}
+
+type agentHarnessInstallCommandInfo struct {
+	Description string            `json:"description,omitempty"`
+	Command     string            `json:"command,omitempty"`
+	Args        []string          `json:"args,omitempty"`
+	Shell       string            `json:"shell,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
 }
 
 type agentTurnInfo struct {
@@ -366,7 +380,31 @@ func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
 		Env:              maps.Clone(harness.Env),
 		WorkingDirectory: strings.TrimSpace(harness.WorkingDirectory),
 		RequiredCommands: append([]string(nil), harness.RequiredCommands...),
+		Install:          agentHarnessInstallInfoFromConfig(harness.Install),
 	})
+}
+
+func agentHarnessInstallInfoFromConfig(install *config.ProviderEntryHarnessInstallConfig) *agentHarnessInstallInfo {
+	if install == nil {
+		return nil
+	}
+	out := &agentHarnessInstallInfo{
+		Instructions: strings.TrimSpace(install.Instructions),
+		Commands:     make([]agentHarnessInstallCommandInfo, 0, len(install.Commands)),
+	}
+	for _, command := range install.Commands {
+		out.Commands = append(out.Commands, agentHarnessInstallCommandInfo{
+			Description: strings.TrimSpace(command.Description),
+			Command:     strings.TrimSpace(command.Command),
+			Args:        append([]string(nil), command.Args...),
+			Shell:       strings.TrimSpace(command.Shell),
+			Env:         maps.Clone(command.Env),
+		})
+	}
+	if out.Instructions == "" && len(out.Commands) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Server) getAgentSession(w http.ResponseWriter, r *http.Request) {

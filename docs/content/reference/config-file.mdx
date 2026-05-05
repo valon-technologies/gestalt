@@ -587,6 +587,15 @@ of launching it directly on the `gestaltd` host. Tool callbacks still route
 back through the host agent socket, and `egress.allowedHosts` remains the
 operator-facing egress policy.
 
+Local `gestalt agent` launches the selected provider's configured harness on
+the operator's machine. `defaultHarness` selects a named entry under
+`harnesses`; each harness has `command`, optional `args`, optional `env`,
+optional `workingDirectory`, optional `requiredCommands`, and optional
+`install` metadata. `install.instructions` and `install.commands` are returned
+to the CLI when a required local command is missing. Install commands may use
+either structured `command` plus `args`, or `shell` for installers that must run
+through the platform shell.
+
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named agent entry as the default selection when a session request omits `provider`. |
@@ -595,6 +604,8 @@ operator-facing egress policy.
 | `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
+| `defaultHarness` | Optional default local harness name used by `gestalt agent` and `gestalt agent doctor` when `--harness` is omitted. |
+| `harnesses` | Optional named local harness configs for `gestalt agent`. Each harness can define `command`, `args`, `env`, `workingDirectory`, `requiredCommands`, and `install` guidance. |
 | `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
