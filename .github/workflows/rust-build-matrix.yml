@@ -112,7 +112,7 @@ jobs:
           command -v cross >/dev/null 2>&1 || cargo install cross --version 0.2.5
 
       - name: Install Go toolchain
-        if: ${{ inputs.bundle-gestaltd }}
+        if: ${{ inputs.bundle-gestaltd && !matrix.platform.windows }}
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: gestaltd/go.mod
@@ -145,7 +145,7 @@ jobs:
         run: cargo test --release --target ${{ matrix.platform.target }}
 
       - name: Build gestaltd helper
-        if: ${{ inputs.bundle-gestaltd }}
+        if: ${{ inputs.bundle-gestaltd && !matrix.platform.windows }}
         shell: bash
         env:
           CGO_ENABLED: '0'
@@ -188,7 +188,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist
           Copy-Item ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}.exe dist/
           $archivePaths = @("${{ inputs.binary-name }}.exe")
-          if ("${{ inputs.bundle-gestaltd }}" -eq "true") {
+          if ("${{ inputs.bundle-gestaltd }}" -eq "true" -and (Test-Path helper/gestaltd.exe)) {
             Copy-Item helper/gestaltd.exe dist/
             $archivePaths += "gestaltd.exe"
           }
