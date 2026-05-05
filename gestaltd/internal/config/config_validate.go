@@ -867,47 +867,28 @@ func normalizePluginInvocationRunAs(path string, invoke *PluginInvocationDepende
 	if runAs.Subject != nil {
 		count++
 	}
-	if runAs.GitHubAppInstallation != nil {
-		count++
-	}
 	if count != 1 {
 		return fmt.Errorf("config validation: %s.runAs must set exactly one delegation target", path)
 	}
-	if runAs.Subject != nil {
-		subject := runAs.Subject
-		subject.ID = strings.TrimSpace(subject.ID)
-		subject.Kind = strings.TrimSpace(subject.Kind)
-		subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
-		subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-		subject.AuthSource = strings.TrimSpace(subject.AuthSource)
-		if subject.ID == "" {
-			return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
-		}
-		if subject.Kind == "" {
-			if kind, _, ok := core.ParseSubjectID(subject.ID); ok {
-				subject.Kind = kind
-			}
-		}
-		if subject.Kind == "" {
-			return fmt.Errorf("config validation: %s.runAs.subject.kind is required", path)
-		}
-		if subject.CredentialSubjectID == "" {
-			subject.CredentialSubjectID = subject.ID
-		}
-		return nil
+	subject := runAs.Subject
+	subject.ID = strings.TrimSpace(subject.ID)
+	subject.Kind = strings.TrimSpace(subject.Kind)
+	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
+	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
+	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
+	if subject.ID == "" {
+		return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
 	}
-	installation := runAs.GitHubAppInstallation
-	installation.Owner = strings.TrimSpace(installation.Owner)
-	installation.Repo = strings.TrimSpace(installation.Repo)
-	installation.AuthSource = strings.TrimSpace(installation.AuthSource)
-	if installation.InstallationID <= 0 {
-		return fmt.Errorf("config validation: %s.runAs.githubAppInstallation.installationId is required", path)
+	if subject.Kind == "" {
+		if kind, _, ok := core.ParseSubjectID(subject.ID); ok {
+			subject.Kind = kind
+		}
 	}
-	if installation.Owner == "" || installation.Repo == "" {
-		return fmt.Errorf("config validation: %s.runAs.githubAppInstallation.owner and repo are required", path)
+	if subject.Kind == "" {
+		return fmt.Errorf("config validation: %s.runAs.subject.kind is required", path)
 	}
-	if installation.AuthSource == "" {
-		installation.AuthSource = "github_app_webhook"
+	if subject.CredentialSubjectID == "" {
+		subject.CredentialSubjectID = subject.ID
 	}
 	return nil
 }

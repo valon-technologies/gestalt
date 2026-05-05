@@ -5163,10 +5163,9 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 					Operation:      "bot.createPullRequest",
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &PluginInvocationRunAsConfig{
-						GitHubAppInstallation: &PluginInvocationRunAsGitHubAppInstallationConfig{
-							InstallationID: 99,
-							Owner:          " acme ",
-							Repo:           " widgets ",
+						Subject: &PluginInvocationRunAsSubjectConfig{
+							ID:          " service_account:github_app_installation:99:repo:acme/widgets ",
+							DisplayName: " Toolshed app ",
 						},
 					},
 				}},
@@ -5184,8 +5183,8 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	if subject.SubjectID != "service_account:github_app_installation:99:repo:acme/widgets" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
 	}
-	if subject.SubjectKind != "service_account" || subject.AuthSource != "github_app_webhook" {
-		t.Fatalf("RunAsSubject() = %#v, want service account github app source", subject)
+	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Toolshed app" {
+		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
 	}
 }
 

@@ -1833,8 +1833,7 @@ type PluginInvocationDependency struct {
 }
 
 type PluginInvocationRunAsConfig struct {
-	Subject               *PluginInvocationRunAsSubjectConfig               `yaml:"subject,omitempty"`
-	GitHubAppInstallation *PluginInvocationRunAsGitHubAppInstallationConfig `yaml:"githubAppInstallation,omitempty"`
+	Subject *PluginInvocationRunAsSubjectConfig `yaml:"subject,omitempty"`
 }
 
 type PluginInvocationRunAsSubjectConfig struct {
@@ -1843,13 +1842,6 @@ type PluginInvocationRunAsSubjectConfig struct {
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
 	DisplayName         string `yaml:"displayName,omitempty"`
 	AuthSource          string `yaml:"authSource,omitempty"`
-}
-
-type PluginInvocationRunAsGitHubAppInstallationConfig struct {
-	InstallationID int64  `yaml:"installationId,omitempty"`
-	Owner          string `yaml:"owner,omitempty"`
-	Repo           string `yaml:"repo,omitempty"`
-	AuthSource     string `yaml:"authSource,omitempty"`
 }
 
 func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
@@ -1863,16 +1855,6 @@ func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
 			CredentialSubjectID: subject.CredentialSubjectID,
 			DisplayName:         subject.DisplayName,
 			AuthSource:          subject.AuthSource,
-		})
-	}
-	if installation := d.RunAs.GitHubAppInstallation; installation != nil && installation.InstallationID > 0 {
-		owner := strings.TrimSpace(installation.Owner)
-		repo := strings.TrimSpace(installation.Repo)
-		subjectID := fmt.Sprintf("service_account:github_app_installation:%d:repo:%s/%s", installation.InstallationID, owner, repo)
-		return core.NormalizeRunAsSubject(&core.RunAsSubject{
-			SubjectID:   subjectID,
-			SubjectKind: "service_account",
-			AuthSource:  installation.AuthSource,
 		})
 	}
 	return nil
