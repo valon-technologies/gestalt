@@ -51,6 +51,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Post("/agent/sessions", s.createAgentSession)
 		r.Get("/agent/sessions", s.listAgentSessions)
 		r.Get("/agent/providers", s.listAgentProviders)
+		r.Post("/agent/harnesses/resolve", s.resolveAgentHarness)
 		r.Route("/agent/sessions", func(r chi.Router) {
 			r.Post("/", s.createAgentSession)
 			r.Get("/", s.listAgentSessions)

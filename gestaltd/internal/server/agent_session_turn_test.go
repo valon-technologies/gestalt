@@ -1179,6 +1179,88 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-harness" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.AgentDefs = map[string]*config.ProviderEntry{
+			"managed": {
+				DefaultHarness: "default",
+				Harnesses: map[string]*config.ProviderEntryHarnessConfig{
+					"default": {
+						Command:          "hermes",
+						Args:             []string{"acp"},
+						Env:              map[string]string{"OPENAI_BASE_URL": "https://example.test"},
+						WorkingDirectory: "/workspace/default",
+						RequiredCommands: []string{"hermes"},
+					},
+					"no-tools": {
+						Command: "hermes",
+						Args:    []string{"acp", "--no-tools"},
+					},
+				},
+			},
+		}
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:     agentControl,
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	defaultReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/harnesses/resolve", bytes.NewBufferString(`{}`))
+	defaultReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-harness"})
+	defaultResp, err := http.DefaultClient.Do(defaultReq)
+	if err != nil {
+		t.Fatalf("resolve default harness: %v", err)
+	}
+	defer func() { _ = defaultResp.Body.Close() }()
+	if defaultResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(defaultResp.Body)
+		t.Fatalf("resolve default harness status = %d body=%s, want 200", defaultResp.StatusCode, body)
+	}
+	var defaultPlan map[string]any
+	if err := json.NewDecoder(defaultResp.Body).Decode(&defaultPlan); err != nil {
+		t.Fatalf("decode default plan: %v", err)
+	}
+	if defaultPlan["provider"] != "managed" || defaultPlan["harness"] != "default" || defaultPlan["command"] != "hermes" {
+		t.Fatalf("default plan = %#v", defaultPlan)
+	}
+
+	namedReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/harnesses/resolve", bytes.NewBufferString(`{"provider":"managed","harness":"no-tools"}`))
+	namedReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-harness"})
+	namedResp, err := http.DefaultClient.Do(namedReq)
+	if err != nil {
+		t.Fatalf("resolve named harness: %v", err)
+	}
+	defer func() { _ = namedResp.Body.Close() }()
+	if namedResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(namedResp.Body)
+		t.Fatalf("resolve named harness status = %d body=%s, want 200", namedResp.StatusCode, body)
+	}
+	var namedPlan map[string]any
+	if err := json.NewDecoder(namedResp.Body).Decode(&namedPlan); err != nil {
+		t.Fatalf("decode named plan: %v", err)
+	}
+	if namedPlan["harness"] != "no-tools" {
+		t.Fatalf("named plan = %#v, want no-tools harness", namedPlan)
+	}
+}
+
 func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 	t.Parallel()
 

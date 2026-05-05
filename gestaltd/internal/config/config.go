@@ -387,18 +387,20 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source          ProviderSource                   `yaml:"source"`
-	Config          yaml.Node                        `yaml:"config,omitempty"`
-	Default         bool                             `yaml:"default,omitempty"`
-	Env             map[string]string                `yaml:"env,omitempty"`
-	Egress          *ProviderEgressConfig            `yaml:"egress,omitempty"`
-	DisplayName     string                           `yaml:"displayName,omitempty"`
-	Description     string                           `yaml:"description,omitempty"`
-	IconFile        string                           `yaml:"iconFile,omitempty"`
-	LocalHarness    *ProviderEntryLocalHarnessConfig `yaml:"localHarness,omitempty"`
-	RouteAuth       *RouteAuthDef                    `yaml:"-"`
-	SecuritySchemes map[string]*HTTPSecurityScheme   `yaml:"securitySchemes,omitempty"`
-	HTTP            map[string]*HTTPBinding          `yaml:"http,omitempty"`
+	Source          ProviderSource                         `yaml:"source"`
+	Config          yaml.Node                              `yaml:"config,omitempty"`
+	Default         bool                                   `yaml:"default,omitempty"`
+	Env             map[string]string                      `yaml:"env,omitempty"`
+	Egress          *ProviderEgressConfig                  `yaml:"egress,omitempty"`
+	DisplayName     string                                 `yaml:"displayName,omitempty"`
+	Description     string                                 `yaml:"description,omitempty"`
+	IconFile        string                                 `yaml:"iconFile,omitempty"`
+	DefaultHarness  string                                 `yaml:"defaultHarness,omitempty"`
+	Harnesses       map[string]*ProviderEntryHarnessConfig `yaml:"harnesses,omitempty"`
+	LocalHarness    *ProviderEntryHarnessConfig            `yaml:"localHarness,omitempty"`
+	RouteAuth       *RouteAuthDef                          `yaml:"-"`
+	SecuritySchemes map[string]*HTTPSecurityScheme         `yaml:"securitySchemes,omitempty"`
+	HTTP            map[string]*HTTPBinding                `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
 	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
@@ -438,15 +440,19 @@ type ProviderEntry struct {
 
 type providerEntryFields ProviderEntry
 
-// ProviderEntryLocalHarnessConfig describes the local process harness used to
-// start an agent provider without the gestaltd server runtime.
-type ProviderEntryLocalHarnessConfig struct {
+// ProviderEntryHarnessConfig describes a process harness that can start an
+// agent provider outside gestaltd's hosted runtime.
+type ProviderEntryHarnessConfig struct {
 	Command          string            `yaml:"command,omitempty"`
 	Args             []string          `yaml:"args,omitempty"`
 	Env              map[string]string `yaml:"env,omitempty"`
 	WorkingDirectory string            `yaml:"workingDirectory,omitempty"`
 	RequiredCommands []string          `yaml:"requiredCommands,omitempty"`
 }
+
+// ProviderEntryLocalHarnessConfig is kept as a compatibility alias for configs
+// that still use providers.agent.<name>.localHarness.
+type ProviderEntryLocalHarnessConfig = ProviderEntryHarnessConfig
 
 type ProviderEntryDevConfig struct {
 	Attach ProviderEntryDevAttachConfig `yaml:"attach,omitempty"`
@@ -891,12 +897,24 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
 	e.Execution = cloneExecutionConfig(e.Execution)
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
-	e.LocalHarness = cloneProviderEntryLocalHarnessConfig(e.LocalHarness)
+	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
+	e.LocalHarness = cloneProviderEntryHarnessConfig(e.LocalHarness)
 	normalizeProviderEntryAliases(&e)
 	return providerEntryFields(e)
 }
 
-func cloneProviderEntryLocalHarnessConfig(src *ProviderEntryLocalHarnessConfig) *ProviderEntryLocalHarnessConfig {
+func cloneProviderEntryHarnessConfigMap(src map[string]*ProviderEntryHarnessConfig) map[string]*ProviderEntryHarnessConfig {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]*ProviderEntryHarnessConfig, len(src))
+	for name, harness := range src {
+		dst[name] = cloneProviderEntryHarnessConfig(harness)
+	}
+	return dst
+}
+
+func cloneProviderEntryHarnessConfig(src *ProviderEntryHarnessConfig) *ProviderEntryHarnessConfig {
 	if src == nil {
 		return nil
 	}
@@ -929,11 +947,27 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	if entry.Dev != nil {
 		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
 	}
-	if entry.LocalHarness != nil {
-		entry.LocalHarness.Command = strings.TrimSpace(entry.LocalHarness.Command)
-		entry.LocalHarness.WorkingDirectory = strings.TrimSpace(entry.LocalHarness.WorkingDirectory)
-		entry.LocalHarness.RequiredCommands = trimStringSlice(entry.LocalHarness.RequiredCommands)
+	entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
+	normalizeProviderEntryHarness(entry.LocalHarness)
+	for name, harness := range entry.Harnesses {
+		trimmed := strings.TrimSpace(name)
+		if trimmed != name {
+			delete(entry.Harnesses, name)
+			if trimmed != "" {
+				entry.Harnesses[trimmed] = harness
+			}
+		}
+		normalizeProviderEntryHarness(harness)
 	}
+}
+
+func normalizeProviderEntryHarness(harness *ProviderEntryHarnessConfig) {
+	if harness == nil {
+		return
+	}
+	harness.Command = strings.TrimSpace(harness.Command)
+	harness.WorkingDirectory = strings.TrimSpace(harness.WorkingDirectory)
+	harness.RequiredCommands = trimStringSlice(harness.RequiredCommands)
 }
 
 func trimStringSlice(values []string) []string {
@@ -1864,13 +1898,14 @@ func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
 }
 
-// ValidateSelectedAgentLocalHarnessEnvPaths fails if the selected local agent
-// harness references missing environment variables.
-func ValidateSelectedAgentLocalHarnessEnvPaths(paths []string, providerName string) error {
+// ValidateSelectedAgentHarnessEnvPaths fails if the selected agent harness
+// references missing environment variables.
+func ValidateSelectedAgentHarnessEnvPaths(paths []string, providerName string, harnessName string) error {
 	providerName = strings.TrimSpace(providerName)
 	if providerName == "" {
 		return nil
 	}
+	harnessName = strings.TrimSpace(harnessName)
 	missingEnvSentinelContext, err := newMissingEnvSentinelPrefix()
 	if err != nil {
 		return err
@@ -1882,12 +1917,47 @@ func ValidateSelectedAgentLocalHarnessEnvPaths(paths []string, providerName stri
 	providers := mappingValueNode(&root, "providers")
 	agentProviders := mappingValueNode(providers, "agent")
 	entry := mappingValueNode(agentProviders, providerName)
-	localHarness := mappingValueNode(entry, "localHarness")
-	if localHarness == nil {
+	harness := selectedAgentHarnessNode(entry, harnessName)
+	if harness == nil {
 		return nil
 	}
-	if firstMissing := firstMissingEnvSentinel(localHarness, missingEnvSentinelContext); firstMissing != "" {
-		return fmt.Errorf("expanding providers.agent.%s.localHarness environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", providerName, firstMissing, firstMissing)
+	if firstMissing := firstMissingEnvSentinel(harness, missingEnvSentinelContext); firstMissing != "" {
+		return fmt.Errorf("expanding providers.agent.%s harness environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", providerName, firstMissing, firstMissing)
+	}
+	return nil
+}
+
+// ValidateSelectedAgentLocalHarnessEnvPaths preserves the old helper API.
+func ValidateSelectedAgentLocalHarnessEnvPaths(paths []string, providerName string) error {
+	return ValidateSelectedAgentHarnessEnvPaths(paths, providerName, "")
+}
+
+func selectedAgentHarnessNode(entry *yaml.Node, harnessName string) *yaml.Node {
+	if entry == nil {
+		return nil
+	}
+	harnessName = strings.TrimSpace(harnessName)
+	if harnessName == "" {
+		if defaultHarness := mappingValueNode(entry, "defaultHarness"); defaultHarness != nil && defaultHarness.Kind == yaml.ScalarNode {
+			harnessName = strings.TrimSpace(defaultHarness.Value)
+		}
+	}
+	harnesses := mappingValueNode(entry, "harnesses")
+	if harnessName == "" && harnesses != nil {
+		if defaultHarness := mappingValueNode(harnesses, DefaultAgentHarnessName); defaultHarness != nil {
+			return defaultHarness
+		}
+		if len(harnesses.Content) == 2 {
+			return harnesses.Content[1]
+		}
+	}
+	if harnessName != "" && harnesses != nil {
+		if harness := mappingValueNode(harnesses, harnessName); harness != nil {
+			return harness
+		}
+	}
+	if harnessName == "" || harnessName == DefaultAgentHarnessName {
+		return mappingValueNode(entry, "localHarness")
 	}
 	return nil
 }
@@ -3040,6 +3110,11 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 	if localHarness, ok := entry["localHarness"].(map[string]any); ok {
 		resolveRelativeStringField(localHarness, "workingDirectory", baseDir)
 	}
+	if harnesses, ok := entry["harnesses"].(map[string]any); ok {
+		for _, harness := range mapValues(harnesses) {
+			resolveRelativeStringField(harness, "workingDirectory", baseDir)
+		}
+	}
 	if source, ok := entry["source"].(map[string]any); ok {
 		resolveRelativeStringField(source, "path", baseDir)
 		return
@@ -3104,6 +3179,11 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
 		if entry.LocalHarness != nil {
 			entry.LocalHarness.WorkingDirectory = resolveRelativePath(baseDir, entry.LocalHarness.WorkingDirectory)
+		}
+		for _, harness := range entry.Harnesses {
+			if harness != nil {
+				harness.WorkingDirectory = resolveRelativePath(baseDir, harness.WorkingDirectory)
+			}
 		}
 	}
 

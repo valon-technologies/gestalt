@@ -108,6 +108,7 @@ type Server struct {
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	pluginDefs             map[string]*config.ProviderEntry
+	agentDefs              map[string]*config.ProviderEntry
 	authorizer             authorization.RuntimeAuthorizer
 	noAuth                 bool
 	anonymousPrincipal     *principal.Principal
@@ -166,6 +167,7 @@ type Config struct {
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]bootstrap.ManualTokenExchanger
 	PluginDefs            map[string]*config.ProviderEntry
+	AgentDefs             map[string]*config.ProviderEntry
 	ProviderUIs           map[string]*config.UIEntry
 	Authorizer            authorization.RuntimeAuthorizer
 	AuthorizationProvider core.AuthorizationProvider
@@ -359,6 +361,7 @@ func New(cfg Config) (*Server, error) {
 		connectionAuth:         cfg.ConnectionAuth,
 		manualConnectionAuth:   cfg.ManualConnectionAuth,
 		pluginDefs:             cfg.PluginDefs,
+		agentDefs:              cfg.AgentDefs,
 		authorizer:             cfg.Authorizer,
 		noAuth:                 noAuth,
 		publicBaseURL:          strings.TrimRight(cfg.PublicBaseURL, "/"),

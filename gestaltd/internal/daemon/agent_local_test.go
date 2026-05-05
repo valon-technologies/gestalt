@@ -46,6 +46,7 @@ providers:
 	}
 	var payload struct {
 		Provider         string            `json:"provider"`
+		Harness          string            `json:"harness"`
 		Command          string            `json:"command"`
 		ResolvedCommand  string            `json:"resolvedCommand"`
 		Args             []string          `json:"args"`
@@ -57,6 +58,9 @@ providers:
 	}
 	if payload.Provider != "local" {
 		t.Fatalf("provider = %q, want local", payload.Provider)
+	}
+	if payload.Harness != "default" {
+		t.Fatalf("harness = %q, want default", payload.Harness)
 	}
 	if payload.Command != "/bin/sh" || payload.ResolvedCommand != "/bin/sh" {
 		t.Fatalf("command = (%q, %q), want /bin/sh", payload.Command, payload.ResolvedCommand)
@@ -157,7 +161,7 @@ providers:
 	if err == nil {
 		t.Fatalf("agent doctor unexpectedly succeeded:\n%s", out)
 	}
-	if !strings.Contains(string(out), "localHarness.requiredCommands") ||
+	if !strings.Contains(string(out), "harnesses.default.requiredCommands") ||
 		!strings.Contains(string(out), "definitely-missing-gestalt-agent-command") {
 		t.Fatalf("doctor output missing required command failure:\n%s", out)
 	}
@@ -196,7 +200,7 @@ providers:
 		t.Fatalf("agent launch unexpectedly succeeded:\n%s", out)
 	}
 	got := string(out)
-	if !strings.Contains(got, "providers.agent.local.localHarness") ||
+	if !strings.Contains(got, "providers.agent.local harness") ||
 		!strings.Contains(got, missingEnv) ||
 		strings.Contains(got, "GESTALT_TEST_MISSING_UNSELECTED_HARNESS_ENV") {
 		t.Fatalf("missing env output = %s", out)
