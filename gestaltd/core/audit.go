@@ -16,10 +16,10 @@ type AuditEntry struct {
 	AgentSubjectKind             string
 	AgentDisplayName             string
 	AgentAuthSource              string
-	RunAsSubjectID                string
-	RunAsSubjectKind              string
-	RunAsDisplayName              string
-	RunAsAuthSource               string
+	RunAsSubjectID               string
+	RunAsSubjectKind             string
+	RunAsDisplayName             string
+	RunAsAuthSource              string
 	AccessPolicy                 string
 	AccessRole                   string
 	AuthorizationDecision        string
