@@ -9,7 +9,15 @@ import grpc as _grpc
 
 grpc: Any = cast(Any, _grpc)
 
-_INTERNAL_CHANNEL_OPTIONS = (("grpc.enable_http_proxy", 0),)
+INTERNAL_GRPC_MAX_MESSAGE_BYTES = 64 * 1024 * 1024
+INTERNAL_GRPC_MESSAGE_OPTIONS = (
+    ("grpc.max_receive_message_length", INTERNAL_GRPC_MAX_MESSAGE_BYTES),
+    ("grpc.max_send_message_length", INTERNAL_GRPC_MAX_MESSAGE_BYTES),
+)
+_INTERNAL_CHANNEL_OPTIONS = (
+    ("grpc.enable_http_proxy", 0),
+    *INTERNAL_GRPC_MESSAGE_OPTIONS,
+)
 _HOST_SERVICE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 
