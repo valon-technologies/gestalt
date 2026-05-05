@@ -1358,7 +1358,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
 		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported):
+		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported),
+		errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())

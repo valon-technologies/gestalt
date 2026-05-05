@@ -480,37 +480,6 @@ func sessionStartConfigToProto(value *coreagent.SessionStartConfig) *proto.Agent
 	return out
 }
 
-func sessionStartConfigFromProto(value *proto.AgentSessionStartConfig) *coreagent.SessionStartConfig {
-	if value == nil || len(value.GetHooks()) == 0 {
-		return nil
-	}
-	out := &coreagent.SessionStartConfig{
-		Hooks: make([]coreagent.SessionStartHook, 0, len(value.GetHooks())),
-	}
-	for _, hook := range value.GetHooks() {
-		if hook == nil {
-			continue
-		}
-		output := hook.GetOutput()
-		out.Hooks = append(out.Hooks, coreagent.SessionStartHook{
-			ID:      hook.GetId(),
-			Type:    hook.GetType(),
-			Command: append([]string(nil), hook.GetCommand()...),
-			CWD:     hook.GetCwd(),
-			Timeout: hook.GetTimeout(),
-			Env:     maps.Clone(hook.GetEnv()),
-			Output: coreagent.SessionStartHookOutput{
-				AdditionalContext: output.GetAdditionalContext(),
-				Metadata:          output.GetMetadata(),
-			},
-		})
-	}
-	if len(out.Hooks) == 0 {
-		return nil
-	}
-	return out
-}
-
 func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.InteractionType, error) {
 	switch value {
 	case proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED:

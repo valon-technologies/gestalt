@@ -80,8 +80,9 @@ return &proto.AgentProviderCapabilities{
 
 `session_start.hooks` currently contains command hooks only. Providers should
 run each argv with the supplied absolute `cwd`, a sanitized environment plus the
-explicit hook `env`, and fail `CreateSession` when any hook fails. Persist hook
-results in session metadata under
+explicit hook `env`, and fail `CreateSession` when any hook fails. First-party
+providers preserve only `HOME`, `PATH`, `SHELL`, `TMPDIR`, `USER`, `LOGNAME`,
+`LANG`, and `LC_ALL` by default. Persist hook results in session metadata under
 `__gestalt.lifecycle.sessionStart.results.<hookId>` and preserve that reserved
 namespace across later `UpdateSession` calls. If a hook has
 `output.additional_context`, prepend stdout as provider-owned context to future

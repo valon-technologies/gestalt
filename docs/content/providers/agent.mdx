@@ -89,8 +89,9 @@ providers:
 ```
 
 `command` is an argv array; Gestalt resolves relative `cwd` values against the
-config file and passes an absolute path to the provider. Providers run hooks
-with a small default environment plus the explicit `env` map. When
+config file and passes an absolute path to the provider. First-party providers
+run hooks with only `HOME`, `PATH`, `SHELL`, `TMPDIR`, `USER`, `LOGNAME`, `LANG`,
+and `LC_ALL` from the process environment, plus the explicit hook `env` map. When
 `additionalContext` is true, stdout is prepended to future turns in the session.
 When `metadata` is true, stdout/stderr are stored under the reserved
 `__gestalt.lifecycle.sessionStart.results.<hookId>` session metadata namespace.
