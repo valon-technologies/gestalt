@@ -38,3 +38,16 @@ func NormalizeRunAsSubject(subject *RunAsSubject) *RunAsSubject {
 	}
 	return out
 }
+
+func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
+	left = NormalizeRunAsSubject(left)
+	right = NormalizeRunAsSubject(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return strings.TrimSpace(left.SubjectID) == strings.TrimSpace(right.SubjectID) &&
+		strings.TrimSpace(left.SubjectKind) == strings.TrimSpace(right.SubjectKind) &&
+		strings.TrimSpace(left.CredentialSubjectID) == strings.TrimSpace(right.CredentialSubjectID) &&
+		strings.TrimSpace(left.DisplayName) == strings.TrimSpace(right.DisplayName) &&
+		strings.TrimSpace(left.AuthSource) == strings.TrimSpace(right.AuthSource)
+}

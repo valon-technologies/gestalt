@@ -3164,7 +3164,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if !hasMode && out[i].CredentialMode != "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
 		}
-		if hasRunAs && out[i].RunAs != nil && !runAsSubjectsEqual(out[i].RunAs, runAs) {
+		if hasRunAs && out[i].RunAs != nil && !core.RunAsSubjectsEqual(out[i].RunAs, runAs) {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
 		}
 		if !hasRunAs && out[i].RunAs != nil {
@@ -3189,19 +3189,6 @@ func runAsSubjectID(subject *core.RunAsSubject) string {
 		return ""
 	}
 	return strings.TrimSpace(core.NormalizeRunAsSubject(subject).SubjectID)
-}
-
-func runAsSubjectsEqual(left, right *core.RunAsSubject) bool {
-	left = core.NormalizeRunAsSubject(left)
-	right = core.NormalizeRunAsSubject(right)
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return strings.TrimSpace(left.SubjectID) == strings.TrimSpace(right.SubjectID) &&
-		strings.TrimSpace(left.SubjectKind) == strings.TrimSpace(right.SubjectKind) &&
-		strings.TrimSpace(left.CredentialSubjectID) == strings.TrimSpace(right.CredentialSubjectID) &&
-		strings.TrimSpace(left.DisplayName) == strings.TrimSpace(right.DisplayName) &&
-		strings.TrimSpace(left.AuthSource) == strings.TrimSpace(right.AuthSource)
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {

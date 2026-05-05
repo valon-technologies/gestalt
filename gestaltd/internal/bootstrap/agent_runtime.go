@@ -583,6 +583,9 @@ func agentRunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *p
 	if runAs == nil {
 		return base
 	}
+	if base == nil {
+		base = &principal.Principal{}
+	}
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(runAs.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(runAs.CredentialSubjectID),
@@ -903,7 +906,7 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
 			continue
 		}
-		if ref.RunAs != nil && !agentRunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
 			continue
 		}
 		return true
@@ -963,7 +966,7 @@ func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID str
 		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
 			continue
 		}
-		if ref.RunAs != nil && !agentRunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
 			continue
 		}
 		return true
@@ -1021,7 +1024,7 @@ func agentToolRunAsExplicitlyGranted(target coreagent.ToolTarget, refs []coreage
 		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
 			continue
 		}
-		if !agentRunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+		if !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
 			continue
 		}
 		if connection := strings.TrimSpace(ref.Connection); connection != "" && config.ResolveConnectionAlias(connection) != config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)) {
@@ -1042,18 +1045,5 @@ func agentToolTargetsEqual(left, right coreagent.ToolTarget) bool {
 		config.ResolveConnectionAlias(strings.TrimSpace(left.Connection)) == config.ResolveConnectionAlias(strings.TrimSpace(right.Connection)) &&
 		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance) &&
 		left.CredentialMode == right.CredentialMode &&
-		agentRunAsSubjectsEqual(left.RunAs, right.RunAs)
-}
-
-func agentRunAsSubjectsEqual(left, right *core.RunAsSubject) bool {
-	left = core.NormalizeRunAsSubject(left)
-	right = core.NormalizeRunAsSubject(right)
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return strings.TrimSpace(left.SubjectID) == strings.TrimSpace(right.SubjectID) &&
-		strings.TrimSpace(left.SubjectKind) == strings.TrimSpace(right.SubjectKind) &&
-		strings.TrimSpace(left.CredentialSubjectID) == strings.TrimSpace(right.CredentialSubjectID) &&
-		strings.TrimSpace(left.DisplayName) == strings.TrimSpace(right.DisplayName) &&
-		strings.TrimSpace(left.AuthSource) == strings.TrimSpace(right.AuthSource)
+		core.RunAsSubjectsEqual(left.RunAs, right.RunAs)
 }
