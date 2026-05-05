@@ -3,35 +3,35 @@
 class Gestalt < Formula
   desc "CLI for Gestalt API - authentication, integration management, and operation invocation"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.13"
+  version "0.0.1-alpha.15"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.13/gestalt-macos-arm64.tar.gz"
-      sha256 "2bdef8bfc5c014a923a4939f639e6559167e1c2620ee2677c2985779e6d59669"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.15/gestalt-macos-arm64.tar.gz"
+      sha256 "a3b5b853994d333da255181447445a7978f51c1704801e2f0776727d74e60fb7"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.13/gestalt-macos-x86_64.tar.gz"
-      sha256 "b790fb177272f2c7ccb04594274bf1864fd748e74dfc27247b7e1aabf53a40e0"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.15/gestalt-macos-x86_64.tar.gz"
+      sha256 "5e38164316887da08aeae4a4c23b146fe11b8cbfcf1c417360961469553b7029"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.13/gestalt-linux-arm64.tar.gz"
-      sha256 "b27b69d1e833553db32310d06ed8c413588770a5ad3fe4b39321e51f321a371e"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.15/gestalt-linux-arm64.tar.gz"
+      sha256 "3f4d3b43fce84be60a9611fc91aa01d28269e8cf2b1af7cafe8f7dcbfa542cc6"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.13/gestalt-linux-x86_64.tar.gz"
-      sha256 "2aae5a673bc23520c15860cd87557720382aff6766bc8f060f2ac60d6eddb729"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.15/gestalt-linux-x86_64.tar.gz"
+      sha256 "d714c82c5cd9d8a83cbbd8bb736aef58dabe3ac5e183908c3a782a6d83d31cb1"
     end
   end
 
   def install
-    bin.install "gestalt"
+    bin.install "gestalt", "gestaltd"
   end
 
   test do
