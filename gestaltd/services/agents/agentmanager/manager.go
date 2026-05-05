@@ -1504,16 +1504,6 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		sort.SliceStable(out, func(i, j int) bool {
 			return listedAgentToolSortLess(out[i], out[j])
 		})
-	} else {
-		stableNames, err := m.stableListedAgentToolNames(ctx, p, refs)
-		if err != nil {
-			return nil, err
-		}
-		for i := range out {
-			if name := stableNames[agentToolTargetKeyFromTarget(out[i].Target)]; name != "" {
-				out[i].MCPName = name
-			}
-		}
 	}
 	assignStableUniqueListedAgentToolNames(out)
 	tools, nextPageToken := paginateListedAgentTools(out, pageSize, pageOffset)
@@ -1952,70 +1942,6 @@ func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUn
 
 func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
 	return tool.Target.Unavailable != nil
-}
-
-func (m *Manager) stableListedAgentToolNames(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) (map[agentToolTargetKey]string, error) {
-	out := make([]coreagent.ListedTool, 0, len(refs))
-	seen := map[agentToolTargetKey]struct{}{}
-	systemTools, err := m.searchWorkflowSystemTools(ctx, p, refs)
-	if err != nil {
-		return nil, err
-	}
-	for i := range systemTools {
-		key := agentToolTargetKeyFromTarget(systemTools[i].Target)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		listed, err := listedAgentSystemTool(systemTools[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, listed)
-	}
-	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, "", true)
-	if err != nil {
-		return nil, err
-	}
-	for i := range candidates {
-		listed, err := m.listedAgentPluginCandidateTool(candidates[i])
-		if err != nil {
-			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
-				continue
-			}
-			if candidates[i].skipUnavailable && agentToolSearchUnavailable(err) {
-				continue
-			}
-			return nil, err
-		}
-		key := agentToolTargetKeyFromTarget(listed.Target)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, listed)
-	}
-	for i := range unavailable {
-		listed, err := m.listedUnavailableAgentPluginTool(unavailable[i])
-		if err != nil {
-			return nil, err
-		}
-		key := agentToolTargetKeyFromTarget(listed.Target)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, listed)
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return listedAgentToolSortLess(out[i], out[j])
-	})
-	assignUniqueListedAgentToolNames(out)
-	names := make(map[agentToolTargetKey]string, len(out))
-	for i := range out {
-		names[agentToolTargetKeyFromTarget(out[i].Target)] = out[i].MCPName
-	}
-	return names, nil
 }
 
 func unavailableAgentToolReason(err error) string {
@@ -2708,6 +2634,24 @@ func listedAgentToolSortLess(a, b coreagent.ListedTool) bool {
 	}
 	if a.MCPName != b.MCPName {
 		return a.MCPName < b.MCPName
+	}
+	if a.Target.System != b.Target.System {
+		return a.Target.System < b.Target.System
+	}
+	if a.Target.Plugin != b.Target.Plugin {
+		return a.Target.Plugin < b.Target.Plugin
+	}
+	if a.Target.Operation != b.Target.Operation {
+		return a.Target.Operation < b.Target.Operation
+	}
+	if a.Target.Connection != b.Target.Connection {
+		return a.Target.Connection < b.Target.Connection
+	}
+	if a.Target.Instance != b.Target.Instance {
+		return a.Target.Instance < b.Target.Instance
+	}
+	if a.Target.CredentialMode != b.Target.CredentialMode {
+		return a.Target.CredentialMode < b.Target.CredentialMode
 	}
 	return a.ToolID < b.ToolID
 }
