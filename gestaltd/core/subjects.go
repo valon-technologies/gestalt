@@ -45,9 +45,9 @@ func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return strings.TrimSpace(left.SubjectID) == strings.TrimSpace(right.SubjectID) &&
-		strings.TrimSpace(left.SubjectKind) == strings.TrimSpace(right.SubjectKind) &&
-		strings.TrimSpace(left.CredentialSubjectID) == strings.TrimSpace(right.CredentialSubjectID) &&
-		strings.TrimSpace(left.DisplayName) == strings.TrimSpace(right.DisplayName) &&
-		strings.TrimSpace(left.AuthSource) == strings.TrimSpace(right.AuthSource)
+	return left.SubjectID == right.SubjectID &&
+		left.SubjectKind == right.SubjectKind &&
+		left.CredentialSubjectID == right.CredentialSubjectID &&
+		left.DisplayName == right.DisplayName &&
+		left.AuthSource == right.AuthSource
 }
