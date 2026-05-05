@@ -2609,14 +2609,6 @@ func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	}
 }
 
-func assignUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
-	order := make([]int, len(tools))
-	for i := range tools {
-		order[i] = i
-	}
-	assignUniqueListedAgentToolNamesInOrder(tools, order)
-}
-
 func assignStableUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
 	order := make([]int, len(tools))
 	for i := range tools {

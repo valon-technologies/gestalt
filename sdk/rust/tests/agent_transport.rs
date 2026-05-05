@@ -670,6 +670,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             page_size: 10,
             page_token: "page-0".to_string(),
             run_grant: "grant-token".to_string(),
+            query: "lookup".to_string(),
         })
         .await
         .expect("list tools");
