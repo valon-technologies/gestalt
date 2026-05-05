@@ -1551,6 +1551,8 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
 			RunGrants: newServerTestAgentRunGrants(t),
 		})
+		cfg.APIRouteTimeout = 25 * time.Millisecond
+		cfg.AgentStreamHeartbeat = 10 * time.Millisecond
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -1617,6 +1619,16 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	}
 	if got := strings.TrimRight(line, "\r\n"); got != ": stream-open" {
 		t.Fatalf("first stream line = %q, want stream-open heartbeat", got)
+	}
+	time.Sleep(50 * time.Millisecond)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read post-timeout heartbeat: %v", err)
+		}
+		if got := strings.TrimRight(line, "\r\n"); got == ": keepalive" {
+			break
+		}
 	}
 
 	provider.mu.Lock()

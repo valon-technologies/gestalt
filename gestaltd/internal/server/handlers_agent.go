@@ -31,7 +31,7 @@ const defaultAgentTurnEventLimit = 100
 const maxAgentTurnEventLimit = 1000
 const agentTurnEventStreamUntilTerminal = "terminal"
 const agentTurnEventStreamUntilBlockedOrTerminal = "blocked_or_terminal"
-const agentTurnEventStreamHeartbeatInterval = 15 * time.Second
+const defaultAgentTurnEventStreamHeartbeatInterval = 15 * time.Second
 
 type agentMessageRequest struct {
 	Role     string                    `json:"role,omitempty"`
@@ -652,7 +652,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if time.Since(lastWrite) >= agentTurnEventStreamHeartbeatInterval {
+			if time.Since(lastWrite) >= s.agentStreamHeartbeat {
 				writeHeartbeat("keepalive")
 			}
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)

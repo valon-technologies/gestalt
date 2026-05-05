@@ -101,6 +101,8 @@ type Server struct {
 	authResolvers          map[string]*principal.Resolver
 	invoker                invocation.Invoker
 	pluginInvoker          invocation.Invoker
+	apiRouteTimeout        time.Duration
+	agentStreamHeartbeat   time.Duration
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
@@ -172,6 +174,8 @@ type Config struct {
 	SecureCookies         bool
 	StateSecret           []byte
 	APITokenTTL           time.Duration
+	APIRouteTimeout       time.Duration
+	AgentStreamHeartbeat  time.Duration
 	Now                   func() time.Time
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
@@ -225,6 +229,14 @@ func New(cfg Config) (*Server, error) {
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
+	}
+	apiRouteTimeout := cfg.APIRouteTimeout
+	if apiRouteTimeout <= 0 {
+		apiRouteTimeout = defaultAPIRouteTimeout
+	}
+	agentStreamHeartbeat := cfg.AgentStreamHeartbeat
+	if agentStreamHeartbeat <= 0 {
+		agentStreamHeartbeat = defaultAgentTurnEventStreamHeartbeatInterval
 	}
 	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin)
 	if err != nil {
@@ -340,6 +352,8 @@ func New(cfg Config) (*Server, error) {
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,
 		pluginInvoker:          pluginInvoker,
+		apiRouteTimeout:        apiRouteTimeout,
+		agentStreamHeartbeat:   agentStreamHeartbeat,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
 		connectionAuth:         cfg.ConnectionAuth,
