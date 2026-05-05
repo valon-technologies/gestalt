@@ -392,6 +392,8 @@ type ListedTool struct {
 	MCPName          string
 	Title            string
 	Description      string
+	Tags             []string
+	SearchText       string
 	InputSchemaJSON  string
 	OutputSchemaJSON string
 	Annotations      core.CapabilityAnnotations
@@ -406,6 +408,7 @@ type ListToolsRequest struct {
 	TurnID       string
 	PageSize     int
 	PageToken    string
+	Query        string
 	ToolRefs     []ToolRef
 	ToolSource   ToolSourceMode
 	RunGrant     string

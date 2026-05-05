@@ -110,6 +110,8 @@ func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
 		McpName:      tool.MCPName,
 		Title:        tool.Title,
 		Description:  tool.Description,
+		Tags:         append([]string(nil), tool.Tags...),
+		SearchText:   tool.SearchText,
 		InputSchema:  tool.InputSchemaJSON,
 		OutputSchema: tool.OutputSchemaJSON,
 		Annotations:  operationAnnotationsToProto(tool.Annotations),

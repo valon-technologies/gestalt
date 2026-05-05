@@ -928,6 +928,10 @@ pub struct ListedAgentTool {
     pub annotations: ::core::option::Option<OperationAnnotations>,
     #[prost(message, optional, tag = "8")]
     pub r#ref: ::core::option::Option<AgentToolRef>,
+    #[prost(string, repeated, tag = "9")]
+    pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "10")]
+    pub search_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentToolsRequest {
@@ -941,6 +945,8 @@ pub struct ListAgentToolsRequest {
     pub page_token: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub run_grant: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub query: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsResponse {

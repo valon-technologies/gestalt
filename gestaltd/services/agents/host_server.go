@@ -64,6 +64,7 @@ func (s *HostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsReq
 		TurnID:       turnID,
 		PageSize:     int(req.GetPageSize()),
 		PageToken:    strings.TrimSpace(req.GetPageToken()),
+		Query:        strings.TrimSpace(req.GetQuery()),
 		RunGrant:     strings.TrimSpace(req.GetRunGrant()),
 	})
 	if err != nil {

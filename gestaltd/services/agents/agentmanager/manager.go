@@ -1463,7 +1463,8 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 
-	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, "", true)
+	query := strings.TrimSpace(req.Query)
+	candidates, unavailable, err := m.searchToolCandidates(ctx, p, refs, query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1499,16 +1500,12 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 
-	sort.SliceStable(out, func(i, j int) bool {
-		if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(out[i]), listedAgentToolUnavailable(out[j]); leftUnavailable != rightUnavailable {
-			return !leftUnavailable
-		}
-		if out[i].MCPName != out[j].MCPName {
-			return out[i].MCPName < out[j].MCPName
-		}
-		return out[i].ToolID < out[j].ToolID
-	})
-	assignUniqueListedAgentToolNames(out)
+	if query == "" {
+		sort.SliceStable(out, func(i, j int) bool {
+			return listedAgentToolSortLess(out[i], out[j])
+		})
+	}
+	assignStableUniqueListedAgentToolNames(out)
 	tools, nextPageToken := paginateListedAgentTools(out, pageSize, pageOffset)
 	return &coreagent.ListToolsResponse{
 		Tools:         tools,
@@ -2539,6 +2536,8 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		MCPName:          agentToolMCPName(target),
 		Title:            name,
 		Description:      description,
+		Tags:             append([]string(nil), candidate.operation.Tags...),
+		SearchText:       agentToolSearchMetadataText(candidate),
 		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
 		OutputSchemaJSON: agentToolOutputSchemaJSON(candidate.operation),
 		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),
@@ -2610,10 +2609,52 @@ func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	}
 }
 
-func assignUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
+func assignStableUniqueListedAgentToolNames(tools []coreagent.ListedTool) {
+	order := make([]int, len(tools))
+	for i := range tools {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return listedAgentToolSortLess(tools[order[i]], tools[order[j]])
+	})
+	assignUniqueListedAgentToolNamesInOrder(tools, order)
+}
+
+func listedAgentToolSortLess(a, b coreagent.ListedTool) bool {
+	if leftUnavailable, rightUnavailable := listedAgentToolUnavailable(a), listedAgentToolUnavailable(b); leftUnavailable != rightUnavailable {
+		return !leftUnavailable
+	}
+	if a.MCPName != b.MCPName {
+		return a.MCPName < b.MCPName
+	}
+	if a.Target.System != b.Target.System {
+		return a.Target.System < b.Target.System
+	}
+	if a.Target.Plugin != b.Target.Plugin {
+		return a.Target.Plugin < b.Target.Plugin
+	}
+	if a.Target.Operation != b.Target.Operation {
+		return a.Target.Operation < b.Target.Operation
+	}
+	if a.Target.Connection != b.Target.Connection {
+		return a.Target.Connection < b.Target.Connection
+	}
+	if a.Target.Instance != b.Target.Instance {
+		return a.Target.Instance < b.Target.Instance
+	}
+	if a.Target.CredentialMode != b.Target.CredentialMode {
+		return a.Target.CredentialMode < b.Target.CredentialMode
+	}
+	return a.ToolID < b.ToolID
+}
+
+func assignUniqueListedAgentToolNamesInOrder(tools []coreagent.ListedTool, order []int) {
 	used := make(map[string]struct{}, len(tools))
 	nextSuffix := make(map[string]int, len(tools))
-	for i := range tools {
+	for _, i := range order {
+		if i < 0 || i >= len(tools) {
+			continue
+		}
 		base := strings.TrimSpace(tools[i].MCPName)
 		if base == "" {
 			base = "tool"
