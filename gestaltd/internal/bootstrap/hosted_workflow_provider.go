@@ -40,7 +40,7 @@ type hostedWorkflowProviderInstance struct {
 	runtimeSession   *pluginruntime.Session
 }
 
-func buildHostedWorkflowProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
+func buildHostedWorkflowProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps, bootstrapProvider coreworkflow.Provider) (coreworkflow.Provider, error) {
 	launch, err := prepareHostedWorkflowProviderLaunch(ctx, name, entry, node, deps)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func buildHostedWorkflowProvider(ctx context.Context, name string, entry *config
 			launch.close()
 			return nil, fmt.Errorf("parse hosted workflow runtime lifecycle policy: %w", err)
 		}
-		return newHostedWorkflowProviderPool(ctx, launch, hostServices, deps, policy)
+		return newHostedWorkflowProviderPool(launch, hostServices, deps, policy, bootstrapProvider)
 	}
 	cleanup := launch.cleanup
 	launch.cleanup = nil
@@ -291,27 +291,23 @@ func hostedWorkflowAllowedHosts(configured []string, runtimePlan HostedRuntimePl
 }
 
 type hostedWorkflowProviderPool struct {
-	coreworkflow.Provider
-
-	executionRefs coreworkflow.ExecutionReferenceStore
-
-	name         string
-	launch       *hostedWorkflowProviderLaunch
-	hostServices []runtimehost.HostService
-	deps         Deps
-	policy       config.HostedRuntimeLifecyclePolicy
+	name              string
+	launch            *hostedWorkflowProviderLaunch
+	hostServices      []runtimehost.HostService
+	deps              Deps
+	policy            config.HostedRuntimeLifecyclePolicy
+	bootstrapProvider coreworkflow.Provider
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	mu             sync.Mutex
-	nextID         int
-	starting       int
-	started        bool
-	controlStarted bool
-	closed         bool
-	workers        []*hostedWorkflowWorker
+	mu       sync.Mutex
+	nextID   int
+	starting int
+	started  bool
+	closed   bool
+	workers  []*hostedWorkflowWorker
 }
 
 type hostedWorkflowWorker struct {
@@ -329,27 +325,20 @@ type hostedWorkflowWorker struct {
 	closed           bool
 }
 
-func newHostedWorkflowProviderPool(ctx context.Context, launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreworkflow.Provider, error) {
+func newHostedWorkflowProviderPool(launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy, bootstrapProvider coreworkflow.Provider) (coreworkflow.Provider, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
-	control, err := startHostedWorkflowProviderInstance(ctx, launch, hostServices, deps, false, nil, 0)
-	if err != nil {
-		launch.close()
-		return nil, err
-	}
-	executionRefs, _ := control.provider.(coreworkflow.ExecutionReferenceStore)
 	poolCtx, cancel := context.WithCancel(context.Background())
 	return &hostedWorkflowProviderPool{
-		Provider:      control.provider,
-		executionRefs: executionRefs,
-		name:          launch.name,
-		launch:        launch,
-		hostServices:  append([]runtimehost.HostService(nil), hostServices...),
-		deps:          deps,
-		policy:        policy,
-		ctx:           poolCtx,
-		cancel:        cancel,
+		name:              launch.name,
+		launch:            launch,
+		hostServices:      append([]runtimehost.HostService(nil), hostServices...),
+		deps:              deps,
+		policy:            policy,
+		bootstrapProvider: bootstrapProvider,
+		ctx:               poolCtx,
+		cancel:            cancel,
 	}, nil
 }
 
@@ -369,11 +358,7 @@ func (p *hostedWorkflowProviderPool) Start(ctx context.Context) error {
 	p.started = true
 	p.mu.Unlock()
 
-	if err := p.startControl(ctx); err != nil {
-		p.markStartFailed()
-		return err
-	}
-	if err := p.ensureMinReady(ctx); err != nil {
+	if err := p.closeBootstrapProvider(); err != nil {
 		p.markStartFailed()
 		return err
 	}
@@ -381,43 +366,33 @@ func (p *hostedWorkflowProviderPool) Start(ctx context.Context) error {
 		p.wg.Add(1)
 		go func() {
 			defer p.wg.Done()
+			if err := p.ensureMinReady(p.ctx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Warn("failed to start hosted workflow runtime workers", "provider", p.name, "error", err)
+			}
 			p.healthLoop()
 		}()
 	} else {
 		p.wg.Add(1)
 		go func() {
 			defer p.wg.Done()
+			if err := p.ensureMinReady(p.ctx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Warn("failed to start hosted workflow runtime workers", "provider", p.name, "error", err)
+			}
 			p.runtimeSessionLoop()
 		}()
 	}
 	return nil
 }
 
-func (p *hostedWorkflowProviderPool) startControl(ctx context.Context) error {
+func (p *hostedWorkflowProviderPool) closeBootstrapProvider() error {
 	p.mu.Lock()
-	if p.controlStarted {
-		p.mu.Unlock()
+	provider := p.bootstrapProvider
+	p.bootstrapProvider = nil
+	p.mu.Unlock()
+	if provider == nil {
 		return nil
 	}
-	provider := p.Provider
-	p.mu.Unlock()
-
-	if provider == nil {
-		return fmt.Errorf("hosted workflow provider %q has no control provider", p.name)
-	}
-	if starter, ok := provider.(startableWorkflowProvider); ok {
-		if err := starter.Start(ctx); err != nil {
-			return fmt.Errorf("start hosted workflow control provider: %w", err)
-		}
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return fmt.Errorf("hosted workflow provider %q is closed", p.name)
-	}
-	p.controlStarted = true
-	return nil
+	return provider.Close()
 }
 
 func (p *hostedWorkflowProviderPool) markStartFailed() {
@@ -428,14 +403,132 @@ func (p *hostedWorkflowProviderPool) markStartFailed() {
 	}
 }
 
+func (p *hostedWorkflowProviderPool) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	return withHostedWorkflowProvider(p, "start run", func(provider coreworkflow.Provider) (*coreworkflow.Run, error) {
+		return provider.StartRun(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) GetRun(ctx context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	return withHostedWorkflowProvider(p, "get run", func(provider coreworkflow.Provider) (*coreworkflow.Run, error) {
+		return provider.GetRun(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	return withHostedWorkflowProvider(p, "list runs", func(provider coreworkflow.Provider) ([]*coreworkflow.Run, error) {
+		return provider.ListRuns(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) CancelRun(ctx context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+	return withHostedWorkflowProvider(p, "cancel run", func(provider coreworkflow.Provider) (*coreworkflow.Run, error) {
+		return provider.CancelRun(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) SignalRun(ctx context.Context, req coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return withHostedWorkflowProvider(p, "signal run", func(provider coreworkflow.Provider) (*coreworkflow.SignalRunResponse, error) {
+		return provider.SignalRun(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) SignalOrStartRun(ctx context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return withHostedWorkflowProvider(p, "signal or start run", func(provider coreworkflow.Provider) (*coreworkflow.SignalRunResponse, error) {
+		return provider.SignalOrStartRun(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+	return withHostedWorkflowProvider(p, "upsert schedule", func(provider coreworkflow.Provider) (*coreworkflow.Schedule, error) {
+		return provider.UpsertSchedule(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) GetSchedule(ctx context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	return withHostedWorkflowProvider(p, "get schedule", func(provider coreworkflow.Provider) (*coreworkflow.Schedule, error) {
+		return provider.GetSchedule(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) ListSchedules(ctx context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	return withHostedWorkflowProvider(p, "list schedules", func(provider coreworkflow.Provider) ([]*coreworkflow.Schedule, error) {
+		return provider.ListSchedules(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) DeleteSchedule(ctx context.Context, req coreworkflow.DeleteScheduleRequest) error {
+	_, err := withHostedWorkflowProvider(p, "delete schedule", func(provider coreworkflow.Provider) (struct{}, error) {
+		return struct{}{}, provider.DeleteSchedule(ctx, req)
+	})
+	return err
+}
+
+func (p *hostedWorkflowProviderPool) PauseSchedule(ctx context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+	return withHostedWorkflowProvider(p, "pause schedule", func(provider coreworkflow.Provider) (*coreworkflow.Schedule, error) {
+		return provider.PauseSchedule(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) ResumeSchedule(ctx context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+	return withHostedWorkflowProvider(p, "resume schedule", func(provider coreworkflow.Provider) (*coreworkflow.Schedule, error) {
+		return provider.ResumeSchedule(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) UpsertEventTrigger(ctx context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return withHostedWorkflowProvider(p, "upsert event trigger", func(provider coreworkflow.Provider) (*coreworkflow.EventTrigger, error) {
+		return provider.UpsertEventTrigger(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) GetEventTrigger(ctx context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return withHostedWorkflowProvider(p, "get event trigger", func(provider coreworkflow.Provider) (*coreworkflow.EventTrigger, error) {
+		return provider.GetEventTrigger(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) ListEventTriggers(ctx context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	return withHostedWorkflowProvider(p, "list event triggers", func(provider coreworkflow.Provider) ([]*coreworkflow.EventTrigger, error) {
+		return provider.ListEventTriggers(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) DeleteEventTrigger(ctx context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
+	_, err := withHostedWorkflowProvider(p, "delete event trigger", func(provider coreworkflow.Provider) (struct{}, error) {
+		return struct{}{}, provider.DeleteEventTrigger(ctx, req)
+	})
+	return err
+}
+
+func (p *hostedWorkflowProviderPool) PauseEventTrigger(ctx context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return withHostedWorkflowProvider(p, "pause event trigger", func(provider coreworkflow.Provider) (*coreworkflow.EventTrigger, error) {
+		return provider.PauseEventTrigger(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) ResumeEventTrigger(ctx context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return withHostedWorkflowProvider(p, "resume event trigger", func(provider coreworkflow.Provider) (*coreworkflow.EventTrigger, error) {
+		return provider.ResumeEventTrigger(ctx, req)
+	})
+}
+
+func (p *hostedWorkflowProviderPool) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) error {
+	_, err := withHostedWorkflowProvider(p, "publish event", func(provider coreworkflow.Provider) (struct{}, error) {
+		return struct{}{}, provider.PublishEvent(ctx, req)
+	})
+	return err
+}
+
 func (p *hostedWorkflowProviderPool) Ping(ctx context.Context) error {
 	var joined []error
-	if p.Provider == nil {
-		joined = append(joined, fmt.Errorf("hosted workflow provider %q has no control provider", p.name))
-	} else if err := p.Provider.Ping(ctx); err != nil {
-		joined = append(joined, fmt.Errorf("control provider: %w", err))
-	}
 	if !p.isStarted() {
+		p.mu.Lock()
+		bootstrapProvider := p.bootstrapProvider
+		p.mu.Unlock()
+		if bootstrapProvider != nil {
+			return bootstrapProvider.Ping(ctx)
+		}
 		return errors.Join(joined...)
 	}
 	workers := p.readyWorkers()
@@ -467,38 +560,64 @@ func (p *hostedWorkflowProviderPool) Ping(ctx context.Context) error {
 }
 
 func (p *hostedWorkflowProviderPool) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.PutExecutionReference(ctx, ref)
+	return withHostedWorkflowExecutionReferenceStore(p, "put execution reference", func(store coreworkflow.ExecutionReferenceStore) (*coreworkflow.ExecutionReference, error) {
+		return store.PutExecutionReference(ctx, ref)
+	})
 }
 
 func (p *hostedWorkflowProviderPool) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.GetExecutionReference(ctx, id)
+	return withHostedWorkflowExecutionReferenceStore(p, "get execution reference", func(store coreworkflow.ExecutionReferenceStore) (*coreworkflow.ExecutionReference, error) {
+		return store.GetExecutionReference(ctx, id)
+	})
 }
 
 func (p *hostedWorkflowProviderPool) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.ListExecutionReferences(ctx, subjectID)
+	return withHostedWorkflowExecutionReferenceStore(p, "list execution references", func(store coreworkflow.ExecutionReferenceStore) ([]*coreworkflow.ExecutionReference, error) {
+		return store.ListExecutionReferences(ctx, subjectID)
+	})
 }
 
-func (p *hostedWorkflowProviderPool) executionReferenceStore() (coreworkflow.ExecutionReferenceStore, error) {
-	if p == nil || p.executionRefs == nil {
-		name := ""
-		if p != nil {
-			name = p.name
+func withHostedWorkflowExecutionReferenceStore[T any](p *hostedWorkflowProviderPool, operation string, fn func(coreworkflow.ExecutionReferenceStore) (T, error)) (T, error) {
+	return withHostedWorkflowProvider(p, operation, func(provider coreworkflow.Provider) (T, error) {
+		store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+		if !ok {
+			var zero T
+			return zero, fmt.Errorf("hosted workflow provider %q does not expose execution references", p.name)
 		}
-		return nil, fmt.Errorf("hosted workflow provider %q does not expose execution references", name)
+		return fn(store)
+	})
+}
+
+func withHostedWorkflowProvider[T any](p *hostedWorkflowProviderPool, operation string, fn func(coreworkflow.Provider) (T, error)) (T, error) {
+	var zero T
+	if p == nil {
+		return zero, fmt.Errorf("hosted workflow provider is unavailable")
 	}
-	return p.executionRefs, nil
+	p.mu.Lock()
+	if p.closed {
+		name := p.name
+		p.mu.Unlock()
+		return zero, fmt.Errorf("hosted workflow provider %q is closed", name)
+	}
+	bootstrapProvider := p.bootstrapProvider
+	p.mu.Unlock()
+	if bootstrapProvider != nil {
+		return fn(bootstrapProvider)
+	}
+	workers := p.readyWorkers()
+	for _, worker := range workers {
+		if !p.acquireWorker(worker) {
+			continue
+		}
+		provider := worker.provider
+		result, err := fn(provider)
+		p.releaseWorker(worker)
+		return result, err
+	}
+	if operation == "" {
+		operation = "workflow operation"
+	}
+	return zero, fmt.Errorf("hosted workflow provider %q has no ready runtime workers for %s", p.name, operation)
 }
 
 func (p *hostedWorkflowProviderPool) Close() error {
@@ -540,9 +659,11 @@ func (p *hostedWorkflowProviderPool) Close() error {
 	}
 	p.mu.Lock()
 	p.workers = nil
+	bootstrapProvider := p.bootstrapProvider
+	p.bootstrapProvider = nil
 	p.mu.Unlock()
-	if p.Provider != nil {
-		closeErrs = append(closeErrs, p.Provider.Close())
+	if bootstrapProvider != nil {
+		closeErrs = append(closeErrs, bootstrapProvider.Close())
 	}
 	if p.launch != nil {
 		p.launch.close()

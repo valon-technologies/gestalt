@@ -1784,7 +1784,26 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	}
 	var provider coreworkflow.Provider
 	if entry.UsesHostedExecution() {
-		provider, err = buildHostedWorkflowProvider(ctx, name, entry, node, hostServices, deps)
+		var bootstrapProvider coreworkflow.Provider
+		runtimeCfg := entry.HostedRuntimeConfig()
+		if runtimeCfg != nil && runtimeCfg.LifecyclePolicyFieldsSet() {
+			if factories.Workflow == nil {
+				return nil, fmt.Errorf("workflow factory is not registered")
+			}
+			bootstrapProvider, err = factories.Workflow(ctx, name, node, hostServices, deps)
+			if err != nil {
+				return nil, fmt.Errorf("workflow provider bootstrap control: %w", err)
+			}
+			defer func() {
+				if bootstrapProvider != nil {
+					_ = bootstrapProvider.Close()
+				}
+			}()
+		}
+		provider, err = buildHostedWorkflowProvider(ctx, name, entry, node, hostServices, deps, bootstrapProvider)
+		if err == nil {
+			bootstrapProvider = nil
+		}
 	} else {
 		if factories.Workflow == nil {
 			return nil, fmt.Errorf("workflow factory is not registered")

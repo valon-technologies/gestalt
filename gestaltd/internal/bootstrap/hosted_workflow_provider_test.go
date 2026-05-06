@@ -58,13 +58,14 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		},
 	}
 
+	bootstrapProvider := newRecordingBootstrapWorkflowProvider()
 	provider, err := buildHostedWorkflowProvider(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 		"config":  map[string]any{"namespace": "default"},
 	}), []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: workflowservice.DefaultHostSocketEnv,
-	}}, deps)
+	}}, deps, bootstrapProvider)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowProvider: %v", err)
 	}
@@ -100,8 +101,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	if got := runtimeProvider.startProviderCalls(); got != 0 {
 		t.Fatalf("StartProvider calls before StartWorkflowProviders = %d, want 0", got)
 	}
-	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 1 {
-		t.Fatalf("StartPlugin requests before StartWorkflowProviders = %d, want control provider only", got)
+	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 0 {
+		t.Fatalf("StartPlugin requests before StartWorkflowProviders = %d, want 0", got)
 	}
 
 	if err := result.Start(ctx); err != nil {
@@ -113,15 +114,16 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	if err := result.StartWorkflowProviders(ctx); err != nil {
 		t.Fatalf("StartWorkflowProviders: %v", err)
 	}
-	if got := runtimeProvider.startProviderCalls(); got != 3 {
-		t.Fatalf("StartProvider calls after StartWorkflowProviders = %d, want control + worker pool size 2", got)
+	waitForHostedWorkflowRuntimeStartProviderCalls(t, runtimeProvider, 2)
+	if got := bootstrapProvider.closeCalls.Load(); got != 1 {
+		t.Fatalf("bootstrap provider Close calls = %d, want 1", got)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
-	if len(startRequests) != 3 {
-		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want control + 2 workers", len(startRequests))
+	if len(startRequests) != 2 {
+		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
-	workerReq := startRequests[1]
+	workerReq := startRequests[0]
 	if got := workerReq.Env[workflowservice.DefaultHostSocketEnv]; got != "tcp://127.0.0.1:8080" {
 		t.Fatalf("worker env %s = %q, want public relay target", workflowservice.DefaultHostSocketEnv, got)
 	}
@@ -129,16 +131,16 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("worker env missing %s", workflowservice.HostSocketTokenEnv())
 	}
 	sessions := runtimeProvider.startSessionRequestsCopy()
-	if len(sessions) != 3 {
-		t.Fatalf("StartSession requests = %d, want control + 2 workers", len(sessions))
+	if len(sessions) != 2 {
+		t.Fatalf("StartSession requests = %d, want 2 workers", len(sessions))
 	}
-	if got := sessions[1].Metadata["provider_kind"]; got != providermanifestKindWorkflow {
+	if got := sessions[0].Metadata["provider_kind"]; got != providermanifestKindWorkflow {
 		t.Fatalf("worker session provider_kind = %q, want %q", got, providermanifestKindWorkflow)
 	}
-	if got := sessions[1].Metadata["provider_name"]; got != "temporal" {
+	if got := sessions[0].Metadata["provider_name"]; got != "temporal" {
 		t.Fatalf("worker session provider_name = %q, want temporal", got)
 	}
-	if got := sessions[1].Metadata["workload"]; got != "temporal-workers" {
+	if got := sessions[0].Metadata["workload"]; got != "temporal-workers" {
 		t.Fatalf("worker session workload = %q, want temporal-workers", got)
 	}
 }
@@ -183,7 +185,7 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	}), []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: workflowservice.DefaultHostSocketEnv,
-	}}, deps)
+	}}, deps, nil)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowProvider: %v", err)
 	}
@@ -229,7 +231,7 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	}), []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: workflowservice.DefaultHostSocketEnv,
-	}}, deps)
+	}}, deps, nil)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowProvider: %v", err)
 	}
@@ -241,10 +243,7 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	if err := pool.Start(ctx); err != nil {
 		t.Fatalf("pool.Start: %v", err)
 	}
-	workers := pool.readyWorkers()
-	if len(workers) != 1 {
-		t.Fatalf("ready workers = %d, want 1", len(workers))
-	}
+	workers := waitForHostedWorkflowReadyWorkers(t, pool, 1)
 	pool.mu.Lock()
 	workers[0].active = 1
 	pool.mu.Unlock()
@@ -269,6 +268,167 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("drainAndCloseWorker did not finish after drain timeout")
 	}
+}
+
+func waitForHostedWorkflowRuntimeStartProviderCalls(t *testing.T, runtimeProvider *recordingHostedWorkflowRuntime, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := runtimeProvider.startProviderCalls(); got == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("StartProvider calls = %d, want %d", runtimeProvider.startProviderCalls(), want)
+}
+
+func waitForHostedWorkflowReadyWorkers(t *testing.T, pool *hostedWorkflowProviderPool, want int) []*hostedWorkflowWorker {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		workers := pool.readyWorkers()
+		if len(workers) == want {
+			return workers
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	workers := pool.readyWorkers()
+	t.Fatalf("ready workers = %d, want %d", len(workers), want)
+	return nil
+}
+
+type recordingBootstrapWorkflowProvider struct {
+	mu            sync.Mutex
+	executionRefs map[string]*workflow.ExecutionReference
+	closeCalls    atomic.Int32
+}
+
+func newRecordingBootstrapWorkflowProvider() *recordingBootstrapWorkflowProvider {
+	return &recordingBootstrapWorkflowProvider{
+		executionRefs: map[string]*workflow.ExecutionReference{},
+	}
+}
+
+func (p *recordingBootstrapWorkflowProvider) StartRun(context.Context, workflow.StartRunRequest) (*workflow.Run, error) {
+	return nil, status.Error(codes.Unimplemented, "start run is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) GetRun(context.Context, workflow.GetRunRequest) (*workflow.Run, error) {
+	return nil, status.Error(codes.Unimplemented, "get run is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) ListRuns(context.Context, workflow.ListRunsRequest) ([]*workflow.Run, error) {
+	return nil, status.Error(codes.Unimplemented, "list runs is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) CancelRun(context.Context, workflow.CancelRunRequest) (*workflow.Run, error) {
+	return nil, status.Error(codes.Unimplemented, "cancel run is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) SignalRun(context.Context, workflow.SignalRunRequest) (*workflow.SignalRunResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "signal run is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) SignalOrStartRun(context.Context, workflow.SignalOrStartRunRequest) (*workflow.SignalRunResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "signal or start run is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) UpsertSchedule(context.Context, workflow.UpsertScheduleRequest) (*workflow.Schedule, error) {
+	return nil, status.Error(codes.Unimplemented, "upsert schedule is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) GetSchedule(context.Context, workflow.GetScheduleRequest) (*workflow.Schedule, error) {
+	return nil, status.Error(codes.NotFound, "schedule not found")
+}
+
+func (p *recordingBootstrapWorkflowProvider) ListSchedules(context.Context, workflow.ListSchedulesRequest) ([]*workflow.Schedule, error) {
+	return nil, nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) DeleteSchedule(context.Context, workflow.DeleteScheduleRequest) error {
+	return status.Error(codes.NotFound, "schedule not found")
+}
+
+func (p *recordingBootstrapWorkflowProvider) PauseSchedule(context.Context, workflow.PauseScheduleRequest) (*workflow.Schedule, error) {
+	return nil, status.Error(codes.Unimplemented, "pause schedule is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) ResumeSchedule(context.Context, workflow.ResumeScheduleRequest) (*workflow.Schedule, error) {
+	return nil, status.Error(codes.Unimplemented, "resume schedule is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) UpsertEventTrigger(context.Context, workflow.UpsertEventTriggerRequest) (*workflow.EventTrigger, error) {
+	return nil, status.Error(codes.Unimplemented, "upsert event trigger is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) GetEventTrigger(context.Context, workflow.GetEventTriggerRequest) (*workflow.EventTrigger, error) {
+	return nil, status.Error(codes.NotFound, "event trigger not found")
+}
+
+func (p *recordingBootstrapWorkflowProvider) ListEventTriggers(context.Context, workflow.ListEventTriggersRequest) ([]*workflow.EventTrigger, error) {
+	return nil, nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) DeleteEventTrigger(context.Context, workflow.DeleteEventTriggerRequest) error {
+	return status.Error(codes.NotFound, "event trigger not found")
+}
+
+func (p *recordingBootstrapWorkflowProvider) PauseEventTrigger(context.Context, workflow.PauseEventTriggerRequest) (*workflow.EventTrigger, error) {
+	return nil, status.Error(codes.Unimplemented, "pause event trigger is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) ResumeEventTrigger(context.Context, workflow.ResumeEventTriggerRequest) (*workflow.EventTrigger, error) {
+	return nil, status.Error(codes.Unimplemented, "resume event trigger is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) PublishEvent(context.Context, workflow.PublishEventRequest) error {
+	return status.Error(codes.Unimplemented, "publish event is not implemented")
+}
+
+func (p *recordingBootstrapWorkflowProvider) Ping(context.Context) error {
+	return nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) Close() error {
+	p.closeCalls.Add(1)
+	return nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) PutExecutionReference(_ context.Context, ref *workflow.ExecutionReference) (*workflow.ExecutionReference, error) {
+	if ref == nil || ref.ID == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing execution reference id")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	cloned := *ref
+	p.executionRefs[ref.ID] = &cloned
+	out := cloned
+	return &out, nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*workflow.ExecutionReference, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ref := p.executionRefs[id]
+	if ref == nil {
+		return nil, status.Error(codes.NotFound, "execution reference not found")
+	}
+	out := *ref
+	return &out, nil
+}
+
+func (p *recordingBootstrapWorkflowProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*workflow.ExecutionReference, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	refs := make([]*workflow.ExecutionReference, 0, len(p.executionRefs))
+	for _, ref := range p.executionRefs {
+		if subjectID != "" && ref.SubjectID != subjectID {
+			continue
+		}
+		out := *ref
+		refs = append(refs, &out)
+	}
+	return refs, nil
 }
 
 const providermanifestKindWorkflow = "workflow"
