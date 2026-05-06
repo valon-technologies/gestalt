@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -141,7 +140,7 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
 		if err != nil {
-			workflowLogSkippedConfigCleanup(ctx, "event_triggers", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "event_triggers", providerName, err)
 			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
@@ -176,8 +175,8 @@ func workflowConfigEventTriggerDefinitionMatches(existing *coreworkflow.EventTri
 		return false
 	}
 	return existing.Paused == trigger.Paused &&
-		reflect.DeepEqual(existing.Match, workflowConfigEventTriggerMatch(trigger)) &&
-		reflect.DeepEqual(existing.Target, target)
+		existing.Match == workflowConfigEventTriggerMatch(trigger) &&
+		coreworkflow.TargetsEqual(existing.Target, target)
 }
 
 func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, pluginName, triggerID string) bool {

@@ -168,7 +168,7 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		}
 		schedules, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
 		if err != nil {
-			workflowLogSkippedConfigCleanup(ctx, "schedules", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "schedules", providerName, err)
 			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
@@ -200,6 +200,14 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 
 func workflowConfigProviderObjectKey(providerName, objectID string) string {
 	return strings.TrimSpace(providerName) + "\x00" + strings.TrimSpace(objectID)
+}
+
+func workflowLogSkippedConfigWorkflowCleanup(ctx context.Context, objectType, providerName string, err error) {
+	slog.WarnContext(ctx, "skipping config-managed workflow cleanup after provider list failed",
+		"object_type", objectType,
+		"provider", providerName,
+		"error", err,
+	)
 }
 
 func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, scheduleID string) bool {
@@ -680,14 +688,6 @@ func workflowLogReplacedUnreadableExecutionRef(ctx context.Context, objectType, 
 		"old_execution_ref", strings.TrimSpace(oldExecutionRef),
 		"new_execution_ref", strings.TrimSpace(newExecutionRef),
 		"error", lookupErr,
-	)
-}
-
-func workflowLogSkippedConfigCleanup(ctx context.Context, objectType, providerName string, err error) {
-	slog.WarnContext(ctx, "skipping workflow config cleanup because provider objects could not be listed",
-		"workflow_object_type", strings.TrimSpace(objectType),
-		"workflow_provider", strings.TrimSpace(providerName),
-		"error", err,
 	)
 }
 
