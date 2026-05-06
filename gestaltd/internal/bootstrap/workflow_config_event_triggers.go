@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -137,7 +138,8 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
 		if err != nil {
-			return fmt.Errorf("bootstrap: list workflow event triggers for provider %q: %w", providerName, err)
+			slog.WarnContext(ctx, "skipping workflow event trigger cleanup because provider list failed", "workflow_provider", providerName, "error", err)
+			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, trigger := range triggers {

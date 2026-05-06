@@ -168,7 +168,8 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		}
 		schedules, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
 		if err != nil {
-			return fmt.Errorf("bootstrap: list workflow schedules for provider %q: %w", providerName, err)
+			slog.WarnContext(ctx, "skipping workflow schedule cleanup because provider list failed", "workflow_provider", providerName, "error", err)
+			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, schedule := range schedules {
