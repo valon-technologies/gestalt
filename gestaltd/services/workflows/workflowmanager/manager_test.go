@@ -9,7 +9,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -17,6 +20,24 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+type recordingWorkflowManagerInvoker struct {
+	requireNone bool
+	modes       []core.ConnectionMode
+}
+
+func (i *recordingWorkflowManagerInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+	return &core.OperationResult{}, nil
+}
+
+func (i *recordingWorkflowManagerInvoker) ResolveToken(ctx context.Context, _ *principal.Principal, _, _, _ string) (context.Context, string, error) {
+	mode := invocation.CredentialModeOverrideFromContext(ctx)
+	i.modes = append(i.modes, mode)
+	if i.requireNone && mode != core.ConnectionModeNone {
+		return ctx, "", invocation.ErrNoCredential
+	}
+	return ctx, "token", nil
+}
 
 func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing.T) {
 	t.Parallel()
@@ -97,6 +118,230 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 	if got := managed.ExecutionRef.Target.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+}
+
+func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"github": {
+				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: core.ConnectionModeNone},
+			},
+		},
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle", "bot.commentFinal"},
+	}, {
+		Plugin: "simple",
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Prompt:       "Handle the webhook.",
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName:     "github",
+					Operation:      "bot.commentFinal",
+					CredentialMode: core.ConnectionModeNone,
+				},
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				},
+				CredentialMode: core.ConnectionModeNone,
+			},
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("SignalOrStartRun error = %v, want invalid invocation", err)
+	}
+}
+
+func TestSignalOrStartRunPluginTargetCredentialModeUsesDeclaredInvoke(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	invoker := &recordingWorkflowManagerInvoker{requireNone: true}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "reviewPullRequest", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+		Invoker:  invoker,
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"github": {
+				{Plugin: "github", Operation: "reviewPullRequest", CredentialMode: core.ConnectionModeNone},
+			},
+		},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle", "reviewPullRequest"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		Kind:             principal.Kind("service_account"),
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName:     "github",
+			Operation:      "reviewPullRequest",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRun: %v", err)
+	}
+	if managed == nil || managed.ExecutionRef == nil || managed.ExecutionRef.Target.Plugin == nil {
+		t.Fatalf("managed signal = %#v, want plugin execution ref", managed)
+	}
+	if got := managed.ExecutionRef.Target.Plugin.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("stored credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+	if len(invoker.modes) == 0 || invoker.modes[len(invoker.modes)-1] != core.ConnectionModeNone {
+		t.Fatalf("resolver credential modes = %#v, want final %q", invoker.modes, core.ConnectionModeNone)
+	}
+}
+
+func TestSignalOrStartRunPluginTargetCredentialModeKeepsBlankModeBlank(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	invoker := &recordingWorkflowManagerInvoker{}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name:       "github",
+				Operations: []catalog.CatalogOperation{{ID: "reviewPullRequest", Method: "POST"}},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+		Invoker:  invoker,
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"github": {
+				{Plugin: "github", Operation: "reviewPullRequest", CredentialMode: core.ConnectionModeNone},
+			},
+		},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"events.handle", "reviewPullRequest"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        "service_account:github_app_installation:99:repo:acme/widgets",
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "reviewPullRequest",
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRun: %v", err)
+	}
+	if got := managed.ExecutionRef.Target.Plugin.CredentialMode; got != "" {
+		t.Fatalf("stored credential mode = %q, want empty", got)
+	}
+	if len(invoker.modes) == 0 || invoker.modes[len(invoker.modes)-1] != "" {
+		t.Fatalf("resolver credential modes = %#v, want final empty", invoker.modes)
+	}
+	blankRefID := managed.ExecutionRef.ID
+
+	explicit, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName:     "github",
+			Operation:      "reviewPullRequest",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRun explicit mode: %v", err)
+	}
+	if explicit.ExecutionRef.ID == blankRefID {
+		t.Fatalf("explicit credential mode reused blank execution ref id %q", blankRefID)
+	}
+}
+
+func TestCreateScheduleRejectsPluginTargetCredentialModeWithoutCaller(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N: "github",
+			CatalogVal: &catalog.Catalog{
+				Name:       "github",
+				Operations: []catalog.CatalogOperation{{ID: "reviewPullRequest", Method: "POST"}},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"reviewPullRequest"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	_, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
+		ProviderName: "local",
+		Cron:         "*/5 * * * *",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName:     "github",
+			Operation:      "reviewPullRequest",
+			CredentialMode: core.ConnectionModeNone,
+		}},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("CreateSchedule error = %v, want authorization denied", err)
 	}
 }
 

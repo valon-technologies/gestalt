@@ -37,11 +37,12 @@ type Target struct {
 }
 
 type PluginTarget struct {
-	PluginName string
-	Operation  string
-	Connection string
-	Instance   string
-	Input      map[string]any
+	PluginName     string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode `json:",omitempty"`
+	Input          map[string]any
 }
 
 type AgentTarget struct {

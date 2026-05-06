@@ -5056,6 +5056,50 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	}
 }
 
+func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCredentialedPlugins(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Target.Plugin.CredentialMode = providermanifestv1.ConnectionModeNone
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	gotPlugin := requireCoreWorkflowPluginTarget(t, recorder.upsertedSchedules[0].Target)
+	if gotPlugin.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("target credential mode = %q, want %q", gotPlugin.CredentialMode, core.ConnectionModeNone)
+	}
+}
+
 func TestBootstrapAppliesConfiguredWorkflowSchedulesForPlatformConnectionOnUserDefaultPlugin(t *testing.T) {
 	t.Parallel()
 

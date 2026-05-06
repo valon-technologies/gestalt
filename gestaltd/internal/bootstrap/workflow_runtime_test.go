@@ -862,6 +862,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
 	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
+	target.Plugin.CredentialMode = core.ConnectionModeNone
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-123",
@@ -884,12 +885,14 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	var gotProvider string
 	var gotInstance string
 	var gotConnection string
+	var gotCredentialMode core.ConnectionMode
 	runtime.SetInvoker(funcInvoker{
 		invoke: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 			gotPrincipal = p
 			gotProvider = providerName
 			gotInstance = instance
 			gotConnection = invocation.ConnectionFromContext(ctx)
+			gotCredentialMode = invocation.CredentialModeOverrideFromContext(ctx)
 			if operation != "sync" {
 				t.Fatalf("operation = %q, want %q", operation, "sync")
 			}
@@ -931,6 +934,9 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 	if gotConnection != "analytics" {
 		t.Fatalf("connection = %q, want %q", gotConnection, "analytics")
+	}
+	if gotCredentialMode != core.ConnectionModeNone {
+		t.Fatalf("credential mode override = %q, want %q", gotCredentialMode, core.ConnectionModeNone)
 	}
 }
 

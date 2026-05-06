@@ -730,11 +730,12 @@ type WorkflowTargetConfig struct {
 }
 
 type WorkflowPluginTargetConfig struct {
-	Name       string         `yaml:"name,omitempty"`
-	Operation  string         `yaml:"operation,omitempty"`
-	Connection string         `yaml:"connection,omitempty"`
-	Instance   string         `yaml:"instance,omitempty"`
-	Input      map[string]any `yaml:"input,omitempty"`
+	Name           string                            `yaml:"name,omitempty"`
+	Operation      string                            `yaml:"operation,omitempty"`
+	Connection     string                            `yaml:"connection,omitempty"`
+	Instance       string                            `yaml:"instance,omitempty"`
+	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+	Input          map[string]any                    `yaml:"input,omitempty"`
 }
 
 type WorkflowAgentConfig struct {

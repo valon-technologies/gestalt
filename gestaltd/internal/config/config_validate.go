@@ -1812,18 +1812,38 @@ func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
 	}
 	if hasPlugin {
 		plugin := *target.Plugin
-		plugin.Name = strings.TrimSpace(plugin.Name)
-		plugin.Operation = strings.TrimSpace(plugin.Operation)
-		plugin.Connection = strings.TrimSpace(plugin.Connection)
-		plugin.Instance = strings.TrimSpace(plugin.Instance)
-		if plugin.Name == "" {
-			return fmt.Errorf("config validation: %s.plugin.name is required", path)
-		}
-		if plugin.Operation == "" {
-			return fmt.Errorf("config validation: %s.plugin.operation is required", path)
+		if err := normalizeWorkflowPluginTargetConfig(path+".plugin", &plugin, true); err != nil {
+			return err
 		}
 		target.Plugin = &plugin
 		return nil
+	}
+	return nil
+}
+
+func normalizeWorkflowPluginTargetConfig(path string, plugin *WorkflowPluginTargetConfig, allowCredentialMode bool) error {
+	if plugin == nil {
+		return fmt.Errorf("config validation: %s is required", path)
+	}
+	plugin.Name = strings.TrimSpace(plugin.Name)
+	plugin.Operation = strings.TrimSpace(plugin.Operation)
+	plugin.Connection = strings.TrimSpace(plugin.Connection)
+	plugin.Instance = strings.TrimSpace(plugin.Instance)
+	plugin.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(plugin.CredentialMode))))
+	if plugin.Name == "" {
+		return fmt.Errorf("config validation: %s.name is required", path)
+	}
+	if plugin.Operation == "" {
+		return fmt.Errorf("config validation: %s.operation is required", path)
+	}
+	switch plugin.CredentialMode {
+	case "":
+	case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+		if !allowCredentialMode {
+			return fmt.Errorf("config validation: %s.credentialMode is not supported", path)
+		}
+	default:
+		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, plugin.CredentialMode)
 	}
 	return nil
 }
@@ -1895,6 +1915,17 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	if agent.Timeout != "" {
 		if _, err := time.ParseDuration(agent.Timeout); err != nil {
 			return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", path, agent.Timeout, err)
+		}
+	}
+	if agent.OutputDelivery != nil {
+		if err := normalizeWorkflowPluginTargetConfig(path+".outputDelivery.target", &agent.OutputDelivery.Target, false); err != nil {
+			return err
+		}
+		agent.OutputDelivery.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(agent.OutputDelivery.CredentialMode))))
+		switch agent.OutputDelivery.CredentialMode {
+		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+		default:
+			return fmt.Errorf("config validation: %s.outputDelivery.credentialMode %q is not supported", path, agent.OutputDelivery.CredentialMode)
 		}
 	}
 	return nil

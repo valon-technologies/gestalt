@@ -26,11 +26,12 @@ type workflowScheduleTargetRequest struct {
 }
 
 type workflowPluginTargetRequest struct {
-	Name       string         `json:"name,omitempty"`
-	Operation  string         `json:"operation"`
-	Connection string         `json:"connection,omitempty"`
-	Instance   string         `json:"instance,omitempty"`
-	Input      map[string]any `json:"input,omitempty"`
+	Name           string         `json:"name,omitempty"`
+	Operation      string         `json:"operation"`
+	Connection     string         `json:"connection,omitempty"`
+	Instance       string         `json:"instance,omitempty"`
+	CredentialMode string         `json:"credentialMode,omitempty"`
+	Input          map[string]any `json:"input,omitempty"`
 }
 
 type workflowAgentTargetRequest struct {
@@ -78,11 +79,12 @@ type workflowScheduleTargetInfo struct {
 }
 
 type workflowPluginTargetInfo struct {
-	Name       string         `json:"name"`
-	Operation  string         `json:"operation"`
-	Connection string         `json:"connection,omitempty"`
-	Instance   string         `json:"instance,omitempty"`
-	Input      map[string]any `json:"input,omitempty"`
+	Name           string         `json:"name"`
+	Operation      string         `json:"operation"`
+	Connection     string         `json:"connection,omitempty"`
+	Instance       string         `json:"instance,omitempty"`
+	CredentialMode string         `json:"credentialMode,omitempty"`
+	Input          map[string]any `json:"input,omitempty"`
 }
 
 type workflowAgentTargetInfo struct {
@@ -160,6 +162,10 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
+	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	managed, err := s.workflowSchedules.CreateSchedule(r.Context(), p, workflowmanager.ScheduleUpsert{
 		ProviderName: strings.TrimSpace(req.Provider),
 		Cron:         strings.TrimSpace(req.Cron),
@@ -201,6 +207,10 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
 		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		return
+	}
+	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	managed, err := s.workflowSchedules.UpdateSchedule(r.Context(), p, scheduleID, workflowmanager.ScheduleUpsert{
@@ -278,11 +288,12 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 	}
 	plugin := workflowPluginTargetFromRequest(target.Plugin)
 	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: strings.TrimSpace(plugin.Name),
-		Operation:  strings.TrimSpace(plugin.Operation),
-		Connection: strings.TrimSpace(plugin.Connection),
-		Instance:   strings.TrimSpace(plugin.Instance),
-		Input:      maps.Clone(plugin.Input),
+		PluginName:     strings.TrimSpace(plugin.Name),
+		Operation:      strings.TrimSpace(plugin.Operation),
+		Connection:     strings.TrimSpace(plugin.Connection),
+		Instance:       strings.TrimSpace(plugin.Instance),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(plugin.CredentialMode))),
+		Input:          maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
 		Plugin: &pluginTarget,
@@ -311,6 +322,19 @@ func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workfl
 	return *target
 }
 
+func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) error {
+	if target.Plugin != nil {
+		if strings.TrimSpace(target.Plugin.CredentialMode) != "" {
+			return fmt.Errorf("workflow target plugin.credentialMode is not supported on public requests")
+		}
+		return nil
+	}
+	if target.Agent != nil && target.Agent.OutputDelivery != nil && strings.TrimSpace(target.Agent.OutputDelivery.Target.CredentialMode) != "" {
+		return fmt.Errorf("workflow target agent.outputDelivery.target.credentialMode is not supported")
+	}
+	return nil
+}
+
 func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) coreworkflow.AgentTarget {
 	if target == nil {
 		return coreworkflow.AgentTarget{}
@@ -335,11 +359,12 @@ func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) 
 	}
 	return &coreworkflow.OutputDelivery{
 		Target: coreworkflow.PluginTarget{
-			PluginName: strings.TrimSpace(delivery.Target.Name),
-			Operation:  strings.TrimSpace(delivery.Target.Operation),
-			Connection: strings.TrimSpace(delivery.Target.Connection),
-			Instance:   strings.TrimSpace(delivery.Target.Instance),
-			Input:      maps.Clone(delivery.Target.Input),
+			PluginName:     strings.TrimSpace(delivery.Target.Name),
+			Operation:      strings.TrimSpace(delivery.Target.Operation),
+			Connection:     strings.TrimSpace(delivery.Target.Connection),
+			Instance:       strings.TrimSpace(delivery.Target.Instance),
+			CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.Target.CredentialMode))),
+			Input:          maps.Clone(delivery.Target.Input),
 		},
 		InputBindings:  workflowOutputBindingsFromRequest(delivery.InputBindings),
 		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.CredentialMode))),
@@ -434,11 +459,12 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 	pluginTarget := *target.Plugin
 	return workflowScheduleTargetInfo{
 		Plugin: &workflowPluginTargetInfo{
-			Name:       pluginTarget.PluginName,
-			Operation:  pluginTarget.Operation,
-			Connection: userFacingConnectionName(pluginTarget.Connection),
-			Instance:   pluginTarget.Instance,
-			Input:      maps.Clone(pluginTarget.Input),
+			Name:           pluginTarget.PluginName,
+			Operation:      pluginTarget.Operation,
+			Connection:     userFacingConnectionName(pluginTarget.Connection),
+			Instance:       pluginTarget.Instance,
+			CredentialMode: string(pluginTarget.CredentialMode),
+			Input:          maps.Clone(pluginTarget.Input),
 		},
 	}
 }

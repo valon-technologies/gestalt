@@ -165,14 +165,15 @@ func (*BoundWorkflowTarget_Plugin) isBoundWorkflowTarget_Kind() {}
 func (*BoundWorkflowTarget_Agent) isBoundWorkflowTarget_Kind() {}
 
 type BoundWorkflowPluginTarget struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
-	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
-	Input         *structpb.Struct       `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
-	Connection    string                 `protobuf:"bytes,4,opt,name=connection,proto3" json:"connection,omitempty"`
-	Instance      string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PluginName     string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
+	Operation      string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Input          *structpb.Struct       `protobuf:"bytes,3,opt,name=input,proto3" json:"input,omitempty"`
+	Connection     string                 `protobuf:"bytes,4,opt,name=connection,proto3" json:"connection,omitempty"`
+	Instance       string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
+	CredentialMode string                 `protobuf:"bytes,6,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BoundWorkflowPluginTarget) Reset() {
@@ -236,6 +237,13 @@ func (x *BoundWorkflowPluginTarget) GetConnection() string {
 func (x *BoundWorkflowPluginTarget) GetInstance() string {
 	if x != nil {
 		return x.Instance
+	}
+	return ""
+}
+
+func (x *BoundWorkflowPluginTarget) GetCredentialMode() string {
+	if x != nil {
+		return x.CredentialMode
 	}
 	return ""
 }
@@ -4509,7 +4517,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x06plugin\x18\x06 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetH\x00R\x06plugin\x12E\n" +
 	"\x05agent\x18\a \x01(\v2-.gestalt.provider.v1.BoundWorkflowAgentTargetH\x00R\x05agentB\x06\n" +
 	"\x04kindJ\x04\b\x01\x10\x06R\vplugin_nameR\toperationR\x05inputR\n" +
-	"connectionR\binstance\"\xc5\x01\n" +
+	"connectionR\binstance\"\xee\x01\n" +
 	"\x19BoundWorkflowPluginTarget\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x12\x1c\n" +
@@ -4518,7 +4526,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x04 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
-	"\binstance\x18\x05 \x01(\tR\binstance\"\xcb\x04\n" +
+	"\binstance\x18\x05 \x01(\tR\binstance\x12'\n" +
+	"\x0fcredential_mode\x18\x06 \x01(\tR\x0ecredentialMode\"\xcb\x04\n" +
 	"\x18BoundWorkflowAgentTarget\x12#\n" +
 	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x16\n" +

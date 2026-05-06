@@ -965,10 +965,10 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 	if target.Plugin != nil {
 		pluginTarget = *target.Plugin
 	}
-	return m.resolvePluginTarget(ctx, p, pluginTarget)
+	return m.resolvePluginTarget(ctx, p, pluginTarget, callerPluginName)
 }
 
-func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principal, target coreworkflow.PluginTarget) (coreworkflow.Target, error) {
+func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principal, target coreworkflow.PluginTarget, callerPluginName string) (coreworkflow.Target, error) {
 	if m == nil || m.providers == nil {
 		return coreworkflow.Target{}, fmt.Errorf("%w: workflow providers are not configured", invocation.ErrInternal)
 	}
@@ -989,6 +989,13 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	}
 	if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
 		return coreworkflow.Target{}, invocation.ErrAuthorizationDenied
+	}
+	credentialMode, err := m.normalizeWorkflowPluginTargetCredentialMode(target.CredentialMode, callerPluginName, pluginName, operation)
+	if err != nil {
+		return coreworkflow.Target{}, err
+	}
+	if credentialMode != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
 
 	connection := strings.TrimSpace(target.Connection)
@@ -1035,15 +1042,41 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 		}
 	}
 	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: pluginName,
-		Operation:  opMeta.ID,
-		Connection: connection,
-		Instance:   sessionInstance,
-		Input:      maps.Clone(target.Input),
+		PluginName:     pluginName,
+		Operation:      opMeta.ID,
+		Connection:     connection,
+		Instance:       sessionInstance,
+		CredentialMode: credentialMode,
+		Input:          maps.Clone(target.Input),
 	}
 	return coreworkflow.Target{
 		Plugin: &pluginTarget,
 	}, nil
+}
+
+func (m *Manager) normalizeWorkflowPluginTargetCredentialMode(mode core.ConnectionMode, callerPluginName, pluginName, operation string) (core.ConnectionMode, error) {
+	mode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	switch mode {
+	case "":
+		return "", nil
+	case core.ConnectionModeNone, core.ConnectionModeUser:
+	default:
+		return "", fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, mode)
+	}
+	if strings.TrimSpace(callerPluginName) == "" {
+		return "", fmt.Errorf("%w: workflow target credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied)
+	}
+	declared, ok, err := m.callerPluginInvokeCredentialMode(callerPluginName, pluginName, operation)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: workflow target credential_mode requires a declared invoke mode", invocation.ErrAuthorizationDenied)
+	}
+	if mode != declared {
+		return "", fmt.Errorf("%w: workflow target credential_mode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, mode, declared)
+	}
+	return mode, nil
 }
 
 func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget, callerPluginName string) (coreworkflow.Target, error) {
@@ -1548,12 +1581,16 @@ func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputD
 	delivery.Target.Operation = strings.TrimSpace(delivery.Target.Operation)
 	delivery.Target.Connection = strings.TrimSpace(delivery.Target.Connection)
 	delivery.Target.Instance = strings.TrimSpace(delivery.Target.Instance)
+	delivery.Target.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.Target.CredentialMode))))
 	delivery.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
 	if delivery.Target.PluginName == "" {
 		return fmt.Errorf("%w: workflow agent output_delivery.target.plugin_name is required", invocation.ErrProviderNotFound)
 	}
 	if delivery.Target.Operation == "" {
 		return fmt.Errorf("%w: workflow agent output_delivery.target.operation is required", invocation.ErrOperationNotFound)
+	}
+	if delivery.Target.CredentialMode != "" {
+		return fmt.Errorf("%w: workflow agent output_delivery.target.credential_mode is not supported", invocation.ErrInvalidInvocation)
 	}
 	if delivery.CredentialMode != "" && callerPluginName == "" {
 		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied)

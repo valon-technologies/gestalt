@@ -24,6 +24,7 @@ message BoundWorkflowPluginTarget {
   google.protobuf.Struct input = 3;
   string connection = 4;
   string instance = 5;
+  string credential_mode = 6;
 }
 
 message BoundWorkflowAgentTarget {
