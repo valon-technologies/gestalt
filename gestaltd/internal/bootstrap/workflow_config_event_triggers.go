@@ -137,7 +137,8 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
 		if err != nil {
-			return fmt.Errorf("bootstrap: list workflow event triggers for provider %q: %w", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "event_triggers", providerName, err)
+			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, trigger := range triggers {
