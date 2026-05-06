@@ -14,11 +14,10 @@ use gestalt::proto::v1::{
     ConfigureProviderRequest, ProviderKind, PublishWorkflowProviderEventRequest,
     StartWorkflowProviderRunRequest, WorkflowEvent, WorkflowRunStatus, bound_workflow_target,
 };
-use gestalt::{RuntimeMetadata, WorkflowHost, WorkflowProvider};
+use gestalt::{ENV_WORKFLOW_HOST_SOCKET_TOKEN, RuntimeMetadata, WorkflowHost, WorkflowProvider};
 use hyper_util::rt::tokio::TokioIo;
-use tokio::net::UnixListener;
-use tokio::net::UnixStream;
-use tokio_stream::wrappers::UnixListenerStream;
+use tokio::net::{TcpListener, UnixListener, UnixStream};
+use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
@@ -30,7 +29,9 @@ struct TestWorkflowProvider {
 }
 
 #[derive(Default, Clone)]
-struct TestWorkflowHostService;
+struct TestWorkflowHostService {
+    relay_tokens: Arc<Mutex<Vec<String>>>,
+}
 
 #[gestalt::async_trait]
 impl WorkflowProvider for TestWorkflowProvider {
@@ -257,6 +258,12 @@ impl WorkflowHostRpc for TestWorkflowHostService {
         &self,
         request: GrpcRequest<pb::InvokeWorkflowOperationRequest>,
     ) -> std::result::Result<GrpcResponse<pb::InvokeWorkflowOperationResponse>, Status> {
+        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
+            self.relay_tokens
+                .lock()
+                .expect("lock relay tokens")
+                .push(token.to_str().expect("relay token ascii").to_string());
+        }
         let request = request.into_inner();
         let target = request
             .target
@@ -409,13 +416,14 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
     let host_socket = helpers::temp_socket("gestalt-rust-workflow-host.sock");
     let _workflow_host_env =
         helpers::EnvGuard::set(gestalt::ENV_WORKFLOW_HOST_SOCKET, host_socket.as_os_str());
+    let host_service = TestWorkflowHostService::default();
 
     let host_socket_for_task = host_socket.clone();
     let host_task = tokio::spawn(async move {
         let listener =
             UnixListener::bind(&host_socket_for_task).expect("bind workflow host socket");
         Server::builder()
-            .add_service(WorkflowHostGrpcServer::new(TestWorkflowHostService))
+            .add_service(WorkflowHostGrpcServer::new(host_service))
             .serve_with_incoming(UnixListenerStream::new(listener))
             .await
             .expect("serve workflow host");
@@ -444,6 +452,63 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
         .expect("invoke operation");
     assert_eq!(invoked.status, 202);
     assert_eq!(invoked.body, "run-42:sync");
+
+    host_task.abort();
+    let _ = host_task.await;
+}
+
+#[tokio::test]
+async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind tcp listener");
+    let address = listener.local_addr().expect("local addr");
+    let _workflow_host_env = helpers::EnvGuard::set(
+        gestalt::ENV_WORKFLOW_HOST_SOCKET,
+        format!("tcp://{address}"),
+    );
+    let _token_guard = helpers::EnvGuard::set(ENV_WORKFLOW_HOST_SOCKET_TOKEN, "relay-token-rust");
+
+    let host_service = TestWorkflowHostService::default();
+    let served_service = host_service.clone();
+    let host_task = tokio::spawn(async move {
+        Server::builder()
+            .add_service(WorkflowHostGrpcServer::new(served_service))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .expect("serve workflow host");
+    });
+
+    let mut host = WorkflowHost::connect()
+        .await
+        .expect("connect workflow host");
+    let invoked = host
+        .invoke_operation(pb::InvokeWorkflowOperationRequest {
+            target: Some(pb::BoundWorkflowTarget {
+                kind: Some(pb::bound_workflow_target::Kind::Plugin(
+                    pb::BoundWorkflowPluginTarget {
+                        plugin_name: "demo".to_string(),
+                        operation: "sync".to_string(),
+                        ..Default::default()
+                    },
+                )),
+            }),
+            run_id: "run-42".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("invoke operation");
+    assert_eq!(invoked.status, 202);
+    assert_eq!(invoked.body, "run-42:sync");
+    assert_eq!(
+        host_service
+            .relay_tokens
+            .lock()
+            .expect("lock relay tokens")
+            .clone(),
+        vec!["relay-token-rust".to_string()]
+    );
 
     host_task.abort();
     let _ = host_task.await;

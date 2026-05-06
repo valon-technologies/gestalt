@@ -141,6 +141,12 @@ type HostedAgentConn interface {
 	Close() error
 }
 
+type HostedWorkflowConn interface {
+	Lifecycle() proto.ProviderLifecycleClient
+	Workflow() proto.WorkflowProviderClient
+	Close() error
+}
+
 type Provider interface {
 	Support(ctx context.Context) (Support, error)
 	ListSessions(ctx context.Context) ([]Session, error)

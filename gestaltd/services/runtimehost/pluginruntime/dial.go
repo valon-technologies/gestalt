@@ -33,6 +33,12 @@ type dialedHostedAgentConn struct {
 	agent     proto.AgentProviderClient
 }
 
+type dialedHostedWorkflowConn struct {
+	conn      *grpc.ClientConn
+	lifecycle proto.ProviderLifecycleClient
+	workflow  proto.WorkflowProviderClient
+}
+
 type DialOption func(*dialConfig)
 
 type dialConfig struct {
@@ -102,6 +108,18 @@ func DialHostedAgent(ctx context.Context, target string, opts ...DialOption) (Ho
 		conn:      conn,
 		lifecycle: proto.NewProviderLifecycleClient(conn),
 		agent:     proto.NewAgentProviderClient(conn),
+	}, nil
+}
+
+func DialHostedWorkflow(ctx context.Context, target string, opts ...DialOption) (HostedWorkflowConn, error) {
+	conn, err := dialHostedConn(ctx, target, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &dialedHostedWorkflowConn{
+		conn:      conn,
+		lifecycle: proto.NewProviderLifecycleClient(conn),
+		workflow:  proto.NewWorkflowProviderClient(conn),
 	}, nil
 }
 
@@ -198,6 +216,27 @@ func (c *dialedHostedAgentConn) Agent() proto.AgentProviderClient {
 }
 
 func (c *dialedHostedAgentConn) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
+func (c *dialedHostedWorkflowConn) Lifecycle() proto.ProviderLifecycleClient {
+	if c == nil {
+		return nil
+	}
+	return c.lifecycle
+}
+
+func (c *dialedHostedWorkflowConn) Workflow() proto.WorkflowProviderClient {
+	if c == nil {
+		return nil
+	}
+	return c.workflow
+}
+
+func (c *dialedHostedWorkflowConn) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
 	}

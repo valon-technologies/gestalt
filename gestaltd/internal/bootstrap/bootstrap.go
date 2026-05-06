@@ -1749,9 +1749,6 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	if entry == nil {
 		return nil, fmt.Errorf("workflow provider is required")
 	}
-	if factories.Workflow == nil {
-		return nil, fmt.Errorf("workflow factory is not registered")
-	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
@@ -1785,7 +1782,15 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		hostServices = append(hostServices, indexedDBHostServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
-	provider, err := factories.Workflow(ctx, name, node, hostServices, deps)
+	var provider coreworkflow.Provider
+	if entry.UsesHostedExecution() {
+		provider, err = buildHostedWorkflowProvider(ctx, name, entry, node, hostServices, deps)
+	} else {
+		if factories.Workflow == nil {
+			return nil, fmt.Errorf("workflow factory is not registered")
+		}
+		provider, err = factories.Workflow(ctx, name, node, hostServices, deps)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}

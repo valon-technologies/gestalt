@@ -524,6 +524,39 @@ named host IndexedDB provider into the workflow provider. `indexeddb.db`
 defaults to the workflow provider name, and `indexeddb.objectStores` can
 allowlist logical stores exposed through that binding.
 
+Workflow providers can also opt into hosted execution. `gestaltd serve`
+starts hosted workflow workers automatically after the provider graph is ready;
+there is no separate worker command to run. A hosted workflow provider may set
+`execution.runtime.pool` to keep a fixed pool of runtime sessions ready for
+polling backends such as Temporal. Workflow runtime pools are fixed-size:
+`maxReadyInstances` must match `minReadyInstances`.
+
+```yaml
+providers:
+  workflow:
+    temporal:
+      source: https://artifacts.example.com/workflow/temporal/v0.0.1-alpha.1/provider-release.yaml
+      execution:
+        mode: hosted
+        runtime:
+          provider: gke
+          template: workflow-workers
+          pool:
+            minReadyInstances: 2
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+      config:
+        namespace: default
+
+runtime:
+  providers:
+    gke:
+      source: https://artifacts.example.com/runtime/gke/v0.0.1-alpha.1/provider-release.yaml
+```
+
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named workflow entry as the default selection when a config-managed workflow object or API request omits `provider`. |
@@ -532,6 +565,7 @@ allowlist logical stores exposed through that binding.
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
+| `execution` | Optional hosted execution selection for this workflow provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `pool` contains hosted workflow worker lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.agent`

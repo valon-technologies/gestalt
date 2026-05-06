@@ -372,6 +372,7 @@ export {
 } from "./agent.ts";
 export {
   ENV_WORKFLOW_HOST_SOCKET,
+  ENV_WORKFLOW_HOST_SOCKET_TOKEN,
   WorkflowHost,
   WorkflowProvider,
   WorkflowRunStatus,

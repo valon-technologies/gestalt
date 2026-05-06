@@ -1553,6 +1553,7 @@ type runtimeBackedHostedCloser struct {
 	sessionID    string
 	closeRuntime bool
 	cleanup      func()
+	stopTimeout  time.Duration
 }
 
 func (c *runtimeBackedHostedCloser) Close() error {
@@ -1561,7 +1562,7 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	}
 	var errs []error
 	if c.runtime != nil && c.sessionID != "" {
-		errs = append(errs, stopPluginRuntimeSession(c.runtime, c.sessionID))
+		errs = append(errs, stopPluginRuntimeSessionWithTimeout(c.runtime, c.sessionID, c.stopTimeout))
 	}
 	if c.conn != nil {
 		errs = append(errs, c.conn.Close())
@@ -1576,10 +1577,17 @@ func (c *runtimeBackedHostedCloser) Close() error {
 }
 
 func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID string) error {
+	return stopPluginRuntimeSessionWithTimeout(runtimeProvider, sessionID, 0)
+}
+
+func stopPluginRuntimeSessionWithTimeout(runtimeProvider pluginruntime.Provider, sessionID string, timeout time.Duration) error {
 	if runtimeProvider == nil || sessionID == "" {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), pluginRuntimeStopTimeout)
+	if timeout <= 0 {
+		timeout = pluginRuntimeStopTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	done := make(chan error, 1)
@@ -1780,6 +1788,10 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 		serviceKey = "workflow_manager"
 		serviceLabel = "workflow manager"
 		methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == workflowservice.DefaultHostSocketEnv:
+		serviceKey = "workflow_host"
+		serviceLabel = "workflow host"
+		methodPrefix = "/" + proto.WorkflowHost_ServiceDesc.ServiceName + "/"
 	case hostService.EnvVar == agentservice.DefaultHostSocketEnv:
 		serviceKey = "agent_host"
 		serviceLabel = "agent host"

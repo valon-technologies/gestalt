@@ -79,7 +79,10 @@ pub use s3::{
 };
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
-pub use workflow::{ENV_WORKFLOW_HOST_SOCKET, WorkflowHost, WorkflowHostError, WorkflowProvider};
+pub use workflow::{
+    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_HOST_SOCKET_TOKEN, WorkflowHost, WorkflowHostError,
+    WorkflowProvider,
+};
 pub use workflow_manager::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, WorkflowManager,
     WorkflowManagerError,

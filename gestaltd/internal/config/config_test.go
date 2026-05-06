@@ -3935,7 +3935,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "plugins.service.execution.runtime lifecycle fields are only supported on providers.agent.*.execution.runtime",
+			want: "plugins.service.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
 	}
 	for _, tc := range cases {
@@ -3952,6 +3952,161 @@ server:
 			}
 		})
 	}
+}
+
+func TestLoadConfigWorkflowRuntimeLifecycleFields(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts hosted workflow runtime pool without indexeddb", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          template: workflow-workers
+          metadata:
+            workload: temporal-workers
+          pool:
+            minReadyInstances: 2
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/gke
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Workflow["temporal"].Execution.Runtime
+		if runtimeCfg == nil || runtimeCfg.Pool == nil {
+			t.Fatalf("workflow execution runtime pool = %#v", runtimeCfg)
+		}
+		if runtimeCfg.Pool.MinReadyInstances != 2 || runtimeCfg.Pool.MaxReadyInstances != 2 {
+			t.Fatalf("workflow pool ready instances = %d/%d, want 2/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
+		}
+		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
+	t.Run("accepts hosted workflow runtime without pool", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/gke
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Workflow["temporal"].Execution.Runtime
+		if runtimeCfg == nil || runtimeCfg.Provider != "hosted" {
+			t.Fatalf("workflow execution runtime = %#v", runtimeCfg)
+		}
+	})
+
+	t.Run("rejects incomplete hosted workflow runtime pool", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/gke
+server:
+  encryptionKey: server-key
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool.maxReadyInstances is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects autoscale-shaped hosted workflow runtime pool", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 2
+            maxReadyInstances: 3
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/gke
+server:
+  encryptionKey: server-key
+`)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool.maxReadyInstances must equal minReadyInstances") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadConfigAgentSessionStartLifecycle(t *testing.T) {

@@ -3,7 +3,10 @@ use std::sync::Arc;
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
 use tonic::codegen::async_trait;
-use tonic::transport::{Channel, Endpoint, Uri};
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
+use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
@@ -13,8 +16,13 @@ use crate::generated::v1::{
     self as pb, workflow_host_client::WorkflowHostClient as ProtoWorkflowHostClient,
 };
 
-/// Environment variable containing the workflow-host service socket path.
+type WorkflowHostTransport = InterceptedService<Channel, WorkflowHostRelayTokenInterceptor>;
+
+/// Environment variable containing the workflow-host service target.
 pub const ENV_WORKFLOW_HOST_SOCKET: &str = "GESTALT_WORKFLOW_HOST_SOCKET";
+/// Environment variable containing the optional workflow-host relay token.
+pub const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN";
+const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`WorkflowHost`].
@@ -32,18 +40,35 @@ pub enum WorkflowHostError {
 
 /// Client for invoking operations from workflow provider code.
 pub struct WorkflowHost {
-    client: ProtoWorkflowHostClient<Channel>,
+    client: ProtoWorkflowHostClient<WorkflowHostTransport>,
 }
 
 impl WorkflowHost {
     /// Connects to the workflow host service described by the environment.
     pub async fn connect() -> std::result::Result<Self, WorkflowHostError> {
-        let socket_path = std::env::var(ENV_WORKFLOW_HOST_SOCKET).map_err(|_| {
+        let target = std::env::var(ENV_WORKFLOW_HOST_SOCKET).map_err(|_| {
             WorkflowHostError::Env(format!("{ENV_WORKFLOW_HOST_SOCKET} is not set"))
         })?;
-        let channel = connect_unix(socket_path).await?;
+        let relay_token = std::env::var(ENV_WORKFLOW_HOST_SOCKET_TOKEN).unwrap_or_default();
+        let channel = match parse_workflow_host_target(&target)? {
+            WorkflowHostTarget::Unix(path) => connect_unix(path).await?,
+            WorkflowHostTarget::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            WorkflowHostTarget::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .tls_config(ClientTlsConfig::new().with_native_roots())?
+                    .connect()
+                    .await?
+            }
+        };
         Ok(Self {
-            client: ProtoWorkflowHostClient::new(channel),
+            client: ProtoWorkflowHostClient::with_interceptor(
+                channel,
+                workflow_host_relay_token_interceptor(relay_token.trim())?,
+            ),
         })
     }
 
@@ -65,6 +90,91 @@ async fn connect_unix(
             async move { UnixStream::connect(path).await.map(TokioIo::new) }
         }))
         .await
+}
+
+#[derive(Clone)]
+struct WorkflowHostRelayTokenInterceptor {
+    token: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for WorkflowHostRelayTokenInterceptor {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
+        if let Some(token) = self.token.clone() {
+            request
+                .metadata_mut()
+                .insert(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
+        }
+        Ok(request)
+    }
+}
+
+fn workflow_host_relay_token_interceptor(
+    token: &str,
+) -> std::result::Result<WorkflowHostRelayTokenInterceptor, WorkflowHostError> {
+    let trimmed = token.trim();
+    let token = if trimmed.is_empty() {
+        None
+    } else {
+        Some(MetadataValue::try_from(trimmed).map_err(|err| {
+            WorkflowHostError::Env(format!(
+                "workflow host: invalid relay token metadata: {err}"
+            ))
+        })?)
+    };
+    Ok(WorkflowHostRelayTokenInterceptor { token })
+}
+
+enum WorkflowHostTarget {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_workflow_host_target(
+    raw: &str,
+) -> std::result::Result<WorkflowHostTarget, WorkflowHostError> {
+    let target = raw.trim();
+    if target.is_empty() {
+        return Err(WorkflowHostError::Env(
+            "workflow host: transport target is required".to_string(),
+        ));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(WorkflowHostError::Env(format!(
+                "workflow host: tcp target {raw:?} is missing host:port"
+            )));
+        }
+        return Ok(WorkflowHostTarget::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(WorkflowHostError::Env(format!(
+                "workflow host: tls target {raw:?} is missing host:port"
+            )));
+        }
+        return Ok(WorkflowHostTarget::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(WorkflowHostError::Env(format!(
+                "workflow host: unix target {raw:?} is missing a socket path"
+            )));
+        }
+        return Ok(WorkflowHostTarget::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        return Err(WorkflowHostError::Env(format!(
+            "workflow host: unsupported target scheme in {raw:?}"
+        )));
+    }
+    Ok(WorkflowHostTarget::Unix(target.to_string()))
 }
 
 #[async_trait]
