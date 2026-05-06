@@ -25,6 +25,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -178,14 +179,20 @@ func workflowSignalsFromTestContext(value any) []map[string]any {
 
 type workflowRuntimeAgentManagerStub struct {
 	agentmanager.Service
-	createSessionRequests []coreagent.ManagerCreateSessionRequest
-	createTurnRequests    []coreagent.ManagerCreateTurnRequest
-	cancelTurnIDs         []string
-	returnNilTurn         bool
+	createSessionRequests  []coreagent.ManagerCreateSessionRequest
+	createSessionDeadlines []time.Duration
+	createTurnRequests     []coreagent.ManagerCreateTurnRequest
+	cancelTurnIDs          []string
+	returnNilTurn          bool
 }
 
-func (m *workflowRuntimeAgentManagerStub) CreateSession(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	m.createSessionRequests = append(m.createSessionRequests, req)
+	if deadline, ok := ctx.Deadline(); ok {
+		m.createSessionDeadlines = append(m.createSessionDeadlines, time.Until(deadline))
+	} else {
+		m.createSessionDeadlines = append(m.createSessionDeadlines, 0)
+	}
 	return &coreagent.Session{
 		ID:           "session-1",
 		ProviderName: req.ProviderName,
@@ -623,6 +630,43 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetPassesWorkflowDeadlineToCreateSession(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-default-timeout",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Model:        "deep",
+			Prompt:       "Send the status summary",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentManager.createSessionDeadlines) != 1 {
+		t.Fatalf("create session deadlines = %#v, want one", agentManager.createSessionDeadlines)
+	}
+	if got := agentManager.createSessionDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateSession remaining deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
+	}
+	if got := agentManager.createSessionDeadlines[0]; got > workflowAgentTimeout(0) {
+		t.Fatalf("CreateSession remaining deadline = %s, want at most workflow timeout %s", got, workflowAgentTimeout(0))
 	}
 }
 

@@ -85,7 +85,7 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 }
 
 func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderSessionCreateContext(ctx)
 	defer cancel()
 	metadata, err := structFromMap(req.Metadata)
 	if err != nil {
