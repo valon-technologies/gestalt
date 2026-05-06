@@ -5261,6 +5261,64 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	}
 }
 
+func TestBootstrapSkipsRemovedConfiguredWorkflowScheduleCleanupWhenListFails(t *testing.T) {
+	t.Parallel()
+
+	factories := validFactories()
+	recorders := []*recordingWorkflowProvider{}
+	sharedSchedules := map[string]*coreworkflow.Schedule{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
+	failListSchedules := false
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{
+			schedules:     sharedSchedules,
+			executionRefs: sharedExecutionRefs,
+		}
+		if failListSchedules {
+			recorder.listSchedulesErr = errors.New("schedule index unavailable")
+		}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	<-result.ProvidersReady
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{Provider: "temporal"})
+	failListSchedules = true
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap with schedule cleanup list failure: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 {
+		t.Fatalf("recorders = %d, want 2", len(recorders))
+	}
+	if len(recorders[1].deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules = %d, want 0", len(recorders[1].deletedSchedules))
+	}
+}
+
 func TestBootstrapIgnoresUserSchedulesThatOnlyShareCfgPrefix(t *testing.T) {
 	t.Parallel()
 
@@ -6255,6 +6313,63 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 	}
 	if len(recorder.upsertedEventTriggers) != 0 {
 		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapSkipsRemovedConfiguredWorkflowEventTriggerCleanupWhenListFails(t *testing.T) {
+	t.Parallel()
+
+	factories := validFactories()
+	recorders := []*recordingWorkflowProvider{}
+	sharedEventTriggers := map[string]*coreworkflow.EventTrigger{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
+	failListEventTriggers := false
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{
+			eventTriggers: sharedEventTriggers,
+			executionRefs: sharedExecutionRefs,
+		}
+		if failListEventTriggers {
+			recorder.listEventTriggersErr = errors.New("event trigger index unavailable")
+		}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		EventTriggers: map[string]workflowFixtureEventTrigger{
+			"task_updated": {
+				Match:     workflowFixtureEventMatch{Type: "task.updated"},
+				Operation: "sync",
+			},
+		},
+	})
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	<-result.ProvidersReady
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{Provider: "temporal"})
+	failListEventTriggers = true
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap with event trigger cleanup list failure: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 {
+		t.Fatalf("recorders = %d, want 2", len(recorders))
+	}
+	if len(recorders[1].deletedEventTriggers) != 0 {
+		t.Fatalf("deleted event triggers = %d, want 0", len(recorders[1].deletedEventTriggers))
 	}
 }
 
