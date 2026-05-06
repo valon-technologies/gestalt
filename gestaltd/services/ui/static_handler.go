@@ -67,6 +67,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case resolution.serveIndex:
 		serveIndex(w, r, h.readIndex)
+	case resolution.servePath != "" && isNavigationHTML(resolution.servePath):
+		serveFile(w, r, h.fs, resolution.servePath)
 	case resolution.servePath != "":
 		serve(h.fileServer, w, r, resolution.servePath)
 	default:
@@ -102,19 +104,23 @@ func (h *handler) resolve(path string) requestResolution {
 		return requestResolution{servePath: "/" + path}
 	}
 
-	if !strings.Contains(path, ".") {
-		if _, err := fs.Stat(h.fs, path+".html"); err == nil {
+	routePath := strings.TrimRight(path, "/")
+	if routePath == "" {
+		routePath = "index.html"
+	}
+	if !strings.Contains(routePath, ".") {
+		if _, err := fs.Stat(h.fs, routePath+".html"); err == nil {
 			return requestResolution{
 				navigation: true,
-				routePath:  cleanRoutePath("/" + path),
-				servePath:  "/" + path + ".html",
+				routePath:  cleanRoutePath("/" + routePath),
+				servePath:  "/" + routePath + ".html",
 			}
 		}
-		if _, err := fs.Stat(h.fs, path+"/index.html"); err == nil {
+		if _, err := fs.Stat(h.fs, routePath+"/index.html"); err == nil {
 			return requestResolution{
 				navigation: true,
-				routePath:  cleanRoutePath("/" + path),
-				servePath:  "/" + path + "/index.html",
+				routePath:  cleanRoutePath("/" + routePath),
+				servePath:  "/" + routePath + "/index.html",
 			}
 		}
 	}
@@ -139,6 +145,11 @@ func navigationRoutePath(path string) (string, bool) {
 	}
 }
 
+func isNavigationHTML(path string) bool {
+	_, ok := navigationRoutePath(strings.TrimPrefix(path, "/"))
+	return ok
+}
+
 func cleanRoutePath(path string) string {
 	path = stdpath.Clean(path)
 	if path == "." {
@@ -155,6 +166,16 @@ func serveIndex(w http.ResponseWriter, r *http.Request, readIndex func() ([]byte
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(data))
+}
+
+func serveFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, path string) {
+	path = strings.TrimPrefix(path, "/")
+	data, err := fs.ReadFile(fsys, path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeContent(w, r, stdpath.Base(path), time.Time{}, bytes.NewReader(data))
 }
 
 func serve(h http.Handler, w http.ResponseWriter, r *http.Request, path string) {

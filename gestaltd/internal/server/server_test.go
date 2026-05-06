@@ -6901,15 +6901,24 @@ func TestMountedUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) 
 		t.Fatalf("asset status = %d, want %d", assetResp.StatusCode, http.StatusOK)
 	}
 
-	reportsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/reports/index.html", nil)
-	reportsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
-	reportsResp, err := http.DefaultClient.Do(reportsReq)
-	if err != nil {
-		t.Fatalf("GET protected mounted reports html: %v", err)
-	}
-	defer func() { _ = reportsResp.Body.Close() }()
-	if reportsResp.StatusCode != http.StatusOK {
-		t.Fatalf("reports html status = %d, want %d", reportsResp.StatusCode, http.StatusOK)
+	for _, path := range []string{"/sample-portal/reports", "/sample-portal/reports/", "/sample-portal/reports/index.html"} {
+		reportsReq, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		reportsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+		reportsResp, err := http.DefaultClient.Do(reportsReq)
+		if err != nil {
+			t.Fatalf("GET protected mounted reports html %s: %v", path, err)
+		}
+		body, err := io.ReadAll(reportsResp.Body)
+		_ = reportsResp.Body.Close()
+		if err != nil {
+			t.Fatalf("read protected mounted reports html %s: %v", path, err)
+		}
+		if reportsResp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, reportsResp.StatusCode, http.StatusOK)
+		}
+		if !strings.Contains(string(body), "<html>reports</html>") {
+			t.Fatalf("%s body = %q, want reports html", path, string(body))
+		}
 	}
 }
 

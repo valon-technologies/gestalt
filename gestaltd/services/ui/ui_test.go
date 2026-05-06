@@ -105,6 +105,33 @@ func TestDirHandler_ServesFilesAndFallbacks(t *testing.T) {
 			path: "/integrations",
 			want: "integrations",
 		},
+		{
+			name: "directory index fallback",
+			files: map[string]string{
+				"index.html":         "<html>home</html>",
+				"reports/index.html": "<html>reports</html>",
+			},
+			path: "/reports",
+			want: "reports",
+		},
+		{
+			name: "directory index fallback with trailing slash",
+			files: map[string]string{
+				"index.html":         "<html>home</html>",
+				"reports/index.html": "<html>reports</html>",
+			},
+			path: "/reports/",
+			want: "reports",
+		},
+		{
+			name: "directory index file served without root fallback",
+			files: map[string]string{
+				"index.html":         "<html>home</html>",
+				"reports/index.html": "<html>reports</html>",
+			},
+			path: "/reports/index.html",
+			want: "reports",
+		},
 	}
 
 	for _, tc := range tests {
