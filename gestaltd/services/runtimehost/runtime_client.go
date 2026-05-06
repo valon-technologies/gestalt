@@ -18,8 +18,11 @@ const (
 	// Hosted agent providers can do real setup work during session creation
 	// after the runtime itself is ready. Keep this below the API route timeout,
 	// but above short health-check style deadlines.
-	ProviderRPCTimeout   = 30 * time.Second
-	providerStartTimeout = 2 * time.Minute
+	ProviderRPCTimeout = 30 * time.Second
+	// ProviderSessionCreateTimeout bounds agent CreateSession RPCs when callers
+	// do not provide their own deadline.
+	ProviderSessionCreateTimeout = 5 * time.Minute
+	providerStartTimeout         = 2 * time.Minute
 )
 
 var providerConfigureTimeout = 30 * time.Second
@@ -153,6 +156,18 @@ func ProviderCallContext(parent context.Context) (context.Context, context.Cance
 		parent = context.Background()
 	}
 	return context.WithTimeout(parent, ProviderRPCTimeout)
+}
+
+// ProviderSessionCreateContext returns a child context for agent CreateSession RPCs.
+// It preserves caller deadlines when present and otherwise applies a bounded fallback.
+func ProviderSessionCreateContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if _, ok := parent.Deadline(); ok {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, ProviderSessionCreateTimeout)
 }
 
 func providerStartContext(parent context.Context) (context.Context, context.CancelFunc) {

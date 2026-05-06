@@ -183,6 +183,70 @@ func TestConfigureRuntimeProviderUsesParentDeadlineWhenPresent(t *testing.T) {
 	}
 }
 
+func TestProviderSessionCreateContextUsesBoundedFallbackWithoutParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := ProviderSessionCreateContext(context.Background())
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("ProviderSessionCreateContext returned context without deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining <= ProviderRPCTimeout {
+		t.Fatalf("remaining deadline = %s, want above provider RPC timeout %s", remaining, ProviderRPCTimeout)
+	}
+	if remaining > ProviderSessionCreateTimeout {
+		t.Fatalf("remaining deadline = %s, want at most session create timeout %s", remaining, ProviderSessionCreateTimeout)
+	}
+}
+
+func TestProviderSessionCreateContextPreservesLongParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * ProviderSessionCreateTimeout)
+	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer parentCancel()
+	ctx, cancel := ProviderSessionCreateContext(parent)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("ProviderSessionCreateContext returned context without deadline")
+	}
+	if !deadline.Equal(parentDeadline) {
+		t.Fatalf("deadline = %s, want parent deadline %s", deadline, parentDeadline)
+	}
+	if remaining := time.Until(deadline); remaining <= ProviderSessionCreateTimeout {
+		t.Fatalf("remaining deadline = %s, want above fallback timeout %s", remaining, ProviderSessionCreateTimeout)
+	}
+}
+
+func TestProviderSessionCreateContextPreservesShortParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(ProviderRPCTimeout / 2)
+	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer parentCancel()
+	ctx, cancel := ProviderSessionCreateContext(parent)
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("ProviderSessionCreateContext returned context without deadline")
+	}
+	if !deadline.Equal(parentDeadline) {
+		t.Fatalf("deadline = %s, want parent deadline %s", deadline, parentDeadline)
+	}
+	if remaining := time.Until(deadline); remaining >= ProviderRPCTimeout {
+		t.Fatalf("remaining deadline = %s, want below provider RPC timeout %s", remaining, ProviderRPCTimeout)
+	}
+	parentCancel()
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("session create context did not observe parent cancellation")
+	}
+}
+
 func TestStartRuntimeProviderValidatesProtocolVersion(t *testing.T) {
 	t.Parallel()
 

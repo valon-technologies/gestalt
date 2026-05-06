@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -138,6 +140,38 @@ func TestRemoteAgentCreateSessionForwardsSessionStart(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
+	}
+}
+
+func TestRemoteAgentCreateSessionPreservesWorkflowDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * runtimehost.ProviderRPCTimeout)
+	var createSessionRemaining time.Duration
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			createSession: func(ctx context.Context, req *proto.CreateAgentProviderSessionRequest, _ ...grpc.CallOption) (*proto.AgentSession, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("CreateSession context has no deadline")
+				}
+				createSessionRemaining = time.Until(deadline)
+				return &proto.AgentSession{Id: req.GetSessionId(), ProviderName: "claude"}, nil
+			},
+		},
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer cancel()
+
+	_, err := agent.CreateSession(ctx, coreagent.CreateSessionRequest{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if createSessionRemaining <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateSession remaining deadline = %s, want above provider RPC timeout %s", createSessionRemaining, runtimehost.ProviderRPCTimeout)
+	}
+	if createSessionRemaining > 2*runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateSession remaining deadline = %s, want at most parent deadline %s", createSessionRemaining, 2*runtimehost.ProviderRPCTimeout)
 	}
 }
 
