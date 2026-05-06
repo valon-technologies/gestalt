@@ -1377,7 +1377,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 }
 
 func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
-	if entry == nil || !entry.UsesHostedExecution() {
+	if entry == nil || !entry.UsesRuntimePlacement() {
 		return config.EffectiveHostedRuntime{}, nil, false, nil
 	}
 	explicitRuntimeConfig := providerEntryHostedRuntimeConfig(entry)
@@ -1424,10 +1424,10 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 	}
 	runtimeCfg := entry.HostedRuntimeConfig()
 	if runtimeCfg == nil {
-		return config.EffectiveHostedRuntime{Enabled: entry.UsesHostedExecution()}
+		return config.EffectiveHostedRuntime{Enabled: entry.UsesRuntimePlacement()}
 	}
 	effective := config.EffectiveHostedRuntime{
-		Enabled:       entry.UsesHostedExecution(),
+		Enabled:       entry.UsesRuntimePlacement(),
 		ProviderName:  strings.TrimSpace(runtimeCfg.Provider),
 		Template:      strings.TrimSpace(runtimeCfg.Template),
 		Image:         strings.TrimSpace(runtimeCfg.Image),

@@ -22,7 +22,7 @@ type desiredWorkflowConfigEventTrigger struct {
 	trigger      config.WorkflowEventTriggerConfig
 }
 
-func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime) error {
+func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -33,6 +33,9 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 
 	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[rowID]
+		if !workflowConfigProviderIncluded(includeProvider, desiredEntry.ProviderName) {
+			continue
+		}
 		trigger := desiredEntry.trigger
 		target := workflowConfigTarget(trigger.Target)
 		pluginName := workflowConfigTargetLabel(target)
@@ -96,7 +99,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		}
 	}
 
-	if err := cleanupRemovedWorkflowConfigEventTriggers(ctx, runtime, desired); err != nil {
+	if err := cleanupRemovedWorkflowConfigEventTriggers(ctx, runtime, desired, includeProvider); err != nil {
 		return err
 	}
 	return nil
@@ -124,13 +127,19 @@ func desiredWorkflowConfigEventTriggers(cfg *config.Config) (map[string]desiredW
 	return desired, nil
 }
 
-func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigEventTrigger) error {
+func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigEventTrigger, includeProvider workflowConfigProviderFilter) error {
 	desiredByProviderTrigger := make(map[string]struct{}, len(desired))
 	for rowID := range desired {
 		entry := desired[rowID]
+		if !workflowConfigProviderIncluded(includeProvider, entry.ProviderName) {
+			continue
+		}
 		desiredByProviderTrigger[workflowConfigProviderObjectKey(entry.ProviderName, entry.TriggerID)] = struct{}{}
 	}
 	for _, providerName := range runtime.ProviderNames() {
+		if !workflowConfigProviderIncluded(includeProvider, providerName) {
+			continue
+		}
 		provider, err := runtime.ResolveProvider(providerName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow event triggers requires provider %q: %w", providerName, err)

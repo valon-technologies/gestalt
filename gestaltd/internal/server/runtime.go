@@ -240,6 +240,7 @@ func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.Co
 		return err
 	}
 	close(workflowProvidersReady)
+	result.StartWorkflowConfigReconciliation(ctx)
 	slog.Info("workflow providers ready", "count", len(result.ExtraWorkflows))
 
 	mcpHandler, err := newMCPHandler(cfg, connMaps, result, mcpInvoker)

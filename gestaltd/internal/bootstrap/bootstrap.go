@@ -249,10 +249,17 @@ type Result struct {
 	ProviderDevSessions   *providerdev.Manager
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
-	pluginRuntimeRegistry *pluginRuntimeRegistry
-	auditClose            func(context.Context) error
-	mu                    sync.Mutex
-	closed                bool
+	pluginRuntimeRegistry               *pluginRuntimeRegistry
+	workflowConfigReconcileTasks        []workflowConfigReconcileTask
+	workflowConfigReconcileTasksStarted bool
+	auditClose                          func(context.Context) error
+	mu                                  sync.Mutex
+	closed                              bool
+}
+
+type workflowConfigReconcileTask struct {
+	name      string
+	reconcile func(context.Context) error
 }
 
 func (r *Result) Start(ctx context.Context) error {
@@ -300,6 +307,53 @@ func (r *Result) StartWorkflowProviders(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (r *Result) StartWorkflowConfigReconciliation(ctx context.Context) {
+	if r == nil {
+		return
+	}
+
+	r.mu.Lock()
+	if r.closed || r.workflowConfigReconcileTasksStarted || len(r.workflowConfigReconcileTasks) == 0 {
+		r.mu.Unlock()
+		return
+	}
+	r.workflowConfigReconcileTasksStarted = true
+	tasks := append([]workflowConfigReconcileTask(nil), r.workflowConfigReconcileTasks...)
+	r.mu.Unlock()
+
+	for _, task := range tasks {
+		task := task
+		go runWorkflowConfigReconcileTask(ctx, task)
+	}
+}
+
+func runWorkflowConfigReconcileTask(ctx context.Context, task workflowConfigReconcileTask) {
+	if task.reconcile == nil {
+		return
+	}
+	taskName := strings.TrimSpace(task.name)
+	if taskName == "" {
+		taskName = "workflow config"
+	}
+	interval := 5 * time.Second
+	for {
+		if err := task.reconcile(ctx); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			slog.WarnContext(ctx, "workflow config reconciliation failed; will retry", "task", taskName, "error", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(interval):
+				continue
+			}
+		}
+		slog.InfoContext(ctx, "workflow config reconciled", "task", taskName)
+		return
+	}
 }
 
 func (r *Result) Close(ctx context.Context) error {
@@ -444,6 +498,16 @@ func (p *workflowProviderWithCleanup) Start(ctx context.Context) error {
 	return nil
 }
 
+func (p *workflowProviderWithCleanup) WaitRuntimeWorkersReady(ctx context.Context) error {
+	if p == nil || p.Provider == nil {
+		return nil
+	}
+	if workerProvider, ok := p.Provider.(runtimeWorkerWorkflowProvider); ok {
+		return workerProvider.WaitRuntimeWorkersReady(ctx)
+	}
+	return nil
+}
+
 func (p *workflowProviderWithExecutionReferencesAndCleanup) Close() error {
 	var errs []error
 	if p != nil && p.Provider != nil {
@@ -463,6 +527,16 @@ func (p *workflowProviderWithExecutionReferencesAndCleanup) Start(ctx context.Co
 	}
 	if starter, ok := p.Provider.(startableWorkflowProvider); ok {
 		return starter.Start(ctx)
+	}
+	return nil
+}
+
+func (p *workflowProviderWithExecutionReferencesAndCleanup) WaitRuntimeWorkersReady(ctx context.Context) error {
+	if p == nil || p.Provider == nil {
+		return nil
+	}
+	if workerProvider, ok := p.Provider.(runtimeWorkerWorkflowProvider); ok {
+		return workerProvider.WaitRuntimeWorkersReady(ctx)
 	}
 	return nil
 }
@@ -1161,10 +1235,27 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime); err != nil {
-		return nil, err
+	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+			return err
+		}
+		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+			return err
+		}
+		return nil
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime); err != nil {
+	var deferredWorkflowConfigReconcileTasks []workflowConfigReconcileTask
+	runtimePlacedWorkflowProviders := runtimePlacedWorkflowProviderNames(cfg)
+	if len(runtimePlacedWorkflowProviders) > 0 {
+		localWorkflowProviders := func(providerName string) bool {
+			_, runtimePlaced := runtimePlacedWorkflowProviders[strings.TrimSpace(providerName)]
+			return !runtimePlaced
+		}
+		if err := reconcileWorkflowConfig(ctx, localWorkflowProviders); err != nil {
+			return nil, err
+		}
+		deferredWorkflowConfigReconcileTasks = runtimeWorkflowConfigReconcileTasks(prepared.Deps.WorkflowRuntime, runtimePlacedWorkflowProviders, reconcileWorkflowConfig)
+	} else if err := reconcileWorkflowConfig(ctx, nil); err != nil {
 		return nil, err
 	}
 
@@ -1175,36 +1266,92 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
 	return &Result{
-		Auth:                  prepared.Auth,
-		SelectedAuthProvider:  prepared.SelectedAuthProvider,
-		AuthProviders:         prepared.AuthProviders,
-		AuthorizationProvider: prepared.AuthorizationProvider,
-		Services:              prepared.Services,
-		ExtraIndexedDBs:       prepared.ExtraIndexedDBs,
-		S3:                    prepared.Deps.S3,
-		ExtraS3s:              prepared.ExtraS3s,
-		ExtraWorkflows:        extraWorkflows,
-		ExtraAgents:           extraAgents,
-		Providers:             providers,
-		WorkflowControl:       prepared.Deps.WorkflowRuntime,
-		AgentControl:          prepared.Deps.AgentRuntime,
-		AgentManager:          prepared.Deps.AgentManager,
-		ProvidersReady:        providersReady,
-		Authorizer:            authz,
-		ConnectionAuth:        connAuthResolver,
-		ManualConnectionAuth:  manualConnAuthResolver,
-		Invoker:               sharedInvoker,
-		PluginInvoker:         pluginInvoker,
-		CapabilityLister:      sharedInvoker,
-		AuditSink:             audit,
-		SecretManager:         prepared.SecretManager,
-		Telemetry:             prepared.Telemetry,
-		PluginRuntimes:        prepared.pluginRuntimeRegistry,
-		ProviderDevSessions:   providerDevSessions,
-		PublicHostServices:    publicHostServices,
-		pluginRuntimeRegistry: prepared.pluginRuntimeRegistry,
-		auditClose:            auditClose,
+		Auth:                         prepared.Auth,
+		SelectedAuthProvider:         prepared.SelectedAuthProvider,
+		AuthProviders:                prepared.AuthProviders,
+		AuthorizationProvider:        prepared.AuthorizationProvider,
+		Services:                     prepared.Services,
+		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
+		S3:                           prepared.Deps.S3,
+		ExtraS3s:                     prepared.ExtraS3s,
+		ExtraWorkflows:               extraWorkflows,
+		ExtraAgents:                  extraAgents,
+		Providers:                    providers,
+		WorkflowControl:              prepared.Deps.WorkflowRuntime,
+		AgentControl:                 prepared.Deps.AgentRuntime,
+		AgentManager:                 prepared.Deps.AgentManager,
+		ProvidersReady:               providersReady,
+		Authorizer:                   authz,
+		ConnectionAuth:               connAuthResolver,
+		ManualConnectionAuth:         manualConnAuthResolver,
+		Invoker:                      sharedInvoker,
+		PluginInvoker:                pluginInvoker,
+		CapabilityLister:             sharedInvoker,
+		AuditSink:                    audit,
+		SecretManager:                prepared.SecretManager,
+		Telemetry:                    prepared.Telemetry,
+		PluginRuntimes:               prepared.pluginRuntimeRegistry,
+		ProviderDevSessions:          providerDevSessions,
+		PublicHostServices:           publicHostServices,
+		pluginRuntimeRegistry:        prepared.pluginRuntimeRegistry,
+		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
+		auditClose:                   auditClose,
 	}, nil
+}
+
+type runtimeWorkerWorkflowProvider interface {
+	WaitRuntimeWorkersReady(context.Context) error
+}
+
+func runtimePlacedWorkflowProviderNames(cfg *config.Config) map[string]struct{} {
+	providerNames := map[string]struct{}{}
+	if cfg == nil {
+		return providerNames
+	}
+	for name, entry := range cfg.Providers.Workflow {
+		if entry != nil && entry.UsesRuntimePlacement() {
+			providerNames[strings.TrimSpace(name)] = struct{}{}
+		}
+	}
+	return providerNames
+}
+
+func runtimeWorkflowConfigReconcileTasks(runtime *workflowRuntime, providerNames map[string]struct{}, reconcile func(context.Context, workflowConfigProviderFilter) error) []workflowConfigReconcileTask {
+	tasks := make([]workflowConfigReconcileTask, 0, len(providerNames))
+	for _, providerName := range slices.Sorted(maps.Keys(providerNames)) {
+		providerName := providerName
+		tasks = append(tasks, workflowConfigReconcileTask{
+			name: "workflow provider " + providerName,
+			reconcile: func(ctx context.Context) error {
+				if err := waitRuntimeWorkflowProviderReady(ctx, runtime, providerName); err != nil {
+					return err
+				}
+				return reconcile(ctx, workflowConfigOnlyProvider(providerName))
+			},
+		})
+	}
+	return tasks
+}
+
+func workflowConfigOnlyProvider(providerName string) workflowConfigProviderFilter {
+	return func(candidateName string) bool {
+		return strings.TrimSpace(candidateName) == strings.TrimSpace(providerName)
+	}
+}
+
+func waitRuntimeWorkflowProviderReady(ctx context.Context, runtime *workflowRuntime, providerName string) error {
+	provider, err := runtime.ResolveProvider(providerName)
+	if err != nil {
+		return err
+	}
+	workerProvider, ok := provider.(runtimeWorkerWorkflowProvider)
+	if !ok {
+		return nil
+	}
+	if err := workerProvider.WaitRuntimeWorkersReady(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
@@ -1766,17 +1913,20 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		hostServices = append(hostServices, indexedDBHostServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
-	var provider coreworkflow.Provider
-	if entry.UsesHostedExecution() {
-		provider, err = buildHostedWorkflowProvider(ctx, name, entry, node, hostServices, deps)
-	} else {
-		if factories.Workflow == nil {
-			return nil, fmt.Errorf("workflow factory is not registered")
-		}
-		provider, err = factories.Workflow(ctx, name, node, hostServices, deps)
+	if factories.Workflow == nil {
+		return nil, fmt.Errorf("workflow factory is not registered")
 	}
+	provider, err := factories.Workflow(ctx, name, node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
+	}
+	if entry.UsesRuntimePlacement() {
+		workerPool, err := buildHostedWorkflowWorkerPool(ctx, name, entry, node, hostServices, deps)
+		if err != nil {
+			_ = provider.Close()
+			return nil, fmt.Errorf("workflow provider: %w", err)
+		}
+		provider = wrapWorkflowProviderWithRuntimeWorkers(provider, workerPool)
 	}
 	if cleanup != nil {
 		if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
@@ -1837,7 +1987,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		provider    coreagent.Provider
 		providerErr error
 	)
-	if entry.UsesHostedExecution() {
+	if entry.UsesRuntimePlacement() {
 		provider, providerErr = buildHostedAgentProvider(ctx, name, entry, node, hostServices, deps)
 	} else {
 		if factories.Agent == nil {
