@@ -314,12 +314,19 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 	if entry == nil {
 		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
 	}
-	providerPath := "execution.runtime.provider"
 	var runtimeCfg *HostedRuntimeConfig
+	runtimePath := "runtime"
 	enabled := false
+	mode := ExecutionMode("")
 	if entry.Execution != nil {
+		mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
+	}
+	if entry.Runtime != nil {
+		runtimeCfg = entry.Runtime
+		enabled = true
+	} else if entry.Execution != nil {
 		runtimeCfg = entry.Execution.Runtime
-		mode := ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
+		runtimePath = "execution.runtime"
 		enabled = runtimeCfg != nil || mode == ExecutionModeHosted
 	}
 	if !enabled {
@@ -339,7 +346,7 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 		var ok bool
 		provider, ok = entries[providerName]
 		if !ok || provider == nil {
-			return EffectiveExecution{}, fmt.Errorf("config validation: %s.%s references unknown runtime %q", configPath, providerPath, providerName)
+			return EffectiveExecution{}, fmt.Errorf("config validation: %s.%s.provider references unknown runtime %q", configPath, runtimePath, providerName)
 		}
 	}
 
