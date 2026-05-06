@@ -55,6 +55,12 @@ type managedSubjectGrantInfo struct {
 	Mutable bool   `json:"mutable"`
 }
 
+type managedSubjectExternalIdentityInfo struct {
+	Type       string `json:"type"`
+	ID         string `json:"id"`
+	ResourceID string `json:"resourceId"`
+}
+
 func (s *Server) mountAuthorizationSubjectRoutes(r chi.Router) {
 	r.Get("/authorization/subjects", s.listManagedSubjects)
 	r.Post("/authorization/subjects", s.createManagedSubject)
@@ -69,6 +75,10 @@ func (s *Server) mountAuthorizationSubjectRoutes(r chi.Router) {
 	r.Get("/authorization/subjects/{subjectID}/grants", s.listManagedSubjectGrants)
 	r.Put("/authorization/subjects/{subjectID}/grants/{plugin}", s.putManagedSubjectGrant)
 	r.Delete("/authorization/subjects/{subjectID}/grants/{plugin}", s.deleteManagedSubjectGrant)
+
+	r.Get("/authorization/subjects/{subjectID}/external-identities", s.listManagedSubjectExternalIdentities)
+	r.Put("/authorization/subjects/{subjectID}/external-identities", s.putManagedSubjectExternalIdentity)
+	r.Delete("/authorization/subjects/{subjectID}/external-identities", s.deleteManagedSubjectExternalIdentity)
 
 	r.Get("/authorization/subjects/{subjectID}/integrations", s.listManagedSubjectIntegrations)
 	r.Post("/authorization/subjects/{subjectID}/auth/start-oauth", s.startManagedSubjectIntegrationOAuth)
@@ -384,6 +394,56 @@ func (s *Server) deleteManagedSubjectGrant(w http.ResponseWriter, r *http.Reques
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{"status": "deleted_pending_reload", "reloaded": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (s *Server) listManagedSubjectExternalIdentities(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManageExternalIdentity)
+	if !ok {
+		return
+	}
+	identities, err := s.managedSubjectExternalIdentityRows(r.Context(), subject.SubjectID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list managed subject external identities")
+		return
+	}
+	writeJSON(w, http.StatusOK, identities)
+}
+
+func (s *Server) putManagedSubjectExternalIdentity(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManageExternalIdentity)
+	if !ok {
+		return
+	}
+	ref, ok := s.managedSubjectExternalIdentityRefFromRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := s.upsertManagedSubjectExternalIdentity(r.Context(), subject.SubjectID, ref); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist managed subject external identity")
+		return
+	}
+	writeJSON(w, http.StatusOK, managedSubjectExternalIdentityInfoFromRef(ref))
+}
+
+func (s *Server) deleteManagedSubjectExternalIdentity(w http.ResponseWriter, r *http.Request) {
+	subject, ok := s.managedSubjectForAction(w, r, authorization.ProviderManagedSubjectActionManageExternalIdentity)
+	if !ok {
+		return
+	}
+	ref, ok := s.managedSubjectExternalIdentityRefFromRequest(w, r)
+	if !ok {
+		return
+	}
+	deleted, err := s.deleteManagedSubjectExternalIdentityRelationship(r.Context(), subject.SubjectID, ref)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete managed subject external identity")
+		return
+	}
+	if !deleted {
+		writeError(w, http.StatusNotFound, "managed subject external identity not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -737,6 +797,63 @@ func (s *Server) managedSubjectGrantRows(ctx context.Context, subjectID string) 
 	return out, nil
 }
 
+func (s *Server) managedSubjectExternalIdentityRows(ctx context.Context, subjectID string) ([]managedSubjectExternalIdentityInfo, error) {
+	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+		PageSize: adminAuthorizationProviderReadPageSize,
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: strings.TrimSpace(subjectID)},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]managedSubjectExternalIdentityInfo, 0, len(relationships))
+	for _, rel := range relationships {
+		if rel == nil || rel.GetResource() == nil {
+			continue
+		}
+		if rel.GetResource().GetType() != authorization.ProviderResourceTypeExternalIdentity || rel.GetRelation() != authorization.ProviderExternalIdentityRelationAssume {
+			continue
+		}
+		ref, err := core.ExternalIdentityRefFromResourceID(rel.GetResource().GetId())
+		if err != nil {
+			continue
+		}
+		out = append(out, managedSubjectExternalIdentityInfoFromRef(externalIdentityRef{Type: ref.Type, ID: ref.ID}))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Type != out[j].Type {
+			return out[i].Type < out[j].Type
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (s *Server) managedSubjectExternalIdentityRefFromRequest(w http.ResponseWriter, r *http.Request) (externalIdentityRef, bool) {
+	var req struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return externalIdentityRef{}, false
+	}
+	ref := externalIdentityRef{Type: req.Type, ID: req.ID}
+	if err := validateExternalIdentityRef(ref); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return externalIdentityRef{}, false
+	}
+	return normalizeExternalIdentityRef(ref), true
+}
+
+func managedSubjectExternalIdentityInfoFromRef(ref externalIdentityRef) managedSubjectExternalIdentityInfo {
+	ref = normalizeExternalIdentityRef(ref)
+	return managedSubjectExternalIdentityInfo{
+		Type:       ref.Type,
+		ID:         ref.ID,
+		ResourceID: externalIdentityResourceID(ref),
+	}
+}
+
 func (s *Server) deleteManagedSubjectCredentials(ctx context.Context, subjectID string) error {
 	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
 		return nil
@@ -938,7 +1055,8 @@ func managedSubjectActionRoles(action string) []string {
 		}
 	case authorization.ProviderManagedSubjectActionManage,
 		authorization.ProviderManagedSubjectActionCreateToken,
-		authorization.ProviderManagedSubjectActionGrant:
+		authorization.ProviderManagedSubjectActionGrant,
+		authorization.ProviderManagedSubjectActionManageExternalIdentity:
 		return []string{authorization.ProviderManagedSubjectRelationAdmin}
 	default:
 		return []string{strings.TrimSpace(action)}

@@ -290,6 +290,12 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			ID:   identity.GetId(),
 		})
 	}
+	if identity := reqCtx.GetExternalIdentity(); identity != nil {
+		ctx = WithExternalIdentity(ctx, ExternalIdentity{
+			Type: identity.GetType(),
+			ID:   identity.GetId(),
+		})
+	}
 	if credential := reqCtx.GetCredential(); credential != nil {
 		ctx = WithCredential(ctx, Credential{
 			Mode:       credential.GetMode(),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -99,6 +100,10 @@ func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal,
 		return principal.AllowsOperationPermission(p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
+}
+
+func (a *Authorizer) AllowExternalIdentityAssumption(_ context.Context, _ *principal.Principal, _ *core.ExternalIdentityRef) bool {
+	return false
 }
 
 func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, provider string) (AccessContext, bool) {

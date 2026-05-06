@@ -99,6 +99,7 @@ class Request:
     agent_external_identity: ExternalIdentity = dataclasses.field(
         default_factory=ExternalIdentity
     )
+    external_identity: ExternalIdentity = dataclasses.field(default_factory=ExternalIdentity)
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

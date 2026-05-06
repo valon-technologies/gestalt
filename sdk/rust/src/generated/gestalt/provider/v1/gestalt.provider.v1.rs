@@ -301,6 +301,9 @@ pub struct RequestContext {
     /// The original agent caller's provider-owned external identity, when known.
     #[prost(message, optional, tag = "7")]
     pub agent_external_identity: ::core::option::Option<ExternalIdentityContext>,
+    /// Provider-owned external identity the invocation is authorized to assume.
+    #[prost(message, optional, tag = "8")]
+    pub external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.

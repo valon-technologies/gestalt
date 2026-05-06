@@ -5227,6 +5227,61 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 
 	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "viewer-session", "", http.StatusOK)
 
+	externalIdentityBody := `{"type":"github_app_installation","id":"repo:valon-technologies/toolshed"}`
+	type externalIdentityInfo struct {
+		Type       string `json:"type"`
+		ID         string `json:"id"`
+		ResourceID string `json:"resourceId"`
+	}
+	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "viewer-session", "", http.StatusForbidden)
+	resp = doJSON(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject external identity put status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var externalIdentity externalIdentityInfo
+	if err := json.NewDecoder(resp.Body).Decode(&externalIdentity); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject external identity: %v", err)
+	}
+	_ = resp.Body.Close()
+	if externalIdentity.Type != "github_app_installation" || externalIdentity.ID != "repo:valon-technologies/toolshed" {
+		t.Fatalf("managed subject external identity = %+v", externalIdentity)
+	}
+	if want := core.ExternalIdentityResourceID(&core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}); externalIdentity.ResourceID != want {
+		t.Fatalf("managed subject external identity resource ID = %q, want %q", externalIdentity.ResourceID, want)
+	}
+	if !authz.AllowExternalIdentityAssumption(context.Background(), &principal.Principal{
+		SubjectID: created.SubjectID,
+		Kind:      principal.Kind("service_account"),
+	}, &core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}) {
+		t.Fatal("managed subject external identity relationship did not authorize assumption")
+	}
+	resp = doJSON(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", "")
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("managed subject external identity list status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var externalIdentities []externalIdentityInfo
+	if err := json.NewDecoder(resp.Body).Decode(&externalIdentities); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode managed subject external identity list: %v", err)
+	}
+	_ = resp.Body.Close()
+	if len(externalIdentities) != 1 || externalIdentities[0] != externalIdentity {
+		t.Fatalf("managed subject external identity list = %+v, want %+v", externalIdentities, externalIdentity)
+	}
+	expectJSONStatus(http.MethodDelete, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody, http.StatusOK)
+	if authz.AllowExternalIdentityAssumption(context.Background(), &principal.Principal{
+		SubjectID: created.SubjectID,
+		Kind:      principal.Kind("service_account"),
+	}, &core.ExternalIdentityRef{Type: "github_app_installation", ID: "repo:valon-technologies/toolshed"}) {
+		t.Fatal("managed subject external identity relationship still authorizes assumption after delete")
+	}
+	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/external-identities", "owner-session", externalIdentityBody, http.StatusOK)
+
 	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/tokens", "viewer-session", `{"name":"viewer-token"}`, http.StatusForbidden)
 
 	expectJSONStatus(http.MethodPost, "/api/v1/authorization/subjects/"+escapedSubjectID+"/auth/connect-manual", "viewer-session", `{"integration":"manual-svc","credential":"viewer-key"}`, http.StatusForbidden)

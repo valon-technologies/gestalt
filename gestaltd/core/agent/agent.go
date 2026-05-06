@@ -98,14 +98,15 @@ type MessagePart struct {
 }
 
 type ToolTarget struct {
-	System         string `json:",omitempty"`
-	Plugin         string
-	Operation      string
-	Connection     string
-	Instance       string
-	CredentialMode core.ConnectionMode
-	Unavailable    *UnavailableToolTarget `json:",omitempty"`
-	RunAs          *core.RunAsSubject
+	System                string `json:",omitempty"`
+	Plugin                string
+	Operation             string
+	Connection            string
+	Instance              string
+	CredentialMode        core.ConnectionMode
+	Unavailable           *UnavailableToolTarget `json:",omitempty"`
+	RunAs                 *core.RunAsSubject
+	RunAsExternalIdentity *core.ExternalIdentityRef
 }
 
 type UnavailableToolTarget struct {
@@ -131,15 +132,16 @@ type Tool struct {
 }
 
 type ToolRef struct {
-	System         string `json:",omitempty"`
-	Plugin         string
-	Operation      string
-	Connection     string
-	Instance       string
-	CredentialMode core.ConnectionMode
-	RunAs          *core.RunAsSubject
-	Title          string
-	Description    string
+	System                string `json:",omitempty"`
+	Plugin                string
+	Operation             string
+	Connection            string
+	Instance              string
+	CredentialMode        core.ConnectionMode
+	RunAs                 *core.RunAsSubject
+	RunAsExternalIdentity *core.ExternalIdentityRef
+	Title                 string
+	Description           string
 }
 
 type ResolveToolsRequest struct {
@@ -180,8 +182,8 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 			if operation == "*" {
 				return fmt.Errorf("mcp catalog %s[%d].operation wildcard is not supported", fieldName, i)
 			}
-			if connection != "" || instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "" {
-				return fmt.Errorf("mcp catalog %s[%d] system refs cannot include connection, instance, credential mode, runAs, title, or description", fieldName, i)
+			if connection != "" || instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "" {
+				return fmt.Errorf("mcp catalog %s[%d] system refs cannot include connection, instance, credential mode, runAs, runAs external identity, title, or description", fieldName, i)
 			}
 			continue
 		}
@@ -191,11 +193,17 @@ func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
 		if operation == "*" || connection == "*" || instance == "*" {
 			return fmt.Errorf("mcp catalog %s[%d] wildcard fields are not supported", fieldName, i)
 		}
-		if pluginName == "*" && (operation != "" || connection != "" || instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "") {
-			return fmt.Errorf("mcp catalog %s[%d] global ref cannot include operation, connection, instance, credential mode, runAs, title, or description", fieldName, i)
+		if pluginName == "*" && (operation != "" || connection != "" || instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil || strings.TrimSpace(ref.Title) != "" || strings.TrimSpace(ref.Description) != "") {
+			return fmt.Errorf("mcp catalog %s[%d] global ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", fieldName, i)
 		}
 		if ref.RunAs != nil && operation == "" {
 			return fmt.Errorf("mcp catalog %s[%d].runAs requires an exact operation", fieldName, i)
+		}
+		if ref.RunAsExternalIdentity != nil && ref.RunAs == nil {
+			return fmt.Errorf("mcp catalog %s[%d].runAs.externalIdentity requires runAs.subject", fieldName, i)
+		}
+		if ref.RunAsExternalIdentity != nil && operation == "" {
+			return fmt.Errorf("mcp catalog %s[%d].runAs.externalIdentity requires an exact operation", fieldName, i)
 		}
 	}
 	return nil

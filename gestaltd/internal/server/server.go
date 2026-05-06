@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
@@ -442,27 +443,10 @@ func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) 
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = pluginInvocationDependencies(entry.Invokes)
+		out[pluginName] = invocationconfig.PluginInvocationDependencies(entry.Invokes)
 	}
 	if len(out) == 0 {
 		return nil
-	}
-	return out
-}
-
-func pluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
-	if len(deps) == 0 {
-		return nil
-	}
-	out := make([]invocation.PluginInvocationDependency, 0, len(deps))
-	for _, dep := range deps {
-		out = append(out, invocation.PluginInvocationDependency{
-			Plugin:         dep.Plugin,
-			Operation:      dep.Operation,
-			Surface:        dep.Surface,
-			CredentialMode: core.ConnectionMode(dep.CredentialMode),
-			RunAs:          dep.RunAsSubject(),
-		})
 	}
 	return out
 }

@@ -438,6 +438,69 @@ func TestRequestContextProto_IncludesAgentExternalIdentity(t *testing.T) {
 	}
 }
 
+func TestRequestContextProto_IncludesInvocationExternalIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithExternalIdentityContext(context.Background(), invocation.ExternalIdentityContext{
+		Type: "github_app_installation",
+		ID:   "repo:acme/widgets",
+	})
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetExternalIdentity() == nil {
+		t.Fatal("expected external identity context")
+	}
+	if got := reqCtx.GetExternalIdentity().GetType(); got != "github_app_installation" {
+		t.Fatalf("external identity type = %q, want github_app_installation", got)
+	}
+	if got := reqCtx.GetExternalIdentity().GetId(); got != "repo:acme/widgets" {
+		t.Fatalf("external identity id = %q, want repo:acme/widgets", got)
+	}
+}
+
+func TestApplyRequestContext_IncludesDelegatedExternalIdentities(t *testing.T) {
+	t.Parallel()
+
+	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
+		Subject: &proto.SubjectContext{
+			Id:          "service_account:github-toolshed",
+			Kind:        "service_account",
+			DisplayName: "GitHub Toolshed",
+			AuthSource:  "managed_subject",
+		},
+		AgentSubject: &proto.SubjectContext{
+			Id:          "user:user-123",
+			Kind:        "user",
+			DisplayName: "Ada Lovelace",
+			AuthSource:  "slack",
+		},
+		ExternalIdentity: &proto.ExternalIdentityContext{
+			Type: "github_app_installation",
+			Id:   "repo:acme/widgets",
+		},
+		AgentExternalIdentity: &proto.ExternalIdentityContext{
+			Type: "github_identity",
+			Id:   "user:12345678",
+		},
+	})
+
+	if got := invocation.ExternalIdentityContextFromContext(ctx); got.Type != "github_app_installation" || got.ID != "repo:acme/widgets" {
+		t.Fatalf("external identity context = %#v", got)
+	}
+	if got := invocation.AgentExternalIdentityContextFromContext(ctx); got.Type != "github_identity" || got.ID != "user:12345678" {
+		t.Fatalf("agent external identity context = %#v", got)
+	}
+	audit := invocation.RunAsAuditFromContext(ctx)
+	if audit.AgentSubject == nil || audit.AgentSubject.SubjectID != "user:user-123" {
+		t.Fatalf("agent subject audit = %#v", audit.AgentSubject)
+	}
+	if audit.RunAsSubject == nil || audit.RunAsSubject.SubjectID != "service_account:github-toolshed" {
+		t.Fatalf("runAs subject audit = %#v", audit.RunAsSubject)
+	}
+}
+
 func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 	t.Parallel()
 

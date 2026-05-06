@@ -1017,8 +1017,11 @@ def _plugin_request(request: Any) -> Request:
         agent_subject=_subject_from_proto(
             getattr(request, "context", None), "agent_subject"
         ),
+        external_identity=_external_identity_from_proto(
+            getattr(request, "context", None), "external_identity"
+        ),
         agent_external_identity=_external_identity_from_proto(
-            getattr(request, "context", None)
+            getattr(request, "context", None), "agent_external_identity"
         ),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
@@ -1072,10 +1075,12 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
     )
 
 
-def _external_identity_from_proto(request_context: Any) -> ExternalIdentity:
+def _external_identity_from_proto(
+    request_context: Any, field_name: str
+) -> ExternalIdentity:
     if request_context is None:
         return ExternalIdentity()
-    identity = getattr(request_context, "agent_external_identity", None)
+    identity = getattr(request_context, field_name, None)
     if identity is None:
         return ExternalIdentity()
     return ExternalIdentity(

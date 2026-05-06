@@ -280,6 +280,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
+	if err := b.authorizeExternalIdentityAssumption(ctx, p); err != nil {
+		return fail(err)
+	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
@@ -450,6 +453,9 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
 		}
 	}
+	if err := b.authorizeExternalIdentityAssumption(ctx, p); err != nil {
+		return fail(err)
+	}
 
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
@@ -480,6 +486,25 @@ func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, p
 	}
 
 	return ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
+}
+
+func (b *Broker) authorizeExternalIdentityAssumption(ctx context.Context, p *principal.Principal) error {
+	identityCtx := ExternalIdentityContextFromContext(ctx)
+	identity := core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
+		Type: identityCtx.Type,
+		ID:   identityCtx.ID,
+	})
+	if identity == nil {
+		return nil
+	}
+	if b == nil || b.authorizer == nil {
+		return fmt.Errorf("%w: external identity %s/%s", ErrAuthorizationDenied, identity.Type, identity.ID)
+	}
+	authorizer, ok := b.authorizer.(authorization.ExternalIdentityAssumptionAuthorizer)
+	if !ok || !authorizer.AllowExternalIdentityAssumption(ctx, p, identity) {
+		return fmt.Errorf("%w: external identity %s/%s", ErrAuthorizationDenied, identity.Type, identity.ID)
+	}
+	return nil
 }
 
 func (b *Broker) mcpConnection(providerName string) string {

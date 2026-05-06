@@ -71,6 +71,7 @@ type HostContext struct {
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
+type externalIdentityCtxKey struct{}
 type agentExternalIdentityCtxKey struct{}
 type accessCtxKey struct{}
 type hostCtxKey struct{}
@@ -144,6 +145,22 @@ func WithAgentExternalIdentityContext(ctx context.Context, identity ExternalIden
 
 func AgentExternalIdentityContextFromContext(ctx context.Context) ExternalIdentityContext {
 	identity, _ := ctx.Value(agentExternalIdentityCtxKey{}).(ExternalIdentityContext)
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	return identity
+}
+
+func WithExternalIdentityContext(ctx context.Context, identity ExternalIdentityContext) context.Context {
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	if identity.Type == "" || identity.ID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, externalIdentityCtxKey{}, identity)
+}
+
+func ExternalIdentityContextFromContext(ctx context.Context) ExternalIdentityContext {
+	identity, _ := ctx.Value(externalIdentityCtxKey{}).(ExternalIdentityContext)
 	identity.Type = strings.TrimSpace(identity.Type)
 	identity.ID = strings.TrimSpace(identity.ID)
 	return identity

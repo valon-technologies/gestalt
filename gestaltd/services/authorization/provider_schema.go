@@ -8,23 +8,24 @@ import (
 )
 
 const (
-	ProviderResourceTypePolicyStatic        = "policy_static"
-	ProviderResourceTypePluginStatic        = "plugin_static"
-	ProviderResourceTypePluginDynamic       = "plugin_dynamic"
-	ProviderResourceTypeAdminPolicyStatic   = "admin_policy_static"
-	ProviderResourceTypeAdminDynamic        = "admin_dynamic"
-	ProviderResourceTypeExternalIdentity    = "external_identity"
-	ProviderResourceTypeManagedSubject      = "managed_subject"
-	ProviderResourceIDAdminDynamicGlobal    = "global"
-	ProviderExternalIdentityRelationAssume  = "assume"
-	ProviderManagedSubjectRelationViewer    = "viewer"
-	ProviderManagedSubjectRelationEditor    = "editor"
-	ProviderManagedSubjectRelationAdmin     = "admin"
-	ProviderManagedSubjectActionView        = "view"
-	ProviderManagedSubjectActionManage      = "manage"
-	ProviderManagedSubjectActionCreateToken = "create_token"
-	ProviderManagedSubjectActionGrant       = "grant"
-	ProviderManagedSubjectActionConnect     = "connect"
+	ProviderResourceTypePolicyStatic                   = "policy_static"
+	ProviderResourceTypePluginStatic                   = "plugin_static"
+	ProviderResourceTypePluginDynamic                  = "plugin_dynamic"
+	ProviderResourceTypeAdminPolicyStatic              = "admin_policy_static"
+	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
+	ProviderResourceTypeExternalIdentity               = "external_identity"
+	ProviderResourceTypeManagedSubject                 = "managed_subject"
+	ProviderResourceIDAdminDynamicGlobal               = "global"
+	ProviderExternalIdentityRelationAssume             = "assume"
+	ProviderManagedSubjectRelationViewer               = "viewer"
+	ProviderManagedSubjectRelationEditor               = "editor"
+	ProviderManagedSubjectRelationAdmin                = "admin"
+	ProviderManagedSubjectActionView                   = "view"
+	ProviderManagedSubjectActionManage                 = "manage"
+	ProviderManagedSubjectActionCreateToken            = "create_token"
+	ProviderManagedSubjectActionGrant                  = "grant"
+	ProviderManagedSubjectActionConnect                = "connect"
+	ProviderManagedSubjectActionManageExternalIdentity = "manage_external_identity"
 
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
@@ -151,6 +152,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 				{Name: ProviderManagedSubjectActionCreateToken, Relations: []string{relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionGrant, Relations: []string{relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionConnect, Relations: []string{relationManagedSubjectEditor, relationManagedSubjectAdmin}},
+				{Name: ProviderManagedSubjectActionManageExternalIdentity, Relations: []string{relationManagedSubjectAdmin}},
 			},
 		},
 	)

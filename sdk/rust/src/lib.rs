@@ -44,7 +44,8 @@ pub use agent_manager::{
     AgentManager, AgentManagerError, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN,
 };
 pub use api::{
-    Access, Credential, Host, Provider, Request, Response, RuntimeMetadata, Subject, ok,
+    Access, Credential, ExternalIdentity, Host, Provider, Request, Response, RuntimeMetadata,
+    Subject, ok,
 };
 pub use auth::{
     AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,

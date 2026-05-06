@@ -266,6 +266,26 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	return a.AllowProvider(ctx, p, provider)
 }
 
+func (a *ProviderBackedAuthorizer) AllowExternalIdentityAssumption(ctx context.Context, p *principal.Principal, identity *core.ExternalIdentityRef) bool {
+	if a == nil {
+		return false
+	}
+	identity = core.NormalizeExternalIdentityRef(identity)
+	if identity == nil {
+		return false
+	}
+	resourceID := core.ExternalIdentityResourceID(identity)
+	if resourceID == "" {
+		return false
+	}
+	_, allowed, err := a.resolveRoleVariants(ctx, externalIdentityAssumptionSubjectRefs(p), resourceTypeExternalIdentity, resourceID, []string{relationExternalIdentityAssume})
+	if err != nil {
+		a.logProviderEvalError("external_identity", resourceID, err)
+		return false
+	}
+	return allowed
+}
+
 func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
@@ -831,6 +851,41 @@ func dynamicSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 		return nil
 	}
 	return []*core.SubjectRef{{Type: subjectTypeSubject, Id: subjectID}}
+}
+
+func externalIdentityAssumptionSubjectRefs(p *principal.Principal) []*core.SubjectRef {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]*core.SubjectRef, 0, 2)
+	appendRef := func(typ, id string) {
+		typ = strings.TrimSpace(typ)
+		id = strings.TrimSpace(id)
+		if typ == "" || id == "" {
+			return
+		}
+		key := typ + "\x00" + id
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, &core.SubjectRef{Type: typ, Id: id})
+	}
+	for _, ref := range dynamicSubjectRefs(p) {
+		if ref != nil {
+			appendRef(ref.GetType(), ref.GetId())
+		}
+	}
+	userSubjectID := strings.TrimSpace(p.SubjectID)
+	if userSubjectID == "" && strings.TrimSpace(p.UserID) != "" {
+		userSubjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
+	}
+	if strings.HasPrefix(userSubjectID, string(principal.KindUser)+":") {
+		appendRef(subjectTypeUser, userSubjectID)
+	}
+	return out
 }
 
 func relationshipMapKey(rel *core.Relationship) string {

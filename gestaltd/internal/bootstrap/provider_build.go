@@ -26,6 +26,7 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
@@ -1071,7 +1072,12 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if invTokens != nil {
 		opts = append(opts,
 			pluginservice.WithInvocationTokens(invTokens),
-			pluginservice.WithInvocationTokenSubject(name, plugininvokerservice.InvocationDependencyGrants(pluginInvocationDependencies(entry.Invokes))),
+			pluginservice.WithInvocationTokenSubject(
+				name,
+				plugininvokerservice.InvocationDependencyGrants(
+					invocationconfig.PluginInvocationDependencies(entry.Invokes),
+				),
+			),
 		)
 	}
 	prov, err := pluginservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -2291,7 +2297,12 @@ func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntr
 		Name:   "plugin_invoker",
 		EnvVar: plugininvokerservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(pluginName, pluginInvocationDependencies(entry.Invokes), invoker, tokens))
+			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(
+				pluginName,
+				invocationconfig.PluginInvocationDependencies(entry.Invokes),
+				invoker,
+				tokens,
+			))
 		},
 	}
 }

@@ -20,6 +20,7 @@ type Request struct {
 	ConnectionParams      map[string]string
 	Subject               Subject
 	AgentSubject          Subject
+	ExternalIdentity      ExternalIdentity
 	AgentExternalIdentity ExternalIdentity
 	Credential            Credential
 	Access                Access
@@ -230,6 +231,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			ConnectionParams:      ConnectionParams(ctx),
 			Subject:               SubjectFromContext(ctx),
 			AgentSubject:          AgentSubjectFromContext(ctx),
+			ExternalIdentity:      ExternalIdentityFromContext(ctx),
 			AgentExternalIdentity: AgentExternalIdentityFromContext(ctx),
 			Credential:            CredentialFromContext(ctx),
 			Access:                AccessFromContext(ctx),

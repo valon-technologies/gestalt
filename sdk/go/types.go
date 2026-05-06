@@ -157,6 +157,7 @@ type OperationResult struct {
 type connectionParamsKey struct{}
 type subjectKey struct{}
 type agentSubjectKey struct{}
+type externalIdentityKey struct{}
 type agentExternalIdentityKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
@@ -202,6 +203,26 @@ func WithAgentSubject(ctx context.Context, subject Subject) context.Context {
 func AgentSubjectFromContext(ctx context.Context) Subject {
 	subject, _ := ctx.Value(agentSubjectKey{}).(Subject)
 	return subject
+}
+
+// WithExternalIdentity returns a child context carrying the provider-owned
+// external identity this request is authorized to assume.
+func WithExternalIdentity(ctx context.Context, identity ExternalIdentity) context.Context {
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	if identity.Type == "" || identity.ID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, externalIdentityKey{}, identity)
+}
+
+// ExternalIdentityFromContext returns the provider-owned external identity this
+// request is authorized to assume, when available.
+func ExternalIdentityFromContext(ctx context.Context) ExternalIdentity {
+	identity, _ := ctx.Value(externalIdentityKey{}).(ExternalIdentity)
+	identity.Type = strings.TrimSpace(identity.Type)
+	identity.ID = strings.TrimSpace(identity.ID)
+	return identity
 }
 
 // WithAgentExternalIdentity returns a child context carrying the original agent

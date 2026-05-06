@@ -150,6 +150,21 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 	if subject := reqCtx.GetSubject(); subject != nil {
 		ctx = principal.WithPrincipal(ctx, principalFromProto(subject))
 	}
+	if agentSubject := reqCtx.GetAgentSubject(); agentSubject != nil {
+		ctx = invocation.WithRunAsAudit(ctx, runAsSubjectFromProto(agentSubject), runAsSubjectFromProto(reqCtx.GetSubject()))
+	}
+	if identity := reqCtx.GetAgentExternalIdentity(); identity != nil {
+		ctx = invocation.WithAgentExternalIdentityContext(ctx, invocation.ExternalIdentityContext{
+			Type: identity.GetType(),
+			ID:   identity.GetId(),
+		})
+	}
+	if identity := reqCtx.GetExternalIdentity(); identity != nil {
+		ctx = invocation.WithExternalIdentityContext(ctx, invocation.ExternalIdentityContext{
+			Type: identity.GetType(),
+			ID:   identity.GetId(),
+		})
+	}
 	if credential := reqCtx.GetCredential(); credential != nil {
 		ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
 			Mode:       core.ConnectionMode(credential.GetMode()),
@@ -173,6 +188,18 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		ctx = invocation.WithWorkflowContext(ctx, workflow.AsMap())
 	}
 	return ctx
+}
+
+func runAsSubjectFromProto(subject *proto.SubjectContext) *core.RunAsSubject {
+	if subject == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:   subject.GetId(),
+		SubjectKind: subject.GetKind(),
+		DisplayName: subject.GetDisplayName(),
+		AuthSource:  subject.GetAuthSource(),
+	})
 }
 
 func principalFromProto(subject *proto.SubjectContext) *principal.Principal {

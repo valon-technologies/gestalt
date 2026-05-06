@@ -1,11 +1,11 @@
 package server
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
@@ -53,7 +53,7 @@ func externalIdentityResourceID(ref externalIdentityRef) string {
 	if ref.Type == "" || ref.ID == "" {
 		return ""
 	}
-	return base64.RawURLEncoding.EncodeToString([]byte(ref.Type + "\x00" + ref.ID))
+	return core.ExternalIdentityResourceID(&core.ExternalIdentityRef{Type: ref.Type, ID: ref.ID})
 }
 
 func externalIdentityRefFromMetadataJSON(metadataJSON string) (externalIdentityRef, bool, error) {

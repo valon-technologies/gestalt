@@ -2023,7 +2023,8 @@ type PluginInvocationDependency struct {
 }
 
 type PluginInvocationRunAsConfig struct {
-	Subject *PluginInvocationRunAsSubjectConfig `yaml:"subject,omitempty"`
+	Subject          *PluginInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
+	ExternalIdentity *PluginInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
 }
 
 type PluginInvocationRunAsSubjectConfig struct {
@@ -2032,6 +2033,11 @@ type PluginInvocationRunAsSubjectConfig struct {
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
 	DisplayName         string `yaml:"displayName,omitempty"`
 	AuthSource          string `yaml:"authSource,omitempty"`
+}
+
+type PluginInvocationExternalIdentityConfig struct {
+	Type string `yaml:"type,omitempty"`
+	ID   string `yaml:"id,omitempty"`
 }
 
 func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
@@ -2048,6 +2054,16 @@ func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
 		})
 	}
 	return nil
+}
+
+func (d PluginInvocationDependency) RunAsExternalIdentity() *core.ExternalIdentityRef {
+	if d.RunAs == nil || d.RunAs.ExternalIdentity == nil {
+		return nil
+	}
+	return core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
+		Type: d.RunAs.ExternalIdentity.Type,
+		ID:   d.RunAs.ExternalIdentity.ID,
+	})
 }
 
 func Load(path string) (*Config, error) {

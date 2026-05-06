@@ -895,12 +895,8 @@ func normalizePluginInvocationRunAs(path string, invoke *PluginInvocationDepende
 		return fmt.Errorf("config validation: %s.runAs requires an exact operation", path)
 	}
 	runAs := invoke.RunAs
-	count := 0
-	if runAs.Subject != nil {
-		count++
-	}
-	if count != 1 {
-		return fmt.Errorf("config validation: %s.runAs must set exactly one delegation target", path)
+	if runAs.Subject == nil {
+		return fmt.Errorf("config validation: %s.runAs.subject is required", path)
 	}
 	subject := runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
@@ -921,6 +917,16 @@ func normalizePluginInvocationRunAs(path string, invoke *PluginInvocationDepende
 	}
 	if subject.CredentialSubjectID == "" {
 		subject.CredentialSubjectID = subject.ID
+	}
+	if identity := runAs.ExternalIdentity; identity != nil {
+		identity.Type = strings.TrimSpace(identity.Type)
+		identity.ID = strings.TrimSpace(identity.ID)
+		if identity.Type == "" {
+			return fmt.Errorf("config validation: %s.runAs.externalIdentity.type is required", path)
+		}
+		if identity.ID == "" {
+			return fmt.Errorf("config validation: %s.runAs.externalIdentity.id is required", path)
+		}
 	}
 	return nil
 }
