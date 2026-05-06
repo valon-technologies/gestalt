@@ -561,11 +561,12 @@ type workflowTargetResponse struct {
 }
 
 type workflowPluginTargetResponse struct {
-	Name       string         `json:"name"`
-	Operation  string         `json:"operation"`
-	Connection string         `json:"connection"`
-	Instance   string         `json:"instance"`
-	Input      map[string]any `json:"input"`
+	Name           string         `json:"name"`
+	Operation      string         `json:"operation"`
+	Connection     string         `json:"connection"`
+	Instance       string         `json:"instance"`
+	CredentialMode string         `json:"credentialMode"`
+	Input          map[string]any `json:"input"`
 }
 
 type workflowAgentTargetResponse struct {
@@ -1044,9 +1045,13 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		UpdatedAt:    &now,
 	}
 	provider.schedules["sched-analytics"] = &coreworkflow.Schedule{
-		ID:           "sched-analytics",
-		Cron:         "15 * * * *",
-		Target:       workflowPluginTarget("analytics", "sync"),
+		ID:   "sched-analytics",
+		Cron: "15 * * * *",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName:     "analytics",
+			Operation:      "sync",
+			CredentialMode: core.ConnectionModeNone,
+		}},
 		ExecutionRef: "workflow_schedule:sched-analytics:ref-analytics",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1139,6 +1144,19 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	if !slices.Equal(listedIDs, []string{"sched-ada", "sched-analytics"}) {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
+	var listedAnalytics *workflowScheduleResponse
+	for i := range listed {
+		if listed[i].ID == "sched-analytics" {
+			listedAnalytics = &listed[i]
+			break
+		}
+	}
+	if listedAnalytics == nil {
+		t.Fatalf("listed schedules missing analytics schedule: %#v", listed)
+	}
+	if got := requireWorkflowPluginTarget(t, listedAnalytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+		t.Fatalf("listed analytics credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
 
 	getAnalyticsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-analytics", nil)
 	getAnalyticsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1149,6 +1167,13 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	defer func() { _ = getAnalyticsResp.Body.Close() }()
 	if getAnalyticsResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 for analytics schedule, got %d", getAnalyticsResp.StatusCode)
+	}
+	var analytics workflowScheduleResponse
+	if err := json.NewDecoder(getAnalyticsResp.Body).Decode(&analytics); err != nil {
+		t.Fatalf("decode analytics schedule: %v", err)
+	}
+	if got := requireWorkflowPluginTarget(t, analytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+		t.Fatalf("analytics credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 
 	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-grace", nil)
@@ -1230,6 +1255,75 @@ func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 	}
 	if len(provider.upsertReqs) != 1 || requireCoreWorkflowPluginTarget(t, provider.upsertReqs[0].Target).Operation != "export" {
 		t.Fatalf("upsert requests = %#v", provider.upsertReqs)
+	}
+}
+
+func TestCreateWorkflowScheduleRejectsPublicTargetCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{{
+		name: "plugin target",
+		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","credentialMode":"none"}}}`,
+		want: "workflow target plugin.credentialMode is not supported",
+	}, {
+		name: "output delivery target",
+		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"prompt":"summarize","outputDelivery":{"target":{"name":"roadmap","operation":"sync","credentialMode":"none"}}}}}`,
+		want: "workflow target agent.outputDelivery.target.credentialMode is not supported",
+	}}
+	for _, tc := range cases {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s request: %v", tc.name, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Fatalf("%s close response: %v", tc.name, closeErr)
+		}
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%s: expected 400, got %d: %s", tc.name, resp.StatusCode, body)
+		}
+		if !strings.Contains(string(body), tc.want) {
+			t.Fatalf("%s: response body = %s, want %q", tc.name, body, tc.want)
+		}
+	}
+	if len(provider.upsertReqs) != 0 {
+		t.Fatalf("upsert requests = %#v, want none", provider.upsertReqs)
 	}
 }
 
@@ -2468,9 +2562,13 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 		UpdatedAt:    &now,
 	}
 	advancedProvider.triggers["trg-ada-advanced"] = &coreworkflow.EventTrigger{
-		ID:           "trg-ada-advanced",
-		Match:        coreworkflow.EventMatch{Type: "analytics.item.synced"},
-		Target:       workflowPluginTarget("analytics", "sync"),
+		ID:    "trg-ada-advanced",
+		Match: coreworkflow.EventMatch{Type: "analytics.item.synced"},
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName:     "analytics",
+			Operation:      "sync",
+			CredentialMode: core.ConnectionModeNone,
+		}},
 		ExecutionRef: "workflow_event_trigger:trg-ada-advanced:ref-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2581,6 +2679,19 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	if !slices.Equal(listedIDs, []string{"trg-ada-advanced", "trg-ada-basic"}) {
 		t.Fatalf("listed triggers = %#v", listed)
 	}
+	var listedAdvanced *workflowEventTriggerResponse
+	for i := range listed {
+		if listed[i].ID == "trg-ada-advanced" {
+			listedAdvanced = &listed[i]
+			break
+		}
+	}
+	if listedAdvanced == nil {
+		t.Fatalf("listed triggers missing advanced trigger: %#v", listed)
+	}
+	if got := requireWorkflowPluginTarget(t, listedAdvanced.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+		t.Fatalf("listed advanced trigger credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
 
 	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/trg-grace-advanced", nil)
 	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2605,6 +2716,64 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	}
 	if _, ok := advancedProvider.triggers["trg-grace-advanced"]; !ok {
 		t.Fatal("expected grace trigger to remain after unauthorized global delete")
+	}
+}
+
+func TestWorkflowEventTriggerCreateRejectsPublicTargetCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/event-triggers/",
+		bytes.NewBufferString(`{"match":{"type":"roadmap.item.updated"},"target":{"plugin":{"name":"roadmap","operation":"sync","credentialMode":"none"}}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if closeErr := resp.Body.Close(); closeErr != nil {
+		t.Fatalf("close response: %v", closeErr)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "workflow target plugin.credentialMode is not supported") {
+		t.Fatalf("response body = %s, want credential mode error", body)
+	}
+	if len(provider.upsertTriggerReqs) != 0 {
+		t.Fatalf("upsert trigger requests = %#v, want none", provider.upsertTriggerReqs)
 	}
 }
 

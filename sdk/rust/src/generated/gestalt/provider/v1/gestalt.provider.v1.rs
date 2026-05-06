@@ -2797,6 +2797,8 @@ pub struct BoundWorkflowPluginTarget {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub credential_mode: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowAgentTarget {

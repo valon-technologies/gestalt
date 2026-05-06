@@ -80,11 +80,12 @@ func workflowPluginTargetToProto(target *coreworkflow.PluginTarget) (*proto.Boun
 		return nil, fmt.Errorf("workflow target input: %w", err)
 	}
 	return &proto.BoundWorkflowPluginTarget{
-		PluginName: target.PluginName,
-		Operation:  target.Operation,
-		Input:      input,
-		Connection: target.Connection,
-		Instance:   target.Instance,
+		PluginName:     target.PluginName,
+		Operation:      target.Operation,
+		Input:          input,
+		Connection:     target.Connection,
+		Instance:       target.Instance,
+		CredentialMode: string(target.CredentialMode),
 	}, nil
 }
 
@@ -93,11 +94,12 @@ func workflowPluginTargetFromProto(target *proto.BoundWorkflowPluginTarget) core
 		return coreworkflow.PluginTarget{}
 	}
 	return coreworkflow.PluginTarget{
-		PluginName: strings.TrimSpace(target.GetPluginName()),
-		Operation:  strings.TrimSpace(target.GetOperation()),
-		Connection: strings.TrimSpace(target.GetConnection()),
-		Instance:   strings.TrimSpace(target.GetInstance()),
-		Input:      mapFromStruct(target.GetInput()),
+		PluginName:     strings.TrimSpace(target.GetPluginName()),
+		Operation:      strings.TrimSpace(target.GetOperation()),
+		Connection:     strings.TrimSpace(target.GetConnection()),
+		Instance:       strings.TrimSpace(target.GetInstance()),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(target.GetCredentialMode()))),
+		Input:          mapFromStruct(target.GetInput()),
 	}
 }
 
@@ -173,7 +175,9 @@ func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery) (*prot
 			Value:      value,
 		})
 	}
-	target, err := workflowPluginTargetToProto(&delivery.Target)
+	deliveryTarget := delivery.Target
+	deliveryTarget.CredentialMode = ""
+	target, err := workflowPluginTargetToProto(&deliveryTarget)
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent output_delivery.target: %w", err)
 	}

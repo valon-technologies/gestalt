@@ -247,6 +247,14 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
 	pluginTarget := target.Plugin
+	credentialMode := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(pluginTarget.CredentialMode))))
+	switch credentialMode {
+	case "":
+	case core.ConnectionModeNone, core.ConnectionModeUser:
+		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
+	default:
+		return nil, fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, credentialMode)
+	}
 	result, err := invoker.Invoke(ctx, principalValue, pluginTarget.PluginName, invokeInstance, pluginTarget.Operation, params)
 	if err != nil {
 		return nil, err

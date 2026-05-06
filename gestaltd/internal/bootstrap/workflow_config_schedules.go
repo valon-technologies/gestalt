@@ -248,11 +248,12 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 		return coreworkflow.Target{}
 	}
 	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: plugin.Name,
-		Operation:  plugin.Operation,
-		Connection: plugin.Connection,
-		Instance:   plugin.Instance,
-		Input:      maps.Clone(plugin.Input),
+		PluginName:     plugin.Name,
+		Operation:      plugin.Operation,
+		Connection:     plugin.Connection,
+		Instance:       plugin.Instance,
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(plugin.CredentialMode)))),
+		Input:          maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
 		Plugin: &pluginTarget,
@@ -521,6 +522,16 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 }
 
 func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget) error {
+	modeOverride := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(target.CredentialMode))))
+	switch modeOverride {
+	case "":
+	case core.ConnectionModeNone:
+		return nil
+	case core.ConnectionModeUser:
+		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(target.PluginName))
+	default:
+		return fmt.Errorf("unsupported credential mode %q for config-managed workflow target %q", modeOverride, strings.TrimSpace(target.PluginName))
+	}
 	mode, err := workflowConfigTargetConnectionMode(cfg, target)
 	if err != nil {
 		return err

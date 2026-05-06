@@ -15,10 +15,11 @@ func TestWorkflowTargetToProtoUsesNestedPluginTarget(t *testing.T) {
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
 		Plugin: &coreworkflow.PluginTarget{
-			PluginName: "demo",
-			Operation:  "refresh",
-			Connection: "workspace",
-			Instance:   "primary",
+			PluginName:     "demo",
+			Operation:      "refresh",
+			Connection:     "workspace",
+			Instance:       "primary",
+			CredentialMode: core.ConnectionModeNone,
 			Input: map[string]any{
 				"customer_id": "cust_123",
 			},
@@ -32,6 +33,9 @@ func TestWorkflowTargetToProtoUsesNestedPluginTarget(t *testing.T) {
 	}
 	if got := target.GetPlugin().GetPluginName(); got != "demo" {
 		t.Fatalf("nested plugin_name = %q, want %q", got, "demo")
+	}
+	if got := target.GetPlugin().GetCredentialMode(); got != string(core.ConnectionModeNone) {
+		t.Fatalf("nested credential_mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 	input := mapFromStruct(target.GetPlugin().GetInput())
 	if got := input["customer_id"]; got != "cust_123" {
@@ -51,11 +55,12 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
 		Kind: &proto.BoundWorkflowTarget_Plugin{
 			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: " demo ",
-				Operation:  " refresh ",
-				Connection: " workspace ",
-				Instance:   " primary ",
-				Input:      input,
+				PluginName:     " demo ",
+				Operation:      " refresh ",
+				Connection:     " workspace ",
+				Instance:       " primary ",
+				CredentialMode: " none ",
+				Input:          input,
 			},
 		},
 	})
@@ -74,6 +79,9 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 	if got := target.Plugin.Instance; got != "primary" {
 		t.Fatalf("instance = %q, want %q", got, "primary")
 	}
+	if got := target.Plugin.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
 	if got := target.Plugin.Input["customer_id"]; got != "cust_123" {
 		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
 	}
@@ -87,9 +95,10 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 		Prompt:       "Sync roadmap",
 		OutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
-				Operation:  "reply",
-				Input:      map[string]any{"format": "plain"},
+				PluginName:     "notification",
+				Operation:      "reply",
+				CredentialMode: core.ConnectionModeUser,
+				Input:          map[string]any{"format": "plain"},
 			},
 			CredentialMode: core.ConnectionModeNone,
 			InputBindings: []coreworkflow.OutputBinding{
@@ -110,6 +119,9 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if target.GetAgent().GetOutputDelivery().GetCredentialMode() != string(core.ConnectionModeNone) {
 		t.Fatalf("output delivery credential mode = %q", target.GetAgent().GetOutputDelivery().GetCredentialMode())
+	}
+	if got := target.GetAgent().GetOutputDelivery().GetTarget().GetCredentialMode(); got != "" {
+		t.Fatalf("output delivery nested target credential mode = %q, want empty", got)
 	}
 	roundTrip := workflowTargetFromProto(target)
 	if roundTrip.Agent == nil || roundTrip.Agent.ProviderName != "managed" {

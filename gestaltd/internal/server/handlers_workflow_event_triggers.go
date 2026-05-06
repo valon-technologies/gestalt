@@ -77,6 +77,10 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
+	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if strings.TrimSpace(req.Match.Type) == "" {
 		writeError(w, http.StatusBadRequest, "workflow trigger match.type is required")
 		return
@@ -121,6 +125,10 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
 		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		return
+	}
+	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if strings.TrimSpace(req.Match.Type) == "" {

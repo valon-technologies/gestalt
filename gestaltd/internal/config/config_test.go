@@ -2756,6 +2756,7 @@ workflows:
         plugin:
           name: roadmap
           operation: nightly_sync
+          credentialMode: none
           input:
             source: yaml
       permissions:
@@ -2803,8 +2804,9 @@ server:
 			Provider: "temporal",
 			Target: &WorkflowTargetConfig{
 				Plugin: &WorkflowPluginTargetConfig{
-					Name:      "roadmap",
-					Operation: "nightly_sync",
+					Name:           "roadmap",
+					Operation:      "nightly_sync",
+					CredentialMode: providermanifestv1.ConnectionModeNone,
 					Input: map[string]any{
 						"source": "yaml",
 					},
@@ -2938,6 +2940,68 @@ server:
   encryptionKey: server-key
 `,
 				want: `workflows.schedules.nightly.permissions[0].operations is required`,
+			},
+			{
+				name: "schedule plugin rejects unsupported credential mode",
+				yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
+          credentialMode: platform
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.plugin.credentialMode "platform" is not supported`,
+			},
+			{
+				name: "agent output delivery rejects nested target credential mode",
+				yaml: `
+plugins:
+  slack:
+    source:
+      path: ./providers/slack/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          prompt: "reply"
+          outputDelivery:
+            target:
+              name: slack
+              operation: chat.postMessage
+              credentialMode: none
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.outputDelivery.target.credentialMode is not supported`,
 			},
 			{
 				name: "event trigger agent missing provider",
