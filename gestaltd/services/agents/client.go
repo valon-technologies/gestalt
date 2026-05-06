@@ -166,7 +166,7 @@ func (r *remoteAgent) UpdateSession(ctx context.Context, req coreagent.UpdateSes
 }
 
 func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	defer cancel()
 	messages, err := agentMessagesToProto(req.Messages)
 	if err != nil {
@@ -212,7 +212,7 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 }
 
 func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	ctx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
 		TurnId:  req.TurnID,

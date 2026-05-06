@@ -25,6 +25,8 @@ const (
 	providerStartTimeout         = 2 * time.Minute
 )
 
+type workflowAgentProviderDeadlineKey struct{}
+
 var providerConfigureTimeout = 30 * time.Second
 
 type RuntimeProviderMetadata struct {
@@ -156,6 +158,30 @@ func ProviderCallContext(parent context.Context) (context.Context, context.Cance
 		parent = context.Background()
 	}
 	return context.WithTimeout(parent, ProviderRPCTimeout)
+}
+
+// WithWorkflowAgentProviderDeadline marks provider RPCs that are part of a
+// workflow-owned agent run. Only workflow agent call helpers should observe it.
+func WithWorkflowAgentProviderDeadline(parent context.Context) context.Context {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithValue(parent, workflowAgentProviderDeadlineKey{}, true)
+}
+
+// ProviderWorkflowAgentCallContext returns a context for workflow-owned agent
+// turn RPCs. It preserves the workflow run deadline only when explicitly marked;
+// otherwise it keeps the normal provider RPC timeout.
+func ProviderWorkflowAgentCallContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if marked, _ := parent.Value(workflowAgentProviderDeadlineKey{}).(bool); marked {
+		if _, ok := parent.Deadline(); ok {
+			return context.WithCancel(parent)
+		}
+	}
+	return ProviderCallContext(parent)
 }
 
 // ProviderSessionCreateContext returns a child context for agent CreateSession RPCs.
