@@ -75,6 +75,8 @@ type agentRuntimeInvokerCall struct {
 	idempotencyKey         string
 	agentSubjectID         string
 	runAsSubjectID         string
+	externalIdentityType   string
+	externalIdentityID     string
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -102,6 +104,8 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		idempotencyKey:         invocation.IdempotencyKeyFromContext(ctx),
 		agentSubjectID:         agentSubjectID,
 		runAsSubjectID:         runAsSubjectID,
+		externalIdentityType:   invocation.ExternalIdentityContextFromContext(ctx).Type,
+		externalIdentityID:     invocation.ExternalIdentityContextFromContext(ctx).ID,
 	})
 	i.mu.Unlock()
 
@@ -2485,9 +2489,12 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 	runtime.SetToolSearcher(manager)
 
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:   "service_account:github-toolshed",
 		SubjectKind: "service_account",
-		AuthSource:  "github_app_webhook",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:{owner}/{repo}",
 	}
 	grant, err := runGrants.Mint(agentgrant.Grant{
 		ProviderName: "simple",
@@ -2503,7 +2510,7 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{Plugin: "slack", Operation: "events.reply"},
-			{Plugin: "github", Operation: "bot.createPullRequest", RunAs: runAs},
+			{Plugin: "github", Operation: "bot.createPullRequest", RunAs: runAs, RunAsExternalIdentity: externalIdentity},
 		},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
@@ -2530,9 +2537,10 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			Plugin:    "github",
-			Operation: "bot.createPullRequest",
-			RunAs:     runAs,
+			Plugin:                "github",
+			Operation:             "bot.createPullRequest",
+			RunAs:                 runAs,
+			RunAsExternalIdentity: externalIdentity,
 		}),
 		RunGrant:  grant,
 		Arguments: map[string]any{"owner": "acme", "repo": "widgets"},
@@ -2552,6 +2560,9 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 	}
 	if calls[1].agentSubjectID != "user:user-123" || calls[1].runAsSubjectID != runAs.SubjectID {
 		t.Fatalf("github audit context = %#v, want original and delegated subjects", calls[1])
+	}
+	if calls[1].externalIdentityType != "github_app_installation" || calls[1].externalIdentityID != "repo:acme/widgets" {
+		t.Fatalf("github external identity context = %#v, want rendered repo identity", calls[1])
 	}
 }
 

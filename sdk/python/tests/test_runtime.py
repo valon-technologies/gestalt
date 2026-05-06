@@ -417,6 +417,8 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_id": request.subject.id,
                 "subject_kind": request.subject.kind,
                 "agent_subject_id": request.agent_subject.id,
+                "external_type": request.external_identity.type,
+                "external_id": request.external_identity.id,
                 "agent_external_type": request.agent_external_identity.type,
                 "agent_external_id": request.agent_external_identity.id,
                 "credential_mode": request.credential.mode,
@@ -538,6 +540,10 @@ class MainEntrypointTests(unittest.TestCase):
                         type="github_identity",
                         id="user:12345678",
                     ),
+                    external_identity=plugin_pb2.ExternalIdentityContext(
+                        type="github_app_installation",
+                        id="repo:acme/widgets",
+                    ),
                     credential=plugin_pb2.CredentialContext(
                         mode="user",
                         subject_id="user:user-123",
@@ -623,6 +629,8 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_id": "user:user-123",
                 "subject_kind": "user",
                 "agent_subject_id": "user:user-456",
+                "external_type": "github_app_installation",
+                "external_id": "repo:acme/widgets",
                 "agent_external_type": "github_identity",
                 "agent_external_id": "user:12345678",
                 "credential_mode": "user",

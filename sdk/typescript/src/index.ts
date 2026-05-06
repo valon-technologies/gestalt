@@ -55,6 +55,7 @@ export {
   type Host,
   type MaybePromise,
   type Credential,
+  type ExternalIdentity,
   type OperationResult,
   type Request,
   type Response,

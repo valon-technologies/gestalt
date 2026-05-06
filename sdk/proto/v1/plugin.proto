@@ -216,6 +216,8 @@ message RequestContext {
   SubjectContext agent_subject = 6;
   // The original agent caller's provider-owned external identity, when known.
   ExternalIdentityContext agent_external_identity = 7;
+  // Provider-owned external identity the invocation is authorized to assume.
+  ExternalIdentityContext external_identity = 8;
 }
 
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional

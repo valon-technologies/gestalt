@@ -400,8 +400,14 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 			Id:   identity.ID,
 		}
 	}
+	if identity := invocation.ExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
+		out.ExternalIdentity = &proto.ExternalIdentityContext{
+			Type: identity.Type,
+			Id:   identity.ID,
+		}
+	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil && out.ExternalIdentity == nil {
 		return nil, nil
 	}
 	return &out, nil

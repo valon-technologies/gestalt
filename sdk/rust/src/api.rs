@@ -20,6 +20,15 @@ pub struct Subject {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Provider-owned identity attached to an incoming provider request.
+pub struct ExternalIdentity {
+    /// Provider identity namespace.
+    pub r#type: String,
+    /// Provider-owned identity id.
+    pub id: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Describes the resolved credential used to authorize an operation.
 pub struct Credential {
     /// Credential mode used by the host.
@@ -57,6 +66,12 @@ pub struct Request {
     pub connection_params: BTreeMap<String, String>,
     /// Subject that initiated the request.
     pub subject: Subject,
+    /// Original agent caller when an agent tool runs as a delegated subject.
+    pub agent_subject: Subject,
+    /// Provider-owned external identity this request is authorized to assume.
+    pub external_identity: ExternalIdentity,
+    /// Original agent caller's provider-owned external identity, when known.
+    pub agent_external_identity: ExternalIdentity,
     /// Credential used to authorize the request.
     pub credential: Credential,
     /// Access decision attached to the request.

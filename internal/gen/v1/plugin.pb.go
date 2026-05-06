@@ -1573,8 +1573,10 @@ type RequestContext struct {
 	AgentSubject *SubjectContext `protobuf:"bytes,6,opt,name=agent_subject,json=agentSubject,proto3" json:"agent_subject,omitempty"`
 	// The original agent caller's provider-owned external identity, when known.
 	AgentExternalIdentity *ExternalIdentityContext `protobuf:"bytes,7,opt,name=agent_external_identity,json=agentExternalIdentity,proto3" json:"agent_external_identity,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Provider-owned external identity the invocation is authorized to assume.
+	ExternalIdentity *ExternalIdentityContext `protobuf:"bytes,8,opt,name=external_identity,json=externalIdentity,proto3" json:"external_identity,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *RequestContext) Reset() {
@@ -1652,6 +1654,13 @@ func (x *RequestContext) GetAgentSubject() *SubjectContext {
 func (x *RequestContext) GetAgentExternalIdentity() *ExternalIdentityContext {
 	if x != nil {
 		return x.AgentExternalIdentity
+	}
+	return nil
+}
+
+func (x *RequestContext) GetExternalIdentity() *ExternalIdentityContext {
+	if x != nil {
+		return x.ExternalIdentity
 	}
 	return nil
 }
@@ -2468,7 +2477,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x06policy\x18\x01 \x01(\tR\x06policy\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\"5\n" +
 	"\vHostContext\x12&\n" +
-	"\x0fpublic_base_url\x18\x01 \x01(\tR\rpublicBaseUrl\"\xee\x03\n" +
+	"\x0fpublic_base_url\x18\x01 \x01(\tR\rpublicBaseUrl\"\xc9\x04\n" +
 	"\x0eRequestContext\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12F\n" +
 	"\n" +
@@ -2478,7 +2487,8 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\bworkflow\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bworkflow\x124\n" +
 	"\x04host\x18\x05 \x01(\v2 .gestalt.provider.v1.HostContextR\x04host\x12H\n" +
 	"\ragent_subject\x18\x06 \x01(\v2#.gestalt.provider.v1.SubjectContextR\fagentSubject\x12d\n" +
-	"\x17agent_external_identity\x18\a \x01(\v2,.gestalt.provider.v1.ExternalIdentityContextR\x15agentExternalIdentity\"\x98\x06\n" +
+	"\x17agent_external_identity\x18\a \x01(\v2,.gestalt.provider.v1.ExternalIdentityContextR\x15agentExternalIdentity\x12Y\n" +
+	"\x11external_identity\x18\b \x01(\v2,.gestalt.provider.v1.ExternalIdentityContextR\x10externalIdentity\"\x98\x06\n" +
 	"\x12HTTPSubjectRequest\x12\x18\n" +
 	"\abinding\x18\x01 \x01(\tR\abinding\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x12\n" +
@@ -2642,48 +2652,49 @@ var file_v1_plugin_proto_depIdxs = []int32{
 	19, // 18: gestalt.provider.v1.RequestContext.host:type_name -> gestalt.provider.v1.HostContext
 	14, // 19: gestalt.provider.v1.RequestContext.agent_subject:type_name -> gestalt.provider.v1.SubjectContext
 	15, // 20: gestalt.provider.v1.RequestContext.agent_external_identity:type_name -> gestalt.provider.v1.ExternalIdentityContext
-	32, // 21: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
-	33, // 22: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
-	39, // 23: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
-	34, // 24: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
-	21, // 25: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
-	20, // 26: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	14, // 27: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
-	39, // 28: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	35, // 29: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
-	20, // 30: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	36, // 31: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	20, // 32: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	4,  // 33: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
-	13, // 34: gestalt.provider.v1.PostConnectRequest.token:type_name -> gestalt.provider.v1.PostConnectCredential
-	37, // 35: gestalt.provider.v1.PostConnectResponse.metadata:type_name -> gestalt.provider.v1.PostConnectResponse.MetadataEntry
-	39, // 36: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
-	5,  // 37: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
-	16, // 38: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	16, // 39: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
-	41, // 40: gestalt.provider.v1.IntegrationProvider.GetMetadata:input_type -> google.protobuf.Empty
-	29, // 41: gestalt.provider.v1.IntegrationProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
-	24, // 42: gestalt.provider.v1.IntegrationProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
-	22, // 43: gestalt.provider.v1.IntegrationProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
-	25, // 44: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
-	27, // 45: gestalt.provider.v1.IntegrationProvider.PostConnect:input_type -> gestalt.provider.v1.PostConnectRequest
-	9,  // 46: gestalt.provider.v1.PluginInvoker.ExchangeInvocationToken:input_type -> gestalt.provider.v1.ExchangeInvocationTokenRequest
-	11, // 47: gestalt.provider.v1.PluginInvoker.Invoke:input_type -> gestalt.provider.v1.PluginInvokeRequest
-	12, // 48: gestalt.provider.v1.PluginInvoker.InvokeGraphQL:input_type -> gestalt.provider.v1.PluginInvokeGraphQLRequest
-	6,  // 49: gestalt.provider.v1.IntegrationProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
-	30, // 50: gestalt.provider.v1.IntegrationProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
-	7,  // 51: gestalt.provider.v1.IntegrationProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
-	23, // 52: gestalt.provider.v1.IntegrationProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
-	26, // 53: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
-	28, // 54: gestalt.provider.v1.IntegrationProvider.PostConnect:output_type -> gestalt.provider.v1.PostConnectResponse
-	10, // 55: gestalt.provider.v1.PluginInvoker.ExchangeInvocationToken:output_type -> gestalt.provider.v1.ExchangeInvocationTokenResponse
-	7,  // 56: gestalt.provider.v1.PluginInvoker.Invoke:output_type -> gestalt.provider.v1.OperationResult
-	7,  // 57: gestalt.provider.v1.PluginInvoker.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
-	49, // [49:58] is the sub-list for method output_type
-	40, // [40:49] is the sub-list for method input_type
-	40, // [40:40] is the sub-list for extension type_name
-	40, // [40:40] is the sub-list for extension extendee
-	0,  // [0:40] is the sub-list for field type_name
+	15, // 21: gestalt.provider.v1.RequestContext.external_identity:type_name -> gestalt.provider.v1.ExternalIdentityContext
+	32, // 22: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
+	33, // 23: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
+	39, // 24: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
+	34, // 25: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
+	21, // 26: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
+	20, // 27: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	14, // 28: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
+	39, // 29: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	35, // 30: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	20, // 31: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	36, // 32: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	20, // 33: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	4,  // 34: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
+	13, // 35: gestalt.provider.v1.PostConnectRequest.token:type_name -> gestalt.provider.v1.PostConnectCredential
+	37, // 36: gestalt.provider.v1.PostConnectResponse.metadata:type_name -> gestalt.provider.v1.PostConnectResponse.MetadataEntry
+	39, // 37: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	5,  // 38: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
+	16, // 39: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	16, // 40: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
+	41, // 41: gestalt.provider.v1.IntegrationProvider.GetMetadata:input_type -> google.protobuf.Empty
+	29, // 42: gestalt.provider.v1.IntegrationProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
+	24, // 43: gestalt.provider.v1.IntegrationProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
+	22, // 44: gestalt.provider.v1.IntegrationProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
+	25, // 45: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
+	27, // 46: gestalt.provider.v1.IntegrationProvider.PostConnect:input_type -> gestalt.provider.v1.PostConnectRequest
+	9,  // 47: gestalt.provider.v1.PluginInvoker.ExchangeInvocationToken:input_type -> gestalt.provider.v1.ExchangeInvocationTokenRequest
+	11, // 48: gestalt.provider.v1.PluginInvoker.Invoke:input_type -> gestalt.provider.v1.PluginInvokeRequest
+	12, // 49: gestalt.provider.v1.PluginInvoker.InvokeGraphQL:input_type -> gestalt.provider.v1.PluginInvokeGraphQLRequest
+	6,  // 50: gestalt.provider.v1.IntegrationProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
+	30, // 51: gestalt.provider.v1.IntegrationProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
+	7,  // 52: gestalt.provider.v1.IntegrationProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
+	23, // 53: gestalt.provider.v1.IntegrationProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
+	26, // 54: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
+	28, // 55: gestalt.provider.v1.IntegrationProvider.PostConnect:output_type -> gestalt.provider.v1.PostConnectResponse
+	10, // 56: gestalt.provider.v1.PluginInvoker.ExchangeInvocationToken:output_type -> gestalt.provider.v1.ExchangeInvocationTokenResponse
+	7,  // 57: gestalt.provider.v1.PluginInvoker.Invoke:output_type -> gestalt.provider.v1.OperationResult
+	7,  // 58: gestalt.provider.v1.PluginInvoker.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
+	50, // [50:59] is the sub-list for method output_type
+	41, // [41:50] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_v1_plugin_proto_init() }

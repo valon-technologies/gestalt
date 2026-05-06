@@ -1759,12 +1759,13 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	target := coreagent.ToolTarget{
-		Plugin:         pluginName,
-		Operation:      opMeta.ID,
-		Connection:     connection,
-		Instance:       sessionInstance,
-		CredentialMode: credentialMode,
-		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
+		Plugin:                pluginName,
+		Operation:             opMeta.ID,
+		Connection:            connection,
+		Instance:              sessionInstance,
+		CredentialMode:        credentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -1801,36 +1802,39 @@ type agentToolSearchCatalog struct {
 }
 
 type agentToolTargetKey struct {
-	system         string
-	plugin         string
-	operation      string
-	connection     string
-	instance       string
-	credentialMode core.ConnectionMode
-	runAs          core.RunAsSubject
+	system                string
+	plugin                string
+	operation             string
+	connection            string
+	instance              string
+	credentialMode        core.ConnectionMode
+	runAs                 core.RunAsSubject
+	runAsExternalIdentity core.ExternalIdentityRef
 }
 
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 	return agentToolTargetKey{
-		system:         strings.TrimSpace(ref.System),
-		plugin:         strings.TrimSpace(ref.Plugin),
-		operation:      strings.TrimSpace(ref.Operation),
-		connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
-		instance:       strings.TrimSpace(ref.Instance),
-		credentialMode: ref.CredentialMode,
-		runAs:          agentToolRunAsKey(ref.RunAs),
+		system:                strings.TrimSpace(ref.System),
+		plugin:                strings.TrimSpace(ref.Plugin),
+		operation:             strings.TrimSpace(ref.Operation),
+		connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		instance:              strings.TrimSpace(ref.Instance),
+		credentialMode:        ref.CredentialMode,
+		runAs:                 agentToolRunAsKey(ref.RunAs),
+		runAsExternalIdentity: agentToolExternalIdentityKey(ref.RunAsExternalIdentity),
 	}
 }
 
 func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
 	return agentToolTargetKey{
-		system:         strings.TrimSpace(target.System),
-		plugin:         strings.TrimSpace(target.Plugin),
-		operation:      strings.TrimSpace(target.Operation),
-		connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
-		instance:       strings.TrimSpace(target.Instance),
-		credentialMode: target.CredentialMode,
-		runAs:          agentToolRunAsKey(target.RunAs),
+		system:                strings.TrimSpace(target.System),
+		plugin:                strings.TrimSpace(target.Plugin),
+		operation:             strings.TrimSpace(target.Operation),
+		connection:            core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		instance:              strings.TrimSpace(target.Instance),
+		credentialMode:        target.CredentialMode,
+		runAs:                 agentToolRunAsKey(target.RunAs),
+		runAsExternalIdentity: agentToolExternalIdentityKey(target.RunAsExternalIdentity),
 	}
 }
 
@@ -1840,8 +1844,9 @@ func (k agentToolTargetKey) String() string {
 	}
 	parts := []string{k.plugin, k.operation}
 	runAsKey := agentToolRunAsKeyString(k.runAs)
-	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" {
-		parts = append(parts, k.connection, k.instance, string(k.credentialMode), runAsKey)
+	externalIdentityKey := agentToolExternalIdentityKeyString(k.runAsExternalIdentity)
+	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" || externalIdentityKey != "" {
+		parts = append(parts, k.connection, k.instance, string(k.credentialMode), runAsKey, externalIdentityKey)
 	}
 	return strings.Join(parts, "/")
 }
@@ -2589,12 +2594,13 @@ func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
 func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandidate) (coreagent.ListedTool, error) {
 	ref := candidate.ref
 	target := coreagent.ToolTarget{
-		Plugin:         strings.TrimSpace(ref.Plugin),
-		Operation:      strings.TrimSpace(ref.Operation),
-		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
-		Instance:       strings.TrimSpace(ref.Instance),
-		CredentialMode: ref.CredentialMode,
-		RunAs:          core.NormalizeRunAsSubject(ref.RunAs),
+		Plugin:                strings.TrimSpace(ref.Plugin),
+		Operation:             strings.TrimSpace(ref.Operation),
+		Connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
+		Instance:              strings.TrimSpace(ref.Instance),
+		CredentialMode:        ref.CredentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(ref.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity),
 	}
 	toolID, err := m.mintAgentToolID(target)
 	if err != nil {
@@ -2614,6 +2620,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	ref.Connection = target.Connection
 	ref.Instance = target.Instance
 	ref.CredentialMode = target.CredentialMode
+	ref.RunAsExternalIdentity = target.RunAsExternalIdentity
 	return coreagent.ListedTool{
 		ToolID:           toolID,
 		MCPName:          agentToolMCPName(target),
@@ -2683,13 +2690,14 @@ func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.C
 
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	return coreagent.ToolRef{
-		System:         target.System,
-		Plugin:         target.Plugin,
-		Operation:      target.Operation,
-		Connection:     target.Connection,
-		Instance:       target.Instance,
-		CredentialMode: target.CredentialMode,
-		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
+		System:                target.System,
+		Plugin:                target.Plugin,
+		Operation:             target.Operation,
+		Connection:            target.Connection,
+		Instance:              target.Instance,
+		CredentialMode:        target.CredentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(target.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity),
 	}
 }
 
@@ -3184,6 +3192,7 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		ref.Title = strings.TrimSpace(ref.Title)
 		ref.Description = strings.TrimSpace(ref.Description)
 		ref.RunAs = core.NormalizeRunAsSubject(ref.RunAs)
+		ref.RunAsExternalIdentity = core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity)
 		credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
 		if err != nil {
 			return nil, err
@@ -3199,8 +3208,8 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			if ref.Operation == "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].operation is required for system tool refs", invocation.ErrOperationNotFound, idx)
 			}
-			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.Title != "" || ref.Description != "" {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, runAs, title, or description", invocation.ErrInvalidInvocation, idx)
+			if ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil || ref.Title != "" || ref.Description != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] system refs cannot include connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrInvalidInvocation, idx)
 			}
 			out = append(out, ref)
 			continue
@@ -3209,9 +3218,12 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
 		}
 		if ref.Plugin == agentToolSearchAllPlugin {
-			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil {
-				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, title, or description", invocation.ErrProviderNotFound, idx)
+			if ref.Operation != "" || ref.Connection != "" || ref.Instance != "" || ref.Title != "" || ref.Description != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d] global search ref cannot include operation, connection, instance, credential mode, runAs, runAs external identity, title, or description", invocation.ErrProviderNotFound, idx)
 			}
+		}
+		if ref.RunAsExternalIdentity != nil && ref.RunAs == nil {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires runAs.subject", invocation.ErrInvalidInvocation, idx)
 		}
 		out = append(out, ref)
 	}
@@ -3225,6 +3237,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 	}
 	modes := make(map[string]core.ConnectionMode)
 	runAsSubjects := make(map[string]*core.RunAsSubject)
+	runAsExternalIdentities := make(map[string]*core.ExternalIdentityRef)
 	if callerPluginName != "" {
 		for _, invoke := range m.pluginInvokes[callerPluginName] {
 			if strings.TrimSpace(invoke.Surface) != "" {
@@ -3243,7 +3256,11 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 				modes[agentToolInvokeKey(pluginName, operation)] = mode
 			}
 			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
-				runAsSubjects[agentToolInvokeKey(pluginName, operation)] = runAs
+				key := agentToolInvokeKey(pluginName, operation)
+				runAsSubjects[key] = runAs
+				if identity := core.NormalizeExternalIdentityRef(invoke.RunAsExternalIdentity); identity != nil {
+					runAsExternalIdentities[key] = identity
+				}
 			}
 		}
 	}
@@ -3256,6 +3273,9 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if out[i].RunAs != nil && callerPluginName == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
 		}
+		if out[i].RunAsExternalIdentity != nil && callerPluginName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		}
 		if operation == "" {
 			if out[i].CredentialMode != "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires an exact operation", invocation.ErrAuthorizationDenied, i)
@@ -3263,17 +3283,24 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 			if out[i].RunAs != nil {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires an exact operation", invocation.ErrAuthorizationDenied, i)
 			}
+			if out[i].RunAsExternalIdentity != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires an exact operation", invocation.ErrAuthorizationDenied, i)
+			}
 			continue
 		}
 		key := agentToolInvokeKey(out[i].Plugin, operation)
 		mode, hasMode := modes[key]
 		runAs, hasRunAs := runAsSubjects[key]
-		if !hasMode && !hasRunAs {
+		externalIdentity, hasExternalIdentity := runAsExternalIdentities[key]
+		if !hasMode && !hasRunAs && !hasExternalIdentity {
 			if out[i].CredentialMode != "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
 			}
 			if out[i].RunAs != nil {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+			}
+			if out[i].RunAsExternalIdentity != nil {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
 			}
 			continue
 		}
@@ -3289,11 +3316,20 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if !hasRunAs && out[i].RunAs != nil {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
 		}
+		if hasExternalIdentity && out[i].RunAsExternalIdentity != nil && !core.ExternalIdentityRefsEqual(out[i].RunAsExternalIdentity, externalIdentity) {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+		}
+		if !hasExternalIdentity && out[i].RunAsExternalIdentity != nil {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs.externalIdentity requires a declared invoke delegation", invocation.ErrAuthorizationDenied, i)
+		}
 		if hasMode {
 			out[i].CredentialMode = mode
 		}
 		if hasRunAs {
 			out[i].RunAs = runAs
+		}
+		if hasExternalIdentity {
+			out[i].RunAsExternalIdentity = externalIdentity
 		}
 	}
 	return out, nil
@@ -3325,6 +3361,24 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 		subject.DisplayName,
 		subject.AuthSource,
 	}, "\x00")
+}
+
+func agentToolExternalIdentityKey(identity *core.ExternalIdentityRef) core.ExternalIdentityRef {
+	if identity == nil {
+		return core.ExternalIdentityRef{}
+	}
+	normalized := core.NormalizeExternalIdentityRef(identity)
+	if normalized == nil {
+		return core.ExternalIdentityRef{}
+	}
+	return *normalized
+}
+
+func agentToolExternalIdentityKeyString(identity core.ExternalIdentityRef) string {
+	if identity == (core.ExternalIdentityRef{}) {
+		return ""
+	}
+	return strings.Join([]string{identity.Type, identity.ID}, "\x00")
 }
 
 func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Provider, source coreagent.ToolSourceMode) (bool, error) {

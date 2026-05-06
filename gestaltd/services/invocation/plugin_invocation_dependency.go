@@ -5,11 +5,12 @@ import "github.com/valon-technologies/gestalt/server/core"
 // PluginInvocationDependency describes one plugin-to-plugin invocation grant.
 // It is the service-level form of the config "invokes" entry.
 type PluginInvocationDependency struct {
-	Plugin         string
-	Operation      string
-	Surface        string
-	CredentialMode core.ConnectionMode
-	RunAs          *core.RunAsSubject
+	Plugin                string
+	Operation             string
+	Surface               string
+	CredentialMode        core.ConnectionMode
+	RunAs                 *core.RunAsSubject
+	RunAsExternalIdentity *core.ExternalIdentityRef
 }
 
 func ClonePluginInvocationDependencies(src []PluginInvocationDependency) []PluginInvocationDependency {
@@ -22,6 +23,10 @@ func ClonePluginInvocationDependencies(src []PluginInvocationDependency) []Plugi
 		if src[i].RunAs != nil {
 			runAs := *src[i].RunAs
 			out[i].RunAs = &runAs
+		}
+		if src[i].RunAsExternalIdentity != nil {
+			identity := *src[i].RunAsExternalIdentity
+			out[i].RunAsExternalIdentity = &identity
 		}
 	}
 	return out

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -49,6 +51,54 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	}
 	if got := CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeNone {
 		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+}
+
+func TestBrokerInvokeRejectsUnauthorizedExternalIdentity(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	svc := testutil.NewStubServices(t)
+	authorizer, err := authorization.New(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
+			"github_policy": {Default: "allow"},
+		},
+		ProviderPolicies: map[string]string{
+			"github": "github_policy",
+		},
+	})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID: "bot.createPullRequest",
+			}}},
+			ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+				called = true
+				return &core.OperationResult{Status: http.StatusOK}, nil
+			},
+		}),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithAuthorizer(authorizer),
+	)
+	ctx := WithExternalIdentityContext(context.Background(), ExternalIdentityContext{
+		Type: "github_app_installation",
+		ID:   "repo:acme/widgets",
+	})
+	_, err = broker.Invoke(ctx, &principal.Principal{
+		SubjectID: "service_account:github-toolshed",
+		Kind:      principal.Kind("service_account"),
+	}, "github", "", "bot.createPullRequest", map[string]any{})
+	if !errors.Is(err, ErrAuthorizationDenied) {
+		t.Fatalf("Invoke error = %v, want ErrAuthorizationDenied", err)
+	}
+	if called {
+		t.Fatal("provider Execute was called for unauthorized external identity")
 	}
 }
 

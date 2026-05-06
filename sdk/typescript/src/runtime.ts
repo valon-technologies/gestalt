@@ -822,6 +822,9 @@ function providerRequest(
   idempotencyKey = "",
 ): Request {
   const subject = requestContext?.subject;
+  const agentSubject = requestContext?.agentSubject;
+  const externalIdentity = requestContext?.externalIdentity;
+  const agentExternalIdentity = requestContext?.agentExternalIdentity;
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
@@ -835,6 +838,20 @@ function providerRequest(
       kind: subject?.kind ?? "",
       displayName: subject?.displayName ?? "",
       authSource: subject?.authSource ?? "",
+    },
+    agentSubject: {
+      id: agentSubject?.id ?? "",
+      kind: agentSubject?.kind ?? "",
+      displayName: agentSubject?.displayName ?? "",
+      authSource: agentSubject?.authSource ?? "",
+    },
+    externalIdentity: {
+      type: externalIdentity?.type ?? "",
+      id: externalIdentity?.id ?? "",
+    },
+    agentExternalIdentity: {
+      type: agentExternalIdentity?.type ?? "",
+      id: agentExternalIdentity?.id ?? "",
     },
     credential: {
       mode: credential?.mode ?? "",

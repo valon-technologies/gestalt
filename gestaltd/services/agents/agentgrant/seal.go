@@ -33,14 +33,15 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		return "", fmt.Errorf("agent run grants are not available")
 	}
 	target = coreagent.ToolTarget{
-		System:         strings.TrimSpace(target.System),
-		Plugin:         strings.TrimSpace(target.Plugin),
-		Operation:      strings.TrimSpace(target.Operation),
-		Connection:     strings.TrimSpace(target.Connection),
-		Instance:       strings.TrimSpace(target.Instance),
-		CredentialMode: core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
-		Unavailable:    normalizeUnavailableToolTarget(target.Unavailable),
-		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
+		System:                strings.TrimSpace(target.System),
+		Plugin:                strings.TrimSpace(target.Plugin),
+		Operation:             strings.TrimSpace(target.Operation),
+		Connection:            strings.TrimSpace(target.Connection),
+		Instance:              strings.TrimSpace(target.Instance),
+		CredentialMode:        core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
+		Unavailable:           normalizeUnavailableToolTarget(target.Unavailable),
+		RunAs:                 core.NormalizeRunAsSubject(target.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity),
 	}
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
@@ -48,6 +49,9 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		}
 	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
 		return "", fmt.Errorf("agent tool target is incomplete")
+	}
+	if target.RunAsExternalIdentity != nil && target.RunAs == nil {
+		return "", fmt.Errorf("agent tool target runAs external identity requires runAs subject")
 	}
 	sealed, err := m.sealValue(sealPurposeToolID, toolBinding{Target: target})
 	if err != nil {
@@ -77,11 +81,15 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.CredentialMode = core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode)))
 	target.Unavailable = normalizeUnavailableToolTarget(target.Unavailable)
 	target.RunAs = core.NormalizeRunAsSubject(target.RunAs)
+	target.RunAsExternalIdentity = core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity)
 	if target.Unavailable != nil {
 		if target.Plugin == "" || target.System != "" || target.Operation != "" {
 			return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 		}
 	} else if target.Operation == "" || (target.Plugin == "" && target.System == "") || (target.Plugin != "" && target.System != "") {
+		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
+	}
+	if target.RunAsExternalIdentity != nil && target.RunAs == nil {
 		return coreagent.ToolTarget{}, fmt.Errorf("agent tool id is invalid")
 	}
 	return target, nil

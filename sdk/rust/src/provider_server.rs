@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Access, Credential, Request, Response, Subject};
+use crate::api::{Access, Credential, ExternalIdentity, Request, Response, Subject};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
@@ -121,6 +121,15 @@ where
                     token: request.token,
                     connection_params: request.connection_params.into_iter().collect(),
                     subject: request_subject(request.context.as_ref()),
+                    agent_subject: request_subject_field(request.context.as_ref(), "agent_subject"),
+                    external_identity: request_external_identity_field(
+                        request.context.as_ref(),
+                        "external_identity",
+                    ),
+                    agent_external_identity: request_external_identity_field(
+                        request.context.as_ref(),
+                        "agent_external_identity",
+                    ),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
                     host: request_host(request.context.as_ref()),
@@ -152,6 +161,15 @@ where
             token: request.token,
             connection_params: request.connection_params.into_iter().collect(),
             subject: request_subject(request.context.as_ref()),
+            agent_subject: request_subject_field(request.context.as_ref(), "agent_subject"),
+            external_identity: request_external_identity_field(
+                request.context.as_ref(),
+                "external_identity",
+            ),
+            agent_external_identity: request_external_identity_field(
+                request.context.as_ref(),
+                "agent_external_identity",
+            ),
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
             host: request_host(request.context.as_ref()),
@@ -186,10 +204,21 @@ where
 }
 
 fn request_subject(context: Option<&crate::generated::v1::RequestContext>) -> Subject {
+    request_subject_field(context, "subject")
+}
+
+fn request_subject_field(
+    context: Option<&crate::generated::v1::RequestContext>,
+    field_name: &str,
+) -> Subject {
     let Some(context) = context else {
         return Subject::default();
     };
-    let Some(subject) = context.subject.as_ref() else {
+    let subject = match field_name {
+        "agent_subject" => context.agent_subject.as_ref(),
+        _ => context.subject.as_ref(),
+    };
+    let Some(subject) = subject else {
         return Subject::default();
     };
     Subject {
@@ -197,6 +226,26 @@ fn request_subject(context: Option<&crate::generated::v1::RequestContext>) -> Su
         kind: subject.kind.clone(),
         display_name: subject.display_name.clone(),
         auth_source: subject.auth_source.clone(),
+    }
+}
+
+fn request_external_identity_field(
+    context: Option<&crate::generated::v1::RequestContext>,
+    field_name: &str,
+) -> ExternalIdentity {
+    let Some(context) = context else {
+        return ExternalIdentity::default();
+    };
+    let identity = match field_name {
+        "agent_external_identity" => context.agent_external_identity.as_ref(),
+        _ => context.external_identity.as_ref(),
+    };
+    let Some(identity) = identity else {
+        return ExternalIdentity::default();
+    };
+    ExternalIdentity {
+        r#type: identity.r#type.clone(),
+        id: identity.id.clone(),
     }
 }
 

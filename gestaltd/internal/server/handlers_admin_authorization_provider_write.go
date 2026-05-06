@@ -99,6 +99,66 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 	return nil
 }
 
+func (s *Server) upsertManagedSubjectExternalIdentity(ctx context.Context, subjectID string, ref externalIdentityRef) error {
+	if s.authorizationProvider == nil {
+		return errAdminAuthorizationUnavailable
+	}
+	// Managed subject assumptions are Zanzibar authorization tuples, not
+	// credential ownership links. Do not route these through the credential sync
+	// uniqueness guard.
+	rel := managedSubjectExternalIdentityRelationship(subjectID, ref)
+	if rel == nil {
+		return fmt.Errorf("external identity relationship is required")
+	}
+	modelID, err := s.managedAuthorizationModelID(ctx)
+	if err != nil {
+		return err
+	}
+	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
+		Writes:  []*core.Relationship{rel},
+		ModelId: modelID,
+	})
+}
+
+func (s *Server) deleteManagedSubjectExternalIdentityRelationship(ctx context.Context, subjectID string, ref externalIdentityRef) (bool, error) {
+	if s.authorizationProvider == nil {
+		return false, errAdminAuthorizationUnavailable
+	}
+	rel := managedSubjectExternalIdentityRelationship(subjectID, ref)
+	if rel == nil {
+		return false, fmt.Errorf("external identity relationship is required")
+	}
+	existing, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
+		PageSize: adminAuthorizationProviderReadPageSize,
+		Subject:  rel.GetSubject(),
+		Resource: rel.GetResource(),
+	})
+	if err != nil {
+		return false, err
+	}
+	found := false
+	for _, candidate := range existing {
+		if providerRelationshipKey(candidate) == providerRelationshipKey(rel) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false, nil
+	}
+	modelID, err := s.managedAuthorizationModelID(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
+		Deletes: relationshipKeys([]*core.Relationship{rel}),
+		ModelId: modelID,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, subjectID string, role string) ([]*core.Relationship, func(context.Context), error) {
 	modelID, err := s.managedAuthorizationModelID(ctx)
 	if err != nil {
@@ -245,6 +305,26 @@ func providerDynamicMembershipRelationships(resource *core.ResourceRef, subjectI
 		Relation: role,
 		Resource: cloneResourceRef(resource),
 	}}
+}
+
+func managedSubjectExternalIdentityRelationship(subjectID string, ref externalIdentityRef) *core.Relationship {
+	subjectID = strings.TrimSpace(subjectID)
+	ref = normalizeExternalIdentityRef(ref)
+	resourceID := externalIdentityResourceID(ref)
+	if subjectID == "" || resourceID == "" {
+		return nil
+	}
+	return &core.Relationship{
+		Subject: &core.SubjectRef{
+			Type: authorization.ProviderSubjectTypeSubject,
+			Id:   subjectID,
+		},
+		Relation: authorization.ProviderExternalIdentityRelationAssume,
+		Resource: &core.ResourceRef{
+			Type: authorization.ProviderResourceTypeExternalIdentity,
+			Id:   resourceID,
+		},
+	}
 }
 
 func relationshipKeys(rels []*core.Relationship) []*core.RelationshipKey {

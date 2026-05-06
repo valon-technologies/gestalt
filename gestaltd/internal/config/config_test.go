@@ -5612,8 +5612,12 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &PluginInvocationRunAsConfig{
 						Subject: &PluginInvocationRunAsSubjectConfig{
-							ID:          " service_account:github_app_installation:99:repo:acme/widgets ",
+							ID:          " service_account:github-toolshed ",
 							DisplayName: " Toolshed app ",
+						},
+						ExternalIdentity: &PluginInvocationExternalIdentityConfig{
+							Type: " github_app_installation ",
+							ID:   " repo:{owner}/{repo} ",
 						},
 					},
 				}},
@@ -5628,11 +5632,15 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
 	}
-	if subject.SubjectID != "service_account:github_app_installation:99:repo:acme/widgets" {
+	if subject.SubjectID != "service_account:github-toolshed" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
 	}
 	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Toolshed app" {
 		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
+	}
+	identity := cfg.Plugins["slack"].Invokes[0].RunAsExternalIdentity()
+	if identity == nil || identity.Type != "github_app_installation" || identity.ID != "repo:{owner}/{repo}" {
+		t.Fatalf("RunAsExternalIdentity() = %#v, want normalized GitHub app repo identity", identity)
 	}
 }
 

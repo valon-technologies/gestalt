@@ -2230,17 +2230,21 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 		},
 	}
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github_app_installation:99:repo:acme/widgets",
+		SubjectID:   "service_account:github-toolshed",
 		SubjectKind: "service_account",
-		AuthSource:  "github_app_webhook",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:{owner}/{repo}",
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
 		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
 			"slack": {{
-				Plugin:    "github",
-				Operation: "bot.createPullRequest",
-				RunAs:     runAs,
+				Plugin:                "github",
+				Operation:             "bot.createPullRequest",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
 			}},
 		},
 	})
@@ -2262,6 +2266,9 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	}
 	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
 		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
+	}
+	if !core.ExternalIdentityRefsEqual(tools[0].Target.RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("tool runAs external identity = %#v, want %#v", tools[0].Target.RunAsExternalIdentity, externalIdentity)
 	}
 }
 
@@ -2387,6 +2394,10 @@ func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
 			DisplayName:         "Toolshed app",
 			AuthSource:          "github_app_webhook",
 		},
+		RunAsExternalIdentity: &core.ExternalIdentityRef{
+			Type: "github_app_installation",
+			ID:   "repo:acme/widgets",
+		},
 	}
 	same := base
 	same.RunAs = &core.RunAsSubject{
@@ -2396,6 +2407,10 @@ func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
 		DisplayName:         " Toolshed app ",
 		AuthSource:          " github_app_webhook ",
 	}
+	same.RunAsExternalIdentity = &core.ExternalIdentityRef{
+		Type: " github_app_installation ",
+		ID:   " repo:acme/widgets ",
+	}
 	differentMetadata := base
 	differentMetadata.RunAs = &core.RunAsSubject{
 		SubjectID:           base.RunAs.SubjectID,
@@ -2404,11 +2419,19 @@ func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
 		DisplayName:         "Another display name",
 		AuthSource:          base.RunAs.AuthSource,
 	}
+	differentExternalIdentity := base
+	differentExternalIdentity.RunAsExternalIdentity = &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:acme/other",
+	}
 
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
-		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects")
+		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects and external identities")
 	}
 	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentMetadata) {
 		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs metadata")
+	}
+	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentExternalIdentity) {
+		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs external identity")
 	}
 }

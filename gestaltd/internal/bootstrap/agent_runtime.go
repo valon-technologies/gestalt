@@ -321,13 +321,14 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		return nil, fmt.Errorf("%w: agent tool resolver is not configured", invocation.ErrInternal)
 	}
 	resolvedTool, err := searcher.ResolveTool(ctx, principalValue, coreagent.ToolRef{
-		System:         toolTarget.System,
-		Plugin:         toolTarget.Plugin,
-		Operation:      toolTarget.Operation,
-		Connection:     toolTarget.Connection,
-		Instance:       toolTarget.Instance,
-		CredentialMode: toolTarget.CredentialMode,
-		RunAs:          core.NormalizeRunAsSubject(toolTarget.RunAs),
+		System:                toolTarget.System,
+		Plugin:                toolTarget.Plugin,
+		Operation:             toolTarget.Operation,
+		Connection:            toolTarget.Connection,
+		Instance:              toolTarget.Instance,
+		CredentialMode:        toolTarget.CredentialMode,
+		RunAs:                 core.NormalizeRunAsSubject(toolTarget.RunAs),
+		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(toolTarget.RunAsExternalIdentity),
 	})
 	if err != nil {
 		return nil, err
@@ -371,6 +372,14 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
 	}
 	params := maps.Clone(req.Arguments)
+	if identity, err := renderAgentToolExternalIdentity(resolvedTool.Target.RunAsExternalIdentity, params); err != nil {
+		return nil, err
+	} else if identity != nil {
+		ctx = invocation.WithExternalIdentityContext(ctx, invocation.ExternalIdentityContext{
+			Type: identity.Type,
+			ID:   identity.ID,
+		})
+	}
 	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
 		return nil, err
@@ -639,6 +648,76 @@ func agentRunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *p
 	return principal.Canonicalize(value)
 }
 
+func renderAgentToolExternalIdentity(identity *core.ExternalIdentityRef, args map[string]any) (*core.ExternalIdentityRef, error) {
+	identity = core.NormalizeExternalIdentityRef(identity)
+	if identity == nil {
+		return nil, nil
+	}
+	renderedID, err := renderAgentToolExternalIdentityTemplate(identity.ID, args)
+	if err != nil {
+		return nil, err
+	}
+	rendered := core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
+		Type: identity.Type,
+		ID:   renderedID,
+	})
+	if rendered == nil {
+		return nil, fmt.Errorf("%w: runAs external identity is incomplete", invocation.ErrInvalidInvocation)
+	}
+	return rendered, nil
+}
+
+func renderAgentToolExternalIdentityTemplate(tmpl string, args map[string]any) (string, error) {
+	if !strings.Contains(tmpl, "{") {
+		return strings.TrimSpace(tmpl), nil
+	}
+	var out strings.Builder
+	for i := 0; i < len(tmpl); {
+		open := strings.IndexByte(tmpl[i:], '{')
+		if open < 0 {
+			out.WriteString(tmpl[i:])
+			break
+		}
+		open += i
+		out.WriteString(tmpl[i:open])
+		close := strings.IndexByte(tmpl[open+1:], '}')
+		if close < 0 {
+			return "", fmt.Errorf("%w: runAs external identity template has an unterminated placeholder", invocation.ErrInvalidInvocation)
+		}
+		close += open + 1
+		name := strings.TrimSpace(tmpl[open+1 : close])
+		if name == "" {
+			return "", fmt.Errorf("%w: runAs external identity template has an empty placeholder", invocation.ErrInvalidInvocation)
+		}
+		value, ok := args[name]
+		if !ok || value == nil {
+			return "", fmt.Errorf("%w: runAs external identity template argument %q is required", invocation.ErrInvalidInvocation, name)
+		}
+		rendered, ok := agentToolExternalIdentityTemplateValue(value)
+		if !ok || strings.TrimSpace(rendered) == "" {
+			return "", fmt.Errorf("%w: runAs external identity template argument %q must be a scalar value", invocation.ErrInvalidInvocation, name)
+		}
+		out.WriteString(rendered)
+		i = close + 1
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+func agentToolExternalIdentityTemplateValue(value any) (string, bool) {
+	switch v := value.(type) {
+	case string:
+		return v, true
+	case fmt.Stringer:
+		return v.String(), true
+	case bool:
+		return fmt.Sprint(v), true
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return fmt.Sprint(v), true
+	default:
+		return "", false
+	}
+}
+
 func agentAuditSubjectFromPrincipal(p *principal.Principal) *core.RunAsSubject {
 	p = principal.Canonicalized(p)
 	if p == nil {
@@ -693,6 +772,9 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
 		return fmt.Errorf("%w: agent tool %q runAs delegation was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
 	}
+	if target.RunAsExternalIdentity != nil && !agentToolExternalIdentityExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
+		return fmt.Errorf("%w: agent tool %q runAs external identity was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	}
 	return nil
 }
 
@@ -716,6 +798,9 @@ func validateAgentRunGrantForToolTarget(grant agentgrant.Grant, target coreagent
 	}
 	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
 		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	}
+	if target.RunAsExternalIdentity != nil && !agentToolExternalIdentityExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
+		return fmt.Errorf("%w: agent tool %q runAs external identity was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	return nil
 }
@@ -860,6 +945,9 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 		if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, refs, nil) {
 			return fmt.Errorf("%w: listed agent tool %q runAs delegation was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
+		if target.RunAsExternalIdentity != nil && !agentToolExternalIdentityExplicitlyGranted(target, refs, nil) {
+			return fmt.Errorf("%w: listed agent tool %q runAs external identity was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		}
 	}
 	return nil
 }
@@ -913,6 +1001,9 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 			continue
 		}
 		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+			continue
+		}
+		if ref.RunAsExternalIdentity != nil && !core.ExternalIdentityRefsEqual(ref.RunAsExternalIdentity, target.RunAsExternalIdentity) {
 			continue
 		}
 		return true
@@ -973,6 +1064,9 @@ func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID str
 			continue
 		}
 		if ref.RunAs != nil && !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+			continue
+		}
+		if ref.RunAsExternalIdentity != nil && !core.ExternalIdentityRefsEqual(ref.RunAsExternalIdentity, target.RunAsExternalIdentity) {
 			continue
 		}
 		return true
@@ -1044,6 +1138,41 @@ func agentToolRunAsExplicitlyGranted(target coreagent.ToolTarget, refs []coreage
 	return false
 }
 
+func agentToolExternalIdentityExplicitlyGranted(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+	if target.RunAsExternalIdentity == nil {
+		return true
+	}
+	if agentToolMatchesResolvedTools(target, "", tools) {
+		return true
+	}
+	for i := range refs {
+		ref := refs[i]
+		if strings.TrimSpace(ref.Plugin) == "*" {
+			continue
+		}
+		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
+			continue
+		}
+		if !core.RunAsSubjectsEqual(ref.RunAs, target.RunAs) {
+			continue
+		}
+		if !core.ExternalIdentityRefsEqual(ref.RunAsExternalIdentity, target.RunAsExternalIdentity) {
+			continue
+		}
+		if connection := strings.TrimSpace(ref.Connection); connection != "" && config.ResolveConnectionAlias(connection) != config.ResolveConnectionAlias(strings.TrimSpace(target.Connection)) {
+			continue
+		}
+		if instance := strings.TrimSpace(ref.Instance); instance != "" && instance != strings.TrimSpace(target.Instance) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func agentToolTargetsEqual(left, right coreagent.ToolTarget) bool {
 	return strings.TrimSpace(left.System) == strings.TrimSpace(right.System) &&
 		strings.TrimSpace(left.Plugin) == strings.TrimSpace(right.Plugin) &&
@@ -1051,5 +1180,6 @@ func agentToolTargetsEqual(left, right coreagent.ToolTarget) bool {
 		config.ResolveConnectionAlias(strings.TrimSpace(left.Connection)) == config.ResolveConnectionAlias(strings.TrimSpace(right.Connection)) &&
 		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance) &&
 		left.CredentialMode == right.CredentialMode &&
-		core.RunAsSubjectsEqual(left.RunAs, right.RunAs)
+		core.RunAsSubjectsEqual(left.RunAs, right.RunAs) &&
+		core.ExternalIdentityRefsEqual(left.RunAsExternalIdentity, right.RunAsExternalIdentity)
 }

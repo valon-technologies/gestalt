@@ -9,6 +9,14 @@ export interface Subject {
 }
 
 /**
+ * Provider-owned external identity attached to an incoming provider request.
+ */
+export interface ExternalIdentity {
+  type: string;
+  id: string;
+}
+
+/**
  * Describes the credential Gestalt used to authorize the current request.
  */
 export interface Credential {
@@ -40,6 +48,9 @@ export interface Request {
   token: string;
   connectionParams: Record<string, string>;
   subject: Subject;
+  agentSubject: Subject;
+  externalIdentity: ExternalIdentity;
+  agentExternalIdentity: ExternalIdentity;
   credential: Credential;
   access: Access;
   host: Host;
@@ -115,6 +126,9 @@ export function request(
   invocationToken = "",
   idempotencyKey = "",
   host: Partial<Host> = {},
+  agentSubject: Partial<Subject> = {},
+  externalIdentity: Partial<ExternalIdentity> = {},
+  agentExternalIdentity: Partial<ExternalIdentity> = {},
 ): Request {
   return {
     token,
@@ -126,6 +140,20 @@ export function request(
       kind: subject.kind ?? "",
       displayName: subject.displayName ?? "",
       authSource: subject.authSource ?? "",
+    },
+    agentSubject: {
+      id: agentSubject.id ?? "",
+      kind: agentSubject.kind ?? "",
+      displayName: agentSubject.displayName ?? "",
+      authSource: agentSubject.authSource ?? "",
+    },
+    externalIdentity: {
+      type: externalIdentity.type ?? "",
+      id: externalIdentity.id ?? "",
+    },
+    agentExternalIdentity: {
+      type: agentExternalIdentity.type ?? "",
+      id: agentExternalIdentity.id ?? "",
     },
     credential: {
       mode: credential.mode ?? "",

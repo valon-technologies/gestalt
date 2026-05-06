@@ -38,6 +38,12 @@ type ProviderActionAuthorizer interface {
 	AllowProviderAction(ctx context.Context, p *principal.Principal, provider, action string) bool
 }
 
+// ExternalIdentityAssumptionAuthorizer grants provider-owned external identity
+// assumptions for a canonical Gestalt subject.
+type ExternalIdentityAssumptionAuthorizer interface {
+	AllowExternalIdentityAssumption(ctx context.Context, p *principal.Principal, identity *core.ExternalIdentityRef) bool
+}
+
 // ManagedAuthorizationModelResolver exposes the authorization model managed by
 // the current runtime authorizer when one exists.
 type ManagedAuthorizationModelResolver interface {

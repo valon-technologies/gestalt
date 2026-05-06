@@ -23,6 +23,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
@@ -1260,24 +1261,7 @@ func agentPluginInvokes(cfg *config.Config) map[string][]invocation.PluginInvoca
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = pluginInvocationDependencies(entry.Invokes)
-	}
-	return out
-}
-
-func pluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
-	if len(deps) == 0 {
-		return nil
-	}
-	out := make([]invocation.PluginInvocationDependency, 0, len(deps))
-	for _, dep := range deps {
-		out = append(out, invocation.PluginInvocationDependency{
-			Plugin:         dep.Plugin,
-			Operation:      dep.Operation,
-			Surface:        dep.Surface,
-			CredentialMode: core.ConnectionMode(dep.CredentialMode),
-			RunAs:          dep.RunAsSubject(),
-		})
+		out[pluginName] = invocationconfig.PluginInvocationDependencies(entry.Invokes)
 	}
 	return out
 }
