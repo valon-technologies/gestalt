@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -71,6 +72,9 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			existingExecutionRef,
 		)
 		if err != nil {
+			if existingExecutionRef != "" && workflowConfigEventTriggerDefinitionMatches(existing, target, trigger) {
+				continue
+			}
 			return fmt.Errorf("bootstrap: store workflow execution ref for event trigger %q on plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
 		if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
@@ -137,7 +141,8 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 		triggers, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
 		if err != nil {
-			return fmt.Errorf("bootstrap: list workflow event triggers for provider %q: %w", providerName, err)
+			workflowLogSkippedConfigCleanup(ctx, "event_triggers", providerName, err)
+			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, trigger := range triggers {
@@ -164,6 +169,15 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 	}
 	return nil
+}
+
+func workflowConfigEventTriggerDefinitionMatches(existing *coreworkflow.EventTrigger, target coreworkflow.Target, trigger config.WorkflowEventTriggerConfig) bool {
+	if existing == nil {
+		return false
+	}
+	return existing.Paused == trigger.Paused &&
+		reflect.DeepEqual(existing.Match, workflowConfigEventTriggerMatch(trigger)) &&
+		reflect.DeepEqual(existing.Target, target)
 }
 
 func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, pluginName, triggerID string) bool {
