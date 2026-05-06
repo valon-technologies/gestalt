@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -84,6 +85,9 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			existingExecutionRef,
 		)
 		if err != nil {
+			if existingExecutionRef != "" && workflowConfigScheduleDefinitionMatches(existing, target, schedule) {
+				continue
+			}
 			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
@@ -114,6 +118,16 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		return err
 	}
 	return nil
+}
+
+func workflowConfigScheduleDefinitionMatches(existing *coreworkflow.Schedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) bool {
+	if existing == nil {
+		return false
+	}
+	return strings.TrimSpace(existing.Cron) == strings.TrimSpace(schedule.Cron) &&
+		strings.TrimSpace(existing.Timezone) == strings.TrimSpace(schedule.Timezone) &&
+		existing.Paused == schedule.Paused &&
+		reflect.DeepEqual(existing.Target, target)
 }
 
 func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkflowConfigSchedule, error) {
