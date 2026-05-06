@@ -5942,6 +5942,37 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 	}
 }
 
+func TestBootstrapSkipsRemovedWorkflowScheduleCleanupWhenProviderListFails(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	provider := &recordingWorkflowProvider{
+		listSchedulesErr: status.Error(codes.Internal, "query temporal index: context canceled"),
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules = %d, want 0", len(provider.deletedSchedules))
+	}
+}
+
 func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	t.Parallel()
 
@@ -6585,6 +6616,37 @@ func TestBootstrapIgnoresMissingPreviousEventTriggerDuringWorkflowProviderMove(t
 	}
 	if len(temporal.deletedEventTriggers) != 0 {
 		t.Fatalf("temporal deleted event triggers = %d, want 0", len(temporal.deletedEventTriggers))
+	}
+}
+
+func TestBootstrapSkipsRemovedWorkflowEventTriggerCleanupWhenProviderListFails(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	provider := &recordingWorkflowProvider{
+		listEventTriggersErr: status.Error(codes.Internal, "query temporal index shard 0: context canceled"),
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.deletedEventTriggers) != 0 {
+		t.Fatalf("deleted event triggers = %d, want 0", len(provider.deletedEventTriggers))
 	}
 }
 
