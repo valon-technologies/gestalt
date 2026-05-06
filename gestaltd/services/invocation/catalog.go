@@ -189,7 +189,12 @@ func OperationConnectionOverrideAllowed(prov core.Provider, operation string, pa
 		return true
 	}
 	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
-		return policy.OperationConnectionOverrideAllowed(operation, params)
+		if policy.OperationConnectionOverrideAllowed(operation, params) {
+			return true
+		}
+	}
+	if op, ok := CatalogOperation(providerCatalog(prov), operation); ok && OperationTransport(op) == catalog.TransportPlugin {
+		return true
 	}
 	return false
 }

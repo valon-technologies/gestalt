@@ -503,6 +503,34 @@ func TestBrokerInvokeGraphQLEnrichesAgentExternalIdentity(t *testing.T) {
 	}
 }
 
+func TestOperationConnectionOverrideAllowedForPluginTransportOperations(t *testing.T) {
+	t.Parallel()
+
+	prov := &brokerOperationConnectionProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N: "slack",
+			CatalogVal: &catalog.Catalog{
+				Name: "slack",
+				Operations: []catalog.CatalogOperation{
+					{ID: "assistant.reconcileStuckRequests", Method: "POST", Transport: catalog.TransportPlugin},
+					{ID: "chat.postMessage", Method: "POST", Transport: catalog.TransportREST},
+				},
+			},
+		},
+		operationConnections: map[string]string{
+			"assistant.reconcileStuckRequests": "default",
+			"chat.postMessage":                 "default",
+		},
+	}
+
+	if !OperationConnectionOverrideAllowed(prov, "assistant.reconcileStuckRequests", nil) {
+		t.Fatal("plugin transport operation should allow explicit connection override")
+	}
+	if OperationConnectionOverrideAllowed(prov, "chat.postMessage", nil) {
+		t.Fatal("REST operation should not allow explicit connection override")
+	}
+}
+
 type staticProviderOverrideResolver struct {
 	provider core.Provider
 }
