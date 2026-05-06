@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -127,7 +126,7 @@ func workflowConfigScheduleDefinitionMatches(existing *coreworkflow.Schedule, ta
 	return strings.TrimSpace(existing.Cron) == strings.TrimSpace(schedule.Cron) &&
 		strings.TrimSpace(existing.Timezone) == strings.TrimSpace(schedule.Timezone) &&
 		existing.Paused == schedule.Paused &&
-		reflect.DeepEqual(existing.Target, target)
+		coreworkflow.TargetsEqual(existing.Target, target)
 }
 
 func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkflowConfigSchedule, error) {

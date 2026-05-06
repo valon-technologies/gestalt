@@ -4920,6 +4920,11 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 		t.Fatal("initial execution ref = empty")
 	}
 	_ = result.Close(context.Background())
+	existingSchedule := sharedSchedules[workflowConfigScheduleID("nightly_sync")]
+	if existingSchedule == nil || existingSchedule.Target.Plugin == nil {
+		t.Fatalf("existing schedule target = %#v", existingSchedule)
+	}
+	existingSchedule.Target.Plugin.Input = map[string]any{}
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
