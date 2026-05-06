@@ -1317,6 +1317,7 @@ type recordingWorkflowProvider struct {
 	eventTriggers              map[string]*coreworkflow.EventTrigger
 	executionRefs              map[string]*coreworkflow.ExecutionReference
 	getExecutionReferenceErrs  map[string]error
+	putExecutionReferenceErr   error
 	deleteMissingNotFound      bool
 	deleteEventMissingNotFound bool
 	closed                     *atomic.Bool
@@ -1475,6 +1476,9 @@ func (p *recordingWorkflowProvider) PublishEvent(context.Context, coreworkflow.P
 	return nil
 }
 func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if p.putExecutionReferenceErr != nil {
+		return nil, p.putExecutionReferenceErr
+	}
 	if p.executionRefs == nil {
 		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
 	}
@@ -4868,6 +4872,113 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	}
 	if !reflect.DeepEqual(nextRef.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", nextRef.Permissions, wantPermissions)
+	}
+}
+
+func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefreshFails(t *testing.T) {
+	t.Parallel()
+
+	factories := validFactories()
+	recorders := []*recordingWorkflowProvider{}
+	sharedSchedules := map[string]*coreworkflow.Schedule{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
+	failExecutionRefWrites := false
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{
+			schedules:     sharedSchedules,
+			executionRefs: sharedExecutionRefs,
+		}
+		if failExecutionRefWrites {
+			recorder.putExecutionReferenceErr = errors.New("execution ref index unavailable")
+		}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	<-result.ProvidersReady
+	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
+		t.Fatalf("initial upserts = %#v", recorders)
+	}
+	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
+	if strings.TrimSpace(initialExecutionRef) == "" {
+		t.Fatal("initial execution ref = empty")
+	}
+	_ = result.Close(context.Background())
+	existingSchedule := sharedSchedules[workflowConfigScheduleID("nightly_sync")]
+	if existingSchedule == nil || existingSchedule.Target.Plugin == nil {
+		t.Fatalf("existing schedule target = %#v", existingSchedule)
+	}
+	existingSchedule.Target.Plugin.Input = map[string]any{}
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModePlatform,
+		Auth: &config.ConnectionAuthDef{
+			Type:  providermanifestv1.AuthTypeBearer,
+			Token: "platform-token",
+		},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.history", Method: http.MethodPost, Path: "/conversations.history"},
+						},
+					},
+				},
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Permissions = []core.AccessPermission{{
+		Plugin:     "slack",
+		Operations: []string{"conversations.history"},
+	}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+	failExecutionRefWrites = true
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap with stale execution ref index: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 {
+		t.Fatalf("recorders = %d, want 2", len(recorders))
+	}
+	if len(recorders[1].upsertedSchedules) != 0 {
+		t.Fatalf("second upserts = %d, want 0", len(recorders[1].upsertedSchedules))
+	}
+	if _, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef); err != nil {
+		t.Fatalf("existing execution ref should remain available: %v", err)
 	}
 }
 
