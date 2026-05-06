@@ -362,6 +362,69 @@ func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	executed := false
+	provider := &brokerOperationConnectionProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "slack",
+				Operations: []catalog.CatalogOperation{{
+					ID:     "chat.postMessage",
+					Method: "POST",
+				}},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, token string) (*core.OperationResult, error) {
+				executed = true
+				if operation != "assistant.reconcileStuckRequests" {
+					t.Fatalf("operation = %q, want assistant.reconcileStuckRequests", operation)
+				}
+				if token != "" {
+					t.Fatalf("token = %q, want empty", token)
+				}
+				return &core.OperationResult{Status: 200, Body: "ok"}, nil
+			},
+		},
+		operationConnections: map[string]string{"assistant.reconcileStuckRequests": "default"},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+	)
+	ctx := WithCatalogOperation(
+		WithConnection(context.Background(), "bot"),
+		"slack",
+		catalog.CatalogOperation{
+			ID:        "assistant.reconcileStuckRequests",
+			Method:    "POST",
+			Transport: catalog.TransportPlugin,
+		},
+	)
+
+	result, err := broker.Invoke(
+		ctx,
+		&principal.Principal{SubjectID: "service_account:workflow-config", Kind: principal.Kind("service_account")},
+		"slack",
+		"",
+		"assistant.reconcileStuckRequests",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if result.Body != "ok" {
+		t.Fatalf("result body = %q, want ok", result.Body)
+	}
+	if !executed {
+		t.Fatal("Execute was not called")
+	}
+}
+
 func TestBrokerInvokeRejectsExplicitInternalConnectionOverride(t *testing.T) {
 	t.Parallel()
 

@@ -295,7 +295,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 		operationConnection = core.ResolveConnectionAlias(operationConnection)
 		explicitConnection := core.ResolveConnectionAlias(conn)
-		overrideDenied := !OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideAllowed := transport == catalog.TransportPlugin || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
+		overrideDenied := !overrideAllowed
 		overrideTargetsInternal := b.connectionIsInternal(providerName, explicitConnection)
 		if operationConnection != "" && operationConnection != explicitConnection && (overrideDenied || overrideTargetsInternal) {
 			return fail(fmt.Errorf(
