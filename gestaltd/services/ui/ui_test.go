@@ -181,7 +181,7 @@ func TestDirHandler_DoesNotServeParentPathElements(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{"/../secret.html", "/../secret"} {
+	for _, path := range []string{"/../secret.html", "/../secret", `/..\secret.html`} {
 		code, body := mustServeRequest(t, handler, path)
 		if code != http.StatusOK {
 			t.Fatalf("%s status = %d, want %d", path, code, http.StatusOK)

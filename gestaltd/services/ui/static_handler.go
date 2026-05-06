@@ -159,6 +159,9 @@ func cleanStaticPath(path string) (string, bool) {
 	if path == "" {
 		return "index.html", true
 	}
+	if strings.Contains(path, "\\") {
+		return "", false
+	}
 	if hasParentPathElement(path) {
 		return "", false
 	}
