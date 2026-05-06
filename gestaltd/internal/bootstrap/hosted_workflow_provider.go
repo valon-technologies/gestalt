@@ -21,6 +21,8 @@ import (
 
 const hostedWorkflowRuntimeLifecycleSafetyMargin = 5 * time.Second
 
+var errHostedWorkflowWorkerPoolClosed = errors.New("hosted workflow worker pool closed")
+
 type hostedWorkflowProviderLaunch struct {
 	name            string
 	runtimeConfig   config.EffectiveHostedRuntime
@@ -40,7 +42,7 @@ type hostedWorkflowProviderInstance struct {
 	runtimeSession   *pluginruntime.Session
 }
 
-func buildHostedWorkflowProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error) {
+func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (*hostedWorkflowWorkerPool, error) {
 	launch, err := prepareHostedWorkflowProviderLaunch(ctx, name, entry, node, deps)
 	if err != nil {
 		return nil, err
@@ -54,22 +56,16 @@ func buildHostedWorkflowProvider(ctx context.Context, name string, entry *config
 	launch.cleanup = chainCleanup(launch.cleanup, publicHostServicesCleanup)
 
 	runtimeCfg := entry.HostedRuntimeConfig()
-	if runtimeCfg != nil && runtimeCfg.LifecyclePolicyFieldsSet() {
-		policy, err := runtimeCfg.LifecyclePolicy()
-		if err != nil {
-			launch.close()
-			return nil, fmt.Errorf("parse hosted workflow runtime lifecycle policy: %w", err)
-		}
-		return newHostedWorkflowProviderPool(ctx, launch, hostServices, deps, policy)
+	if runtimeCfg == nil || !runtimeCfg.LifecyclePolicyFieldsSet() {
+		launch.close()
+		return nil, fmt.Errorf("workflow runtime pool is required")
 	}
-	cleanup := launch.cleanup
-	launch.cleanup = nil
-	instance, err := startHostedWorkflowProviderInstance(ctx, launch, hostServices, deps, launch.runtimeOwned, cleanup, 0)
+	policy, err := runtimeCfg.LifecyclePolicy()
 	if err != nil {
 		launch.close()
-		return nil, err
+		return nil, fmt.Errorf("parse hosted workflow runtime lifecycle policy: %w", err)
 	}
-	return instance.provider, nil
+	return newHostedWorkflowWorkerPool(launch, hostServices, deps, policy)
 }
 
 func (p *hostedWorkflowProviderLaunch) close() {
@@ -201,6 +197,9 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 	if err != nil {
 		return nil, fmt.Errorf("wait for hosted workflow runtime session %q ready: %w", sessionID, err)
 	}
+	if reason := hostedRuntimeSessionCompatibilityReason(readySession); reason != "" {
+		return nil, fmt.Errorf("hosted workflow runtime session is not compatible: %s", reason)
+	}
 
 	startEnv := withRuntimeSessionEnv(maps.Clone(launch.cfg.Env), sessionID)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)
@@ -290,11 +289,56 @@ func hostedWorkflowAllowedHosts(configured []string, runtimePlan HostedRuntimePl
 	return hostedAgentAllowedHosts(configured, runtimePlan)
 }
 
-type hostedWorkflowProviderPool struct {
+type workflowProviderWithRuntimeWorkers struct {
 	coreworkflow.Provider
+	workers *hostedWorkflowWorkerPool
+}
 
-	executionRefs coreworkflow.ExecutionReferenceStore
+type workflowProviderWithRuntimeWorkersAndExecutionReferences struct {
+	*workflowProviderWithRuntimeWorkers
+	coreworkflow.ExecutionReferenceStore
+}
 
+func wrapWorkflowProviderWithRuntimeWorkers(provider coreworkflow.Provider, workers *hostedWorkflowWorkerPool) coreworkflow.Provider {
+	wrapped := &workflowProviderWithRuntimeWorkers{
+		Provider: provider,
+		workers:  workers,
+	}
+	if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
+		return &workflowProviderWithRuntimeWorkersAndExecutionReferences{
+			workflowProviderWithRuntimeWorkers: wrapped,
+			ExecutionReferenceStore:            executionRefs,
+		}
+	}
+	return wrapped
+}
+
+func (p *workflowProviderWithRuntimeWorkers) Start(ctx context.Context) error {
+	if p == nil || p.workers == nil {
+		return nil
+	}
+	return p.workers.Start(ctx)
+}
+
+func (p *workflowProviderWithRuntimeWorkers) WaitRuntimeWorkersReady(ctx context.Context) error {
+	if p == nil || p.workers == nil {
+		return nil
+	}
+	return p.workers.WaitReady(ctx)
+}
+
+func (p *workflowProviderWithRuntimeWorkers) Close() error {
+	var errs []error
+	if p != nil && p.workers != nil {
+		errs = append(errs, p.workers.Close())
+	}
+	if p != nil && p.Provider != nil {
+		errs = append(errs, p.Provider.Close())
+	}
+	return errors.Join(errs...)
+}
+
+type hostedWorkflowWorkerPool struct {
 	name         string
 	launch       *hostedWorkflowProviderLaunch
 	hostServices []runtimehost.HostService
@@ -304,14 +348,15 @@ type hostedWorkflowProviderPool struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	ready  chan struct{}
+	once   sync.Once
 
-	mu             sync.Mutex
-	nextID         int
-	starting       int
-	started        bool
-	controlStarted bool
-	closed         bool
-	workers        []*hostedWorkflowWorker
+	mu       sync.Mutex
+	nextID   int
+	starting int
+	started  bool
+	closed   bool
+	workers  []*hostedWorkflowWorker
 }
 
 type hostedWorkflowWorker struct {
@@ -329,38 +374,31 @@ type hostedWorkflowWorker struct {
 	closed           bool
 }
 
-func newHostedWorkflowProviderPool(ctx context.Context, launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreworkflow.Provider, error) {
+func newHostedWorkflowWorkerPool(launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (*hostedWorkflowWorkerPool, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
-	control, err := startHostedWorkflowProviderInstance(ctx, launch, hostServices, deps, false, nil, 0)
-	if err != nil {
-		launch.close()
-		return nil, err
-	}
-	executionRefs, _ := control.provider.(coreworkflow.ExecutionReferenceStore)
 	poolCtx, cancel := context.WithCancel(context.Background())
-	return &hostedWorkflowProviderPool{
-		Provider:      control.provider,
-		executionRefs: executionRefs,
-		name:          launch.name,
-		launch:        launch,
-		hostServices:  append([]runtimehost.HostService(nil), hostServices...),
-		deps:          deps,
-		policy:        policy,
-		ctx:           poolCtx,
-		cancel:        cancel,
+	return &hostedWorkflowWorkerPool{
+		name:         launch.name,
+		launch:       launch,
+		hostServices: append([]runtimehost.HostService(nil), hostServices...),
+		deps:         deps,
+		policy:       policy,
+		ctx:          poolCtx,
+		cancel:       cancel,
+		ready:        make(chan struct{}),
 	}, nil
 }
 
-func (p *hostedWorkflowProviderPool) Start(ctx context.Context) error {
+func (p *hostedWorkflowWorkerPool) Start(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		return fmt.Errorf("hosted workflow provider %q is closed", p.name)
+		return fmt.Errorf("hosted workflow provider %q is closed: %w", p.name, errHostedWorkflowWorkerPoolClosed)
 	}
 	if p.started {
 		p.mu.Unlock()
@@ -369,139 +407,90 @@ func (p *hostedWorkflowProviderPool) Start(ctx context.Context) error {
 	p.started = true
 	p.mu.Unlock()
 
-	if err := p.startControl(ctx); err != nil {
-		p.markStartFailed()
-		return err
-	}
-	if err := p.ensureMinReady(ctx); err != nil {
-		p.markStartFailed()
-		return err
-	}
-	if p.policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
-		p.wg.Add(1)
-		go func() {
-			defer p.wg.Done()
-			p.healthLoop()
-		}()
-	} else {
-		p.wg.Add(1)
-		go func() {
-			defer p.wg.Done()
-			p.runtimeSessionLoop()
-		}()
-	}
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.startLoop()
+	}()
 	return nil
 }
 
-func (p *hostedWorkflowProviderPool) startControl(ctx context.Context) error {
-	p.mu.Lock()
-	if p.controlStarted {
-		p.mu.Unlock()
-		return nil
+func (p *hostedWorkflowWorkerPool) startLoop() {
+	interval := p.policy.HealthCheckInterval
+	if interval <= 0 {
+		interval = time.Second
 	}
-	provider := p.Provider
-	p.mu.Unlock()
-
-	if provider == nil {
-		return fmt.Errorf("hosted workflow provider %q has no control provider", p.name)
-	}
-	if starter, ok := provider.(startableWorkflowProvider); ok {
-		if err := starter.Start(ctx); err != nil {
-			return fmt.Errorf("start hosted workflow control provider: %w", err)
+	for {
+		if err := p.ensureMinReady(p.ctx); err != nil {
+			if hostedWorkflowWorkerPoolStopped(err) {
+				return
+			}
+			slog.Warn("failed to start hosted workflow runtime workers", "provider", p.name, "error", err)
+			select {
+			case <-p.ctx.Done():
+				return
+			case <-time.After(interval):
+				continue
+			}
 		}
+		if !p.markReady() {
+			return
+		}
+		break
 	}
+	if p.policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
+		p.healthLoop()
+		return
+	}
+	p.runtimeSessionLoop()
+}
 
+func (p *hostedWorkflowWorkerPool) markReady() bool {
+	if p == nil {
+		return false
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed {
-		return fmt.Errorf("hosted workflow provider %q is closed", p.name)
+		return false
 	}
-	p.controlStarted = true
-	return nil
+	p.once.Do(func() {
+		close(p.ready)
+	})
+	return true
 }
 
-func (p *hostedWorkflowProviderPool) markStartFailed() {
+func (p *hostedWorkflowWorkerPool) WaitReady(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	var poolDone <-chan struct{}
+	if p.ctx != nil {
+		poolDone = p.ctx.Done()
+	}
+	select {
+	case <-p.ready:
+		if p.isClosed() {
+			return errHostedWorkflowWorkerPoolClosed
+		}
+		return nil
+	case <-poolDone:
+		return errHostedWorkflowWorkerPoolClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *hostedWorkflowWorkerPool) isClosed() bool {
+	if p == nil {
+		return true
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if !p.closed {
-		p.started = false
-	}
+	return p.closed
 }
 
-func (p *hostedWorkflowProviderPool) Ping(ctx context.Context) error {
-	var joined []error
-	if p.Provider == nil {
-		joined = append(joined, fmt.Errorf("hosted workflow provider %q has no control provider", p.name))
-	} else if err := p.Provider.Ping(ctx); err != nil {
-		joined = append(joined, fmt.Errorf("control provider: %w", err))
-	}
-	if !p.isStarted() {
-		return errors.Join(joined...)
-	}
-	workers := p.readyWorkers()
-	if len(workers) == 0 {
-		joined = append(joined, fmt.Errorf("hosted workflow provider %q has no ready runtime workers", p.name))
-		return errors.Join(joined...)
-	}
-	errs := make(chan error, len(workers))
-	var wg sync.WaitGroup
-	for _, worker := range workers {
-		wg.Add(1)
-		go func(worker *hostedWorkflowWorker) {
-			defer wg.Done()
-			if !p.acquireWorker(worker) {
-				return
-			}
-			if err := worker.provider.Ping(ctx); err != nil {
-				errs <- fmt.Errorf("runtime worker %d: %w", worker.id, err)
-			}
-			p.releaseWorker(worker)
-		}(worker)
-	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		joined = append(joined, err)
-	}
-	return errors.Join(joined...)
-}
-
-func (p *hostedWorkflowProviderPool) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.PutExecutionReference(ctx, ref)
-}
-
-func (p *hostedWorkflowProviderPool) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.GetExecutionReference(ctx, id)
-}
-
-func (p *hostedWorkflowProviderPool) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
-	store, err := p.executionReferenceStore()
-	if err != nil {
-		return nil, err
-	}
-	return store.ListExecutionReferences(ctx, subjectID)
-}
-
-func (p *hostedWorkflowProviderPool) executionReferenceStore() (coreworkflow.ExecutionReferenceStore, error) {
-	if p == nil || p.executionRefs == nil {
-		name := ""
-		if p != nil {
-			name = p.name
-		}
-		return nil, fmt.Errorf("hosted workflow provider %q does not expose execution references", name)
-	}
-	return p.executionRefs, nil
-}
-
-func (p *hostedWorkflowProviderPool) Close() error {
+func (p *hostedWorkflowWorkerPool) Close() error {
 	if p == nil {
 		return nil
 	}
@@ -541,25 +530,13 @@ func (p *hostedWorkflowProviderPool) Close() error {
 	p.mu.Lock()
 	p.workers = nil
 	p.mu.Unlock()
-	if p.Provider != nil {
-		closeErrs = append(closeErrs, p.Provider.Close())
-	}
 	if p.launch != nil {
 		p.launch.close()
 	}
 	return errors.Join(closeErrs...)
 }
 
-func (p *hostedWorkflowProviderPool) isStarted() bool {
-	if p == nil {
-		return false
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.started
-}
-
-func (p *hostedWorkflowProviderPool) startWorker(ctx context.Context) (*hostedWorkflowWorker, error) {
+func (p *hostedWorkflowWorkerPool) startWorker(ctx context.Context) (*hostedWorkflowWorker, error) {
 	startCtx, cancel := context.WithTimeout(ctx, p.policy.StartupTimeout)
 	defer cancel()
 	instance, err := startHostedWorkflowProviderInstance(startCtx, p.launch, p.hostServices, p.deps, false, nil, p.policy.DrainTimeout)
@@ -576,7 +553,7 @@ func (p *hostedWorkflowProviderPool) startWorker(ctx context.Context) (*hostedWo
 	if p.closed {
 		p.mu.Unlock()
 		_ = instance.provider.Close()
-		return nil, fmt.Errorf("hosted workflow provider %q is closed", p.name)
+		return nil, fmt.Errorf("hosted workflow provider %q is closed: %w", p.name, errHostedWorkflowWorkerPoolClosed)
 	}
 	p.nextID++
 	now := time.Now().UTC()
@@ -595,12 +572,12 @@ func (p *hostedWorkflowProviderPool) startWorker(ctx context.Context) (*hostedWo
 	return worker, nil
 }
 
-func (p *hostedWorkflowProviderPool) ensureMinReady(ctx context.Context) error {
+func (p *hostedWorkflowWorkerPool) ensureMinReady(ctx context.Context) error {
 	for {
 		p.mu.Lock()
 		if p.closed {
 			p.mu.Unlock()
-			return nil
+			return errHostedWorkflowWorkerPoolClosed
 		}
 		ready := 0
 		now := time.Now().UTC()
@@ -627,7 +604,7 @@ func (p *hostedWorkflowProviderPool) ensureMinReady(ctx context.Context) error {
 	}
 }
 
-func (p *hostedWorkflowProviderPool) healthLoop() {
+func (p *hostedWorkflowWorkerPool) healthLoop() {
 	ticker := time.NewTicker(p.policy.HealthCheckInterval)
 	defer ticker.Stop()
 	for {
@@ -662,7 +639,7 @@ func (p *hostedWorkflowProviderPool) healthLoop() {
 	}
 }
 
-func (p *hostedWorkflowProviderPool) runtimeSessionLoop() {
+func (p *hostedWorkflowWorkerPool) runtimeSessionLoop() {
 	interval := p.policy.HealthCheckInterval
 	if interval <= 0 {
 		interval = time.Second
@@ -691,7 +668,7 @@ func (p *hostedWorkflowProviderPool) runtimeSessionLoop() {
 	}
 }
 
-func (p *hostedWorkflowProviderPool) readyWorkers() []*hostedWorkflowWorker {
+func (p *hostedWorkflowWorkerPool) readyWorkers() []*hostedWorkflowWorker {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now().UTC()
@@ -704,7 +681,7 @@ func (p *hostedWorkflowProviderPool) readyWorkers() []*hostedWorkflowWorker {
 	return out
 }
 
-func (p *hostedWorkflowProviderPool) runtimeManagedWorkers() []*hostedWorkflowWorker {
+func (p *hostedWorkflowWorkerPool) runtimeManagedWorkers() []*hostedWorkflowWorker {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]*hostedWorkflowWorker, 0, len(p.workers))
@@ -716,7 +693,7 @@ func (p *hostedWorkflowProviderPool) runtimeManagedWorkers() []*hostedWorkflowWo
 	return out
 }
 
-func (p *hostedWorkflowProviderPool) workerAvailableLocked(worker *hostedWorkflowWorker, now time.Time) bool {
+func (p *hostedWorkflowWorkerPool) workerAvailableLocked(worker *hostedWorkflowWorker, now time.Time) bool {
 	if worker == nil || worker.provider == nil || worker.closed || worker.closing || worker.draining {
 		return false
 	}
@@ -729,7 +706,7 @@ func (p *hostedWorkflowProviderPool) workerAvailableLocked(worker *hostedWorkflo
 	return true
 }
 
-func (p *hostedWorkflowProviderPool) acquireWorker(worker *hostedWorkflowWorker) bool {
+func (p *hostedWorkflowWorkerPool) acquireWorker(worker *hostedWorkflowWorker) bool {
 	if worker == nil {
 		return false
 	}
@@ -742,7 +719,7 @@ func (p *hostedWorkflowProviderPool) acquireWorker(worker *hostedWorkflowWorker)
 	return true
 }
 
-func (p *hostedWorkflowProviderPool) releaseWorker(worker *hostedWorkflowWorker) {
+func (p *hostedWorkflowWorkerPool) releaseWorker(worker *hostedWorkflowWorker) {
 	if worker == nil {
 		return
 	}
@@ -753,7 +730,7 @@ func (p *hostedWorkflowProviderPool) releaseWorker(worker *hostedWorkflowWorker)
 	}
 }
 
-func (p *hostedWorkflowProviderPool) refreshWorkerRuntimeSession(worker *hostedWorkflowWorker) (*pluginruntime.Session, *time.Time, error) {
+func (p *hostedWorkflowWorkerPool) refreshWorkerRuntimeSession(worker *hostedWorkflowWorker) (*pluginruntime.Session, *time.Time, error) {
 	if worker == nil {
 		return nil, nil, fmt.Errorf("runtime worker is unavailable")
 	}
@@ -788,18 +765,18 @@ func (p *hostedWorkflowProviderPool) refreshWorkerRuntimeSession(worker *hostedW
 	return session, drainAt, nil
 }
 
-func (p *hostedWorkflowProviderPool) replaceWorker(worker *hostedWorkflowWorker) {
+func (p *hostedWorkflowWorkerPool) replaceWorker(worker *hostedWorkflowWorker) {
 	p.replaceWorkerAllowNever(worker, "", false)
 }
 
-func (p *hostedWorkflowProviderPool) replaceWorkerAllowNever(worker *hostedWorkflowWorker, reason string, allowRestartPolicyNever bool) {
+func (p *hostedWorkflowWorkerPool) replaceWorkerAllowNever(worker *hostedWorkflowWorker, reason string, allowRestartPolicyNever bool) {
 	if (p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever && !allowRestartPolicyNever) || !p.markWorkerDraining(worker) {
 		return
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		if err := p.ensureMinReady(p.ctx); err != nil && !errors.Is(err, context.Canceled) {
+		if err := p.ensureMinReady(p.ctx); err != nil && !hostedWorkflowWorkerPoolStopped(err) {
 			slog.Warn("failed to replace hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "reason", reason, "error", err)
 		}
 		if err := p.drainAndCloseWorker(worker); err != nil {
@@ -808,7 +785,11 @@ func (p *hostedWorkflowProviderPool) replaceWorkerAllowNever(worker *hostedWorkf
 	}()
 }
 
-func (p *hostedWorkflowProviderPool) markWorkerDraining(worker *hostedWorkflowWorker) bool {
+func hostedWorkflowWorkerPoolStopped(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, errHostedWorkflowWorkerPoolClosed)
+}
+
+func (p *hostedWorkflowWorkerPool) markWorkerDraining(worker *hostedWorkflowWorker) bool {
 	if worker == nil {
 		return false
 	}
@@ -821,7 +802,7 @@ func (p *hostedWorkflowProviderPool) markWorkerDraining(worker *hostedWorkflowWo
 	return true
 }
 
-func (p *hostedWorkflowProviderPool) drainAndCloseWorker(worker *hostedWorkflowWorker) error {
+func (p *hostedWorkflowWorkerPool) drainAndCloseWorker(worker *hostedWorkflowWorker) error {
 	if worker == nil {
 		return nil
 	}
@@ -857,7 +838,7 @@ func (p *hostedWorkflowProviderPool) drainAndCloseWorker(worker *hostedWorkflowW
 	return worker.provider.Close()
 }
 
-func (p *hostedWorkflowProviderPool) removeWorkerLocked(worker *hostedWorkflowWorker) {
+func (p *hostedWorkflowWorkerPool) removeWorkerLocked(worker *hostedWorkflowWorker) {
 	for i, candidate := range p.workers {
 		if candidate == worker {
 			p.workers = append(p.workers[:i], p.workers[i+1:]...)
@@ -866,7 +847,7 @@ func (p *hostedWorkflowProviderPool) removeWorkerLocked(worker *hostedWorkflowWo
 	}
 }
 
-func (p *hostedWorkflowProviderPool) runtimeSessionDrainAt(session *pluginruntime.Session, now time.Time) *time.Time {
+func (p *hostedWorkflowWorkerPool) runtimeSessionDrainAt(session *pluginruntime.Session, now time.Time) *time.Time {
 	if session == nil || session.Lifecycle == nil {
 		return nil
 	}
@@ -884,7 +865,7 @@ func (p *hostedWorkflowProviderPool) runtimeSessionDrainAt(session *pluginruntim
 	return drainAt
 }
 
-func (p *hostedWorkflowProviderPool) runtimeSessionExpiryDrainAt(lifecycle *pluginruntime.SessionLifecycle, now time.Time) time.Time {
+func (p *hostedWorkflowWorkerPool) runtimeSessionExpiryDrainAt(lifecycle *pluginruntime.SessionLifecycle, now time.Time) time.Time {
 	expiresAt := lifecycle.ExpiresAt.UTC()
 	reserve := p.policy.StartupTimeout + p.policy.DrainTimeout + p.policy.HealthCheckInterval + hostedWorkflowRuntimeLifecycleSafetyMargin
 	drainAt := expiresAt.Add(-reserve).UTC()
@@ -904,7 +885,7 @@ func (p *hostedWorkflowProviderPool) runtimeSessionExpiryDrainAt(lifecycle *plug
 	return drainAt
 }
 
-func (p *hostedWorkflowProviderPool) runtimeSessionRetirementReason(session *pluginruntime.Session, drainAt *time.Time, now time.Time) string {
+func (p *hostedWorkflowWorkerPool) runtimeSessionRetirementReason(session *pluginruntime.Session, drainAt *time.Time, now time.Time) string {
 	if session == nil {
 		return ""
 	}
@@ -923,6 +904,3 @@ func (p *hostedWorkflowProviderPool) runtimeSessionRetirementReason(session *plu
 	}
 	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
 }
-
-var _ coreworkflow.Provider = (*hostedWorkflowProviderPool)(nil)
-var _ coreworkflow.ExecutionReferenceStore = (*hostedWorkflowProviderPool)(nil)

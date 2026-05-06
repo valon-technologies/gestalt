@@ -4068,7 +4068,7 @@ server:
 		}
 	})
 
-	t.Run("accepts hosted workflow runtime without pool", func(t *testing.T) {
+	t.Run("rejects workflow runtime without pool", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -4089,13 +4089,12 @@ runtime:
 server:
   encryptionKey: server-key
 `)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		runtimeCfg := cfg.Providers.Workflow["temporal"].Execution.Runtime
-		if runtimeCfg == nil || runtimeCfg.Provider != "hosted" {
-			t.Fatalf("workflow execution runtime = %#v", runtimeCfg)
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool is required for runtime-placed workflow providers") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 

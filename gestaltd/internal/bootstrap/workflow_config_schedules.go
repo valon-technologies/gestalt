@@ -32,7 +32,9 @@ type desiredWorkflowConfigSchedule struct {
 	schedule     config.WorkflowScheduleConfig
 }
 
-func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime) error {
+type workflowConfigProviderFilter func(providerName string) bool
+
+func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
 	}
@@ -43,6 +45,9 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 
 	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[rowID]
+		if !workflowConfigProviderIncluded(includeProvider, desiredEntry.ProviderName) {
+			continue
+		}
 		schedule := desiredEntry.schedule
 		target := workflowConfigTarget(schedule.Target)
 		pluginName := workflowConfigTargetLabel(target)
@@ -113,10 +118,17 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		}
 	}
 
-	if err := cleanupRemovedWorkflowConfigSchedules(ctx, runtime, desired); err != nil {
+	if err := cleanupRemovedWorkflowConfigSchedules(ctx, runtime, desired, includeProvider); err != nil {
 		return err
 	}
 	return nil
+}
+
+func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter, providerName string) bool {
+	if includeProvider == nil {
+		return true
+	}
+	return includeProvider(strings.TrimSpace(providerName))
 }
 
 func workflowConfigScheduleDefinitionMatches(existing *coreworkflow.Schedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) bool {
@@ -155,13 +167,19 @@ func isWorkflowObjectNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigSchedule) error {
+func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflowRuntime, desired map[string]desiredWorkflowConfigSchedule, includeProvider workflowConfigProviderFilter) error {
 	desiredByProviderSchedule := make(map[string]struct{}, len(desired))
 	for rowID := range desired {
 		entry := desired[rowID]
+		if !workflowConfigProviderIncluded(includeProvider, entry.ProviderName) {
+			continue
+		}
 		desiredByProviderSchedule[workflowConfigProviderObjectKey(entry.ProviderName, entry.ScheduleID)] = struct{}{}
 	}
 	for _, providerName := range runtime.ProviderNames() {
+		if !workflowConfigProviderIncluded(includeProvider, providerName) {
+			continue
+		}
 		provider, err := runtime.ResolveProvider(providerName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)

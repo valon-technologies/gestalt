@@ -58,7 +58,7 @@ func TestHostedAgentPoolDoesNotRouteNewWorkToKnownStaleBackend(t *testing.T) {
 func TestHostedWorkflowWorkerKnownStaleSessionIsNotReady(t *testing.T) {
 	t.Parallel()
 
-	pool := &hostedWorkflowProviderPool{}
+	pool := &hostedWorkflowWorkerPool{}
 	worker := &hostedWorkflowWorker{
 		provider:       &noopWorkflowProvider{},
 		runtimeSession: staleRuntimeSessionForTest(),

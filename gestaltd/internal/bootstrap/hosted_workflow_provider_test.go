@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -40,7 +42,6 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	}
 	entry := &config.ProviderEntry{
 		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
 			Runtime: &config.HostedRuntimeConfig{
 				Provider: "gke",
 				Metadata: map[string]string{
@@ -58,7 +59,7 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		},
 	}
 
-	provider, err := buildHostedWorkflowProvider(ctx, "temporal", entry, mustNode(t, map[string]any{
+	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 		"config":  map[string]any{"namespace": "default"},
 	}), []runtimehost.HostService{{
@@ -66,8 +67,10 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		EnvVar: workflowservice.DefaultHostSocketEnv,
 	}}, deps)
 	if err != nil {
-		t.Fatalf("buildHostedWorkflowProvider: %v", err)
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
 	}
+	control := &recordingWorkflowControlProvider{}
+	provider := wrapWorkflowProviderWithRuntimeWorkers(control, workers)
 	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
 	t.Cleanup(func() { _ = provider.Close() })
 	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
@@ -100,8 +103,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	if got := runtimeProvider.startProviderCalls(); got != 0 {
 		t.Fatalf("StartProvider calls before StartWorkflowProviders = %d, want 0", got)
 	}
-	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 1 {
-		t.Fatalf("StartPlugin requests before StartWorkflowProviders = %d, want control provider only", got)
+	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 0 {
+		t.Fatalf("StartPlugin requests before StartWorkflowProviders = %d, want 0", got)
 	}
 
 	if err := result.Start(ctx); err != nil {
@@ -113,15 +116,22 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	if err := result.StartWorkflowProviders(ctx); err != nil {
 		t.Fatalf("StartWorkflowProviders: %v", err)
 	}
-	if got := runtimeProvider.startProviderCalls(); got != 3 {
-		t.Fatalf("StartProvider calls after StartWorkflowProviders = %d, want control + worker pool size 2", got)
+	workerProvider, ok := provider.(runtimeWorkerWorkflowProvider)
+	if !ok {
+		t.Fatalf("provider does not expose runtime worker readiness")
+	}
+	if err := workerProvider.WaitRuntimeWorkersReady(ctx); err != nil {
+		t.Fatalf("WaitRuntimeWorkersReady: %v", err)
+	}
+	if got := runtimeProvider.startProviderCalls(); got != 2 {
+		t.Fatalf("StartProvider calls after StartWorkflowProviders = %d, want worker pool size 2", got)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
-	if len(startRequests) != 3 {
-		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want control + 2 workers", len(startRequests))
+	if len(startRequests) != 2 {
+		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
-	workerReq := startRequests[1]
+	workerReq := startRequests[0]
 	if got := workerReq.Env[workflowservice.DefaultHostSocketEnv]; got != "tcp://127.0.0.1:8080" {
 		t.Fatalf("worker env %s = %q, want public relay target", workflowservice.DefaultHostSocketEnv, got)
 	}
@@ -129,17 +139,493 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("worker env missing %s", workflowservice.HostSocketTokenEnv())
 	}
 	sessions := runtimeProvider.startSessionRequestsCopy()
-	if len(sessions) != 3 {
-		t.Fatalf("StartSession requests = %d, want control + 2 workers", len(sessions))
+	if len(sessions) != 2 {
+		t.Fatalf("StartSession requests = %d, want 2 workers", len(sessions))
 	}
-	if got := sessions[1].Metadata["provider_kind"]; got != providermanifestKindWorkflow {
+	if got := sessions[0].Metadata["provider_kind"]; got != providermanifestKindWorkflow {
 		t.Fatalf("worker session provider_kind = %q, want %q", got, providermanifestKindWorkflow)
 	}
-	if got := sessions[1].Metadata["provider_name"]; got != "temporal" {
+	if got := sessions[0].Metadata["provider_name"]; got != "temporal" {
 		t.Fatalf("worker session provider_name = %q, want temporal", got)
 	}
-	if got := sessions[1].Metadata["workload"]; got != "temporal-workers" {
+	if got := sessions[0].Metadata["workload"]; got != "temporal-workers" {
 		t.Fatalf("worker session workload = %q, want temporal-workers", got)
+	}
+}
+
+func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	runtimeProvider := &blockingStartSessionWorkflowRuntime{
+		recordingHostedWorkflowRuntime: newRecordingHostedWorkflowRuntime(t),
+		started:                        make(chan struct{}),
+	}
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
+	deps := Deps{
+		BaseURL:            "http://127.0.0.1:8080",
+		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		PluginRuntime:      runtimeProvider,
+		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
+	}
+	entry := &config.ProviderEntry{
+		Execution: &config.ExecutionConfig{
+			Runtime: &config.HostedRuntimeConfig{
+				Provider: "gke",
+				Pool: &config.HostedRuntimePoolConfig{
+					MinReadyInstances:   1,
+					MaxReadyInstances:   1,
+					StartupTimeout:      "5s",
+					HealthCheckInterval: "1m",
+					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+					DrainTimeout:        "50ms",
+				},
+			},
+		},
+	}
+
+	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
+		"command": "/bin/temporal-provider",
+	}), []runtimehost.HostService{{
+		Name:   "workflow_host",
+		EnvVar: workflowservice.DefaultHostSocketEnv,
+	}}, deps)
+	if err != nil {
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
+	}
+	provider := wrapWorkflowProviderWithRuntimeWorkers(&recordingWorkflowControlProvider{}, workers)
+	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
+	t.Cleanup(func() { _ = provider.Close() })
+
+	done := make(chan error, 1)
+	go func() {
+		done <- result.StartWorkflowProviders(ctx)
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("StartWorkflowProviders: %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("StartWorkflowProviders blocked on runtime worker startup")
+	}
+	select {
+	case <-runtimeProvider.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runtime worker startup did not begin")
+	}
+}
+
+func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runtimeProvider := newRecordingHostedWorkflowRuntime(t)
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
+	deps := Deps{
+		BaseURL:            "http://127.0.0.1:8080",
+		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		PluginRuntime:      runtimeProvider,
+		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
+	}
+	entry := &config.ProviderEntry{
+		Execution: &config.ExecutionConfig{
+			Runtime: &config.HostedRuntimeConfig{
+				Provider: "gke",
+				Pool: &config.HostedRuntimePoolConfig{
+					MinReadyInstances:   1,
+					MaxReadyInstances:   1,
+					StartupTimeout:      "5s",
+					HealthCheckInterval: "1m",
+					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+					DrainTimeout:        "50ms",
+				},
+			},
+		},
+	}
+
+	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
+		"command": "/bin/temporal-provider",
+	}), []runtimehost.HostService{{
+		Name:   "workflow_host",
+		EnvVar: workflowservice.DefaultHostSocketEnv,
+	}}, deps)
+	if err != nil {
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
+	}
+	provider := wrapWorkflowProviderWithRuntimeWorkers(&recordingWorkflowControlProvider{}, workers)
+	workflowRuntime, err := newWorkflowRuntime(&config.Config{})
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	workflowRuntime.PublishProvider("temporal", provider)
+	reconciled := make(chan struct{})
+	result := &Result{
+		ExtraWorkflows: []workflow.Provider{provider},
+		workflowConfigReconcileTasks: []workflowConfigReconcileTask{{
+			name: "temporal",
+			reconcile: func(context.Context) error {
+				if err := waitRuntimeWorkflowProviderReady(ctx, workflowRuntime, "temporal"); err != nil {
+					return err
+				}
+				close(reconciled)
+				return nil
+			},
+		}},
+	}
+	t.Cleanup(func() { _ = provider.Close() })
+
+	result.StartWorkflowConfigReconciliation(ctx)
+	select {
+	case <-reconciled:
+		t.Fatal("workflow config reconciliation ran before runtime workers were started")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := result.StartWorkflowProviders(ctx); err != nil {
+		t.Fatalf("StartWorkflowProviders: %v", err)
+	}
+	select {
+	case <-reconciled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("workflow config reconciliation did not run after runtime workers became ready")
+	}
+}
+
+func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependently(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"ready": {
+					Source: config.ProviderSource{Path: "stub"},
+					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+						Provider: "gke",
+						Pool: &config.HostedRuntimePoolConfig{
+							MinReadyInstances:   1,
+							MaxReadyInstances:   1,
+							StartupTimeout:      "5s",
+							HealthCheckInterval: "1m",
+							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							DrainTimeout:        "50ms",
+						},
+					}},
+				},
+				"stuck": {
+					Source: config.ProviderSource{Path: "stub"},
+					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+						Provider: "gke",
+						Pool: &config.HostedRuntimePoolConfig{
+							MinReadyInstances:   1,
+							MaxReadyInstances:   1,
+							StartupTimeout:      "5s",
+							HealthCheckInterval: "1m",
+							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							DrainTimeout:        "50ms",
+						},
+					}},
+				},
+			},
+		},
+		Workflows: config.WorkflowsConfig{
+			Schedules: map[string]config.WorkflowScheduleConfig{
+				"ready_schedule": {
+					Provider: "ready",
+					Target:   workflowConfigTestAgentTarget(),
+					Cron:     "* * * * *",
+				},
+			},
+		},
+	}
+	workflowRuntime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	readyProvider := &notifyingRuntimeWorkflowControlProvider{
+		recordingWorkflowControlProvider: &recordingWorkflowControlProvider{},
+		upsertedSchedule:                 make(chan struct{}),
+	}
+	stuckProvider := &blockingRuntimeWorkflowControlProvider{
+		recordingWorkflowControlProvider: &recordingWorkflowControlProvider{},
+		waitStarted:                      make(chan struct{}),
+	}
+	workflowRuntime.PublishProvider("ready", readyProvider)
+	workflowRuntime.PublishProvider("stuck", stuckProvider)
+	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
+		if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, includeProvider); err != nil {
+			return err
+		}
+		return reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, includeProvider)
+	}
+	result := &Result{
+		workflowConfigReconcileTasks: runtimeWorkflowConfigReconcileTasks(workflowRuntime, runtimePlacedWorkflowProviderNames(cfg), reconcileWorkflowConfig),
+	}
+
+	result.StartWorkflowConfigReconciliation(ctx)
+	select {
+	case <-stuckProvider.waitStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stuck provider readiness wait did not start")
+	}
+	select {
+	case <-readyProvider.upsertedSchedule:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("ready provider schedules = %d, want 1 while another provider is stuck", len(readyProvider.upsertedSchedules))
+	}
+	if got := len(stuckProvider.upsertedSchedules); got != 0 {
+		t.Fatalf("stuck provider schedules = %d, want 0 before readiness", got)
+	}
+}
+
+func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	runtimeProvider := &staleSessionWorkflowRuntime{
+		recordingHostedWorkflowRuntime: newRecordingHostedWorkflowRuntime(t),
+	}
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
+	deps := Deps{
+		BaseURL:            "http://127.0.0.1:8080",
+		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		PluginRuntime:      runtimeProvider,
+		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
+	}
+	entry := &config.ProviderEntry{
+		Execution: &config.ExecutionConfig{
+			Runtime: &config.HostedRuntimeConfig{
+				Provider: "gke",
+				Pool: &config.HostedRuntimePoolConfig{
+					MinReadyInstances:   1,
+					MaxReadyInstances:   1,
+					StartupTimeout:      "5s",
+					HealthCheckInterval: "1m",
+					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+					DrainTimeout:        "50ms",
+				},
+			},
+		},
+	}
+
+	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
+		"command": "/bin/temporal-provider",
+	}), []runtimehost.HostService{{
+		Name:   "workflow_host",
+		EnvVar: workflowservice.DefaultHostSocketEnv,
+	}}, deps)
+	if err != nil {
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+	if err := pool.Start(ctx); err != nil {
+		t.Fatalf("pool.Start: %v", err)
+	}
+	waitForHostedWorkflowRuntimeStartSessionRequests(t, runtimeProvider.recordingHostedWorkflowRuntime, 1)
+	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 0 {
+		t.Fatalf("StartPlugin requests = %d, want 0 for incompatible runtime session", got)
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	if err := pool.WaitReady(waitCtx); err == nil {
+		t.Fatal("pool.WaitReady: expected timeout for incompatible runtime session")
+	}
+	if got := len(pool.readyWorkers()); got != 0 {
+		t.Fatalf("ready workers = %d, want 0 for incompatible runtime session", got)
+	}
+}
+
+func TestHostedWorkflowProviderPoolClosedStartLoopDoesNotMarkReady(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool := &hostedWorkflowWorkerPool{
+		name:   "temporal",
+		ctx:    ctx,
+		cancel: cancel,
+		ready:  make(chan struct{}),
+		policy: config.HostedRuntimeLifecyclePolicy{
+			MinReadyInstances:   1,
+			HealthCheckInterval: time.Hour,
+			RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+		},
+	}
+	pool.mu.Lock()
+	pool.closed = true
+	pool.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pool.startLoop()
+	}()
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		select {
+		case <-pool.ready:
+			t.Fatal("pool marked ready after it was closed")
+		default:
+		}
+		t.Fatal("startLoop did not exit after pool closed")
+	}
+	select {
+	case <-pool.ready:
+		t.Fatal("pool marked ready after it was closed")
+	default:
+	}
+}
+
+func TestHostedWorkflowProviderPoolCloseUnblocksWaitReady(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	pool := &hostedWorkflowWorkerPool{
+		name:   "temporal",
+		ctx:    ctx,
+		cancel: cancel,
+		ready:  make(chan struct{}),
+		policy: config.HostedRuntimeLifecyclePolicy{
+			MinReadyInstances:   1,
+			HealthCheckInterval: time.Hour,
+			RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+		},
+	}
+	t.Cleanup(func() { _ = pool.Close() })
+
+	waitDone := make(chan error, 1)
+	go func() {
+		waitDone <- pool.WaitReady(context.Background())
+	}()
+	select {
+	case err := <-waitDone:
+		t.Fatalf("WaitReady returned before pool close: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	if err := pool.Close(); err != nil {
+		t.Fatalf("pool.Close: %v", err)
+	}
+	select {
+	case err := <-waitDone:
+		if !errors.Is(err, errHostedWorkflowWorkerPoolClosed) {
+			t.Fatalf("WaitReady error = %v, want hosted workflow worker pool closed", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitReady did not unblock after pool close")
+	}
+}
+
+func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Workflow: map[string]*config.ProviderEntry{
+				"local": {Source: config.ProviderSource{Path: "stub"}},
+				"runtime": {
+					Source: config.ProviderSource{Path: "stub"},
+					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+						Provider: "gke",
+						Pool: &config.HostedRuntimePoolConfig{
+							MinReadyInstances:   1,
+							MaxReadyInstances:   1,
+							StartupTimeout:      "5s",
+							HealthCheckInterval: "1m",
+							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							DrainTimeout:        "50ms",
+						},
+					}},
+				},
+			},
+		},
+		Workflows: config.WorkflowsConfig{
+			Schedules: map[string]config.WorkflowScheduleConfig{
+				"local_schedule": {
+					Provider: "local",
+					Target:   workflowConfigTestAgentTarget(),
+					Cron:     "* * * * *",
+				},
+				"runtime_schedule": {
+					Provider: "runtime",
+					Target:   workflowConfigTestAgentTarget(),
+					Cron:     "* * * * *",
+				},
+			},
+			EventTriggers: map[string]config.WorkflowEventTriggerConfig{
+				"local_trigger": {
+					Provider: "local",
+					Target:   workflowConfigTestAgentTarget(),
+					Match:    config.WorkflowEventMatch{Type: "local.changed"},
+				},
+				"runtime_trigger": {
+					Provider: "runtime",
+					Target:   workflowConfigTestAgentTarget(),
+					Match:    config.WorkflowEventMatch{Type: "runtime.changed"},
+				},
+			},
+		},
+	}
+	workflowRuntime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		t.Fatalf("newWorkflowRuntime: %v", err)
+	}
+	localProvider := &recordingWorkflowControlProvider{}
+	runtimeProvider := &recordingWorkflowControlProvider{}
+	workflowRuntime.PublishProvider("local", localProvider)
+	workflowRuntime.PublishProvider("runtime", runtimeProvider)
+
+	runtimePlaced := runtimePlacedWorkflowProviderNames(cfg)
+	localFilter := func(providerName string) bool {
+		_, ok := runtimePlaced[providerName]
+		return !ok
+	}
+	runtimeFilter := func(providerName string) bool {
+		_, ok := runtimePlaced[providerName]
+		return ok
+	}
+
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, localFilter); err != nil {
+		t.Fatalf("reconcile local schedules: %v", err)
+	}
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, localFilter); err != nil {
+		t.Fatalf("reconcile local event triggers: %v", err)
+	}
+	if got := len(localProvider.upsertedSchedules); got != 1 {
+		t.Fatalf("local upserted schedules = %d, want 1", got)
+	}
+	if got := len(localProvider.upsertedEventTriggers); got != 1 {
+		t.Fatalf("local upserted event triggers = %d, want 1", got)
+	}
+	if got := len(runtimeProvider.upsertedSchedules); got != 0 {
+		t.Fatalf("runtime upserted schedules during local reconcile = %d, want 0", got)
+	}
+	if got := len(runtimeProvider.upsertedEventTriggers); got != 0 {
+		t.Fatalf("runtime upserted event triggers during local reconcile = %d, want 0", got)
+	}
+
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
+		t.Fatalf("reconcile runtime schedules: %v", err)
+	}
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, workflowRuntime, runtimeFilter); err != nil {
+		t.Fatalf("reconcile runtime event triggers: %v", err)
+	}
+	if got := len(runtimeProvider.upsertedSchedules); got != 1 {
+		t.Fatalf("runtime upserted schedules = %d, want 1", got)
+	}
+	if got := len(runtimeProvider.upsertedEventTriggers); got != 1 {
+		t.Fatalf("runtime upserted event triggers = %d, want 1", got)
+	}
+}
+
+func workflowConfigTestAgentTarget() *config.WorkflowTargetConfig {
+	return &config.WorkflowTargetConfig{
+		Agent: &config.WorkflowAgentConfig{
+			Prompt: "summarize",
+		},
 	}
 }
 
@@ -171,27 +657,34 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	}
 	entry := &config.ProviderEntry{
 		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
 			Runtime: &config.HostedRuntimeConfig{
 				Provider: "gke",
+				Pool: &config.HostedRuntimePoolConfig{
+					MinReadyInstances:   1,
+					MaxReadyInstances:   1,
+					StartupTimeout:      "5s",
+					HealthCheckInterval: "1m",
+					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+					DrainTimeout:        "50ms",
+				},
 			},
 		},
 	}
 
-	provider, err := buildHostedWorkflowProvider(ctx, "temporal", entry, mustNode(t, map[string]any{
+	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: workflowservice.DefaultHostSocketEnv,
 	}}, deps)
 	if err != nil {
-		t.Fatalf("buildHostedWorkflowProvider: %v", err)
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
 	}
-	if err := provider.Close(); err != nil {
-		t.Fatalf("provider.Close: %v", err)
+	if err := workers.Close(); err != nil {
+		t.Fatalf("workers.Close: %v", err)
 	}
 	if got := runtimeProvider.closeCalls.Load(); got != 0 {
-		t.Fatalf("runtime Close calls after provider.Close = %d, want 0 for shared runtime", got)
+		t.Fatalf("runtime Close calls after workers.Close = %d, want 0 for shared runtime", got)
 	}
 }
 
@@ -209,7 +702,6 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	}
 	entry := &config.ProviderEntry{
 		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
 			Runtime: &config.HostedRuntimeConfig{
 				Provider: "gke",
 				Pool: &config.HostedRuntimePoolConfig{
@@ -224,22 +716,21 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 		},
 	}
 
-	provider, err := buildHostedWorkflowProvider(ctx, "temporal", entry, mustNode(t, map[string]any{
+	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
 		Name:   "workflow_host",
 		EnvVar: workflowservice.DefaultHostSocketEnv,
 	}}, deps)
 	if err != nil {
-		t.Fatalf("buildHostedWorkflowProvider: %v", err)
+		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
 	}
-	t.Cleanup(func() { _ = provider.Close() })
-	pool, ok := provider.(*hostedWorkflowProviderPool)
-	if !ok {
-		t.Fatalf("provider = %T, want *hostedWorkflowProviderPool", provider)
-	}
+	t.Cleanup(func() { _ = pool.Close() })
 	if err := pool.Start(ctx); err != nil {
 		t.Fatalf("pool.Start: %v", err)
+	}
+	if err := pool.WaitReady(ctx); err != nil {
+		t.Fatalf("pool.WaitReady: %v", err)
 	}
 	workers := pool.readyWorkers()
 	if len(workers) != 1 {
@@ -282,6 +773,201 @@ type recordingHostedWorkflowRuntime struct {
 	startPluginRequests []pluginruntime.StartPluginRequest
 	servers             map[string]*recordingHostedWorkflowServer
 	closeCalls          atomic.Int32
+}
+
+type blockingStartSessionWorkflowRuntime struct {
+	*recordingHostedWorkflowRuntime
+	started chan struct{}
+	once    sync.Once
+}
+
+func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	r.once.Do(func() {
+		close(r.started)
+	})
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type staleSessionWorkflowRuntime struct {
+	*recordingHostedWorkflowRuntime
+}
+
+func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	session, err := r.recordingHostedWorkflowRuntime.GetSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if session.Metadata == nil {
+		session.Metadata = map[string]string{}
+	}
+	for key, value := range staleRuntimeSessionForTest().Metadata {
+		session.Metadata[key] = value
+	}
+	return session, nil
+}
+
+type notifyingRuntimeWorkflowControlProvider struct {
+	*recordingWorkflowControlProvider
+	upsertedSchedule chan struct{}
+	once             sync.Once
+}
+
+func (p *notifyingRuntimeWorkflowControlProvider) WaitRuntimeWorkersReady(context.Context) error {
+	return nil
+}
+
+func (p *notifyingRuntimeWorkflowControlProvider) UpsertSchedule(ctx context.Context, req workflow.UpsertScheduleRequest) (*workflow.Schedule, error) {
+	schedule, err := p.recordingWorkflowControlProvider.UpsertSchedule(ctx, req)
+	if err == nil {
+		p.once.Do(func() {
+			close(p.upsertedSchedule)
+		})
+	}
+	return schedule, err
+}
+
+type blockingRuntimeWorkflowControlProvider struct {
+	*recordingWorkflowControlProvider
+	waitStarted chan struct{}
+	once        sync.Once
+}
+
+func (p *blockingRuntimeWorkflowControlProvider) WaitRuntimeWorkersReady(ctx context.Context) error {
+	p.once.Do(func() {
+		close(p.waitStarted)
+	})
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type recordingWorkflowControlProvider struct {
+	noopWorkflowProvider
+	refs                  map[string]*workflow.ExecutionReference
+	schedules             map[string]*workflow.Schedule
+	upsertedSchedules     []workflow.UpsertScheduleRequest
+	eventTriggers         map[string]*workflow.EventTrigger
+	upsertedEventTriggers []workflow.UpsertEventTriggerRequest
+}
+
+func (p *recordingWorkflowControlProvider) PutExecutionReference(_ context.Context, ref *workflow.ExecutionReference) (*workflow.ExecutionReference, error) {
+	if p.refs == nil {
+		p.refs = map[string]*workflow.ExecutionReference{}
+	}
+	stored := cloneWorkflowExecutionReference(ref)
+	p.refs[stored.ID] = stored
+	return cloneWorkflowExecutionReference(stored), nil
+}
+
+func (p *recordingWorkflowControlProvider) GetExecutionReference(_ context.Context, id string) (*workflow.ExecutionReference, error) {
+	ref := p.refs[id]
+	if ref == nil {
+		return nil, status.Error(codes.NotFound, "execution reference not found")
+	}
+	return cloneWorkflowExecutionReference(ref), nil
+}
+
+func (p *recordingWorkflowControlProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*workflow.ExecutionReference, error) {
+	out := make([]*workflow.ExecutionReference, 0, len(p.refs))
+	for _, ref := range p.refs {
+		if ref == nil {
+			continue
+		}
+		if subjectID != "" && ref.SubjectID != subjectID {
+			continue
+		}
+		out = append(out, cloneWorkflowExecutionReference(ref))
+	}
+	return out, nil
+}
+
+func (p *recordingWorkflowControlProvider) GetSchedule(_ context.Context, req workflow.GetScheduleRequest) (*workflow.Schedule, error) {
+	if schedule := p.schedules[req.ScheduleID]; schedule != nil {
+		return cloneWorkflowSchedule(schedule), nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *recordingWorkflowControlProvider) UpsertSchedule(_ context.Context, req workflow.UpsertScheduleRequest) (*workflow.Schedule, error) {
+	p.upsertedSchedules = append(p.upsertedSchedules, req)
+	if p.schedules == nil {
+		p.schedules = map[string]*workflow.Schedule{}
+	}
+	schedule := &workflow.Schedule{
+		ID:           req.ScheduleID,
+		Cron:         req.Cron,
+		Timezone:     req.Timezone,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		CreatedBy:    req.RequestedBy,
+		ExecutionRef: req.ExecutionRef,
+	}
+	p.schedules[req.ScheduleID] = schedule
+	return cloneWorkflowSchedule(schedule), nil
+}
+
+func (p *recordingWorkflowControlProvider) ListSchedules(context.Context, workflow.ListSchedulesRequest) ([]*workflow.Schedule, error) {
+	out := make([]*workflow.Schedule, 0, len(p.schedules))
+	for _, schedule := range p.schedules {
+		out = append(out, cloneWorkflowSchedule(schedule))
+	}
+	return out, nil
+}
+
+func (p *recordingWorkflowControlProvider) GetEventTrigger(_ context.Context, req workflow.GetEventTriggerRequest) (*workflow.EventTrigger, error) {
+	if trigger := p.eventTriggers[req.TriggerID]; trigger != nil {
+		return cloneWorkflowEventTrigger(trigger), nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *recordingWorkflowControlProvider) UpsertEventTrigger(_ context.Context, req workflow.UpsertEventTriggerRequest) (*workflow.EventTrigger, error) {
+	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
+	if p.eventTriggers == nil {
+		p.eventTriggers = map[string]*workflow.EventTrigger{}
+	}
+	trigger := &workflow.EventTrigger{
+		ID:           req.TriggerID,
+		Match:        req.Match,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		CreatedBy:    req.RequestedBy,
+		ExecutionRef: req.ExecutionRef,
+	}
+	p.eventTriggers[req.TriggerID] = trigger
+	return cloneWorkflowEventTrigger(trigger), nil
+}
+
+func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, workflow.ListEventTriggersRequest) ([]*workflow.EventTrigger, error) {
+	out := make([]*workflow.EventTrigger, 0, len(p.eventTriggers))
+	for _, trigger := range p.eventTriggers {
+		out = append(out, cloneWorkflowEventTrigger(trigger))
+	}
+	return out, nil
+}
+
+func cloneWorkflowExecutionReference(ref *workflow.ExecutionReference) *workflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	clone := *ref
+	return &clone
+}
+
+func cloneWorkflowSchedule(schedule *workflow.Schedule) *workflow.Schedule {
+	if schedule == nil {
+		return nil
+	}
+	clone := *schedule
+	return &clone
+}
+
+func cloneWorkflowEventTrigger(trigger *workflow.EventTrigger) *workflow.EventTrigger {
+	if trigger == nil {
+		return nil
+	}
+	clone := *trigger
+	return &clone
 }
 
 func newRecordingHostedWorkflowRuntime(t *testing.T) *recordingHostedWorkflowRuntime {
@@ -433,6 +1119,18 @@ func (r *recordingHostedWorkflowRuntime) startProviderCalls() int32 {
 		total += server.startProviderCalls.Load()
 	}
 	return total
+}
+
+func waitForHostedWorkflowRuntimeStartSessionRequests(t *testing.T, runtimeProvider *recordingHostedWorkflowRuntime, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := len(runtimeProvider.startSessionRequestsCopy()); got >= want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("StartSession requests = %d, want at least %d", len(runtimeProvider.startSessionRequestsCopy()), want)
 }
 
 func (r *recordingHostedWorkflowRuntime) cleanupServer(sessionID string) {

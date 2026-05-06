@@ -314,26 +314,16 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 	if entry == nil {
 		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
 	}
-	mode := ExecutionModeLocal
 	providerPath := "execution.runtime.provider"
 	var runtimeCfg *HostedRuntimeConfig
+	enabled := false
 	if entry.Execution != nil {
-		mode = entry.Execution.Mode
-		if mode == "" {
-			if entry.Execution.Runtime != nil {
-				mode = ExecutionModeHosted
-			} else {
-				mode = ExecutionModeLocal
-			}
-		}
 		runtimeCfg = entry.Execution.Runtime
+		mode := ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
+		enabled = runtimeCfg != nil || mode == ExecutionModeHosted
 	}
-	switch mode {
-	case "", ExecutionModeLocal:
+	if !enabled {
 		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
-	case ExecutionModeHosted:
-	default:
-		return EffectiveExecution{}, fmt.Errorf("config validation: %s.execution.mode must be %q or %q, got %q", configPath, ExecutionModeLocal, ExecutionModeHosted, mode)
 	}
 	if runtimeCfg == nil {
 		runtimeCfg = &HostedRuntimeConfig{}

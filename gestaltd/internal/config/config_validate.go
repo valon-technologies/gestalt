@@ -1082,7 +1082,7 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
 		return err
 	}
-	if entry.UsesHostedExecution() {
+	if entry.UsesRuntimePlacement() {
 		if err := validateHostedAgentRuntimeLifecyclePolicy(subject, entry); err != nil {
 			return err
 		}
@@ -1211,8 +1211,11 @@ func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEn
 
 func validateHostedWorkflowRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
 	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
-	if runtimeCfg == nil || !runtimeCfg.LifecyclePolicyFieldsSet() {
-		return nil
+	if runtimeCfg == nil {
+		return fmt.Errorf("config validation: %s is required for runtime-placed workflow providers", runtimePath)
+	}
+	if !runtimeCfg.LifecyclePolicyFieldsSet() {
+		return fmt.Errorf("config validation: %s.pool is required for runtime-placed workflow providers", runtimePath)
 	}
 	if err := validateHostedRuntimeLifecyclePolicy(subject, entry, false, "workflow"); err != nil {
 		return err
@@ -1225,7 +1228,7 @@ func validateHostedWorkflowRuntimeLifecyclePolicy(subject string, entry *Provide
 }
 
 func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, requireIndexedDB bool, providerKind string) error {
-	if entry == nil || !entry.UsesHostedExecution() {
+	if entry == nil || !entry.UsesRuntimePlacement() {
 		return nil
 	}
 	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
@@ -1308,7 +1311,7 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
 		return err
 	}
-	if entry.UsesHostedExecution() {
+	if entry.UsesRuntimePlacement() {
 		if err := validateHostedWorkflowRuntimeLifecyclePolicy(subject, entry); err != nil {
 			return err
 		}

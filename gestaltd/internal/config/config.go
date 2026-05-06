@@ -1133,6 +1133,10 @@ func (e *ProviderEntry) EffectiveAllowedHosts() []string {
 }
 
 func (e *ProviderEntry) UsesHostedExecution() bool {
+	return e.UsesRuntimePlacement()
+}
+
+func (e *ProviderEntry) UsesRuntimePlacement() bool {
 	if e == nil {
 		return false
 	}
