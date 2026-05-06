@@ -1,5 +1,3 @@
-import { connect } from "node:net";
-
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -7,6 +5,7 @@ import {
   ConnectError,
   createClient,
   type Client,
+  type Interceptor,
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
@@ -48,8 +47,11 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
-/** Environment variable containing the workflow-host service socket path. */
+/** Environment variable containing the workflow-host service target. */
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
+/** Environment variable containing the optional workflow-host relay token. */
+export const ENV_WORKFLOW_HOST_SOCKET_TOKEN = `${ENV_WORKFLOW_HOST_SOCKET}_TOKEN`;
+const WORKFLOW_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /**
  * Generated workflow protocol message types commonly used by providers.
@@ -325,15 +327,16 @@ export class WorkflowHost {
   private readonly client: Client<typeof WorkflowHostService>;
 
   constructor() {
-    const socketPath = process.env[ENV_WORKFLOW_HOST_SOCKET];
-    if (!socketPath) {
+    const target = process.env[ENV_WORKFLOW_HOST_SOCKET];
+    if (!target) {
       throw new Error(`workflow host: ${ENV_WORKFLOW_HOST_SOCKET} is not set`);
     }
+    const relayToken = process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN]?.trim() ?? "";
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
-      nodeOptions: {
-        createConnection: () => connect({ path: socketPath }),
-      },
+      ...workflowHostTransportOptions(target),
+      interceptors: relayToken
+        ? [workflowHostRelayTokenInterceptor(relayToken)]
+        : [],
     });
     this.client = createClient(WorkflowHostService, transport);
   }
@@ -344,6 +347,57 @@ export class WorkflowHost {
   ): Promise<InvokeWorkflowOperationResponse> {
     return await this.client.invokeOperation(request);
   }
+}
+
+function workflowHostTransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("workflow host: transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(
+        `workflow host: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(
+        `workflow host: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(
+        `workflow host: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
+      );
+    }
+    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(
+      `workflow host: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
+    );
+  }
+  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
+}
+
+function workflowHostRelayTokenInterceptor(token: string): Interceptor {
+  return (next) => async (req) => {
+    req.header.set(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
+    return next(req);
+  };
 }
 
 /** Builds the Connect service implementation used by the TypeScript runtime. */

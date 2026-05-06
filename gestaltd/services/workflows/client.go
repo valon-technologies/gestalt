@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
@@ -21,6 +22,14 @@ type ExecConfig struct {
 	Cleanup      func()
 	HostServices []runtimehost.HostService
 	Name         string
+}
+
+type RemoteConfig struct {
+	Client  proto.WorkflowProviderClient
+	Runtime proto.ProviderLifecycleClient
+	Closer  io.Closer
+	Config  map[string]any
+	Name    string
 }
 
 var startWorkflowProviderProcess = runtimehost.StartPluginProcess
@@ -53,6 +62,28 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreworkflow.Provider, 
 		return nil, err
 	}
 	return &remoteWorkflow{client: workflowClient, runtime: runtimeClient, closer: proc}, nil
+}
+
+func NewRemote(ctx context.Context, cfg RemoteConfig) (coreworkflow.Provider, error) {
+	if cfg.Client == nil {
+		if cfg.Closer != nil {
+			_ = cfg.Closer.Close()
+		}
+		return nil, fmt.Errorf("workflow provider client is required")
+	}
+	if cfg.Runtime == nil {
+		if cfg.Closer != nil {
+			_ = cfg.Closer.Close()
+		}
+		return nil, fmt.Errorf("workflow provider lifecycle client is required")
+	}
+	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
+		if cfg.Closer != nil {
+			_ = cfg.Closer.Close()
+		}
+		return nil, err
+	}
+	return &remoteWorkflow{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer}, nil
 }
 
 func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {

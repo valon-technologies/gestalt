@@ -21,9 +21,9 @@ Gestalt-owned services. How is hostname-based egress preserved. How does the
 host dial the hosted plugin back once it starts.
 
 It does **not** replace the host-local authentication, authorization,
-IndexedDB, cache, S3, secrets, or workflow providers. Those remain on the
-`gestaltd` host. A runtime provider only changes where the plugin process runs
-and how the host reaches it.
+IndexedDB, cache, S3, or secrets providers. Those remain on the `gestaltd`
+host. A runtime provider changes where executable plugin, agent, and workflow
+provider processes run and how the host reaches them.
 
 ## Manifest
 

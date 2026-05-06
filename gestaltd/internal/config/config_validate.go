@@ -1200,12 +1200,34 @@ func validateHostedRuntimeDockerConfigJSON(value string) error {
 }
 
 func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
+	return validateHostedRuntimeLifecyclePolicy(subject, entry, true, "agent")
+}
+
+func validateHostedWorkflowRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
+	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
+	if runtimeCfg == nil || !runtimeCfg.LifecyclePolicyFieldsSet() {
+		return nil
+	}
+	if err := validateHostedRuntimeLifecyclePolicy(subject, entry, false, "workflow"); err != nil {
+		return err
+	}
+	lifecycle := runtimeCfg.lifecyclePolicyConfig()
+	if lifecycle.MaxReadyInstances != lifecycle.MinReadyInstances {
+		return fmt.Errorf("config validation: %s.pool.maxReadyInstances must equal minReadyInstances for fixed workflow worker pools", runtimePath)
+	}
+	return nil
+}
+
+func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, requireIndexedDB bool, providerKind string) error {
 	if entry == nil || !entry.UsesHostedExecution() {
 		return nil
 	}
 	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
 	if runtimeCfg == nil {
-		return fmt.Errorf("config validation: %s is required for hosted agent providers", runtimePath)
+		if providerKind == "" {
+			providerKind = "provider"
+		}
+		return fmt.Errorf("config validation: %s is required for hosted %s providers", runtimePath, providerKind)
 	}
 	lifecycle := runtimeCfg.lifecyclePolicyConfig()
 	lifecycleSubject := runtimePath + ".pool"
@@ -1232,7 +1254,7 @@ func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEn
 	default:
 		return fmt.Errorf("config validation: %s.restartPolicy must be one of %q or %q", lifecycleSubject, HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever)
 	}
-	if lifecycle.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
+	if requireIndexedDB && lifecycle.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
 		return fmt.Errorf("config validation: %s.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", lifecycleSubject, HostedRuntimeRestartPolicyAlways, subject)
 	}
 	if _, err := runtimeCfg.LifecyclePolicy(); err != nil {
@@ -1274,8 +1296,16 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
 	}
-	if entry.Execution != nil {
-		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
+	if err := normalizeExecutionConfig(subject, entry.Execution, true); err != nil {
+		return err
+	}
+	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
+		return err
+	}
+	if entry.UsesHostedExecution() {
+		if err := validateHostedWorkflowRuntimeLifecyclePolicy(subject, entry); err != nil {
+			return err
+		}
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -1432,7 +1462,7 @@ func normalizeExecutionConfig(subject string, execution *ExecutionConfig, allowL
 		return err
 	}
 	if !allowLifecycle && execution.Runtime.LifecyclePolicyFieldsSet() {
-		return fmt.Errorf("config validation: %s.execution.runtime lifecycle fields are only supported on providers.agent.*.execution.runtime", subject)
+		return fmt.Errorf("config validation: %s.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers", subject)
 	}
 	return nil
 }
