@@ -1316,6 +1316,7 @@ type recordingWorkflowProvider struct {
 	getEventTriggerErr         error
 	eventTriggers              map[string]*coreworkflow.EventTrigger
 	executionRefs              map[string]*coreworkflow.ExecutionReference
+	getExecutionReferenceErrs  map[string]error
 	deleteMissingNotFound      bool
 	deleteEventMissingNotFound bool
 	closed                     *atomic.Bool
@@ -1482,6 +1483,9 @@ func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref
 	return cloneBootstrapWorkflowExecutionRef(stored), nil
 }
 func (p *recordingWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	if err := p.getExecutionReferenceErrs[strings.TrimSpace(id)]; err != nil {
+		return nil, err
+	}
 	if ref := p.executionRefs[strings.TrimSpace(id)]; ref != nil {
 		return cloneBootstrapWorkflowExecutionRef(ref), nil
 	}
@@ -5507,6 +5511,69 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	}
 	if ref.RevokedAt != nil {
 		t.Fatalf("revokedAt = %#v, want nil", ref.RevokedAt)
+	}
+}
+
+func TestBootstrapReplacesUnreadableConfiguredWorkflowExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	const staleExecutionRef = "workflow_schedule:stale-ref"
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	provider := &recordingWorkflowProvider{
+		schedules: map[string]*coreworkflow.Schedule{
+			workflowConfigScheduleID("nightly_sync"): {
+				ID:           workflowConfigScheduleID("nightly_sync"),
+				Cron:         "0 2 * * *",
+				Timezone:     "UTC",
+				Target:       coreWorkflowPluginTarget("roadmap", "sync"),
+				ExecutionRef: staleExecutionRef,
+				CreatedBy: coreworkflow.Actor{
+					SubjectID:   "system:config",
+					SubjectKind: "system",
+					AuthSource:  "config",
+				},
+			},
+		},
+		getExecutionReferenceErrs: map[string]error{
+			staleExecutionRef: status.Error(codes.Internal, "query temporal index: workflow task failed"),
+		},
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(provider.upsertedSchedules))
+	}
+	replacementExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	if replacementExecutionRef == "" || replacementExecutionRef == staleExecutionRef {
+		t.Fatalf("replacement execution ref = %q, want fresh ref", replacementExecutionRef)
+	}
+	if _, err := provider.GetExecutionReference(context.Background(), replacementExecutionRef); err != nil {
+		t.Fatalf("Get replacement execution ref: %v", err)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -75,7 +76,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		executionRefID, createdExecutionRef, err := workflowEnsureConfigExecutionRef(
+		executionRefID, createdExecutionRef, replacedUnreadableExecutionRef, replacedUnreadableExecutionRefErr, err := workflowEnsureConfigExecutionRef(
 			ctx,
 			executionRefs,
 			desiredExecutionRef,
@@ -99,7 +100,10 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			}
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		if existingExecutionRef != executionRefID {
+		if replacedUnreadableExecutionRef != "" {
+			workflowLogReplacedUnreadableExecutionRef(ctx, "schedule", desiredEntry.ScheduleKey, desiredEntry.ScheduleID, providerName, pluginName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
+		}
+		if existingExecutionRef != executionRefID && replacedUnreadableExecutionRef == "" {
 			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
 				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", existingExecutionRef, desiredEntry.ScheduleID, pluginName, err)
 			}
@@ -330,14 +334,16 @@ func workflowEnsureConfigExecutionRef(
 	desired *coreworkflow.ExecutionReference,
 	refID string,
 	candidateIDs ...string,
-) (string, bool, error) {
+) (string, bool, string, error, error) {
 	if store == nil {
-		return "", false, fmt.Errorf("workflow execution refs are not configured")
+		return "", false, "", nil, fmt.Errorf("workflow execution refs are not configured")
 	}
 	refID = strings.TrimSpace(refID)
 	if refID == "" {
-		return "", false, fmt.Errorf("workflow execution ref id is required")
+		return "", false, "", nil, fmt.Errorf("workflow execution ref id is required")
 	}
+	replacedUnreadableCandidateID := ""
+	var replacedUnreadableCandidateErr error
 	for _, candidateID := range candidateIDs {
 		candidateID = strings.TrimSpace(candidateID)
 		if candidateID == "" {
@@ -348,17 +354,21 @@ func workflowEnsureConfigExecutionRef(
 			if isWorkflowObjectNotFound(err) {
 				continue
 			}
-			return "", false, err
+			if replacedUnreadableCandidateID == "" {
+				replacedUnreadableCandidateID = candidateID
+				replacedUnreadableCandidateErr = err
+			}
+			continue
 		}
 		if workflowConfigExecutionRefMatches(existing, desired) {
-			return candidateID, false, nil
+			return candidateID, false, "", nil, nil
 		}
 	}
 	desired.ID = refID
 	if _, err := store.PutExecutionReference(ctx, desired); err != nil {
-		return "", false, err
+		return "", false, "", nil, err
 	}
-	return refID, true, nil
+	return refID, true, replacedUnreadableCandidateID, replacedUnreadableCandidateErr, nil
 }
 
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
@@ -644,6 +654,19 @@ func workflowExecutionReferenceStore(providerName string, provider coreworkflow.
 		return nil, fmt.Errorf("workflow provider %q does not support execution refs", strings.TrimSpace(providerName))
 	}
 	return store, nil
+}
+
+func workflowLogReplacedUnreadableExecutionRef(ctx context.Context, objectType, objectKey, objectID, providerName, pluginName, oldExecutionRef, newExecutionRef string, lookupErr error) {
+	slog.WarnContext(ctx, "replaced unreadable workflow execution ref during config reconciliation",
+		"workflow_object_type", strings.TrimSpace(objectType),
+		"workflow_object_key", strings.TrimSpace(objectKey),
+		"workflow_object_id", strings.TrimSpace(objectID),
+		"workflow_provider", strings.TrimSpace(providerName),
+		"plugin", strings.TrimSpace(pluginName),
+		"old_execution_ref", strings.TrimSpace(oldExecutionRef),
+		"new_execution_ref", strings.TrimSpace(newExecutionRef),
+		"error", lookupErr,
+	)
 }
 
 func workflowRevokeExecutionRefByID(ctx context.Context, store coreworkflow.ExecutionReferenceStore, refID string) error {
