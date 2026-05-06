@@ -38,6 +38,14 @@ func mustServe(t *testing.T, handler http.Handler, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
+func mustServeRequest(t *testing.T, handler http.Handler, path string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec.Code, rec.Body.String()
+}
+
 func TestDirHandler_ServesFilesAndFallbacks(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +165,30 @@ func TestDirHandler_ServesFilesAndFallbacks(t *testing.T) {
 				t.Fatalf("body = %q, want content containing %q", body, tc.want)
 			}
 		})
+	}
+}
+
+func TestDirHandler_DoesNotServeParentPathElements(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	assetDir := filepath.Join(parent, "assets")
+	mustWriteFile(t, assetDir, "index.html", "<html>home</html>")
+	mustWriteFile(t, parent, "secret.html", "<html>secret</html>")
+
+	handler, err := DirHandler(assetDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"/../secret.html", "/../secret"} {
+		code, body := mustServeRequest(t, handler, path)
+		if code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, code, http.StatusOK)
+		}
+		if strings.Contains(body, "secret") {
+			t.Fatalf("%s body = %q, should not include parent file content", path, body)
+		}
 	}
 }
 

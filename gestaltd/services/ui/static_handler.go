@@ -89,10 +89,14 @@ type requestResolution struct {
 }
 
 func (h *handler) resolve(path string) requestResolution {
-	if path == "" {
-		path = "index.html"
+	path, ok := cleanStaticPath(path)
+	if !ok {
+		return requestResolution{
+			navigation: true,
+			routePath:  "/",
+			serveIndex: true,
+		}
 	}
-	path = strings.TrimPrefix(path, "/")
 
 	if info, err := fs.Stat(h.fs, path); err == nil && !info.IsDir() {
 		if routePath, ok := navigationRoutePath(path); ok {
@@ -150,6 +154,31 @@ func isNavigationHTML(path string) bool {
 	return ok
 }
 
+func cleanStaticPath(path string) (string, bool) {
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		return "index.html", true
+	}
+	if hasParentPathElement(path) {
+		return "", false
+	}
+	path = stdpath.Clean(path)
+	if path == "." {
+		return "index.html", true
+	}
+	path = strings.TrimPrefix(path, "/")
+	return path, fs.ValidPath(path)
+}
+
+func hasParentPathElement(path string) bool {
+	for _, part := range strings.Split(path, "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
 func cleanRoutePath(path string) string {
 	path = stdpath.Clean(path)
 	if path == "." {
@@ -169,7 +198,11 @@ func serveIndex(w http.ResponseWriter, r *http.Request, readIndex func() ([]byte
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, fsys fs.FS, path string) {
-	path = strings.TrimPrefix(path, "/")
+	path, ok := cleanStaticPath(path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
 	data, err := fs.ReadFile(fsys, path)
 	if err != nil {
 		http.NotFound(w, r)
