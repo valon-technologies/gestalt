@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowprincipal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -349,6 +350,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	timeout := workflowAgentTimeout(agentTarget.TimeoutSeconds)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	runCtx = runtimehost.WithWorkflowAgentProviderDeadline(runCtx)
 
 	metadata := maps.Clone(agentTarget.Metadata)
 	if metadata == nil {

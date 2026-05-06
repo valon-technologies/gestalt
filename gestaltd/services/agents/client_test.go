@@ -17,6 +17,9 @@ import (
 
 type fakeAgentProviderClient struct {
 	createSession   func(context.Context, *proto.CreateAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error)
+	getSession      func(context.Context, *proto.GetAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error)
+	createTurn      func(context.Context, *proto.CreateAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error)
+	getTurn         func(context.Context, *proto.GetAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error)
 	getCapabilities func(context.Context, *proto.GetAgentProviderCapabilitiesRequest, ...grpc.CallOption) (*proto.AgentProviderCapabilities, error)
 	listSessions    func(context.Context, *proto.ListAgentProviderSessionsRequest, ...grpc.CallOption) (*proto.ListAgentProviderSessionsResponse, error)
 	listTurns       func(context.Context, *proto.ListAgentProviderTurnsRequest, ...grpc.CallOption) (*proto.ListAgentProviderTurnsResponse, error)
@@ -30,7 +33,10 @@ func (c *fakeAgentProviderClient) CreateSession(ctx context.Context, req *proto.
 	return nil, errors.New("unexpected CreateSession call")
 }
 
-func (c *fakeAgentProviderClient) GetSession(context.Context, *proto.GetAgentProviderSessionRequest, ...grpc.CallOption) (*proto.AgentSession, error) {
+func (c *fakeAgentProviderClient) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest, opts ...grpc.CallOption) (*proto.AgentSession, error) {
+	if c.getSession != nil {
+		return c.getSession(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected GetSession call")
 }
 
@@ -45,11 +51,17 @@ func (c *fakeAgentProviderClient) UpdateSession(context.Context, *proto.UpdateAg
 	return nil, errors.New("unexpected UpdateSession call")
 }
 
-func (c *fakeAgentProviderClient) CreateTurn(context.Context, *proto.CreateAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error) {
+func (c *fakeAgentProviderClient) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest, opts ...grpc.CallOption) (*proto.AgentTurn, error) {
+	if c.createTurn != nil {
+		return c.createTurn(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected CreateTurn call")
 }
 
-func (c *fakeAgentProviderClient) GetTurn(context.Context, *proto.GetAgentProviderTurnRequest, ...grpc.CallOption) (*proto.AgentTurn, error) {
+func (c *fakeAgentProviderClient) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest, opts ...grpc.CallOption) (*proto.AgentTurn, error) {
+	if c.getTurn != nil {
+		return c.getTurn(ctx, req, opts...)
+	}
 	return nil, errors.New("unexpected GetTurn call")
 }
 
@@ -172,6 +184,121 @@ func TestRemoteAgentCreateSessionPreservesWorkflowDeadline(t *testing.T) {
 	}
 	if createSessionRemaining > 2*runtimehost.ProviderRPCTimeout {
 		t.Fatalf("CreateSession remaining deadline = %s, want at most parent deadline %s", createSessionRemaining, 2*runtimehost.ProviderRPCTimeout)
+	}
+}
+
+func TestRemoteAgentWorkflowAgentTurnCallsPreserveMarkedDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * runtimehost.ProviderSessionCreateTimeout)
+	var createTurnRemaining time.Duration
+	var getTurnRemaining time.Duration
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			createTurn: func(ctx context.Context, req *proto.CreateAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("CreateTurn context has no deadline")
+				}
+				createTurnRemaining = time.Until(deadline)
+				return &proto.AgentTurn{
+					Id:        "turn-1",
+					SessionId: req.GetSessionId(),
+					Status:    proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+				}, nil
+			},
+			getTurn: func(ctx context.Context, req *proto.GetAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("GetTurn context has no deadline")
+				}
+				getTurnRemaining = time.Until(deadline)
+				return &proto.AgentTurn{
+					Id:     req.GetTurnId(),
+					Status: proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+				}, nil
+			},
+		},
+	}
+	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer cancel()
+	ctx := runtimehost.WithWorkflowAgentProviderDeadline(parent)
+
+	if _, err := agent.CreateTurn(ctx, coreagent.CreateTurnRequest{SessionID: "session-1"}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if _, err := agent.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: "turn-1"}); err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	for name, remaining := range map[string]time.Duration{
+		"CreateTurn": createTurnRemaining,
+		"GetTurn":    getTurnRemaining,
+	} {
+		if remaining <= runtimehost.ProviderRPCTimeout {
+			t.Fatalf("%s remaining deadline = %s, want above provider RPC timeout %s", name, remaining, runtimehost.ProviderRPCTimeout)
+		}
+		if remaining > 2*runtimehost.ProviderSessionCreateTimeout {
+			t.Fatalf("%s remaining deadline = %s, want at most parent deadline %s", name, remaining, 2*runtimehost.ProviderSessionCreateTimeout)
+		}
+	}
+}
+
+func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * runtimehost.ProviderSessionCreateTimeout)
+	var createTurnRemaining time.Duration
+	var getTurnRemaining time.Duration
+	var getSessionRemaining time.Duration
+	agent := &remoteAgent{
+		client: &fakeAgentProviderClient{
+			createTurn: func(ctx context.Context, req *proto.CreateAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("CreateTurn context has no deadline")
+				}
+				createTurnRemaining = time.Until(deadline)
+				return &proto.AgentTurn{Id: "turn-1", SessionId: req.GetSessionId()}, nil
+			},
+			getTurn: func(ctx context.Context, req *proto.GetAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("GetTurn context has no deadline")
+				}
+				getTurnRemaining = time.Until(deadline)
+				return &proto.AgentTurn{Id: req.GetTurnId()}, nil
+			},
+			getSession: func(ctx context.Context, req *proto.GetAgentProviderSessionRequest, _ ...grpc.CallOption) (*proto.AgentSession, error) {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("GetSession context has no deadline")
+				}
+				getSessionRemaining = time.Until(deadline)
+				return &proto.AgentSession{Id: req.GetSessionId(), ProviderName: "claude"}, nil
+			},
+		},
+	}
+	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer cancel()
+
+	if _, err := agent.CreateTurn(parent, coreagent.CreateTurnRequest{SessionID: "session-1"}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if _, err := agent.GetTurn(parent, coreagent.GetTurnRequest{TurnID: "turn-1"}); err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	marked := runtimehost.WithWorkflowAgentProviderDeadline(parent)
+	if _, err := agent.GetSession(marked, coreagent.GetSessionRequest{SessionID: "session-1"}); err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	for name, remaining := range map[string]time.Duration{
+		"CreateTurn": createTurnRemaining,
+		"GetTurn":    getTurnRemaining,
+		"GetSession": getSessionRemaining,
+	} {
+		if remaining > runtimehost.ProviderRPCTimeout {
+			t.Fatalf("%s remaining deadline = %s, want at most provider RPC timeout %s", name, remaining, runtimehost.ProviderRPCTimeout)
+		}
 	}
 }
 

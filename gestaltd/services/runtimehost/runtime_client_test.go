@@ -247,6 +247,58 @@ func TestProviderSessionCreateContextPreservesShortParentDeadline(t *testing.T) 
 	}
 }
 
+func TestProviderWorkflowAgentCallContextRequiresMarkerForParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	parentDeadline := time.Now().Add(2 * ProviderSessionCreateTimeout)
+	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer parentCancel()
+
+	unmarked, unmarkedCancel := ProviderWorkflowAgentCallContext(parent)
+	defer unmarkedCancel()
+	unmarkedDeadline, ok := unmarked.Deadline()
+	if !ok {
+		t.Fatal("unmarked workflow agent context has no deadline")
+	}
+	if unmarkedDeadline.Equal(parentDeadline) {
+		t.Fatal("unmarked workflow agent context preserved parent deadline")
+	}
+	if remaining := time.Until(unmarkedDeadline); remaining > ProviderRPCTimeout {
+		t.Fatalf("unmarked remaining deadline = %s, want at most provider RPC timeout %s", remaining, ProviderRPCTimeout)
+	}
+
+	markedParent := WithWorkflowAgentProviderDeadline(parent)
+	marked, markedCancel := ProviderWorkflowAgentCallContext(markedParent)
+	defer markedCancel()
+	markedDeadline, ok := marked.Deadline()
+	if !ok {
+		t.Fatal("marked workflow agent context has no deadline")
+	}
+	if !markedDeadline.Equal(parentDeadline) {
+		t.Fatalf("marked deadline = %s, want parent deadline %s", markedDeadline, parentDeadline)
+	}
+	parentCancel()
+	select {
+	case <-marked.Done():
+	case <-time.After(time.Second):
+		t.Fatal("marked workflow agent context did not observe parent cancellation")
+	}
+}
+
+func TestProviderWorkflowAgentCallContextFallsBackWithoutParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := ProviderWorkflowAgentCallContext(WithWorkflowAgentProviderDeadline(context.Background()))
+	defer cancel()
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("workflow agent context has no deadline")
+	}
+	if remaining := time.Until(deadline); remaining > ProviderRPCTimeout {
+		t.Fatalf("remaining deadline = %s, want at most provider RPC timeout %s", remaining, ProviderRPCTimeout)
+	}
+}
+
 func TestStartRuntimeProviderValidatesProtocolVersion(t *testing.T) {
 	t.Parallel()
 

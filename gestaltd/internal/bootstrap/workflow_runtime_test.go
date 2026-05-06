@@ -179,11 +179,16 @@ func workflowSignalsFromTestContext(value any) []map[string]any {
 
 type workflowRuntimeAgentManagerStub struct {
 	agentmanager.Service
-	createSessionRequests  []coreagent.ManagerCreateSessionRequest
-	createSessionDeadlines []time.Duration
-	createTurnRequests     []coreagent.ManagerCreateTurnRequest
-	cancelTurnIDs          []string
-	returnNilTurn          bool
+	createSessionRequests           []coreagent.ManagerCreateSessionRequest
+	createSessionDeadlines          []time.Duration
+	createTurnRequests              []coreagent.ManagerCreateTurnRequest
+	createTurnDeadlines             []time.Duration
+	createTurnProviderCallDeadlines []time.Duration
+	getTurnDeadlines                []time.Duration
+	getTurnProviderCallDeadlines    []time.Duration
+	cancelTurnIDs                   []string
+	returnNilTurn                   bool
+	completeTurnViaGet              bool
 }
 
 func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
@@ -201,24 +206,53 @@ func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *
 	}, nil
 }
 
-func (m *workflowRuntimeAgentManagerStub) CreateTurn(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (m *workflowRuntimeAgentManagerStub) CreateTurn(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	m.createTurnRequests = append(m.createTurnRequests, req)
+	m.createTurnDeadlines = append(m.createTurnDeadlines, remainingDeadline(ctx))
+	callCtx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
+	m.createTurnProviderCallDeadlines = append(m.createTurnProviderCallDeadlines, remainingDeadline(callCtx))
+	cancel()
 	if m.returnNilTurn {
 		return nil, nil
+	}
+	status := coreagent.ExecutionStatusSucceeded
+	outputText := "turn completed"
+	if m.completeTurnViaGet {
+		status = coreagent.ExecutionStatusRunning
+		outputText = ""
 	}
 	return &coreagent.Turn{
 		ID:           "turn-1",
 		SessionID:    req.SessionID,
 		ProviderName: "managed",
 		Model:        req.Model,
-		Status:       coreagent.ExecutionStatusSucceeded,
-		OutputText:   "turn completed",
+		Status:       status,
+		OutputText:   outputText,
+	}, nil
+}
+
+func (m *workflowRuntimeAgentManagerStub) GetTurn(ctx context.Context, _ *principal.Principal, turnID string) (*coreagent.Turn, error) {
+	m.getTurnDeadlines = append(m.getTurnDeadlines, remainingDeadline(ctx))
+	callCtx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
+	m.getTurnProviderCallDeadlines = append(m.getTurnProviderCallDeadlines, remainingDeadline(callCtx))
+	cancel()
+	return &coreagent.Turn{
+		ID:         turnID,
+		Status:     coreagent.ExecutionStatusSucceeded,
+		OutputText: "turn completed",
 	}, nil
 }
 
 func (m *workflowRuntimeAgentManagerStub) CancelTurn(_ context.Context, _ *principal.Principal, turnID, _ string) (*coreagent.Turn, error) {
 	m.cancelTurnIDs = append(m.cancelTurnIDs, turnID)
 	return &coreagent.Turn{ID: turnID, Status: coreagent.ExecutionStatusCanceled}, nil
+}
+
+func remainingDeadline(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		return time.Until(deadline)
+	}
+	return 0
 }
 
 type workflowRoundTripProvider struct {
@@ -633,10 +667,10 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetPassesWorkflowDeadlineToCreateSession(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(t *testing.T) {
 	t.Parallel()
 
-	agentManager := &workflowRuntimeAgentManagerStub{}
+	agentManager := &workflowRuntimeAgentManagerStub{completeTurnViaGet: true}
 	runtime := &workflowRuntime{}
 	runtime.SetAgentManager(agentManager)
 	p := principal.Canonicalize(&principal.Principal{
@@ -667,6 +701,24 @@ func TestWorkflowRuntimeInvokeAgentTargetPassesWorkflowDeadlineToCreateSession(t
 	}
 	if got := agentManager.createSessionDeadlines[0]; got > workflowAgentTimeout(0) {
 		t.Fatalf("CreateSession remaining deadline = %s, want at most workflow timeout %s", got, workflowAgentTimeout(0))
+	}
+	if len(agentManager.createTurnDeadlines) != 1 {
+		t.Fatalf("create turn deadlines = %#v, want one", agentManager.createTurnDeadlines)
+	}
+	if got := agentManager.createTurnDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateTurn remaining deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
+	}
+	if got := agentManager.createTurnProviderCallDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("CreateTurn provider call deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
+	}
+	if len(agentManager.getTurnDeadlines) != 1 {
+		t.Fatalf("get turn deadlines = %#v, want one", agentManager.getTurnDeadlines)
+	}
+	if got := agentManager.getTurnDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("GetTurn remaining deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
+	}
+	if got := agentManager.getTurnProviderCallDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
+		t.Fatalf("GetTurn provider call deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
 	}
 }
 
