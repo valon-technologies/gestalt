@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
 	"strconv"
@@ -734,10 +735,19 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	}
 	requireBounded := req.SummaryOnly || limit > 0
 	out := make([]*coreagent.Session, 0)
+	var providerErrs []error
+	providerSucceeded := false
+	strictProvider := providerName != ""
 	for _, candidate := range candidates {
 		if requireBounded {
 			if err := requireAgentProviderBoundedListHydration(ctx, candidate.name, candidate.provider); err != nil {
-				return nil, err
+				err = fmt.Errorf("agent provider %q list sessions: %w", candidate.name, err)
+				if strictProvider {
+					return nil, err
+				}
+				slog.WarnContext(ctx, "agent provider list sessions failed", "provider", candidate.name, "error", err)
+				providerErrs = append(providerErrs, err)
+				continue
 			}
 		}
 		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{
@@ -747,8 +757,16 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			SummaryOnly: req.SummaryOnly,
 		})
 		if err != nil {
-			return nil, err
+			err = fmt.Errorf("agent provider %q list sessions: %w", candidate.name, err)
+			if strictProvider {
+				return nil, err
+			}
+			slog.WarnContext(ctx, "agent provider list sessions failed", "provider", candidate.name, "error", err)
+			providerErrs = append(providerErrs, err)
+			continue
 		}
+		candidateOut := make([]*coreagent.Session, 0, len(sessions))
+		var candidateErr error
 		for _, session := range sessions {
 			if session == nil {
 				continue
@@ -758,7 +776,8 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			}
 			normalized, err := normalizeProviderSession(candidate.name, strings.TrimSpace(session.ID), session)
 			if err != nil {
-				return nil, err
+				candidateErr = fmt.Errorf("agent provider %q list sessions: %w", candidate.name, err)
+				break
 			}
 			if req.State != "" && normalized.State != req.State {
 				continue
@@ -767,8 +786,21 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			if req.SummaryOnly {
 				normalized = summarizeAgentSession(normalized)
 			}
-			out = append(out, normalized)
+			candidateOut = append(candidateOut, normalized)
 		}
+		if candidateErr != nil {
+			if strictProvider {
+				return nil, candidateErr
+			}
+			slog.WarnContext(ctx, "agent provider list sessions failed", "provider", candidate.name, "error", candidateErr)
+			providerErrs = append(providerErrs, candidateErr)
+			continue
+		}
+		providerSucceeded = true
+		out = append(out, candidateOut...)
+	}
+	if !providerSucceeded && len(providerErrs) > 0 {
+		return nil, errors.Join(providerErrs...)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		left := out[i]

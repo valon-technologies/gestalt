@@ -143,6 +143,7 @@ type routeCountingAgentProvider struct {
 	createSessionReqs []coreagent.CreateSessionRequest
 	createTurnReqs    []coreagent.CreateTurnRequest
 	listSessionReqs   []coreagent.ListSessionsRequest
+	listSessionsErr   error
 	listTurnReqs      []coreagent.ListTurnsRequest
 	turnIDOverride    string
 	cancelStatus      coreagent.ExecutionStatus
@@ -188,6 +189,9 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent
 
 func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	p.listSessionReqs = append(p.listSessionReqs, req)
+	if p.listSessionsErr != nil {
+		return nil, p.listSessionsErr
+	}
 	var sessions []*coreagent.Session
 	requested := map[string]struct{}{}
 	for _, id := range req.SessionIDs {
@@ -1110,6 +1114,92 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 	}
 	if len(provider.listSessionReqs) != 0 {
 		t.Fatalf("provider ListSessions calls = %d, want 0", len(provider.listSessionReqs))
+	}
+}
+
+func TestManagerListSessionsContinuesAfterUnfilteredProviderFailure(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID("user-1")
+	brokenErr := errors.New("backend unavailable")
+	broken := newRouteCountingAgentProvider("broken")
+	broken.listSessionsErr = brokenErr
+	healthy := newRouteCountingAgentProvider("healthy")
+	healthy.sessions["session-1"] = &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "healthy",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "healthy",
+			names:       []string{"broken", "healthy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"broken":  broken,
+				"healthy": healthy,
+			},
+		},
+		RunGrants: newAgentManagerTestRunGrants(t),
+	})
+
+	sessions, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: subjectID}, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       100,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "session-1" || sessions[0].ProviderName != "healthy" {
+		t.Fatalf("ListSessions = %#v, want healthy session", sessions)
+	}
+	if len(broken.listSessionReqs) != 1 {
+		t.Fatalf("broken ListSessions calls = %d, want 1", len(broken.listSessionReqs))
+	}
+	if len(healthy.listSessionReqs) != 1 {
+		t.Fatalf("healthy ListSessions calls = %d, want 1", len(healthy.listSessionReqs))
+	}
+}
+
+func TestManagerListSessionsReturnsFilteredProviderFailure(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID("user-1")
+	brokenErr := errors.New("backend unavailable")
+	broken := newRouteCountingAgentProvider("broken")
+	broken.listSessionsErr = brokenErr
+	healthy := newRouteCountingAgentProvider("healthy")
+	healthy.sessions["session-1"] = &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "healthy",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: subjectID},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "healthy",
+			names:       []string{"broken", "healthy"},
+			providers: map[string]*routeCountingAgentProvider{
+				"broken":  broken,
+				"healthy": healthy,
+			},
+		},
+		RunGrants: newAgentManagerTestRunGrants(t),
+	})
+
+	_, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: subjectID}, coreagent.ManagerListSessionsRequest{
+		ProviderName: "broken",
+		SummaryOnly:  true,
+		Limit:        100,
+	})
+	if !errors.Is(err, brokenErr) {
+		t.Fatalf("ListSessions error = %v, want backend error", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), `agent provider "broken"`) {
+		t.Fatalf("ListSessions error = %v, want provider name", err)
+	}
+	if len(healthy.listSessionReqs) != 0 {
+		t.Fatalf("healthy ListSessions calls = %d, want 0", len(healthy.listSessionReqs))
 	}
 }
 
