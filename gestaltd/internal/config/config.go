@@ -415,6 +415,7 @@ type ProviderEntry struct {
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
+	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
 	Execution         *ExecutionConfig              `yaml:"execution,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 	MCP               bool                          `yaml:"mcp,omitempty"`
@@ -942,6 +943,7 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
+	e.Runtime = cloneHostedRuntimeConfig(e.Runtime)
 	e.Execution = cloneExecutionConfig(e.Execution)
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
@@ -1140,6 +1142,9 @@ func (e *ProviderEntry) UsesRuntimePlacement() bool {
 	if e == nil {
 		return false
 	}
+	if e.Runtime != nil {
+		return true
+	}
 	if e.Execution != nil {
 		mode := ExecutionMode(strings.ToLower(strings.TrimSpace(string(e.Execution.Mode))))
 		if mode == "" {
@@ -1153,6 +1158,9 @@ func (e *ProviderEntry) UsesRuntimePlacement() bool {
 func (e *ProviderEntry) HostedRuntimeConfig() *HostedRuntimeConfig {
 	if e == nil {
 		return nil
+	}
+	if e.Runtime != nil {
+		return e.Runtime
 	}
 	if e.Execution != nil {
 		return e.Execution.Runtime

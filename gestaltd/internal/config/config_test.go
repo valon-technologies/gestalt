@@ -3560,6 +3560,37 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("rejects unknown top-level hosted runtime on agent providers", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: missing
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  runtime:
+    defaultHostedProvider: hosted
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `providers.agent.simple.runtime.provider references unknown runtime "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadConfigAgentRuntimeLifecycleFields(t *testing.T) {
@@ -3661,6 +3692,53 @@ server:
 		}
 		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
 			t.Fatalf("execution restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
+	t.Run("accepts required lifecycle fields under agent runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb: agent_state
+      runtime:
+        provider: hosted
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
+		if runtimeCfg == nil || runtimeCfg.Pool == nil {
+			t.Fatalf("runtime pool = %#v", runtimeCfg)
+		}
+		if cfg.Providers.Agent["simple"].HostedRuntimeConfig() != runtimeCfg {
+			t.Fatal("HostedRuntimeConfig did not return top-level runtime")
+		}
+		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
+			t.Fatalf("runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
 	})
 
@@ -4001,6 +4079,82 @@ server:
 `,
 			want: "plugins.service.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
+		{
+			name: "rejects lifecycle fields on plugin top-level runtime",
+			yaml: `
+plugins:
+  service:
+    source:
+      path: ./plugins/service/manifest.yaml
+    runtime:
+      provider: hosted
+      pool:
+        minReadyInstances: 1
+        maxReadyInstances: 2
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "plugins.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
+		},
+		{
+			name: "rejects duplicate runtime config",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb: agent_state
+      runtime:
+        provider: hosted
+      execution:
+        runtime:
+          provider: hosted
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.runtime may not be set with providers.agent.simple.execution.runtime",
+		},
+		{
+			name: "rejects runtime with local execution mode",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+      execution:
+        mode: local
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.runtime is only valid when execution.mode is "hosted"`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -4059,6 +4213,54 @@ server:
 		runtimeCfg := cfg.Providers.Workflow["temporal"].Execution.Runtime
 		if runtimeCfg == nil || runtimeCfg.Pool == nil {
 			t.Fatalf("workflow execution runtime pool = %#v", runtimeCfg)
+		}
+		if runtimeCfg.Pool.MinReadyInstances != 2 || runtimeCfg.Pool.MaxReadyInstances != 2 {
+			t.Fatalf("workflow pool ready instances = %d/%d, want 2/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
+		}
+		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
+	t.Run("accepts top-level hosted workflow runtime pool without indexeddb", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+      runtime:
+        provider: hosted
+        template: workflow-workers
+        metadata:
+          workload: temporal-workers
+        pool:
+          minReadyInstances: 2
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/gke
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Workflow["temporal"].Runtime
+		if runtimeCfg == nil || runtimeCfg.Pool == nil {
+			t.Fatalf("workflow runtime pool = %#v", runtimeCfg)
+		}
+		if cfg.Providers.Workflow["temporal"].HostedRuntimeConfig() != runtimeCfg {
+			t.Fatal("HostedRuntimeConfig did not return top-level workflow runtime")
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 2 || runtimeCfg.Pool.MaxReadyInstances != 2 {
 			t.Fatalf("workflow pool ready instances = %d/%d, want 2/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)

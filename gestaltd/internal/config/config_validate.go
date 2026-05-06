@@ -804,10 +804,8 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 		}
 	}
-	if entry.Execution != nil {
-		if err := normalizeExecutionConfig("plugins."+name, entry.Execution, false); err != nil {
-			return err
-		}
+	if err := normalizeProviderRuntimeConfig("plugins."+name, entry, false); err != nil {
+		return err
 	}
 	seenInvokes := make(map[string]int, len(entry.Invokes))
 	for i := range entry.Invokes {
@@ -1028,10 +1026,8 @@ func validateAgentConfig(cfg *Config) error {
 				entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 			}
 		}
-		if entry.Execution != nil {
-			if err := normalizeExecutionConfig("providers.agent."+name, entry.Execution, true); err != nil {
-				return err
-			}
+		if err := normalizeProviderRuntimeConfig("providers.agent."+name, entry, true); err != nil {
+			return err
 		}
 		if err := validateAgentProviderLifecycleConfig("providers.agent."+name+".lifecycle", entry.Lifecycle); err != nil {
 			return err
@@ -1273,10 +1269,16 @@ func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, 
 }
 
 func hostedRuntimeConfigAndPath(subject string, entry *ProviderEntry) (*HostedRuntimeConfig, string) {
-	if entry != nil && entry.Execution != nil {
+	if entry == nil {
+		return nil, subject + ".runtime"
+	}
+	if entry.Runtime != nil {
+		return entry.Runtime, subject + ".runtime"
+	}
+	if entry.Execution != nil {
 		return entry.Execution.Runtime, subject + ".execution.runtime"
 	}
-	return nil, subject + ".execution.runtime"
+	return nil, subject + ".runtime"
 }
 
 func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEntry) error {
@@ -1305,7 +1307,7 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
 	}
-	if err := normalizeExecutionConfig(subject, entry.Execution, true); err != nil {
+	if err := normalizeProviderRuntimeConfig(subject, entry, true); err != nil {
 		return err
 	}
 	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
@@ -1370,8 +1372,11 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
 	}
+	if entry.Runtime != nil {
+		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.* and providers.agent.* and providers.workflow.*", subject)
+	}
 	if entry.Execution != nil {
-		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
+		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.* and providers.workflow.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -1472,6 +1477,33 @@ func normalizeExecutionConfig(subject string, execution *ExecutionConfig, allowL
 	}
 	if !allowLifecycle && execution.Runtime.LifecyclePolicyFieldsSet() {
 		return fmt.Errorf("config validation: %s.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers", subject)
+	}
+	return nil
+}
+
+func normalizeProviderRuntimeConfig(subject string, entry *ProviderEntry, allowLifecycle bool) error {
+	if entry == nil {
+		return nil
+	}
+	if entry.Runtime != nil && entry.Execution != nil && entry.Execution.Runtime != nil {
+		return fmt.Errorf("config validation: %s.runtime may not be set with %s.execution.runtime", subject, subject)
+	}
+	if entry.Execution != nil {
+		if err := normalizeExecutionConfig(subject, entry.Execution, allowLifecycle); err != nil {
+			return err
+		}
+		if entry.Runtime != nil && entry.Execution.Mode == ExecutionModeLocal {
+			return fmt.Errorf("config validation: %s.runtime is only valid when execution.mode is %q", subject, ExecutionModeHosted)
+		}
+	}
+	if entry.Runtime == nil {
+		return nil
+	}
+	if err := normalizeHostedRuntimeConfig(subject, entry.Runtime); err != nil {
+		return err
+	}
+	if !allowLifecycle && entry.Runtime.LifecyclePolicyFieldsSet() {
+		return fmt.Errorf("config validation: %s.runtime lifecycle fields are only supported on hosted agent and workflow providers", subject)
 	}
 	return nil
 }
