@@ -383,6 +383,12 @@ func (p *hostedWorkflowProviderPool) Start(ctx context.Context) error {
 			defer p.wg.Done()
 			p.healthLoop()
 		}()
+	} else {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.runtimeSessionLoop()
+		}()
 	}
 	return nil
 }
@@ -656,6 +662,35 @@ func (p *hostedWorkflowProviderPool) healthLoop() {
 	}
 }
 
+func (p *hostedWorkflowProviderPool) runtimeSessionLoop() {
+	interval := p.policy.HealthCheckInterval
+	if interval <= 0 {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		_ = p.ensureMinReady(p.ctx)
+		for _, worker := range p.runtimeManagedWorkers() {
+			session, drainAt, err := p.refreshWorkerRuntimeSession(worker)
+			if err != nil {
+				slog.Warn("hosted workflow runtime session refresh failed", "provider", p.name, "worker", worker.id, "error", err)
+				p.replaceWorkerAllowNever(worker, err.Error(), true)
+				continue
+			}
+			if reason := p.runtimeSessionRetirementReason(session, drainAt, time.Now().UTC()); reason != "" {
+				slog.Info("retiring hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "reason", reason)
+				p.replaceWorkerAllowNever(worker, reason, true)
+			}
+		}
+	}
+}
+
 func (p *hostedWorkflowProviderPool) readyWorkers() []*hostedWorkflowWorker {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -669,8 +704,23 @@ func (p *hostedWorkflowProviderPool) readyWorkers() []*hostedWorkflowWorker {
 	return out
 }
 
+func (p *hostedWorkflowProviderPool) runtimeManagedWorkers() []*hostedWorkflowWorker {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*hostedWorkflowWorker, 0, len(p.workers))
+	for _, worker := range p.workers {
+		if worker != nil && worker.provider != nil && !worker.closed && !worker.closing {
+			out = append(out, worker)
+		}
+	}
+	return out
+}
+
 func (p *hostedWorkflowProviderPool) workerAvailableLocked(worker *hostedWorkflowWorker, now time.Time) bool {
 	if worker == nil || worker.provider == nil || worker.closed || worker.closing || worker.draining {
+		return false
+	}
+	if hostedRuntimeSessionCompatibilityReason(worker.runtimeSession) != "" {
 		return false
 	}
 	if worker.forceCloseAt != nil && !now.Before(*worker.forceCloseAt) {
@@ -739,17 +789,21 @@ func (p *hostedWorkflowProviderPool) refreshWorkerRuntimeSession(worker *hostedW
 }
 
 func (p *hostedWorkflowProviderPool) replaceWorker(worker *hostedWorkflowWorker) {
-	if p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever || !p.markWorkerDraining(worker) {
+	p.replaceWorkerAllowNever(worker, "", false)
+}
+
+func (p *hostedWorkflowProviderPool) replaceWorkerAllowNever(worker *hostedWorkflowWorker, reason string, allowRestartPolicyNever bool) {
+	if (p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever && !allowRestartPolicyNever) || !p.markWorkerDraining(worker) {
 		return
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
 		if err := p.ensureMinReady(p.ctx); err != nil && !errors.Is(err, context.Canceled) {
-			slog.Warn("failed to replace hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "error", err)
+			slog.Warn("failed to replace hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "reason", reason, "error", err)
 		}
 		if err := p.drainAndCloseWorker(worker); err != nil {
-			slog.Warn("failed to close hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "error", err)
+			slog.Warn("failed to close hosted workflow runtime worker", "provider", p.name, "worker", worker.id, "reason", reason, "error", err)
 		}
 	}()
 }
@@ -857,6 +911,9 @@ func (p *hostedWorkflowProviderPool) runtimeSessionRetirementReason(session *plu
 	switch session.State {
 	case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
 		return fmt.Sprintf("runtime session entered %q state", session.State)
+	}
+	if reason := hostedRuntimeSessionCompatibilityReason(session); reason != "" {
+		return reason
 	}
 	if drainAt == nil || now.Before(*drainAt) {
 		return ""

@@ -1010,24 +1010,45 @@ func (p *hostedAgentProviderPool) acquireBackend(ctx context.Context, preferred 
 }
 
 func (p *hostedAgentProviderPool) acquireBackendForNewWork(ctx context.Context, preferred *hostedAgentPoolBackend, allowDraining bool) (*hostedAgentPoolBackend, func(), error) {
-	if preferred != nil {
-		p.mu.Lock()
-		if p.closed {
+	for {
+		var backend *hostedAgentPoolBackend
+		var release func()
+		var err error
+		if preferred != nil {
+			p.mu.Lock()
+			if p.closed {
+				p.mu.Unlock()
+				return nil, nil, fmt.Errorf("hosted agent provider %q is closed", p.name)
+			}
+			now := time.Now().UTC()
+			if p.backendAcceptsNewWorkLocked(preferred, now) || (allowDraining && p.backendAvailableLocked(preferred, true) && !p.backendRuntimeDrainDueLocked(preferred, now) && !p.backendRuntimeSessionStaleLocked(preferred)) {
+				preferred.active++
+				backend = preferred
+				release = p.releaseBackend(preferred)
+			}
 			p.mu.Unlock()
-			return nil, nil, fmt.Errorf("hosted agent provider %q is closed", p.name)
+			preferred = nil
+			if backend == nil {
+				if ctx.Err() != nil {
+					return nil, nil, ctx.Err()
+				}
+				continue
+			}
+		} else {
+			backend, release, err = p.acquireBackend(ctx, nil, false)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
-		now := time.Now().UTC()
-		if p.backendAcceptsNewWorkLocked(preferred, now) || (allowDraining && p.backendAvailableLocked(preferred, true) && !p.backendRuntimeDrainDueLocked(preferred, now)) {
-			preferred.active++
-			p.mu.Unlock()
-			return preferred, p.releaseBackend(preferred), nil
+		if err := p.ensureBackendFreshForNewWork(ctx, backend); err != nil {
+			release()
+			if ctx.Err() != nil {
+				return nil, nil, ctx.Err()
+			}
+			continue
 		}
-		p.mu.Unlock()
-		if ctx.Err() != nil {
-			return nil, nil, ctx.Err()
-		}
+		return backend, release, nil
 	}
-	return p.acquireBackend(ctx, nil, false)
 }
 
 func (p *hostedAgentProviderPool) releaseBackend(backend *hostedAgentPoolBackend) func() {
@@ -1117,7 +1138,7 @@ func (p *hostedAgentProviderPool) backendAvailableLocked(backend *hostedAgentPoo
 }
 
 func (p *hostedAgentProviderPool) backendAcceptsNewWorkLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
-	return p.backendAvailableLocked(backend, false) && !p.backendRuntimeDrainDueLocked(backend, now)
+	return p.backendAvailableLocked(backend, false) && !p.backendRuntimeDrainDueLocked(backend, now) && !p.backendRuntimeSessionStaleLocked(backend)
 }
 
 func (p *hostedAgentProviderPool) backendRuntimeDrainDueLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
@@ -1129,6 +1150,10 @@ func (p *hostedAgentProviderPool) backendRuntimeDrainDueLocked(backend *hostedAg
 		now = time.Now().UTC()
 	}
 	return !now.Before(drainAt)
+}
+
+func (p *hostedAgentProviderPool) backendRuntimeSessionStaleLocked(backend *hostedAgentPoolBackend) bool {
+	return backend != nil && hostedRuntimeSessionCompatibilityReason(backend.runtimeSession) != ""
 }
 
 func (p *hostedAgentProviderPool) readyBackends() []*hostedAgentPoolBackend {
@@ -1435,6 +1460,66 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAg
 	return session, drainAt, nil
 }
 
+func (p *hostedAgentProviderPool) ensureBackendFreshForNewWork(ctx context.Context, backend *hostedAgentPoolBackend) error {
+	if backend == nil {
+		return fmt.Errorf("runtime instance is unavailable")
+	}
+	p.mu.Lock()
+	knownReason := hostedRuntimeSessionCompatibilityReason(backend.runtimeSession)
+	p.mu.Unlock()
+	if knownReason != "" {
+		p.replaceBackendAllowNever(backend, knownReason, true)
+		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance is stale: %s", p.name, knownReason))
+	}
+	if p.policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
+		return nil
+	}
+	session, drainAt, err := p.refreshBackendRuntimeSessionWithContext(ctx, backend, 10*time.Second)
+	if err != nil {
+		p.replaceBackendAllowNever(backend, err.Error(), true)
+		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance refresh failed: %w", p.name, err))
+	}
+	if reason := p.runtimeSessionRetirementReason(session, drainAt, time.Now().UTC()); reason != "" {
+		p.replaceBackendAllowNever(backend, reason, true)
+		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance is retiring: %s", p.name, reason))
+	}
+	return nil
+}
+
+func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx context.Context, backend *hostedAgentPoolBackend, timeout time.Duration) (*pluginruntime.Session, *time.Time, error) {
+	if backend == nil {
+		return nil, nil, fmt.Errorf("runtime instance is unavailable")
+	}
+	p.mu.Lock()
+	runtimeProvider := backend.runtimeProvider
+	sessionID := strings.TrimSpace(backend.runtimeSessionID)
+	p.mu.Unlock()
+	if runtimeProvider == nil || sessionID == "" {
+		return nil, nil, nil
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	session, err := runtimeProvider.GetSession(refreshCtx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+	if err != nil {
+		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
+	}
+	drainAt := p.runtimeSessionDrainAt(session, time.Now().UTC())
+	p.mu.Lock()
+	if p.backendAvailableLocked(backend, true) {
+		if backend.runtimeDrainAt != nil && (drainAt == nil || backend.runtimeDrainAt.Before(*drainAt)) {
+			drainAt = cloneTime(backend.runtimeDrainAt)
+		}
+		backend.runtimeSession = session
+		backend.runtimeDrainAt = cloneTime(drainAt)
+		backend.forceCloseAt = runtimeSessionExpiresAt(session)
+	}
+	p.mu.Unlock()
+	return session, drainAt, nil
+}
+
 func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *pluginruntime.Session, drainAt *time.Time, now time.Time) string {
 	if session == nil {
 		return ""
@@ -1442,6 +1527,9 @@ func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *plugin
 	switch session.State {
 	case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
 		return fmt.Sprintf("runtime session entered %q state", session.State)
+	}
+	if reason := hostedRuntimeSessionCompatibilityReason(session); reason != "" {
+		return reason
 	}
 	if drainAt == nil || now.Before(*drainAt) {
 		return ""
@@ -1579,7 +1667,11 @@ func (p *hostedAgentProviderPool) pingBackend(backend *hostedAgentPoolBackend) e
 }
 
 func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend) {
-	if p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever || !p.markBackendDraining(backend) {
+	p.replaceBackendAllowNever(backend, "", false)
+}
+
+func (p *hostedAgentProviderPool) replaceBackendAllowNever(backend *hostedAgentPoolBackend, reason string, allowRestartPolicyNever bool) {
+	if (p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever && !allowRestartPolicyNever) || !p.markBackendDraining(backend) {
 		return
 	}
 	if !p.addLifecycleWork() {
@@ -1592,10 +1684,10 @@ func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend
 		startErr := p.ensureMinReady(p.ctx)
 		recordHostedAgentRuntimeReplacement(p.ctx, p.name, startErr)
 		if startErr != nil && !errors.Is(startErr, context.Canceled) {
-			slog.Warn("failed to replace hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", startErr)
+			slog.Warn("failed to replace hosted agent runtime instance", "provider", p.name, "instance", backend.id, "reason", reason, "error", startErr)
 		}
 		if err := p.drainAndCloseBackend(backend); err != nil {
-			slog.Warn("failed to close unhealthy hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", err)
+			slog.Warn("failed to close unhealthy hosted agent runtime instance", "provider", p.name, "instance", backend.id, "reason", reason, "error", err)
 		}
 	}()
 }
