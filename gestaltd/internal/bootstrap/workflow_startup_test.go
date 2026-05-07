@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"go.opentelemetry.io/otel/metric"
@@ -139,18 +140,29 @@ func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
 		return startupTestWorkflowProvider{}, nil
 	}
 	deps := Deps{
-		BaseURL:            "https://gestalt.example.test",
-		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"main": {
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
+				Config: mustNode(t, map[string]any{"bucket": "workflow-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			return &coretesting.StubIndexedDB{}, nil
+		},
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
-		Config: mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
+		Config:    mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
+		IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "main"},
 	}, factories, deps)
 	if err != nil {
 		t.Fatalf("buildWorkflow: %v", err)
 	}
 
 	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb", indexeddbservice.DefaultSocketEnv)
 	if err := provider.Close(); err != nil {
 		t.Fatalf("provider.Close: %v", err)
 	}

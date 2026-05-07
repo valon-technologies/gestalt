@@ -1915,7 +1915,7 @@ func registerPublicWorkflowHostServices(providerName string, hostServices []runt
 	}
 	registerHostServices := make([]runtimehost.HostService, 0, len(hostServices))
 	for _, hostService := range hostServices {
-		if strings.TrimSpace(hostService.EnvVar) != workflowservice.DefaultHostSocketEnv || hostService.Register == nil {
+		if hostService.Register == nil {
 			continue
 		}
 		if strings.TrimSpace(hostService.Name) == "" {
