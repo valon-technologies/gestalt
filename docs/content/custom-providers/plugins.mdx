@@ -765,13 +765,11 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
         return &gestalt.Catalog{
             Name:        "slack-session",
             DisplayName: "Slack",
-            Operations: []gestalt.CatalogOperation{
+            Operations: []*gestalt.CatalogOperation{
                 {
-                    ID:     "conversations.getMessage",
+                    Id:     "conversations.getMessage",
                     Method: http.MethodGet,
-                    Annotations: gestalt.OperationAnnotations{
-                        ReadOnlyHint: true,
-                    },
+                    ReadOnly: true,
                 },
             },
         }, nil
@@ -817,10 +815,7 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
                 operations: vec![gestalt::CatalogOperation {
                     id: "conversations.getMessage".to_string(),
                     method: "GET".to_string(),
-                    annotations: Some(gestalt::OperationAnnotations {
-                        read_only_hint: Some(true),
-                        ..Default::default()
-                    }),
+                    read_only: true,
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -852,6 +847,83 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     ```
   </Tabs.Tab>
 </Tabs>
+
+## Post-connect metadata
+
+Plugins can derive additional connection metadata after Gestalt completes a
+credential exchange. Use a post-connect hook when the upstream connect response
+contains workspace, tenant, or account identifiers that should be stored with
+the connection and reused by later operation requests. Return only non-secret
+metadata; Gestalt already stores access and refresh tokens separately.
+
+<Tabs items={['Go', 'Python', 'TypeScript']}>
+  <Tabs.Tab>
+    Implement the `PostConnectCapable` interface on your provider:
+
+    ```go
+    import (
+      "context"
+      "encoding/json"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func (p *Provider) PostConnect(ctx context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
+      upstream := map[string]string{}
+      if token.MetadataJSON != "" {
+        _ = json.Unmarshal([]byte(token.MetadataJSON), &upstream)
+      }
+
+      return map[string]string{
+        "slack_team_id": upstream["team_id"],
+        "subject_id":    token.SubjectID,
+        "connection":    token.Connection,
+        "instance":      token.Instance,
+      }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Register a post-connect hook with `@gestalt.post_connect`:
+
+    ```python
+    import gestalt
+
+
+    @gestalt.post_connect
+    def capture_workspace(token: gestalt.ConnectedToken) -> dict[str, str]:
+        return {
+            "slack_team_id": token.metadata.get("team_id", ""),
+            "subject_id": token.subject_id,
+            "connection": token.connection,
+            "instance": token.instance,
+        }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Provide a `postConnect` handler in the plugin definition:
+
+    ```typescript
+    import { definePlugin } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      postConnect(token) {
+        return {
+          slack_team_id: token.metadata.team_id ?? "",
+          subject_id: token.subjectId,
+          connection: token.connection,
+          instance: token.instance,
+        };
+      },
+      operations: [/* ... */],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The Rust high-level plugin SDK currently exposes dynamic session catalogs but
+does not expose a post-connect hook. Use Go, Python, or TypeScript when your
+provider needs to derive connection metadata during the connect flow.
 
 ## Testing locally
 
