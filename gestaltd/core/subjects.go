@@ -2,11 +2,9 @@ package core
 
 import "strings"
 
-// TODO(hughhan1): Run-as delegation currently treats SubjectID as an opaque
-// provider-owned string and infers kind from the first colon when omitted. This
-// is intentionally integration-agnostic, but still brittle for wider use. Add a
-// structured service-account/subject reference primitive before adding more
-// delegation patterns that depend on encoded subject-id grammars.
+// TODO(#1823): Add first-class run-as subject and external-identity grant
+// provisioning instead of relying on opaque subject IDs plus separate tuple
+// seeding.
 type RunAsSubject struct {
 	SubjectID           string
 	SubjectKind         string

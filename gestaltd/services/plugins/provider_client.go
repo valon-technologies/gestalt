@@ -401,6 +401,8 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		}
 	}
 	if identity := invocation.ExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
+		// TODO(#1823): Let provider install/connect flows report identity
+		// candidates without writing authorization relationships themselves.
 		out.ExternalIdentity = &proto.ExternalIdentityContext{
 			Type: identity.Type,
 			Id:   identity.ID,

@@ -106,6 +106,7 @@ func (s *Server) upsertManagedSubjectExternalIdentity(ctx context.Context, subje
 	// Managed subject assumptions are Zanzibar authorization tuples, not
 	// credential ownership links. Do not route these through the credential sync
 	// uniqueness guard.
+	// TODO(#1823): Add declarative reconciliation for deploy-managed bot grants.
 	rel := managedSubjectExternalIdentityRelationship(subjectID, ref)
 	if rel == nil {
 		return fmt.Errorf("external identity relationship is required")
@@ -314,6 +315,8 @@ func managedSubjectExternalIdentityRelationship(subjectID string, ref externalId
 	if subjectID == "" || resourceID == "" {
 		return nil
 	}
+	// TODO(#1823): Keep encoded resource ids internal to the authorization
+	// provider boundary.
 	return &core.Relationship{
 		Subject: &core.SubjectRef{
 			Type: authorization.ProviderSubjectTypeSubject,
