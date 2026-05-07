@@ -1,6 +1,6 @@
 # Installer
 
-Gestalt publishes a Linux installer script for installing release binaries
+Gestalt publishes Linux installer scripts for installing release binaries
 directly.
 
 For a package-manager install, see [Homebrew](/install/homebrew). For manual
@@ -13,7 +13,7 @@ archive downloads, see [Binary Releases](/install/binary).
 ### Install
 
 ```sh
-curl -fsSL https://gestaltd.ai/install.sh | sh -s -- --component gestaltd
+curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh
 ```
 
 ### Verify
@@ -22,29 +22,26 @@ curl -fsSL https://gestaltd.ai/install.sh | sh -s -- --component gestaltd
 gestaltd --version
 ```
 
-## Client and bundled server
+## Client
 
-`gestalt` is the CLI for communicating with the Gestalt server. The default
-installer also installs the bundled `gestaltd` helper binary from the CLI release
-archive.
+`gestalt` is the CLI for communicating with the Gestalt server.
 
 ### Install
 
 ```sh
-curl -fsSL https://gestaltd.ai/install.sh | sh
+curl -fsSL https://gestaltd.ai/install-gestalt.sh | sh
 ```
 
 Or with `wget`:
 
 ```sh
-wget -qO- https://gestaltd.ai/install.sh | sh
+wget -qO- https://gestaltd.ai/install-gestalt.sh | sh
 ```
 
 ### Verify
 
 ```sh
 gestalt --version
-gestaltd --version
 ```
 
-Once both binaries are on your `PATH`, continue to [Getting Started](/getting-started).
+Once the binaries you need are on your `PATH`, continue to [Getting Started](/getting-started).

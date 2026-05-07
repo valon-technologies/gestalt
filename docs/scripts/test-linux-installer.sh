@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 installer="$PWD/public/install.sh"
+cli_installer="$PWD/public/install-gestalt.sh"
+daemon_installer="$PWD/public/install-gestaltd.sh"
 tmp_dir="$(mktemp -d)"
 download_root="$tmp_dir/releases"
 
@@ -84,7 +86,7 @@ make_archive() {
   checksum_archive "$archive" >"${archive}.sha256"
 }
 
-run_installer() {
+run_core_installer() {
   env \
     GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
     GESTALT_INSTALL_OS=linux \
@@ -92,39 +94,52 @@ run_installer() {
     sh "$installer" "$@"
 }
 
-make_archive gestalt 1.2.3 linux-x86_64 gestalt gestaltd
+run_cli_installer() {
+  env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
+    GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
+    GESTALT_INSTALL_OS=linux \
+    GESTALT_INSTALL_ARCH=x86_64 \
+    sh "$cli_installer" "$@"
+}
+
+run_daemon_installer() {
+  env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
+    GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
+    GESTALT_INSTALL_OS=linux \
+    GESTALT_INSTALL_ARCH=x86_64 \
+    sh "$daemon_installer" "$@"
+}
+
+make_archive gestalt 1.2.3 linux-x86_64 gestalt
 make_archive gestaltd 2.0.0 linux-x86_64 gestaltd
-make_archive gestalt 3.0.0 linux-x86_64 gestalt
-make_archive gestalt 4.0.0 linux-x86_64 gestalt gestaltd
-make_archive gestalt 5.0.0 linux-x86_64 gestalt gestaltd
-make_archive gestalt 6.0.0 linux-x86_64 gestalt gestaltd
+make_archive gestaltd 3.0.0 linux-x86_64 gestalt
+make_archive gestalt 4.0.0 linux-x86_64 gestalt
+make_archive gestalt 5.0.0 linux-x86_64 gestalt
+make_archive gestalt 6.0.0 linux-x86_64 gestalt
 
 symlink_stage="$tmp_dir/stage/gestalt-7.0.0-linux-x86_64"
 symlink_dest="$download_root/gestalt/v7.0.0"
 mkdir -p "$symlink_stage" "$symlink_dest"
 ln -s /etc/hosts "$symlink_stage/gestalt"
-{
-  printf '#!/bin/sh\n'
-  printf 'printf "gestaltd 7.0.0\\n"\n'
-} >"$symlink_stage/gestaltd"
-chmod +x "$symlink_stage/gestaltd"
-(cd "$symlink_stage" && tar -czf "$symlink_dest/gestalt-linux-x86_64.tar.gz" gestalt gestaltd)
+(cd "$symlink_stage" && tar -czf "$symlink_dest/gestalt-linux-x86_64.tar.gz" gestalt)
 checksum_archive "$symlink_dest/gestalt-linux-x86_64.tar.gz" >"$symlink_dest/gestalt-linux-x86_64.tar.gz.sha256"
 
-both_bin="$tmp_dir/bin-both"
-run_installer --component both --version 1.2.3 --bin-dir "$both_bin" >/dev/null
-assert_executable "$both_bin/gestalt"
-assert_executable "$both_bin/gestaltd"
-
 cli_bin="$tmp_dir/bin-cli"
-run_installer --component gestalt --version gestalt/v1.2.3 --bin-dir "$cli_bin" >/dev/null
+run_cli_installer --version gestalt/v1.2.3 --bin-dir "$cli_bin" >/dev/null
 assert_executable "$cli_bin/gestalt"
 assert_not_exists "$cli_bin/gestaltd"
 
 daemon_bin="$tmp_dir/bin-daemon"
-run_installer --component gestaltd --version 2.0.0 --bin-dir "$daemon_bin" >/dev/null
+run_daemon_installer --version 2.0.0 --bin-dir "$daemon_bin" >/dev/null
 assert_executable "$daemon_bin/gestaltd"
 assert_not_exists "$daemon_bin/gestalt"
+
+default_bin="$tmp_dir/bin-default"
+run_core_installer --version 1.2.3 --bin-dir "$default_bin" >/dev/null
+assert_executable "$default_bin/gestalt"
+assert_not_exists "$default_bin/gestaltd"
 
 cat >"$tmp_dir/releases-page-1.json" <<'JSON'
 [
@@ -158,34 +173,41 @@ JSON
 
 latest_cli_output="$(
   env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
     GESTALT_INSTALL_RELEASES_URL="file://${tmp_dir}/releases-page-{page}.json" \
     GESTALT_INSTALL_DOWNLOAD_BASE="file:///does-not-exist" \
     GESTALT_INSTALL_MAX_PAGES=2 \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=aarch64 \
-    sh "$installer" --component both --dry-run --bin-dir "$tmp_dir/dry-run-bin"
+    sh "$cli_installer" --dry-run --bin-dir "$tmp_dir/dry-run-bin"
 )"
+assert_contains "$latest_cli_output" "component: gestalt"
 assert_contains "$latest_cli_output" "tag: gestalt/v0.2.0-alpha.1"
 assert_contains "$latest_cli_output" "gestalt-linux-arm64.tar.gz"
+assert_contains "$latest_cli_output" "binaries: gestalt"
 
 latest_daemon_output="$(
   env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
     GESTALT_INSTALL_RELEASES_URL="file://${tmp_dir}/releases-page-{page}.json" \
     GESTALT_INSTALL_DOWNLOAD_BASE="file:///does-not-exist" \
     GESTALT_INSTALL_MAX_PAGES=2 \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=armv7l \
-    sh "$installer" --component gestaltd --dry-run --bin-dir "$tmp_dir/dry-run-bin"
+    sh "$daemon_installer" --dry-run --bin-dir "$tmp_dir/dry-run-bin"
 )"
+assert_contains "$latest_daemon_output" "component: gestaltd"
 assert_contains "$latest_daemon_output" "tag: gestaltd/v0.9.0-alpha.1"
 assert_contains "$latest_daemon_output" "gestaltd-linux-armv7.tar.gz"
+assert_contains "$latest_daemon_output" "binaries: gestaltd"
 
 dry_run_dead_base="$(
   env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
     GESTALT_INSTALL_DOWNLOAD_BASE="file:///does-not-exist" \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
-    sh "$installer" --component both --version 1.2.3 --dry-run --bin-dir "$tmp_dir/dry-run-bin"
+    sh "$cli_installer" --version 1.2.3 --dry-run --bin-dir "$tmp_dir/dry-run-bin"
 )"
 assert_contains "$dry_run_dead_base" "archive: file:///does-not-exist/gestalt/v1.2.3/gestalt-linux-x86_64.tar.gz"
 
@@ -197,6 +219,18 @@ mismatch_output="$(
 )"
 assert_contains "$mismatch_output" "does not match --component gestaltd"
 
+both_output="$(assert_fails sh "$installer" --component both --dry-run)"
+assert_contains "$both_output" "--component both is no longer supported"
+
+wrapper_component_output="$(assert_fails sh "$cli_installer" --component gestaltd --dry-run)"
+assert_contains "$wrapper_component_output" "install-gestalt.sh does not accept --component"
+
+cli_help_output="$(sh "$cli_installer" --help)"
+assert_contains "$cli_help_output" "Install the Gestalt CLI on Linux."
+
+daemon_help_output="$(sh "$daemon_installer" --help)"
+assert_contains "$daemon_help_output" "Install gestaltd on Linux."
+
 conflict_output="$(assert_fails sh "$installer" --user --bin-dir "$tmp_dir/conflict-bin")"
 assert_contains "$conflict_output" "mutually exclusive"
 
@@ -205,7 +239,7 @@ missing_output="$(
     GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
-    sh "$installer" --component both --version 3.0.0 --bin-dir "$tmp_dir/missing-bin"
+    sh "$installer" --component gestaltd --version 3.0.0 --bin-dir "$tmp_dir/missing-bin"
 )"
 assert_contains "$missing_output" "did not contain expected regular binary: gestaltd"
 
@@ -214,7 +248,7 @@ symlink_output="$(
     GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
-    sh "$installer" --component both --version 7.0.0 --bin-dir "$tmp_dir/symlink-bin"
+    sh "$installer" --component gestalt --version 7.0.0 --bin-dir "$tmp_dir/symlink-bin"
 )"
 assert_contains "$symlink_output" "did not contain expected regular binary: gestalt"
 
@@ -225,7 +259,7 @@ checksum_output="$(
     GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
-    sh "$installer" --component both --version 4.0.0 --bin-dir "$tmp_dir/bad-checksum-bin"
+    sh "$installer" --component gestalt --version 4.0.0 --bin-dir "$tmp_dir/bad-checksum-bin"
 )"
 assert_contains "$checksum_output" "checksum mismatch"
 
@@ -236,7 +270,7 @@ malformed_output="$(
     GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
-    sh "$installer" --component both --version 5.0.0 --bin-dir "$tmp_dir/empty-checksum-bin"
+    sh "$installer" --component gestalt --version 5.0.0 --bin-dir "$tmp_dir/empty-checksum-bin"
 )"
 assert_contains "$malformed_output" "checksum file is malformed"
 
@@ -246,14 +280,16 @@ sha_tool_output="$(
     GESTALT_INSTALL_OS=linux \
     GESTALT_INSTALL_ARCH=x86_64 \
     GESTALT_INSTALL_SHA256_TOOL=none \
-    sh "$installer" --component both --version 6.0.0 --bin-dir "$tmp_dir/no-sha-bin"
+    sh "$installer" --component gestalt --version 6.0.0 --bin-dir "$tmp_dir/no-sha-bin"
 )"
 assert_contains "$sha_tool_output" "no supported SHA-256 tool"
 
 if [[ -d out ]]; then
-  [[ -f out/install.sh ]] || fail "docs static export did not include out/install.sh"
-  first_line="$(sed -n '1p' out/install.sh)"
-  [[ "$first_line" == "#!/bin/sh" ]] || fail "out/install.sh did not preserve installer shebang"
+  for script in install.sh install-gestalt.sh install-gestaltd.sh; do
+    [[ -f "out/${script}" ]] || fail "docs static export did not include out/${script}"
+    first_line="$(sed -n '1p' "out/${script}")"
+    [[ "$first_line" == "#!/bin/sh" ]] || fail "out/${script} did not preserve installer shebang"
+  done
 else
   printf 'Skipping static export assertion because docs/out does not exist; run npm run build first.\n'
 fi

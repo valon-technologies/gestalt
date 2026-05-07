@@ -235,14 +235,15 @@ fn missing_harness_commands(
         }
     }
     let command = plan.command.trim();
-    if !missing.iter().any(|missing| missing.command == command) {
-        if let Err(err) = find_command(command, working_directory, env) {
-            missing.push(MissingHarnessCommand {
-                command: command.to_string(),
-                role: MissingHarnessCommandRole::HarnessCommand,
-                detail: err.to_string(),
-            });
-        }
+    if missing.iter().any(|missing| missing.command == command) {
+        return missing;
+    }
+    if let Err(err) = find_command(command, working_directory, env) {
+        missing.push(MissingHarnessCommand {
+            command: command.to_string(),
+            role: MissingHarnessCommandRole::HarnessCommand,
+            detail: err.to_string(),
+        });
     }
     missing
 }

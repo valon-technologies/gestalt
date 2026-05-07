@@ -40,7 +40,7 @@ jobs:
       artifact-prefix: gestalt
       run-tests: true
       package: true
-      bundle-gestaltd: true
+      bundle-gestaltd: false
 
   release:
     name: Publish Release
@@ -55,7 +55,7 @@ jobs:
       component-summary: |
         Command-line client for authenticating with Gestalt, working with integrations and workflows, and running interactive agent sessions from the terminal.
       install-markdown: |
-        - Linux installer: `curl -fsSL https://gestaltd.ai/install.sh | sh -s -- --component both --version ${version}`
+        - Linux installer: `curl -fsSL https://gestaltd.ai/install-gestalt.sh | sh -s -- --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestalt`
         - Docker: `docker pull valontechnologies/gestalt:${version}`
         - Docs: [CLI guide](https://gestaltd.ai/client/cli)
@@ -142,7 +142,7 @@ jobs:
             old_version=$(grep '^\s*version ' "$formula" | sed 's/.*version "\(.*\)"/\1/')
 
             sed -i "s/version \"${old_version}\"/version \"${VERSION}\"/" "$formula"
-            perl -0pi -e 's/bin\.install "gestalt"(?:, "gestaltd")?/bin.install "gestalt", "gestaltd"/' "$formula"
+            perl -0pi -e 's/bin\.install "gestalt"(?:, "gestaltd")?/bin.install "gestalt"/' "$formula"
             perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64.tar.gz}g' "$formula"
 
             awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
@@ -174,7 +174,8 @@ jobs:
             cat "$formula"
             echo ""
             grep -q "version \"${VERSION}\"" "$formula" || { echo "ERROR: version not updated in ${formula}"; exit 1; }
-            grep -q 'bin.install "gestalt", "gestaltd"' "$formula" || { echo "ERROR: gestaltd helper not installed in ${formula}"; exit 1; }
+            grep -q 'bin.install "gestalt"$' "$formula" || { echo "ERROR: gestalt install line not updated in ${formula}"; exit 1; }
+            ! grep -q 'bin.install "gestalt", "gestaltd"' "$formula" || { echo "ERROR: gestaltd helper should not be installed in ${formula}"; exit 1; }
             grep -q "PLACEHOLDER" "$formula" && { echo "ERROR: PLACEHOLDER still present in ${formula}"; exit 1; }
           done
           echo "Formula verified successfully"
