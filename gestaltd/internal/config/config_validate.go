@@ -2084,15 +2084,33 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 			return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", path, agent.Timeout, err)
 		}
 	}
-	if agent.OutputDelivery != nil {
-		if err := normalizeWorkflowPluginTargetConfig(path+".outputDelivery.target", &agent.OutputDelivery.Target, false); err != nil {
-			return err
-		}
-		agent.OutputDelivery.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(agent.OutputDelivery.CredentialMode))))
-		switch agent.OutputDelivery.CredentialMode {
-		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
-		default:
-			return fmt.Errorf("config validation: %s.outputDelivery.credentialMode %q is not supported", path, agent.OutputDelivery.CredentialMode)
+	if err := normalizeWorkflowOutputDeliveryConfig(path+".outputDelivery", agent.OutputDelivery, false); err != nil {
+		return err
+	}
+	if err := normalizeWorkflowOutputDeliveryConfig(path+".sessionReadyDelivery", agent.SessionReadyDelivery, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizeWorkflowOutputDeliveryConfig(path string, delivery *WorkflowOutputDeliveryConfig, beforeTurn bool) error {
+	if delivery == nil {
+		return nil
+	}
+	if err := normalizeWorkflowPluginTargetConfig(path+".target", &delivery.Target, false); err != nil {
+		return err
+	}
+	delivery.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
+	switch delivery.CredentialMode {
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+	default:
+		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, delivery.CredentialMode)
+	}
+	if beforeTurn {
+		for i := range delivery.InputBindings {
+			if strings.TrimSpace(delivery.InputBindings[i].Value.AgentOutput) != "" {
+				return fmt.Errorf("config validation: %s.inputBindings[%d].value.agentOutput is not available before the agent turn starts", path, i)
+			}
 		}
 	}
 	return nil

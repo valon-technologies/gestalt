@@ -1325,10 +1325,14 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
 	target.OutputDelivery = cloneWorkflowOutputDelivery(target.OutputDelivery)
+	target.SessionReadyDelivery = cloneWorkflowOutputDelivery(target.SessionReadyDelivery)
 	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
 		return coreworkflow.Target{}, err
 	}
 	if err := m.normalizeWorkflowOutputDelivery(target.OutputDelivery, callerPluginName); err != nil {
+		return coreworkflow.Target{}, err
+	}
+	if err := m.normalizeWorkflowAgentDelivery(target.SessionReadyDelivery, callerPluginName, "session_ready_delivery"); err != nil {
 		return coreworkflow.Target{}, err
 	}
 	return coreworkflow.Target{Agent: &target}, nil
@@ -1578,6 +1582,9 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
 			addWorkflowPermission(permissions, pluginName, operation)
 		}
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.SessionReadyDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+			addWorkflowPermission(permissions, pluginName, operation)
+		}
 	}
 	out := principal.PermissionsToAccessPermissions(permissions)
 	if len(out) == 0 {
@@ -1778,6 +1785,14 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 				return false
 			}
 		}
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.SessionReadyDelivery); ok {
+			if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
+				return false
+			}
+			if !principal.AllowsOperationPermission(p, pluginName, operation) {
+				return false
+			}
+		}
 		return true
 	}
 	if target.Plugin == nil {
@@ -1849,6 +1864,10 @@ func cloneWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery) *corewor
 }
 
 func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName string) error {
+	return m.normalizeWorkflowAgentDelivery(delivery, callerPluginName, "output_delivery")
+}
+
+func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName, fieldName string) error {
 	if delivery == nil {
 		return nil
 	}
@@ -1859,29 +1878,29 @@ func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputD
 	delivery.Target.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.Target.CredentialMode))))
 	delivery.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
 	if delivery.Target.PluginName == "" {
-		return fmt.Errorf("%w: workflow agent output_delivery.target.plugin_name is required", invocation.ErrProviderNotFound)
+		return fmt.Errorf("%w: workflow agent %s.target.plugin_name is required", invocation.ErrProviderNotFound, fieldName)
 	}
 	if delivery.Target.Operation == "" {
-		return fmt.Errorf("%w: workflow agent output_delivery.target.operation is required", invocation.ErrOperationNotFound)
+		return fmt.Errorf("%w: workflow agent %s.target.operation is required", invocation.ErrOperationNotFound, fieldName)
 	}
 	if delivery.Target.CredentialMode != "" {
-		return fmt.Errorf("%w: workflow agent output_delivery.target.credential_mode is not supported", invocation.ErrInvalidInvocation)
+		return fmt.Errorf("%w: workflow agent %s.target.credential_mode is not supported", invocation.ErrInvalidInvocation, fieldName)
 	}
 	if delivery.CredentialMode != "" && callerPluginName == "" {
-		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied)
+		return fmt.Errorf("%w: workflow agent %s.credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied, fieldName)
 	}
 	if delivery.CredentialMode != "" && delivery.CredentialMode != core.ConnectionModeNone && delivery.CredentialMode != core.ConnectionModeUser {
-		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode %q is not supported", invocation.ErrInvalidInvocation, delivery.CredentialMode)
+		return fmt.Errorf("%w: workflow agent %s.credential_mode %q is not supported", invocation.ErrInvalidInvocation, fieldName, delivery.CredentialMode)
 	}
 	mode, declared, err := m.callerPluginInvokeCredentialMode(callerPluginName, delivery.Target.PluginName, delivery.Target.Operation)
 	if err != nil {
 		return err
 	}
 	if delivery.CredentialMode != "" && !declared {
-		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode requires a declared invoke mode", invocation.ErrAuthorizationDenied)
+		return fmt.Errorf("%w: workflow agent %s.credential_mode requires a declared invoke mode", invocation.ErrAuthorizationDenied, fieldName)
 	}
 	if delivery.CredentialMode != "" && delivery.CredentialMode != mode {
-		return fmt.Errorf("%w: workflow agent output_delivery.credential_mode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, delivery.CredentialMode, mode)
+		return fmt.Errorf("%w: workflow agent %s.credential_mode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, fieldName, delivery.CredentialMode, mode)
 	}
 	if delivery.CredentialMode == "" && declared {
 		delivery.CredentialMode = mode
@@ -1892,11 +1911,15 @@ func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputD
 		binding.Value.AgentOutput = strings.TrimSpace(binding.Value.AgentOutput)
 		binding.Value.SignalPayload = strings.TrimSpace(binding.Value.SignalPayload)
 		binding.Value.SignalMetadata = strings.TrimSpace(binding.Value.SignalMetadata)
+		binding.Value.AgentSession = strings.TrimSpace(binding.Value.AgentSession)
+		if fieldName == "session_ready_delivery" && binding.Value.AgentOutput != "" {
+			return fmt.Errorf("%w: workflow agent %s.input_bindings[%d].value.agent_output is not available before the agent turn starts", invocation.ErrInvalidInvocation, fieldName, i)
+		}
 		if binding.InputField == "" {
-			return fmt.Errorf("%w: workflow agent output_delivery.input_bindings[%d].input_field is required", invocation.ErrInvalidInvocation, i)
+			return fmt.Errorf("%w: workflow agent %s.input_bindings[%d].input_field is required", invocation.ErrInvalidInvocation, fieldName, i)
 		}
 		if !workflowOutputValueSourceIsSet(binding.Value) {
-			return fmt.Errorf("%w: workflow agent output_delivery.input_bindings[%d].value must set exactly one source", invocation.ErrInvalidInvocation, i)
+			return fmt.Errorf("%w: workflow agent %s.input_bindings[%d].value must set exactly one source", invocation.ErrInvalidInvocation, fieldName, i)
 		}
 	}
 	return nil
@@ -1938,6 +1961,9 @@ func workflowOutputValueSourceIsSet(source coreworkflow.OutputValueSource) bool 
 		set++
 	}
 	if strings.TrimSpace(source.SignalMetadata) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.AgentSession) != "" {
 		set++
 	}
 	if source.Literal != nil {

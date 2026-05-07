@@ -317,16 +317,17 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		})
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(agent.Provider),
-		Model:          strings.TrimSpace(agent.Model),
-		Prompt:         strings.TrimSpace(agent.Prompt),
-		Messages:       messages,
-		ToolRefs:       tools,
-		OutputDelivery: workflowConfigOutputDelivery(agent.OutputDelivery),
-		ResponseSchema: maps.Clone(agent.ResponseSchema),
-		Metadata:       maps.Clone(agent.Metadata),
-		ModelOptions:   maps.Clone(agent.ModelOptions),
-		TimeoutSeconds: timeoutSeconds,
+		ProviderName:         strings.TrimSpace(agent.Provider),
+		Model:                strings.TrimSpace(agent.Model),
+		Prompt:               strings.TrimSpace(agent.Prompt),
+		Messages:             messages,
+		ToolRefs:             tools,
+		OutputDelivery:       workflowConfigOutputDelivery(agent.OutputDelivery),
+		SessionReadyDelivery: workflowConfigOutputDelivery(agent.SessionReadyDelivery),
+		ResponseSchema:       maps.Clone(agent.ResponseSchema),
+		Metadata:             maps.Clone(agent.Metadata),
+		ModelOptions:         maps.Clone(agent.ModelOptions),
+		TimeoutSeconds:       timeoutSeconds,
 	}
 }
 
@@ -352,6 +353,7 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 				AgentOutput:    strings.TrimSpace(binding.Value.AgentOutput),
 				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
 				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
+				AgentSession:   strings.TrimSpace(binding.Value.AgentSession),
 				Literal:        binding.Value.Literal,
 			},
 		})
@@ -500,7 +502,7 @@ func workflowEnsureConfigExecutionRef(
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
 	var base []core.AccessPermission
 	if target.Agent != nil {
-		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+1)
+		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+2)
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
 			pluginName := strings.TrimSpace(tool.Plugin)
@@ -514,6 +516,16 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			})
 		}
 		if delivery := target.Agent.OutputDelivery; delivery != nil {
+			pluginName := strings.TrimSpace(delivery.Target.PluginName)
+			operation := strings.TrimSpace(delivery.Target.Operation)
+			if pluginName != "" && operation != "" {
+				base = append(base, core.AccessPermission{
+					Plugin:     pluginName,
+					Operations: []string{operation},
+				})
+			}
+		}
+		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
 			pluginName := strings.TrimSpace(delivery.Target.PluginName)
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
@@ -612,6 +624,11 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 			}
 		}
 		if delivery := target.Agent.OutputDelivery; delivery != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target, hasRunAs); err != nil {
+				return nil, err
+			}
+		}
+		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target, hasRunAs); err != nil {
 				return nil, err
 			}

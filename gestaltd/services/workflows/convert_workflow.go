@@ -123,21 +123,26 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent model_options: %w", err)
 	}
-	outputDelivery, err := workflowOutputDeliveryToProto(target.OutputDelivery)
+	outputDelivery, err := workflowOutputDeliveryToProto(target.OutputDelivery, "output_delivery")
+	if err != nil {
+		return nil, err
+	}
+	sessionReadyDelivery, err := workflowOutputDeliveryToProto(target.SessionReadyDelivery, "session_ready_delivery")
 	if err != nil {
 		return nil, err
 	}
 	return &proto.BoundWorkflowAgentTarget{
-		ProviderName:   target.ProviderName,
-		Model:          target.Model,
-		Prompt:         target.Prompt,
-		Messages:       messages,
-		ToolRefs:       agentwire.ToolRefsToProto(target.ToolRefs),
-		ResponseSchema: responseSchema,
-		Metadata:       metadata,
-		ModelOptions:   modelOptions,
-		TimeoutSeconds: int32(target.TimeoutSeconds),
-		OutputDelivery: outputDelivery,
+		ProviderName:         target.ProviderName,
+		Model:                target.Model,
+		Prompt:               target.Prompt,
+		Messages:             messages,
+		ToolRefs:             agentwire.ToolRefsToProto(target.ToolRefs),
+		ResponseSchema:       responseSchema,
+		Metadata:             metadata,
+		ModelOptions:         modelOptions,
+		TimeoutSeconds:       int32(target.TimeoutSeconds),
+		OutputDelivery:       outputDelivery,
+		SessionReadyDelivery: sessionReadyDelivery,
 	}, nil
 }
 
@@ -146,20 +151,21 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		return nil
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(target.GetProviderName()),
-		Model:          strings.TrimSpace(target.GetModel()),
-		Prompt:         target.GetPrompt(),
-		Messages:       agentwire.MessagesFromProto(target.GetMessages()),
-		ToolRefs:       agentwire.ToolRefsFromProto(target.GetToolRefs()),
-		ResponseSchema: mapFromStruct(target.GetResponseSchema()),
-		Metadata:       mapFromStruct(target.GetMetadata()),
-		ModelOptions:   mapFromStruct(target.GetModelOptions()),
-		TimeoutSeconds: int(target.GetTimeoutSeconds()),
-		OutputDelivery: workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+		ProviderName:         strings.TrimSpace(target.GetProviderName()),
+		Model:                strings.TrimSpace(target.GetModel()),
+		Prompt:               target.GetPrompt(),
+		Messages:             agentwire.MessagesFromProto(target.GetMessages()),
+		ToolRefs:             agentwire.ToolRefsFromProto(target.GetToolRefs()),
+		ResponseSchema:       mapFromStruct(target.GetResponseSchema()),
+		Metadata:             mapFromStruct(target.GetMetadata()),
+		ModelOptions:         mapFromStruct(target.GetModelOptions()),
+		TimeoutSeconds:       int(target.GetTimeoutSeconds()),
+		OutputDelivery:       workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+		SessionReadyDelivery: workflowOutputDeliveryFromProto(target.GetSessionReadyDelivery()),
 	}
 }
 
-func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery) (*proto.WorkflowOutputDelivery, error) {
+func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery, fieldName string) (*proto.WorkflowOutputDelivery, error) {
 	if delivery == nil {
 		return nil, nil
 	}
@@ -168,7 +174,7 @@ func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery) (*prot
 		binding := delivery.InputBindings[i]
 		value, err := workflowOutputValueSourceToProto(binding.Value)
 		if err != nil {
-			return nil, fmt.Errorf("workflow agent output_delivery.input_bindings[%d].value: %w", i, err)
+			return nil, fmt.Errorf("workflow agent %s.input_bindings[%d].value: %w", fieldName, i, err)
 		}
 		bindings = append(bindings, &proto.WorkflowOutputBinding{
 			InputField: binding.InputField,
@@ -179,7 +185,7 @@ func workflowOutputDeliveryToProto(delivery *coreworkflow.OutputDelivery) (*prot
 	deliveryTarget.CredentialMode = ""
 	target, err := workflowPluginTargetToProto(&deliveryTarget)
 	if err != nil {
-		return nil, fmt.Errorf("workflow agent output_delivery.target: %w", err)
+		return nil, fmt.Errorf("workflow agent %s.target: %w", fieldName, err)
 	}
 	return &proto.WorkflowOutputDelivery{
 		Target:         target,
@@ -219,6 +225,9 @@ func workflowOutputValueSourceToProto(source coreworkflow.OutputValueSource) (*p
 	if strings.TrimSpace(source.SignalMetadata) != "" {
 		set++
 	}
+	if strings.TrimSpace(source.AgentSession) != "" {
+		set++
+	}
 	if source.Literal != nil {
 		set++
 	}
@@ -237,6 +246,10 @@ func workflowOutputValueSourceToProto(source coreworkflow.OutputValueSource) (*p
 	case strings.TrimSpace(source.SignalMetadata) != "":
 		return &proto.WorkflowOutputValueSource{
 			Kind: &proto.WorkflowOutputValueSource_SignalMetadata{SignalMetadata: source.SignalMetadata},
+		}, nil
+	case strings.TrimSpace(source.AgentSession) != "":
+		return &proto.WorkflowOutputValueSource{
+			Kind: &proto.WorkflowOutputValueSource_AgentSession{AgentSession: source.AgentSession},
 		}, nil
 	case source.Literal != nil:
 		value, err := protoValueFromAny(source.Literal)
@@ -261,6 +274,8 @@ func workflowOutputValueSourceFromProto(source *proto.WorkflowOutputValueSource)
 		return coreworkflow.OutputValueSource{SignalPayload: strings.TrimSpace(typed.SignalPayload)}
 	case *proto.WorkflowOutputValueSource_SignalMetadata:
 		return coreworkflow.OutputValueSource{SignalMetadata: strings.TrimSpace(typed.SignalMetadata)}
+	case *proto.WorkflowOutputValueSource_AgentSession:
+		return coreworkflow.OutputValueSource{AgentSession: strings.TrimSpace(typed.AgentSession)}
 	case *proto.WorkflowOutputValueSource_Literal:
 		return coreworkflow.OutputValueSource{Literal: protoValueToAny(typed.Literal)}
 	default:

@@ -763,16 +763,17 @@ type WorkflowPluginTargetConfig struct {
 }
 
 type WorkflowAgentConfig struct {
-	Provider       string                        `yaml:"provider,omitempty"`
-	Model          string                        `yaml:"model,omitempty"`
-	Prompt         string                        `yaml:"prompt,omitempty"`
-	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata       map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout        string                        `yaml:"timeout,omitempty"`
+	Provider             string                        `yaml:"provider,omitempty"`
+	Model                string                        `yaml:"model,omitempty"`
+	Prompt               string                        `yaml:"prompt,omitempty"`
+	Messages             []WorkflowAgentMessage        `yaml:"messages,omitempty"`
+	Tools                []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
+	OutputDelivery       *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
+	SessionReadyDelivery *WorkflowOutputDeliveryConfig `yaml:"sessionReadyDelivery,omitempty"`
+	ResponseSchema       map[string]any                `yaml:"responseSchema,omitempty"`
+	Metadata             map[string]any                `yaml:"metadata,omitempty"`
+	ModelOptions         map[string]any                `yaml:"modelOptions,omitempty"`
+	Timeout              string                        `yaml:"timeout,omitempty"`
 }
 
 type WorkflowOutputDeliveryConfig struct {
@@ -790,6 +791,7 @@ type WorkflowOutputValueSourceConfig struct {
 	AgentOutput    string `yaml:"agentOutput,omitempty"`
 	SignalPayload  string `yaml:"signalPayload,omitempty"`
 	SignalMetadata string `yaml:"signalMetadata,omitempty"`
+	AgentSession   string `yaml:"agentSession,omitempty"`
 	Literal        any    `yaml:"literal,omitempty"`
 }
 

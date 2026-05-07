@@ -281,6 +281,7 @@ type (
 	WorkflowOutputDelivery                    = internal.WorkflowOutputDelivery
 	WorkflowOutputValueSource                 = internal.WorkflowOutputValueSource
 	WorkflowOutputValueSource_AgentOutput     = internal.WorkflowOutputValueSource_AgentOutput
+	WorkflowOutputValueSource_AgentSession    = internal.WorkflowOutputValueSource_AgentSession
 	WorkflowOutputValueSource_Literal         = internal.WorkflowOutputValueSource_Literal
 	WorkflowOutputValueSource_SignalMetadata  = internal.WorkflowOutputValueSource_SignalMetadata
 	WorkflowOutputValueSource_SignalPayload   = internal.WorkflowOutputValueSource_SignalPayload
