@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Plugins
 
 Plugin providers are the packages that expose tools through Gestalt. Operators
@@ -36,6 +38,153 @@ invoker for request-scoped nested calls. Use a managed subject and scoped API
 token when the plugin should call the Gestalt HTTP API as a stable service
 account instead. See
 [Authorization > Service accounts for direct API calls](/providers/authorization#service-accounts-for-direct-api-calls).
+
+## Using `PluginInvoker` from a plugin
+
+Use `PluginInvoker` when executable plugin code needs to call another configured
+plugin as part of the same request. The caller must declare the allowed call
+graph in `plugins.<caller>.invokes`; at runtime the SDK sends the current
+invocation token to the host, and the host preserves the original subject,
+credential context, and permission ceiling for the nested call.
+
+```yaml
+plugins:
+  triage:
+    source: ./plugins/triage/manifest.yaml
+    invokes:
+      - plugin: github
+        operations:
+          - issues.get
+
+  github:
+    source: ./plugins/github/manifest.yaml
+```
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+        "encoding/json"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func loadLinkedIssue(ctx context.Context, request gestalt.Request, issueNumber int) (map[string]any, error) {
+        invoker, err := request.Invoker()
+        if err != nil {
+            return nil, err
+        }
+        defer invoker.Close()
+
+        result, err := invoker.Invoke(ctx, "github", "issues.get", map[string]any{
+            "owner":  "acme",
+            "repo":   "roadmap",
+            "number": issueNumber,
+        }, &gestalt.InvokeOptions{
+            Connection:     "default",
+            IdempotencyKey: request.IdempotencyKey,
+        })
+        if err != nil {
+            return nil, err
+        }
+
+        var issue map[string]any
+        if err := json.Unmarshal([]byte(result.Body), &issue); err != nil {
+            return nil, err
+        }
+        return issue, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import json
+
+    import gestalt
+
+
+    def load_linked_issue(
+        request: gestalt.Request,
+        issue_number: int,
+    ) -> dict[str, object]:
+        with request.invoker() as invoker:
+            result = invoker.invoke(
+                "github",
+                "issues.get",
+                {
+                    "owner": "acme",
+                    "repo": "roadmap",
+                    "number": issue_number,
+                },
+                connection="default",
+                idempotency_key=request.idempotency_key,
+            )
+
+        return json.loads(result.body)
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn load_linked_issue(
+        request: &gestalt::Request,
+        issue_number: i64,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let mut invoker = request.invoker().await?;
+
+        let result = invoker
+            .invoke(
+                "github",
+                "issues.get",
+                serde_json::json!({
+                    "owner": "acme",
+                    "repo": "roadmap",
+                    "number": issue_number,
+                }),
+                Some(gestalt::InvokeOptions {
+                    connection: "default".to_string(),
+                    idempotency_key: request.idempotency_key.clone(),
+                    ..Default::default()
+                }),
+            )
+            .await?;
+
+        Ok(serde_json::from_str(&result.body)?)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { PluginInvoker, type Request } from "@valon-technologies/gestalt";
+
+    export async function loadLinkedIssue(request: Request, issueNumber: number) {
+      const invoker = new PluginInvoker(request);
+
+      const result = await invoker.invoke(
+        "github",
+        "issues.get",
+        {
+          owner: "acme",
+          repo: "roadmap",
+          number: issueNumber,
+        },
+        {
+          connection: "default",
+          idempotencyKey: request.idempotencyKey,
+        },
+      );
+
+      return JSON.parse(result.body);
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The nested call must fit inside the caller's configured `invokes` grant. Pass
+`connection`, `instance`, or an idempotency key when the target plugin should
+use a specific connected account, provider instance, or retry boundary. For raw
+GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in
+the same SDK client.
 
 ## First-party plugin packages
 
