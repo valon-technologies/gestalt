@@ -110,7 +110,7 @@ jobs:
           cache-dependency-path: gestaltd/go.sum
 
       - name: Run race tests
-        run: go test -race ./...
+        run: go test -race -timeout=15m ./...
 
   docs-build:
     name: Docs Build

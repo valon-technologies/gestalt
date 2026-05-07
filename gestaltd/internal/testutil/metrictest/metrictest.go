@@ -3,6 +3,7 @@ package metrictest
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -36,6 +37,23 @@ func CollectMetrics(t *testing.T, reader *sdkmetric.ManualReader) metricdata.Res
 		t.Fatalf("collect metrics: %v", err)
 	}
 	return rm
+}
+
+func CollectMetricsUntilFloat64Histogram(t *testing.T, reader *sdkmetric.ManualReader, name string, attrs map[string]string) metricdata.ResourceMetrics {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	var rm metricdata.ResourceMetrics
+	for {
+		rm = CollectMetrics(t, reader)
+		if HasFloat64Histogram(rm, name, attrs) {
+			return rm
+		}
+		if time.Now().After(deadline) {
+			return rm
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func RequireInt64Sum(t *testing.T, rm metricdata.ResourceMetrics, name string, want int64, attrs map[string]string) {
@@ -136,6 +154,27 @@ func RequireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name s
 	}
 
 	t.Fatalf("metric %q with attrs %v not found", name, attrs)
+}
+
+func HasFloat64Histogram(rm metricdata.ResourceMetrics, name string, attrs map[string]string) bool {
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			histogram, ok := metric.Data.(metricdata.Histogram[float64])
+			if !ok {
+				continue
+			}
+			for _, point := range histogram.DataPoints {
+				if AttrsMatch(point.Attributes, attrs) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func RequireNoMetric(t *testing.T, rm metricdata.ResourceMetrics, name string) {
