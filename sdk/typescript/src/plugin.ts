@@ -24,9 +24,9 @@ import {
   type HTTPSubjectResolver,
 } from "./http-subject.ts";
 import {
-  isRuntimeProvider,
-  RuntimeProvider,
-  type RuntimeProviderOptions,
+  isProviderBase,
+  ProviderBase,
+  type ProviderBaseOptions,
 } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
@@ -118,7 +118,7 @@ export type PostConnectHandler = (
 /**
  * Runtime hooks required to implement a plugin provider.
  */
-export interface PluginDefinitionOptions extends RuntimeProviderOptions {
+export interface PluginDefinitionOptions extends ProviderBaseOptions {
   connectionMode?: ConnectionMode;
   authTypes?: string[];
   connectionParams?: Record<string, ConnectionParamDefinition>;
@@ -170,7 +170,7 @@ export function operation<In, Out>(
  * });
  * ```
  */
-export class PluginProvider extends RuntimeProvider {
+export class PluginProvider extends ProviderBase {
   readonly kind = "integration" as const;
   readonly iconSvg: string;
   readonly connectionMode: ConnectionMode;
@@ -390,7 +390,7 @@ export function isPluginProvider(
 ): value is PluginProvider {
   return (
     value instanceof PluginProvider ||
-    (isRuntimeProvider(value) &&
+    (isProviderBase(value) &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "integration" &&
       "staticCatalog" in value &&

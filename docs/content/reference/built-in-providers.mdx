@@ -89,9 +89,10 @@ providers:
 
 ## Runtime Providers
 
-Runtime providers manage hosted execution backends for executable plugins. They
-are configured under top-level `runtime.providers`, and plugins opt into them
-with `plugins.<name>.execution.mode: hosted`.
+Runtime providers manage hosted execution backends for executable plugins,
+hosted agent providers, and hosted workflow providers. They are configured
+under top-level `runtime.providers`, and providers opt into them with their
+own `runtime` block.
 
 ```yaml
 runtime:
@@ -105,15 +106,13 @@ runtime:
 plugins:
   support:
     source: ./plugins/support/manifest.yaml
-    execution:
-      mode: hosted
-      runtime:
-        image: ghcr.io/example/support-plugin:2026-04-21
+    runtime:
+      image: ghcr.io/example/support-plugin:2026-04-21
 ```
 
 | Name | Purpose |
 | --- | --- |
-| `local` | Built-in same-machine runtime driver. Used by default when a plugin does not opt into hosted execution. |
+| `local` | Built-in same-machine runtime driver. Used by default when a provider does not opt into hosted execution. |
 | `modal` | First-party hosted runtime provider for Modal sandboxes. |
 
 ## Workflow Providers

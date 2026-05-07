@@ -8728,13 +8728,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg := validConfig()
 		cfg.Providers.Agent = map[string]*config.ProviderEntry{
 			"simple": {
-				Execution: &config.ExecutionConfig{
-					Mode: config.ExecutionModeHosted,
-					Runtime: &config.HostedRuntimeConfig{
-						Image: "ghcr.io/example/simple-agent:latest",
-						ImagePullAuth: &config.HostedRuntimeImagePullAuth{
-							DockerConfigJSON: transportSecretRef("ghcr-docker-config"),
-						},
+				Runtime: &config.RuntimePlacementConfig{
+					Image: "ghcr.io/example/simple-agent:latest",
+					ImagePullAuth: &config.RuntimePlacementImagePullAuth{
+						DockerConfigJSON: transportSecretRef("ghcr-docker-config"),
 					},
 				},
 			},
@@ -8744,7 +8741,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("ResolveConfigSecrets: %v", err)
 		}
 
-		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
 			return

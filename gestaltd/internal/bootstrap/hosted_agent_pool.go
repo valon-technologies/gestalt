@@ -28,7 +28,7 @@ type hostedAgentProviderPool struct {
 	launch       *hostedAgentProviderLaunch
 	hostServices []runtimehost.HostService
 	deps         Deps
-	policy       config.HostedRuntimeLifecyclePolicy
+	policy       config.RuntimePlacementLifecyclePolicy
 
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -62,7 +62,7 @@ type hostedAgentPoolBackend struct {
 	closed           bool
 }
 
-func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreagent.Provider, error) {
+func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (coreagent.Provider, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
@@ -85,7 +85,7 @@ func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProvider
 			return nil, err
 		}
 	}
-	if policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
+	if policy.RestartPolicy != config.RuntimePlacementRestartPolicyNever {
 		pool.lifecycleWG.Add(1)
 		go func() {
 			defer pool.lifecycleWG.Done()
@@ -231,7 +231,7 @@ func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, back
 	})
 }
 
-func hostedAgentWorkspacePrepareTimeout(cfg *config.HostedRuntimeWorkspaceConfig) time.Duration {
+func hostedAgentWorkspacePrepareTimeout(cfg *config.RuntimePlacementWorkspaceConfig) time.Duration {
 	const defaultTimeout = 10 * time.Minute
 	if cfg == nil || strings.TrimSpace(cfg.PrepareTimeout) == "" {
 		return defaultTimeout
@@ -243,7 +243,7 @@ func hostedAgentWorkspacePrepareTimeout(cfg *config.HostedRuntimeWorkspaceConfig
 	return timeout
 }
 
-func validateWorkspacePolicy(workspace *coreagent.Workspace, policy *config.HostedRuntimeWorkspaceConfig) error {
+func validateWorkspacePolicy(workspace *coreagent.Workspace, policy *config.RuntimePlacementWorkspaceConfig) error {
 	if workspace == nil {
 		return nil
 	}
@@ -1471,7 +1471,7 @@ func (p *hostedAgentProviderPool) ensureBackendFreshForNewWork(ctx context.Conte
 		p.replaceBackendAllowNever(backend, knownReason, true)
 		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance is stale: %s", p.name, knownReason))
 	}
-	if p.policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
+	if p.policy.RestartPolicy != config.RuntimePlacementRestartPolicyNever {
 		return nil
 	}
 	session, drainAt, err := p.refreshBackendRuntimeSessionWithContext(ctx, backend, 10*time.Second)
@@ -1637,7 +1637,7 @@ func cloneTime(src *time.Time) *time.Time {
 }
 
 func (p *hostedAgentProviderPool) maybeProbeAfterCallError(backend *hostedAgentPoolBackend, callErr error) {
-	if callErr == nil || backend == nil || errors.Is(callErr, core.ErrNotFound) || p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever {
+	if callErr == nil || backend == nil || errors.Is(callErr, core.ErrNotFound) || p.policy.RestartPolicy == config.RuntimePlacementRestartPolicyNever {
 		return
 	}
 	go func() {
@@ -1671,7 +1671,7 @@ func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend
 }
 
 func (p *hostedAgentProviderPool) replaceBackendAllowNever(backend *hostedAgentPoolBackend, reason string, allowRestartPolicyNever bool) {
-	if (p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever && !allowRestartPolicyNever) || !p.markBackendDraining(backend) {
+	if (p.policy.RestartPolicy == config.RuntimePlacementRestartPolicyNever && !allowRestartPolicyNever) || !p.markBackendDraining(backend) {
 		return
 	}
 	if !p.addLifecycleWork() {
@@ -1693,7 +1693,7 @@ func (p *hostedAgentProviderPool) replaceBackendAllowNever(backend *hostedAgentP
 }
 
 func (p *hostedAgentProviderPool) startProactiveReplacement(backend *hostedAgentPoolBackend, reason string) {
-	if backend == nil || p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever {
+	if backend == nil || p.policy.RestartPolicy == config.RuntimePlacementRestartPolicyNever {
 		return
 	}
 	p.mu.Lock()

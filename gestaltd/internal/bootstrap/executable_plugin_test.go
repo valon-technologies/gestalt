@@ -1344,13 +1344,6 @@ func cloneRuntimeEgressPolicy(policy pluginruntime.RuntimeEgressPolicy) pluginru
 	}
 }
 
-func hostedExecutionConfig(runtimeCfg *config.HostedRuntimeConfig) *config.ExecutionConfig {
-	return &config.ExecutionConfig{
-		Mode:    config.ExecutionModeHosted,
-		Runtime: runtimeCfg,
-	}
-}
-
 func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRequest, allowedHosts []string, action pluginruntime.PolicyAction) {
 	t.Helper()
 	if got := req.Egress.AllowedHosts; !slices.Equal(got, allowedHosts) {
@@ -3990,7 +3983,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -4005,7 +3998,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Invokes: []config.PluginInvocationDependency{{
 					Plugin:    "roadmap",
 					Operation: "sync",
@@ -5582,7 +5575,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5597,13 +5590,10 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution: &config.ExecutionConfig{
-					Mode: config.ExecutionModeHosted,
-					Runtime: &config.HostedRuntimeConfig{
-						Template: "python-dev",
-						Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
-						Metadata: map[string]string{"tenant": "eng"},
-					},
+				Runtime: &config.RuntimePlacementConfig{
+					Template: "python-dev",
+					Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
+					Metadata: map[string]string{"tenant": "eng"},
 				},
 			},
 		},
@@ -5707,7 +5697,7 @@ func TestPluginRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5722,7 +5712,7 @@ func TestPluginRuntimeStartsHostedCommandWithoutBundleStaging(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -5782,7 +5772,7 @@ func TestPluginRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5795,9 +5785,9 @@ func TestPluginRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 			"echoext": {
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+				Runtime: &config.RuntimePlacementConfig{
 					Image: "ghcr.io/example/echo-plugin@sha256:abc123",
-				}),
+				},
 			},
 		},
 	}
@@ -5850,7 +5840,7 @@ func TestPluginRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5865,9 +5855,9 @@ func TestPluginRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 				Args:                 []string{"host-arg"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+				Runtime: &config.RuntimePlacementConfig{
 					Template: "python-runtime",
-				}),
+				},
 			},
 		},
 	}
@@ -5920,9 +5910,9 @@ func TestPluginRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution: hostedExecutionConfig(&config.HostedRuntimeConfig{
+				Runtime: &config.RuntimePlacementConfig{
 					Image: "ghcr.io/example/echo-plugin@sha256:abc123",
-				}),
+				},
 			},
 		},
 	}
@@ -5966,7 +5956,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -5982,7 +5972,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				S3:                   []string{"main"},
 			},
 		},
@@ -6289,7 +6279,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6304,7 +6294,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -6380,7 +6370,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -6396,7 +6386,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -6502,7 +6492,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6515,7 +6505,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -6620,7 +6610,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -6636,7 +6626,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Cache:                []string{"session", "rate_limit"},
 			},
 		},
@@ -6744,7 +6734,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6757,7 +6747,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Cache:                []string{"session"},
 			},
 		},
@@ -6862,7 +6852,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6875,7 +6865,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				S3:                   []string{"main"},
 			},
 		},
@@ -7006,7 +6996,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7019,7 +7009,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     callerManifest,
 				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Invokes:              callerInvokes,
 			},
 			"example": {
@@ -7145,7 +7135,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -7161,7 +7151,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -7240,7 +7230,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7255,7 +7245,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            &config.ExecutionConfig{Mode: config.ExecutionModeHosted},
+				Runtime:              &config.RuntimePlacementConfig{},
 				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 			},
 		},
@@ -7292,7 +7282,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7307,7 +7297,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Cache:                []string{"session"},
 			},
 		},
@@ -7348,7 +7338,7 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7361,7 +7351,7 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -7738,7 +7728,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7753,7 +7743,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -7893,7 +7883,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7908,7 +7898,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -8004,7 +7994,7 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -8020,7 +8010,7 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 			},
 		},
@@ -8090,7 +8080,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyAllow)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -8106,7 +8096,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}
@@ -8155,7 +8145,7 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *tes
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -8171,7 +8161,7 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *tes
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 				Cache:                []string{"session"},
 			},
@@ -8244,7 +8234,7 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -8259,7 +8249,7 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"127.0.0.1", "localhost"}},
 			},
 		},
@@ -8334,7 +8324,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -8350,7 +8340,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Runtime:              &config.RuntimePlacementConfig{},
 			},
 		},
 	}

@@ -1,17 +1,17 @@
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
 /**
  * Runtime hooks required to implement a Gestalt secrets provider.
  */
-export interface SecretsProviderOptions extends RuntimeProviderOptions {
+export interface SecretsProviderOptions extends ProviderBaseOptions {
   getSecret: (name: string) => MaybePromise<string>;
 }
 
 /**
  * Secrets provider implementation consumed by the Gestalt runtime.
  */
-export class SecretsProvider extends RuntimeProvider {
+export class SecretsProvider extends ProviderBase {
   readonly kind = "secrets" as const;
 
   private readonly getSecretHandler: SecretsProviderOptions["getSecret"];

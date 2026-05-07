@@ -16,7 +16,7 @@ type hostedProcessLaunch struct {
 	cleanup func()
 }
 
-func prepareHostedProcessLaunch(kind, name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), runtimeConfig config.EffectiveHostedRuntime) (hostedProcessLaunch, error) {
+func prepareHostedProcessLaunch(kind, name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), runtimeConfig config.EffectiveRuntimePlacement) (hostedProcessLaunch, error) {
 	if hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
 		command, args, err := hostedRuntimeImageEntrypoint(kind, name, entry)
 		if err != nil {
@@ -40,7 +40,7 @@ func prepareHostedProcessLaunch(kind, name string, entry *config.ProviderEntry, 
 	return launch, nil
 }
 
-func hostedRuntimeUsesImageEntrypoint(runtimeConfig config.EffectiveHostedRuntime) bool {
+func hostedRuntimeUsesImageEntrypoint(runtimeConfig config.EffectiveRuntimePlacement) bool {
 	hasRuntimeImageOrTemplate := strings.TrimSpace(runtimeConfig.Image) != "" || strings.TrimSpace(runtimeConfig.Template) != ""
 	if runtimeConfig.Provider != nil {
 		return runtimeConfig.Provider.Driver != config.RuntimeProviderDriverLocal && hasRuntimeImageOrTemplate

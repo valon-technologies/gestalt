@@ -41,20 +41,18 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Metadata: map[string]string{
-					"workload": "temporal-workers",
-				},
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   2,
-					MaxReadyInstances:   2,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "50ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Metadata: map[string]string{
+				"workload": "temporal-workers",
+			},
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   2,
+				MaxReadyInstances:   2,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "50ms",
 			},
 		},
 	}
@@ -169,17 +167,15 @@ func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testi
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   1,
-					MaxReadyInstances:   1,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "50ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   1,
+				MaxReadyInstances:   1,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "50ms",
 			},
 		},
 	}
@@ -230,17 +226,15 @@ func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   1,
-					MaxReadyInstances:   1,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "50ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   1,
+				MaxReadyInstances:   1,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "50ms",
 			},
 		},
 	}
@@ -302,31 +296,31 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 			Workflow: map[string]*config.ProviderEntry{
 				"ready": {
 					Source: config.ProviderSource{Path: "stub"},
-					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+					Runtime: &config.RuntimePlacementConfig{
 						Provider: "gke",
-						Pool: &config.HostedRuntimePoolConfig{
+						Pool: &config.RuntimePlacementPoolConfig{
 							MinReadyInstances:   1,
 							MaxReadyInstances:   1,
 							StartupTimeout:      "5s",
 							HealthCheckInterval: "1m",
-							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 							DrainTimeout:        "50ms",
 						},
-					}},
+					},
 				},
 				"stuck": {
 					Source: config.ProviderSource{Path: "stub"},
-					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+					Runtime: &config.RuntimePlacementConfig{
 						Provider: "gke",
-						Pool: &config.HostedRuntimePoolConfig{
+						Pool: &config.RuntimePlacementPoolConfig{
 							MinReadyInstances:   1,
 							MaxReadyInstances:   1,
 							StartupTimeout:      "5s",
 							HealthCheckInterval: "1m",
-							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 							DrainTimeout:        "50ms",
 						},
-					}},
+					},
 				},
 			},
 		},
@@ -395,17 +389,15 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   1,
-					MaxReadyInstances:   1,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "50ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   1,
+				MaxReadyInstances:   1,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "50ms",
 			},
 		},
 	}
@@ -447,10 +439,10 @@ func TestHostedWorkflowProviderPoolClosedStartLoopDoesNotMarkReady(t *testing.T)
 		ctx:    ctx,
 		cancel: cancel,
 		ready:  make(chan struct{}),
-		policy: config.HostedRuntimeLifecyclePolicy{
+		policy: config.RuntimePlacementLifecyclePolicy{
 			MinReadyInstances:   1,
 			HealthCheckInterval: time.Hour,
-			RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+			RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 		},
 	}
 	pool.mu.Lock()
@@ -488,10 +480,10 @@ func TestHostedWorkflowProviderPoolCloseUnblocksWaitReady(t *testing.T) {
 		ctx:    ctx,
 		cancel: cancel,
 		ready:  make(chan struct{}),
-		policy: config.HostedRuntimeLifecyclePolicy{
+		policy: config.RuntimePlacementLifecyclePolicy{
 			MinReadyInstances:   1,
 			HealthCheckInterval: time.Hour,
-			RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+			RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 		},
 	}
 	t.Cleanup(func() { _ = pool.Close() })
@@ -528,17 +520,17 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 				"local": {Source: config.ProviderSource{Path: "stub"}},
 				"runtime": {
 					Source: config.ProviderSource{Path: "stub"},
-					Execution: &config.ExecutionConfig{Runtime: &config.HostedRuntimeConfig{
+					Runtime: &config.RuntimePlacementConfig{
 						Provider: "gke",
-						Pool: &config.HostedRuntimePoolConfig{
+						Pool: &config.RuntimePlacementPoolConfig{
 							MinReadyInstances:   1,
 							MaxReadyInstances:   1,
 							StartupTimeout:      "5s",
 							HealthCheckInterval: "1m",
-							RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+							RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 							DrainTimeout:        "50ms",
 						},
-					}},
+					},
 				},
 			},
 		},
@@ -632,7 +624,7 @@ func workflowConfigTestAgentTarget() *config.WorkflowTargetConfig {
 func TestHostedWorkflowAllowedHostsFiltersLoopbackRelayTargets(t *testing.T) {
 	t.Parallel()
 
-	allowed := hostedWorkflowAllowedHosts([]string{"localhost", "127.0.0.1", "api.example.com"}, HostedRuntimePlan{
+	allowed := hostedWorkflowAllowedHosts([]string{"localhost", "127.0.0.1", "api.example.com"}, RuntimePlacementPlan{
 		Resolved: RuntimeBehavior{
 			HostServiceAccess: RuntimeHostServiceAccessRelay,
 			EgressMode:        RuntimeEgressModeNone,
@@ -656,17 +648,15 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   1,
-					MaxReadyInstances:   1,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "50ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   1,
+				MaxReadyInstances:   1,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "50ms",
 			},
 		},
 	}
@@ -701,17 +691,15 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "gke",
-				Pool: &config.HostedRuntimePoolConfig{
-					MinReadyInstances:   1,
-					MaxReadyInstances:   1,
-					StartupTimeout:      "5s",
-					HealthCheckInterval: "1m",
-					RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
-					DrainTimeout:        "150ms",
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "gke",
+			Pool: &config.RuntimePlacementPoolConfig{
+				MinReadyInstances:   1,
+				MaxReadyInstances:   1,
+				StartupTimeout:      "5s",
+				HealthCheckInterval: "1m",
+				RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
+				DrainTimeout:        "150ms",
 			},
 		},
 	}

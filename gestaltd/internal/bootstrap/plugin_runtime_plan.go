@@ -36,16 +36,16 @@ type RuntimeBehavior struct {
 	EgressMode        RuntimeEgressMode
 }
 
-type HostedRuntimePlan struct {
+type RuntimePlacementPlan struct {
 	Resolved                  RuntimeBehavior
 	RequiresHostServiceAccess bool
 	RequiresHostnameEgress    bool
 	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildHostedRuntimePlan(support pluginruntime.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) HostedRuntimePlan {
+func buildRuntimePlacementPlan(support pluginruntime.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) RuntimePlacementPlan {
 	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), deps)
-	return HostedRuntimePlan{
+	return RuntimePlacementPlan{
 		Resolved:                  resolved,
 		RequiresHostServiceAccess: requiresHostServiceAccess,
 		RequiresHostnameEgress:    requiresHostnameEgress,
@@ -53,12 +53,12 @@ func buildHostedRuntimePlan(support pluginruntime.Support, deps Deps, requiresHo
 	}
 }
 
-func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support pluginruntime.Support) (HostedRuntimePlan, error) {
+func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support pluginruntime.Support) (RuntimePlacementPlan, error) {
 	requiresHostServiceAccess, requiresHostnameEgress, err := pluginRuntimeRequirementsForPlugin(pluginName, entry, deps)
 	if err != nil {
-		return HostedRuntimePlan{}, err
+		return RuntimePlacementPlan{}, err
 	}
-	return buildHostedRuntimePlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
+	return buildRuntimePlacementPlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
 }
 
 func runtimeAdvertisedBehavior(support pluginruntime.Support) RuntimeBehavior {
@@ -152,7 +152,7 @@ func agentRuntimeRequirementsForProvider(name string, entry *config.ProviderEntr
 	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
 }
 
-func (p HostedRuntimePlan) Validate(label string) error {
+func (p RuntimePlacementPlan) Validate(label string) error {
 	if label == "" {
 		label = "hosted runtime"
 	}

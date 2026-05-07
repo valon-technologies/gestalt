@@ -28,7 +28,7 @@ import {
   WriteObjectResponseSchema,
 } from "./internal/gen/v1/s3_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Base environment variable for discovering S3 runtime sockets. */
 export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
@@ -245,7 +245,7 @@ export interface ProviderReadResult {
 /**
  * Runtime hooks required to implement a Gestalt S3 provider.
  */
-export interface S3ProviderOptions extends RuntimeProviderOptions {
+export interface S3ProviderOptions extends ProviderBaseOptions {
   headObject: (ref: ObjectRef) => MaybePromise<ObjectMeta>;
   readObject: (ref: ObjectRef, options?: ReadOptions) => MaybePromise<ProviderReadResult>;
   writeObject: (
@@ -269,7 +269,7 @@ export interface S3ProviderOptions extends RuntimeProviderOptions {
 /**
  * S3 provider implementation consumed by the Gestalt runtime.
  */
-export class S3Provider extends RuntimeProvider {
+export class S3Provider extends ProviderBase {
   readonly kind = "s3" as const;
 
   private readonly headObjectHandler: S3ProviderOptions["headObject"];

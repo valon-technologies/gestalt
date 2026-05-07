@@ -25,10 +25,10 @@ var errHostedWorkflowWorkerPoolClosed = errors.New("hosted workflow worker pool 
 
 type hostedWorkflowProviderLaunch struct {
 	name            string
-	runtimeConfig   config.EffectiveHostedRuntime
+	runtimeConfig   config.EffectiveRuntimePlacement
 	runtimeProvider pluginruntime.Provider
 	runtimeOwned    bool
-	runtimePlan     HostedRuntimePlan
+	runtimePlan     RuntimePlacementPlan
 	cfg             componentprovider.YAMLConfig
 	allowedHosts    []string
 	launch          hostedProcessLaunch
@@ -55,7 +55,7 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 	}
 	launch.cleanup = chainCleanup(launch.cleanup, publicHostServicesCleanup)
 
-	runtimeCfg := entry.HostedRuntimeConfig()
+	runtimeCfg := entry.RuntimePlacementConfig()
 	if runtimeCfg == nil || !runtimeCfg.LifecyclePolicyFieldsSet() {
 		launch.close()
 		return nil, fmt.Errorf("workflow runtime pool is required")
@@ -97,7 +97,7 @@ func prepareHostedWorkflowProviderLaunch(ctx context.Context, name string, entry
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	requiresHostnameEgress := deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement()
-	runtimePlan := buildHostedRuntimePlan(runtimeSupport, deps, true, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, true, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -285,7 +285,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 	}, nil
 }
 
-func hostedWorkflowAllowedHosts(configured []string, runtimePlan HostedRuntimePlan) []string {
+func hostedWorkflowAllowedHosts(configured []string, runtimePlan RuntimePlacementPlan) []string {
 	return hostedAgentAllowedHosts(configured, runtimePlan)
 }
 
@@ -343,7 +343,7 @@ type hostedWorkflowWorkerPool struct {
 	launch       *hostedWorkflowProviderLaunch
 	hostServices []runtimehost.HostService
 	deps         Deps
-	policy       config.HostedRuntimeLifecyclePolicy
+	policy       config.RuntimePlacementLifecyclePolicy
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -374,7 +374,7 @@ type hostedWorkflowWorker struct {
 	closed           bool
 }
 
-func newHostedWorkflowWorkerPool(launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (*hostedWorkflowWorkerPool, error) {
+func newHostedWorkflowWorkerPool(launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (*hostedWorkflowWorkerPool, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
@@ -438,7 +438,7 @@ func (p *hostedWorkflowWorkerPool) startLoop() {
 		}
 		break
 	}
-	if p.policy.RestartPolicy != config.HostedRuntimeRestartPolicyNever {
+	if p.policy.RestartPolicy != config.RuntimePlacementRestartPolicyNever {
 		p.healthLoop()
 		return
 	}
@@ -770,7 +770,7 @@ func (p *hostedWorkflowWorkerPool) replaceWorker(worker *hostedWorkflowWorker) {
 }
 
 func (p *hostedWorkflowWorkerPool) replaceWorkerAllowNever(worker *hostedWorkflowWorker, reason string, allowRestartPolicyNever bool) {
-	if (p.policy.RestartPolicy == config.HostedRuntimeRestartPolicyNever && !allowRestartPolicyNever) || !p.markWorkerDraining(worker) {
+	if (p.policy.RestartPolicy == config.RuntimePlacementRestartPolicyNever && !allowRestartPolicyNever) || !p.markWorkerDraining(worker) {
 		return
 	}
 	p.wg.Add(1)

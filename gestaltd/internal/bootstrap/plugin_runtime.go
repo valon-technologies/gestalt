@@ -31,14 +31,14 @@ func newPluginRuntimeRegistry(cfg *config.Config, factory RuntimeFactory, deps D
 	}
 }
 
-func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, entry *config.ProviderEntry) (config.EffectiveHostedRuntime, pluginruntime.Provider, error) {
+func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, entry *config.ProviderEntry) (config.EffectiveRuntimePlacement, pluginruntime.Provider, error) {
 	if r == nil || r.cfg == nil {
-		return config.EffectiveHostedRuntime{}, nil, nil
+		return config.EffectiveRuntimePlacement{}, nil, nil
 	}
 
-	effective, err := r.cfg.EffectiveHostedRuntime(configPath, entry)
+	effective, err := r.cfg.EffectiveRuntimePlacement(configPath, entry)
 	if err != nil {
-		return config.EffectiveHostedRuntime{}, nil, err
+		return config.EffectiveRuntimePlacement{}, nil, err
 	}
 	if !effective.Enabled || effective.ProviderName == "" || effective.Provider == nil {
 		return effective, nil, nil
@@ -48,7 +48,7 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, 
 	return effective, provider, err
 }
 
-func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveHostedRuntime) (pluginruntime.Provider, error) {
+func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveRuntimePlacement) (pluginruntime.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("plugin runtime registry is not configured")
 	}

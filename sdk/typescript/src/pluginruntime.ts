@@ -26,7 +26,7 @@ import {
   type StopPluginRuntimeSessionRequest,
 } from "./internal/gen/v1/pluginruntime_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 export type {
   GetPluginRuntimeSessionRequest,
@@ -42,7 +42,7 @@ export type {
 };
 export { PluginRuntimeEgressMode };
 
-export interface PluginRuntimeProviderOptions extends RuntimeProviderOptions {
+export interface PluginRuntimeProviderOptions extends ProviderBaseOptions {
   getSupport: () => MaybePromise<MessageInitShape<typeof PluginRuntimeSupportSchema>>;
   startSession: (
     request: StartPluginRuntimeSessionRequest,
@@ -65,7 +65,7 @@ export interface PluginRuntimeProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<MessageInitShape<typeof HostedPluginSchema>>;
 }
 
-export class PluginRuntimeProvider extends RuntimeProvider {
+export class PluginRuntimeProvider extends ProviderBase {
   readonly kind = "runtime" as const;
 
   private readonly getSupportHandler: PluginRuntimeProviderOptions["getSupport"];

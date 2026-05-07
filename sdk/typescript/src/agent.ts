@@ -72,7 +72,7 @@ import {
   type UpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the agent-host service target. */
 export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
@@ -156,7 +156,7 @@ export type AgentTurnEventInit = Omit<
 };
 
 /** Handlers and runtime metadata for an agent provider. */
-export interface AgentProviderOptions extends RuntimeProviderOptions {
+export interface AgentProviderOptions extends ProviderBaseOptions {
   createSession?: (
     request: CreateAgentProviderSessionRequest,
   ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
@@ -199,7 +199,7 @@ export interface AgentProviderOptions extends RuntimeProviderOptions {
 }
 
 /** Runtime provider implementation for the Gestalt agent host contract. */
-export class AgentProvider extends RuntimeProvider {
+export class AgentProvider extends ProviderBase {
   readonly kind = "agent" as const;
 
   private readonly createSessionHandler: AgentProviderOptions["createSession"];

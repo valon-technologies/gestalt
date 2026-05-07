@@ -4,7 +4,7 @@ import { createClient, type Client, type Interceptor } from "@connectrpc/connect
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import { Cache as CacheService } from "./internal/gen/v1/cache_pb.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
 /** Base environment variable for discovering cache runtime sockets. */
@@ -33,7 +33,7 @@ export interface CacheSetOptions {
 /**
  * Runtime hooks required to implement a Gestalt cache provider.
  */
-export interface CacheProviderOptions extends RuntimeProviderOptions {
+export interface CacheProviderOptions extends ProviderBaseOptions {
   get: (key: string) => MaybePromise<Uint8Array | null | undefined>;
   set: (
     key: string,
@@ -224,7 +224,7 @@ export class Cache {
 /**
  * Cache provider implementation consumed by the Gestalt runtime.
  */
-export class CacheProvider extends RuntimeProvider {
+export class CacheProvider extends ProviderBase {
   readonly kind = "cache" as const;
 
   private readonly getHandler: CacheProviderOptions["get"];

@@ -132,31 +132,28 @@ the agent process is launched from. Use hooks for context or metadata, and use
 `workspace` for checkout and cwd setup.
 
 If you want the provider to run in a hosted sandbox instead of directly on the
-`gestaltd` host, add `execution.mode: hosted` and `execution.runtime` to that
-same `providers.agent.<name>` entry:
+`gestaltd` host, add `runtime` to that same `providers.agent.<name>` entry:
 
 ```yaml
 providers:
   agent:
     simple:
       source: ./providers/agent/simple/manifest.yaml
-      execution:
-        mode: hosted
-        runtime:
-          provider: modal
-          image: ghcr.io/valon/gestalt-python-runtime:latest
-          workspace:
-            prepareTimeout: 10m
-            git:
-              allowedRepositories:
-                - github.com/valon-technologies/*
-          pool:
-            minReadyInstances: 1
-            maxReadyInstances: 4
-            startupTimeout: 2m
-            healthCheckInterval: 30s
-            restartPolicy: always
-            drainTimeout: 1m
+      runtime:
+        provider: modal
+        image: ghcr.io/valon/gestalt-python-runtime:latest
+        workspace:
+          prepareTimeout: 10m
+          git:
+            allowedRepositories:
+              - github.com/valon-technologies/*
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 4
+          startupTimeout: 2m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 1m
       egress:
         allowedHosts:
           - api.openai.com
@@ -169,7 +166,7 @@ This keeps the caller interface the same. The request still targets
 `provider: simple`. The only difference is where the provider executes and how
 `gestaltd` enforces host-service access and egress.
 
-`execution.runtime.pool` is the hosted agent lifecycle block.
+`runtime.pool` is the hosted agent lifecycle block.
 
 ## Session and turn shape
 

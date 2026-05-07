@@ -1,27 +1,28 @@
 # Runtime
 
-Runtime providers manage **where executable plugins and hosted agent providers run**.
+Runtime providers manage **where executable plugins, hosted agent providers, and hosted workflow providers run**.
 
-A runtime provider is not the plugin itself, and it is not a host provider like
-authentication, IndexedDB, or workflow. Instead, it is a control-plane backend
-that lets `gestaltd` create a plugin runtime session, prepare relay-backed
-host-service environment variables, start the plugin process there, and dial
-the plugin back over gRPC.
+A runtime provider is not the plugin or hosted provider itself, and it is not a
+host provider like authentication, IndexedDB, or workflow. Instead, it is a
+control-plane backend that lets `gestaltd` create a runtime session, prepare
+relay-backed host-service environment variables, start the provider process
+there, and dial the provider back over gRPC.
 
 ## Scope
 
-Runtime providers apply to executable plugins under `plugins.<name>` and agent
-providers under `providers.agent.<name>` when they opt into hosted execution.
+Runtime providers apply to executable plugins under `plugins.<name>`, agent
+providers under `providers.agent.<name>`, and workflow providers under
+`providers.workflow.<name>` when they opt into hosted execution.
 They do **not** replace host-local infrastructure providers such as
 authentication, authorization, IndexedDB, cache, S3, secrets, or workflow.
 Those providers still live on the `gestaltd` host. A runtime provider only
-changes where the configured plugin or agent provider process runs.
+changes where the configured provider process runs.
 
 ## Mental model
 
-By default, executable plugins and agent providers run on the same machine as
+By default, executable plugins, agent providers, and workflow providers run on the same machine as
 `gestaltd`. A provider only uses a runtime provider when it opts in with
-`execution.mode: hosted` and selects a backend with `execution.runtime`.
+`runtime` and selects a backend with `runtime`.
 
 When a provider does opt in, Gestalt selects a backend from `runtime.providers`,
 reads the backend's support profile, starts a runtime session, waits for that
@@ -52,23 +53,21 @@ runtime:
 
 server:
   runtime:
-    defaultHostedProvider: modal
+    defaultProvider: modal
 
 plugins:
   support:
     source: ./plugins/support/manifest.yaml
-    execution:
-      mode: hosted
-      runtime:
-        image: ghcr.io/example/support-plugin:2026-04-21
-        template: python-dev
-        metadata:
-          environment: production
+    runtime:
+      image: ghcr.io/example/support-plugin:2026-04-21
+      template: python-dev
+      metadata:
+        environment: production
 ```
 
 Selection is intentionally two-step. `runtime.providers` defines named
-backends, while `execution.mode: hosted` opts a specific plugin or agent
-provider into hosted execution. `server.runtime.defaultHostedProvider` is only
+backends, while `runtime` opts a specific plugin, agent provider, or workflow
+provider into hosted execution. `server.runtime.defaultProvider` is only
 a default selector for providers that already opted into hosted execution.
 
 ## Runtime profiles
@@ -140,7 +139,7 @@ Today there are two main runtime choices:
 | Backend | Type | Notes |
 | --- | --- | --- |
 | `local` | Built-in driver | Runs the plugin on the same machine as `gestaltd`. Supports host-path execution and the existing host-local runtime behavior. |
-| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.execution.runtime.image`. When the host is configured for the public relay and proxy path, Modal can run plugins that need Gestalt-owned services and hostname-based egress. |
+| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. When the host is configured for the public relay and proxy path, Modal can run plugins that need Gestalt-owned services and hostname-based egress. |
 
 ## Provider images
 
@@ -154,14 +153,12 @@ directory and passes the manifest entrypoint args.
 plugins:
   support:
     source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
-    execution:
-      mode: hosted
-      runtime:
-        provider: modal
-        image: ghcr.io/example/support-plugin@sha256:...
+    runtime:
+      provider: modal
+      image: ghcr.io/example/support-plugin@sha256:...
 ```
 
-This is why `plugins.<name>.execution.runtime.image`, `template`,
+This is why `plugins.<name>.runtime.image`, `template`,
 `imagePullAuth`, and `metadata` are forwarded to the runtime backend: they are
 runtime-specific session hints, not universal plugin semantics. For private OCI
 images, `imagePullAuth.dockerConfigJson` carries Docker config JSON, matching

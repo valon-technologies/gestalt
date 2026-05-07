@@ -45,14 +45,14 @@ func buildAgentProviderBinary(t *testing.T) string {
 
 type agentRuntimeFactoryContextKey struct{}
 
-func testHostedAgentRuntimeConfig() *config.HostedRuntimeConfig {
-	return &config.HostedRuntimeConfig{
-		Pool: &config.HostedRuntimePoolConfig{
+func testHostedAgentRuntimeConfig() *config.RuntimePlacementConfig {
+	return &config.RuntimePlacementConfig{
+		Pool: &config.RuntimePlacementPoolConfig{
 			MinReadyInstances:   1,
 			MaxReadyInstances:   1,
 			StartupTimeout:      "5s",
 			HealthCheckInterval: "1s",
-			RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+			RestartPolicy:       config.RuntimePlacementRestartPolicyNever,
 			DrainTimeout:        "1s",
 		},
 	}
@@ -718,16 +718,16 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 		name: "simple",
 		launch: &hostedAgentProviderLaunch{
 			name: "simple",
-			runtimeConfig: config.EffectiveHostedRuntime{
-				Workspace: &config.HostedRuntimeWorkspaceConfig{
+			runtimeConfig: config.EffectiveRuntimePlacement{
+				Workspace: &config.RuntimePlacementWorkspaceConfig{
 					PrepareTimeout: "10s",
-					Git: &config.HostedRuntimeWorkspaceGitConfig{
+					Git: &config.RuntimePlacementWorkspaceGitConfig{
 						AllowedRepositories: allowedRepos,
 					},
 				},
 			},
 		},
-		policy:              config.HostedRuntimeLifecyclePolicy{MaxReadyInstances: 1},
+		policy:              config.RuntimePlacementLifecyclePolicy{MaxReadyInstances: 1},
 		ctx:                 ctx,
 		cancel:              cancel,
 		backends:            []*hostedAgentPoolBackend{{id: 1, provider: agentProvider, runtimeProvider: runtimeProvider, runtimeSessionID: runtimeSession.ID, runtimeSession: runtimeSession, liveTurns: map[string]struct{}{}}},
@@ -858,7 +858,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Template = "python-dev"
 	runtimeConfig.Image = "ghcr.io/valon/gestalt-python-runtime:latest"
-	runtimeConfig.ImagePullAuth = &config.HostedRuntimeImagePullAuth{
+	runtimeConfig.ImagePullAuth = &config.RuntimePlacementImagePullAuth{
 		DockerConfigJSON: `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}`,
 	}
 	runtimeConfig.Metadata = map[string]string{"tenant": "eng"}
@@ -878,7 +878,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -888,8 +888,8 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Command: bin,
+					Runtime: runtimeConfig,
 					ResolvedManifest: &providermanifestv1.Manifest{
 						Kind: providermanifestv1.KindAgent,
 						Entrypoint: &providermanifestv1.Entrypoint{
@@ -967,7 +967,7 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	runtimeConfig.Pool.DrainTimeout = "2s"
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -977,8 +977,8 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Command: bin,
+					Runtime: runtimeConfig,
 				},
 			},
 		},
@@ -1107,7 +1107,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	runtimeConfig.Pool.MaxReadyInstances = 2
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1117,8 +1117,8 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Command: bin,
+					Runtime: runtimeConfig,
 				},
 			},
 		},
@@ -1212,10 +1212,10 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	}
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.HealthCheckInterval = "50ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1227,7 +1227,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -1303,10 +1303,10 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 	runtimeConfig := testHostedAgentRuntimeConfig()
 	runtimeConfig.Pool.MaxReadyInstances = 2
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1318,7 +1318,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -1413,10 +1413,10 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	runtimeConfig.Pool.MaxReadyInstances = 2
 	runtimeConfig.Pool.StartupTimeout = "5s"
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1428,7 +1428,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -1522,10 +1522,10 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	runtimeConfig.Pool.MinReadyInstances = 2
 	runtimeConfig.Pool.MaxReadyInstances = 3
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1537,7 +1537,7 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -1600,10 +1600,10 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 	runtimeConfig.Pool.StartupTimeout = "5m"
 	runtimeConfig.Pool.DrainTimeout = "2m"
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1615,7 +1615,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -1671,10 +1671,10 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 	runtimeConfig.Pool.StartupTimeout = "5m"
 	runtimeConfig.Pool.DrainTimeout = "2m"
 	runtimeConfig.Pool.HealthCheckInterval = "25ms"
-	runtimeConfig.Pool.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	runtimeConfig.Pool.RestartPolicy = config.RuntimePlacementRestartPolicyAlways
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -1686,7 +1686,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 				"simple": {
 					Command:   bin,
 					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
+					Runtime:   runtimeConfig,
 				},
 			},
 		},
@@ -2044,7 +2044,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -2054,8 +2054,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: testHostedAgentRuntimeConfig()},
+					Command: bin,
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},
@@ -3281,7 +3281,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -3291,8 +3291,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: testHostedAgentRuntimeConfig()},
+					Command: bin,
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},
@@ -3361,13 +3361,10 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 				Args:         []string{"--serve"},
 			},
 		},
-		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
-			Runtime: &config.HostedRuntimeConfig{
-				Image: "ghcr.io/example/simple-agent@sha256:abc123",
-				ImagePullAuth: &config.HostedRuntimeImagePullAuth{
-					DockerConfigJSON: `{"auths":{"ghcr.io":{"username":"ghcr-user","password":" ghcr-token "}}}`,
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Image: "ghcr.io/example/simple-agent@sha256:abc123",
+			ImagePullAuth: &config.RuntimePlacementImagePullAuth{
+				DockerConfigJSON: `{"auths":{"ghcr.io":{"username":"ghcr-user","password":" ghcr-token "}}}`,
 			},
 		},
 	}
@@ -3392,23 +3389,20 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeProviderEntryHostedRuntimeConfigIncludesImagePullAuth(t *testing.T) {
+func TestAgentRuntimeProviderEntryRuntimePlacementConfigIncludesImagePullAuth(t *testing.T) {
 	t.Parallel()
 
 	dockerConfigJSON := `{"auths":{"ghcr.io":{"username":"ghcr-user","password":" ghcr-token "}}}`
 	entry := &config.ProviderEntry{
-		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
-			Runtime: &config.HostedRuntimeConfig{
-				Image: "ghcr.io/example/simple-agent@sha256:abc123",
-				ImagePullAuth: &config.HostedRuntimeImagePullAuth{
-					DockerConfigJSON: dockerConfigJSON,
-				},
+		Runtime: &config.RuntimePlacementConfig{
+			Image: "ghcr.io/example/simple-agent@sha256:abc123",
+			ImagePullAuth: &config.RuntimePlacementImagePullAuth{
+				DockerConfigJSON: dockerConfigJSON,
 			},
 		},
 	}
 
-	runtimeConfig := providerEntryHostedRuntimeConfig(entry)
+	runtimeConfig := providerEntryRuntimePlacementConfig(entry)
 	if runtimeConfig.ImagePullAuth == nil {
 		t.Fatal("ImagePullAuth = nil")
 	}
@@ -3416,7 +3410,7 @@ func TestAgentRuntimeProviderEntryHostedRuntimeConfigIncludesImagePullAuth(t *te
 		t.Fatalf("ImagePullAuth.DockerConfigJSON = %q, want opaque Docker config JSON preserved", runtimeConfig.ImagePullAuth.DockerConfigJSON)
 	}
 
-	entry.Execution.Runtime.ImagePullAuth.DockerConfigJSON = `{"auths":{"ghcr.io":{"username":"mutated","password":"mutated"}}}`
+	entry.Runtime.ImagePullAuth.DockerConfigJSON = `{"auths":{"ghcr.io":{"username":"mutated","password":"mutated"}}}`
 	if runtimeConfig.ImagePullAuth.DockerConfigJSON != dockerConfigJSON {
 		t.Fatalf("ImagePullAuth.DockerConfigJSON aliasing original config = %q, want opaque Docker config JSON preserved", runtimeConfig.ImagePullAuth.DockerConfigJSON)
 	}
@@ -3447,12 +3441,9 @@ func TestAgentRuntimeTemplateLaunchUsesManifestEntrypoint(t *testing.T) {
 				Args:         []string{"--serve"},
 			},
 		},
-		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
-			Runtime: &config.HostedRuntimeConfig{
-				Provider: "hosted",
-				Template: "python-runtime",
-			},
+		Runtime: &config.RuntimePlacementConfig{
+			Provider: "hosted",
+			Template: "python-runtime",
 		},
 	}
 
@@ -3491,11 +3482,8 @@ func TestAgentRuntimeLocalFallbackImageLaunchUsesConfiguredCommand(t *testing.T)
 				Args:         []string{"--serve"},
 			},
 		},
-		Execution: &config.ExecutionConfig{
-			Mode: config.ExecutionModeHosted,
-			Runtime: &config.HostedRuntimeConfig{
-				Image: "ghcr.io/example/simple-agent@sha256:abc123",
-			},
+		Runtime: &config.RuntimePlacementConfig{
+			Image: "ghcr.io/example/simple-agent@sha256:abc123",
 		},
 	}
 
@@ -3538,7 +3526,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -3548,8 +3536,8 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
-					Command:   bin,
-					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: testHostedAgentRuntimeConfig()},
+					Command: bin,
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},
