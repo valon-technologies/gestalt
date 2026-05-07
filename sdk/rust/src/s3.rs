@@ -24,8 +24,10 @@ use crate::generated::v1::{
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
+/// Server-streamed object read chunks returned by [`S3Provider::read_object`].
 pub type S3ReadObjectStream =
     Pin<Box<dyn Stream<Item = std::result::Result<pb::ReadObjectChunk, Status>> + Send + 'static>>;
+/// Client-streamed object write chunks passed to [`S3Provider::write_object`].
 pub type S3WriteObjectStream = tonic::Streaming<pb::WriteObjectRequest>;
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
@@ -269,36 +271,43 @@ pub trait S3Provider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Returns object metadata without reading the object body.
     async fn head_object(
         &self,
         request: pb::HeadObjectRequest,
     ) -> std::result::Result<pb::HeadObjectResponse, Status>;
 
+    /// Streams object metadata followed by object data chunks.
     async fn read_object(
         &self,
         request: pb::ReadObjectRequest,
     ) -> std::result::Result<S3ReadObjectStream, Status>;
 
+    /// Consumes a streamed upload and returns metadata for the written object.
     async fn write_object(
         &self,
         request: S3WriteObjectStream,
     ) -> std::result::Result<pb::WriteObjectResponse, Status>;
 
+    /// Deletes one object or object version.
     async fn delete_object(
         &self,
         request: pb::DeleteObjectRequest,
     ) -> std::result::Result<(), Status>;
 
+    /// Lists objects in a bucket using S3-style pagination and delimiters.
     async fn list_objects(
         &self,
         request: pb::ListObjectsRequest,
     ) -> std::result::Result<pb::ListObjectsResponse, Status>;
 
+    /// Copies one object to another object reference.
     async fn copy_object(
         &self,
         request: pb::CopyObjectRequest,
     ) -> std::result::Result<pb::CopyObjectResponse, Status>;
 
+    /// Creates a presigned URL for direct object access.
     async fn presign_object(
         &self,
         request: pb::PresignObjectRequest,

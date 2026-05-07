@@ -332,6 +332,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Creates or idempotently returns an agent session.
     async fn create_session(
         &self,
         _request: pb::CreateAgentProviderSessionRequest,
@@ -341,6 +342,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one agent session by ID.
     async fn get_session(
         &self,
         _request: pb::GetAgentProviderSessionRequest,
@@ -350,6 +352,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists agent sessions visible to the request subject.
     async fn list_sessions(
         &self,
         _request: pb::ListAgentProviderSessionsRequest,
@@ -359,6 +362,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Updates mutable agent session metadata or state.
     async fn update_session(
         &self,
         _request: pb::UpdateAgentProviderSessionRequest,
@@ -368,6 +372,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Starts or idempotently returns an agent turn.
     async fn create_turn(
         &self,
         _request: pb::CreateAgentProviderTurnRequest,
@@ -377,6 +382,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one agent turn by ID.
     async fn get_turn(
         &self,
         _request: pb::GetAgentProviderTurnRequest,
@@ -386,6 +392,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists turns for a session or query.
     async fn list_turns(
         &self,
         _request: pb::ListAgentProviderTurnsRequest,
@@ -395,6 +402,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Requests cancellation of a running or pending turn.
     async fn cancel_turn(
         &self,
         _request: pb::CancelAgentProviderTurnRequest,
@@ -404,6 +412,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists ordered events emitted by a turn.
     async fn list_turn_events(
         &self,
         _request: pb::ListAgentProviderTurnEventsRequest,
@@ -413,6 +422,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one pending or resolved interaction.
     async fn get_interaction(
         &self,
         _request: pb::GetAgentProviderInteractionRequest,
@@ -422,6 +432,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists interactions associated with a turn.
     async fn list_interactions(
         &self,
         _request: pb::ListAgentProviderInteractionsRequest,
@@ -431,6 +442,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Records a response to a pending interaction.
     async fn resolve_interaction(
         &self,
         _request: pb::ResolveAgentProviderInteractionRequest,
@@ -440,6 +452,7 @@ pub trait AgentProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns the provider's supported agent features.
     async fn get_capabilities(
         &self,
         _request: pb::GetAgentProviderCapabilitiesRequest,

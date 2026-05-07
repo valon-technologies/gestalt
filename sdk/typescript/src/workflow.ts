@@ -154,12 +154,15 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   resumeEventTrigger: (
     request: ResumeWorkflowProviderEventTriggerRequest,
   ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  /** Store or update an execution reference for a workflow target. */
   putExecutionReference?: (
     request: PutWorkflowExecutionReferenceRequest,
   ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  /** Load one execution reference by provider-owned lookup fields. */
   getExecutionReference?: (
     request: GetWorkflowExecutionReferenceRequest,
   ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  /** List execution references for the requested scope. */
   listExecutionReferences?: (
     request: ListWorkflowExecutionReferencesRequest,
   ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]>;
@@ -313,6 +316,7 @@ export class WorkflowProvider extends ProviderBase {
     return await this.resumeEventTriggerHandler(request);
   }
 
+  /** Store or update an execution reference for a workflow target. */
   async putExecutionReference(
     request: PutWorkflowExecutionReferenceRequest,
   ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
@@ -323,6 +327,7 @@ export class WorkflowProvider extends ProviderBase {
     );
   }
 
+  /** Load one execution reference by provider-owned lookup fields. */
   async getExecutionReference(
     request: GetWorkflowExecutionReferenceRequest,
   ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
@@ -333,6 +338,7 @@ export class WorkflowProvider extends ProviderBase {
     );
   }
 
+  /** List execution references for the requested scope. */
   async listExecutionReferences(
     request: ListWorkflowExecutionReferencesRequest,
   ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]> {

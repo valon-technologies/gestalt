@@ -12,18 +12,31 @@ import (
 // service bindings.
 type AgentProvider interface {
 	Provider
+	// CreateSession creates or idempotently returns an agent session.
 	CreateSession(ctx context.Context, req *CreateAgentProviderSessionRequest) (*AgentSession, error)
+	// GetSession returns one agent session by ID.
 	GetSession(ctx context.Context, req *GetAgentProviderSessionRequest) (*AgentSession, error)
+	// ListSessions returns agent sessions visible to the request subject.
 	ListSessions(ctx context.Context, req *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error)
+	// UpdateSession updates mutable agent session metadata or state.
 	UpdateSession(ctx context.Context, req *UpdateAgentProviderSessionRequest) (*AgentSession, error)
+	// CreateTurn starts or idempotently returns an agent turn.
 	CreateTurn(ctx context.Context, req *CreateAgentProviderTurnRequest) (*AgentTurn, error)
+	// GetTurn returns one agent turn by ID.
 	GetTurn(ctx context.Context, req *GetAgentProviderTurnRequest) (*AgentTurn, error)
+	// ListTurns returns turns for a session or query.
 	ListTurns(ctx context.Context, req *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error)
+	// CancelTurn requests cancellation of a running or pending turn.
 	CancelTurn(ctx context.Context, req *CancelAgentProviderTurnRequest) (*AgentTurn, error)
+	// ListTurnEvents returns ordered events emitted by a turn.
 	ListTurnEvents(ctx context.Context, req *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error)
+	// GetInteraction returns one pending or resolved interaction.
 	GetInteraction(ctx context.Context, req *GetAgentProviderInteractionRequest) (*AgentInteraction, error)
+	// ListInteractions returns interactions associated with a turn.
 	ListInteractions(ctx context.Context, req *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error)
+	// ResolveInteraction records a response to a pending interaction.
 	ResolveInteraction(ctx context.Context, req *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error)
+	// GetCapabilities returns the provider's supported agent features.
 	GetCapabilities(ctx context.Context, req *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error)
 }
 
@@ -88,7 +101,11 @@ func (UnimplementedAgentProvider) GetCapabilities(context.Context, *GetAgentProv
 	return nil, Unimplemented("agent get capabilities is not implemented")
 }
 
+// Agent protocol type aliases expose request, response, and model messages
+// through the SDK package so provider implementations do not need to import
+// generated protobuf packages directly.
 type (
+	// AgentMessage is a protocol alias exposed for provider implementations.
 	AgentMessage                           = proto.AgentMessage
 	AgentMessagePartToolCall               = proto.AgentMessagePartToolCall
 	AgentMessagePartToolResult             = proto.AgentMessagePartToolResult
@@ -152,6 +169,7 @@ type (
 )
 
 type (
+	// AgentMessagePartType identifies the payload kind in an agent message part.
 	AgentMessagePartType  = proto.AgentMessagePartType
 	AgentToolSourceMode   = proto.AgentToolSourceMode
 	AgentExecutionStatus  = proto.AgentExecutionStatus
@@ -160,6 +178,8 @@ type (
 	AgentInteractionState = proto.AgentInteractionState
 )
 
+// Agent protocol enum constants provide stable SDK names for common generated
+// enum values.
 const (
 	AgentMessagePartTypeUnspecified = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
 	AgentMessagePartTypeText        = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT

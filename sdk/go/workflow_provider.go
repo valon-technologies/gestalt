@@ -12,27 +12,49 @@ import (
 // service bindings.
 type WorkflowProvider interface {
 	Provider
+	// StartRun starts or idempotently returns a workflow run.
 	StartRun(ctx context.Context, req *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
+	// GetRun returns one workflow run by ID.
 	GetRun(ctx context.Context, req *GetWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
+	// ListRuns returns workflow runs visible to the request subject.
 	ListRuns(ctx context.Context, req *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error)
+	// CancelRun requests cancellation of a pending or running workflow run.
 	CancelRun(ctx context.Context, req *CancelWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
+	// SignalRun delivers a signal to an existing workflow run.
 	SignalRun(ctx context.Context, req *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
+	// SignalOrStartRun delivers a signal or starts a run when no target run exists.
 	SignalOrStartRun(ctx context.Context, req *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
+	// UpsertSchedule creates or updates a workflow schedule.
 	UpsertSchedule(ctx context.Context, req *UpsertWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
+	// GetSchedule returns one workflow schedule by ID.
 	GetSchedule(ctx context.Context, req *GetWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
+	// ListSchedules returns workflow schedules visible to the request subject.
 	ListSchedules(ctx context.Context, req *ListWorkflowProviderSchedulesRequest) (*ListWorkflowProviderSchedulesResponse, error)
+	// DeleteSchedule deletes a workflow schedule.
 	DeleteSchedule(ctx context.Context, req *DeleteWorkflowProviderScheduleRequest) error
+	// PauseSchedule pauses a workflow schedule without deleting it.
 	PauseSchedule(ctx context.Context, req *PauseWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
+	// ResumeSchedule resumes a paused workflow schedule.
 	ResumeSchedule(ctx context.Context, req *ResumeWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
+	// UpsertEventTrigger creates or updates a workflow event trigger.
 	UpsertEventTrigger(ctx context.Context, req *UpsertWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
+	// GetEventTrigger returns one workflow event trigger by ID.
 	GetEventTrigger(ctx context.Context, req *GetWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
+	// ListEventTriggers returns workflow event triggers visible to the request subject.
 	ListEventTriggers(ctx context.Context, req *ListWorkflowProviderEventTriggersRequest) (*ListWorkflowProviderEventTriggersResponse, error)
+	// DeleteEventTrigger deletes a workflow event trigger.
 	DeleteEventTrigger(ctx context.Context, req *DeleteWorkflowProviderEventTriggerRequest) error
+	// PauseEventTrigger pauses a workflow event trigger without deleting it.
 	PauseEventTrigger(ctx context.Context, req *PauseWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
+	// ResumeEventTrigger resumes a paused workflow event trigger.
 	ResumeEventTrigger(ctx context.Context, req *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
+	// PutExecutionReference stores or updates a workflow execution reference.
 	PutExecutionReference(ctx context.Context, req *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
+	// GetExecutionReference returns one workflow execution reference.
 	GetExecutionReference(ctx context.Context, req *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
+	// ListExecutionReferences returns workflow execution references for a scope.
 	ListExecutionReferences(ctx context.Context, req *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
+	// PublishEvent publishes a workflow event for trigger matching.
 	PublishEvent(ctx context.Context, req *PublishWorkflowProviderEventRequest) error
 }
 
@@ -133,7 +155,11 @@ func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkf
 	return Unimplemented("workflow publish event is not implemented")
 }
 
+// Workflow protocol type aliases expose request, response, and model messages
+// through the SDK package so provider implementations do not need to import
+// generated protobuf packages directly.
 type (
+	// BoundWorkflowTarget is a protocol alias exposed for provider implementations.
 	BoundWorkflowTarget                       = proto.BoundWorkflowTarget
 	BoundWorkflowTargetPlugin                 = proto.BoundWorkflowTarget_Plugin
 	BoundWorkflowTargetAgent                  = proto.BoundWorkflowTarget_Agent
@@ -213,8 +239,11 @@ type (
 	WorkflowManagerSignalOrStartRunRequest    = proto.WorkflowManagerSignalOrStartRunRequest
 )
 
+// WorkflowRunStatus identifies the lifecycle state of a workflow run.
 type WorkflowRunStatus = proto.WorkflowRunStatus
 
+// Workflow run status constants provide stable SDK names for common generated
+// enum values.
 const (
 	WorkflowRunStatusUnspecified = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
 	WorkflowRunStatusPending     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING

@@ -215,6 +215,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Starts or idempotently returns a workflow run.
     async fn start_run(
         &self,
         _request: pb::StartWorkflowProviderRunRequest,
@@ -224,6 +225,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one workflow run by ID.
     async fn get_run(
         &self,
         _request: pb::GetWorkflowProviderRunRequest,
@@ -233,6 +235,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists workflow runs visible to the request subject.
     async fn list_runs(
         &self,
         _request: pb::ListWorkflowProviderRunsRequest,
@@ -242,6 +245,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Requests cancellation of a pending or running workflow run.
     async fn cancel_run(
         &self,
         _request: pb::CancelWorkflowProviderRunRequest,
@@ -251,6 +255,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Delivers a signal to an existing workflow run.
     async fn signal_run(
         &self,
         _request: pb::SignalWorkflowProviderRunRequest,
@@ -260,6 +265,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Delivers a signal or starts a run when no target run exists.
     async fn signal_or_start_run(
         &self,
         _request: pb::SignalOrStartWorkflowProviderRunRequest,
@@ -269,6 +275,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Creates or updates a workflow schedule.
     async fn upsert_schedule(
         &self,
         _request: pb::UpsertWorkflowProviderScheduleRequest,
@@ -278,6 +285,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one workflow schedule by ID.
     async fn get_schedule(
         &self,
         _request: pb::GetWorkflowProviderScheduleRequest,
@@ -287,6 +295,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists workflow schedules visible to the request subject.
     async fn list_schedules(
         &self,
         _request: pb::ListWorkflowProviderSchedulesRequest,
@@ -296,6 +305,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Deletes a workflow schedule.
     async fn delete_schedule(
         &self,
         _request: pb::DeleteWorkflowProviderScheduleRequest,
@@ -305,6 +315,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Pauses a workflow schedule without deleting it.
     async fn pause_schedule(
         &self,
         _request: pb::PauseWorkflowProviderScheduleRequest,
@@ -314,6 +325,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Resumes a paused workflow schedule.
     async fn resume_schedule(
         &self,
         _request: pb::ResumeWorkflowProviderScheduleRequest,
@@ -323,6 +335,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Creates or updates a workflow event trigger.
     async fn upsert_event_trigger(
         &self,
         _request: pb::UpsertWorkflowProviderEventTriggerRequest,
@@ -332,6 +345,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one workflow event trigger by ID.
     async fn get_event_trigger(
         &self,
         _request: pb::GetWorkflowProviderEventTriggerRequest,
@@ -341,6 +355,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists workflow event triggers visible to the request subject.
     async fn list_event_triggers(
         &self,
         _request: pb::ListWorkflowProviderEventTriggersRequest,
@@ -350,6 +365,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Deletes a workflow event trigger.
     async fn delete_event_trigger(
         &self,
         _request: pb::DeleteWorkflowProviderEventTriggerRequest,
@@ -359,6 +375,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Pauses a workflow event trigger without deleting it.
     async fn pause_event_trigger(
         &self,
         _request: pb::PauseWorkflowProviderEventTriggerRequest,
@@ -368,6 +385,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Resumes a paused workflow event trigger.
     async fn resume_event_trigger(
         &self,
         _request: pb::ResumeWorkflowProviderEventTriggerRequest,
@@ -377,6 +395,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Publishes a workflow event for trigger matching.
     async fn publish_event(
         &self,
         _request: pb::PublishWorkflowProviderEventRequest,
@@ -386,6 +405,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Stores or updates a workflow execution reference.
     async fn put_execution_reference(
         &self,
         _request: pb::PutWorkflowExecutionReferenceRequest,
@@ -395,6 +415,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one workflow execution reference.
     async fn get_execution_reference(
         &self,
         _request: pb::GetWorkflowExecutionReferenceRequest,
@@ -404,6 +425,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists workflow execution references for a scope.
     async fn list_execution_references(
         &self,
         _request: pb::ListWorkflowExecutionReferencesRequest,

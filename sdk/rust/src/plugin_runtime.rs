@@ -45,12 +45,14 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Returns the runtime capabilities supported by this provider.
     async fn get_support(&self, _request: ()) -> ProviderResult<pb::PluginRuntimeSupport> {
         Err(crate::Error::unimplemented(
             "runtime get support is not implemented",
         ))
     }
 
+    /// Starts a hosted plugin-runtime session.
     async fn start_session(
         &self,
         _request: pb::StartPluginRuntimeSessionRequest,
@@ -60,6 +62,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Returns one hosted plugin-runtime session by ID.
     async fn get_session(
         &self,
         _request: pb::GetPluginRuntimeSessionRequest,
@@ -69,6 +72,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Lists hosted plugin-runtime sessions.
     async fn list_sessions(
         &self,
         _request: pb::ListPluginRuntimeSessionsRequest,
@@ -78,6 +82,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Stops a hosted plugin-runtime session.
     async fn stop_session(
         &self,
         _request: pb::StopPluginRuntimeSessionRequest,
@@ -87,6 +92,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Prepares an agent workspace for use by a hosted plugin.
     async fn prepare_workspace(
         &self,
         _request: pb::PreparePluginRuntimeWorkspaceRequest,
@@ -96,6 +102,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Removes a previously prepared agent workspace.
     async fn remove_workspace(
         &self,
         _request: pb::RemovePluginRuntimeWorkspaceRequest,
@@ -105,6 +112,7 @@ pub trait PluginRuntimeProvider: Send + Sync + 'static {
         ))
     }
 
+    /// Starts one hosted plugin process inside a runtime session.
     async fn start_plugin(
         &self,
         _request: pb::StartHostedPluginRequest,
