@@ -89,7 +89,7 @@ jobs:
       component-summary: |
         Self-hosted integration gateway for Gestalt with the embedded client UI, admin UI, HTTP API, and optional MCP endpoint.
       install-markdown: |
-        - Linux installer: `curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh -s -- --version ${version}`
+        - Installer: `curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh -s -- --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestaltd`
         - Docker: `docker pull valontechnologies/gestaltd:${version}`
         - Docs: [Deployment guide](https://gestaltd.ai/deploy)

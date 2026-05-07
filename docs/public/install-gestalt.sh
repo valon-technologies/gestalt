@@ -5,7 +5,7 @@ script_url="${GESTALT_INSTALL_SCRIPT_URL:-https://gestaltd.ai/install.sh}"
 
 usage() {
   cat <<'USAGE'
-Install the Gestalt CLI on Linux.
+Install the Gestalt CLI on Linux or macOS.
 
 Usage:
   install-gestalt.sh [options]

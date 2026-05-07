@@ -5,7 +5,7 @@ script_url="${GESTALT_INSTALL_SCRIPT_URL:-https://gestaltd.ai/install.sh}"
 
 usage() {
   cat <<'USAGE'
-Install gestaltd on Linux.
+Install gestaltd on Linux or macOS.
 
 Usage:
   install-gestaltd.sh [options]
