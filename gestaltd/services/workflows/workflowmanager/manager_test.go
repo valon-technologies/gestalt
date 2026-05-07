@@ -110,6 +110,9 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	if run.ExecutionRef.ID == definition.Definition.ID {
 		t.Fatalf("run execution ref reused definition id %q, want snapshot ref", run.ExecutionRef.ID)
 	}
+	if run.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("run source definition id = %q, want %q", run.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
+	}
 }
 
 func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *testing.T) {
@@ -176,6 +179,9 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	if schedule.ExecutionRef.ID == definition.Definition.ID {
 		t.Fatalf("schedule execution ref reused definition id %q, want snapshot ref", schedule.ExecutionRef.ID)
 	}
+	if schedule.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("schedule source definition id = %q, want %q", schedule.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
+	}
 
 	trigger, err := manager.CreateEventTrigger(context.Background(), caller, EventTriggerUpsert{
 		ProviderName:     "local",
@@ -197,6 +203,9 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	}
 	if trigger.ExecutionRef.ID == definition.Definition.ID {
 		t.Fatalf("trigger execution ref reused definition id %q, want snapshot ref", trigger.ExecutionRef.ID)
+	}
+	if trigger.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("trigger source definition id = %q, want %q", trigger.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
 	}
 }
 
@@ -282,6 +291,25 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 		t.Fatalf("provider upserted schedules = %d, want 1", len(provider.upsertedSchedules))
 	}
 
+	otherDefinition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.updated",
+			Input:      map[string]any{"mode": "other"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition(other): %v", err)
+	}
+	otherScheduleReq := scheduleReq
+	otherScheduleReq.DefinitionID = otherDefinition.Definition.ID
+	_, err = manager.CreateSchedule(context.Background(), caller, otherScheduleReq)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("CreateSchedule replay with different definition error = %v, want invalid invocation", err)
+	}
+
 	triggerReq := EventTriggerUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
@@ -292,6 +320,12 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	trigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
 	if err != nil {
 		t.Fatalf("CreateEventTrigger: %v", err)
+	}
+	otherTriggerReq := triggerReq
+	otherTriggerReq.DefinitionID = otherDefinition.Definition.ID
+	_, err = manager.CreateEventTrigger(context.Background(), caller, otherTriggerReq)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("CreateEventTrigger replay with different definition error = %v, want invalid invocation", err)
 	}
 
 	if err := manager.DeleteDefinition(context.Background(), caller, definition.Definition.ID); err != nil {

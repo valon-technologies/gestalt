@@ -162,6 +162,7 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 		ID:                  "workflow_schedule:cfg_123:ref",
 		ProviderName:        "temporal",
 		Target:              coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "brain", Operation: "sources.sync"}},
+		SourceDefinitionID:  "workflow_definition:def-123",
 		SubjectID:           "system:config",
 		SubjectKind:         "system",
 		DisplayName:         "Gestalt config",
@@ -187,6 +188,9 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 	if pb.GetRunAs().GetSubjectId() != "service_account:brain-sync" || pb.GetRunAs().GetSubjectKind() != "service_account" {
 		t.Fatalf("runAs proto = %#v", pb.GetRunAs())
 	}
+	if pb.GetSourceDefinitionId() != "workflow_definition:def-123" {
+		t.Fatalf("source definition id = %q, want stored definition id", pb.GetSourceDefinitionId())
+	}
 	roundTrip, err := workflowExecutionReferenceFromProto(pb)
 	if err != nil {
 		t.Fatalf("workflowExecutionReferenceFromProto: %v", err)
@@ -196,6 +200,9 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 	}
 	if roundTrip.RunAs == nil || roundTrip.RunAs.SubjectID != "service_account:brain-sync" || roundTrip.RunAs.CredentialSubjectID != "service_account:brain-sync" {
 		t.Fatalf("round trip runAs = %#v", roundTrip.RunAs)
+	}
+	if roundTrip.SourceDefinitionID != "workflow_definition:def-123" {
+		t.Fatalf("round trip source definition id = %q", roundTrip.SourceDefinitionID)
 	}
 }
 

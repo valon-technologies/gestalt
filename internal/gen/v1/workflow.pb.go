@@ -1615,6 +1615,7 @@ type WorkflowExecutionReference struct {
 	AuthSource          string                      `protobuf:"bytes,12,opt,name=auth_source,json=authSource,proto3" json:"auth_source,omitempty"`
 	CallerPluginName    string                      `protobuf:"bytes,13,opt,name=caller_plugin_name,json=callerPluginName,proto3" json:"caller_plugin_name,omitempty"`
 	RunAs               *WorkflowRunAsSubject       `protobuf:"bytes,14,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
+	SourceDefinitionId  string                      `protobuf:"bytes,15,opt,name=source_definition_id,json=sourceDefinitionId,proto3" json:"source_definition_id,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1738,6 +1739,13 @@ func (x *WorkflowExecutionReference) GetRunAs() *WorkflowRunAsSubject {
 		return x.RunAs
 	}
 	return nil
+}
+
+func (x *WorkflowExecutionReference) GetSourceDefinitionId() string {
+	if x != nil {
+		return x.SourceDefinitionId
+	}
+	return ""
 }
 
 type WorkflowSignal struct {
@@ -5142,7 +5150,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1e\n" +
 	"\n" +
 	"operations\x18\x02 \x03(\tR\n" +
-	"operations\"\x9e\x05\n" +
+	"operations\"\xd0\x05\n" +
 	"\x1aWorkflowExecutionReference\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
@@ -5161,7 +5169,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\vauth_source\x18\f \x01(\tR\n" +
 	"authSource\x12,\n" +
 	"\x12caller_plugin_name\x18\r \x01(\tR\x10callerPluginName\x12@\n" +
-	"\x06run_as\x18\x0e \x01(\v2).gestalt.provider.v1.WorkflowRunAsSubjectR\x05runAsJ\x04\b\t\x10\n" +
+	"\x06run_as\x18\x0e \x01(\v2).gestalt.provider.v1.WorkflowRunAsSubjectR\x05runAs\x120\n" +
+	"\x14source_definition_id\x18\x0f \x01(\tR\x12sourceDefinitionIdJ\x04\b\t\x10\n" +
 	"R\x12target_fingerprint\"\xdf\x02\n" +
 	"\x0eWorkflowSignal\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +

@@ -250,7 +250,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 			return nil, err
 		}
 	}
-	ref, err := m.putExecutionRef(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName)
+	ref, err := m.putExecutionRef(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName, "")
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		if _, err := m.revokeExecutionRefWithError(ctx, existing.Definition); err != nil {
 			return nil, err
 		}
-		ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName)
+		ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "")
 		if err != nil {
 			m.restoreExecutionRef(ctx, existing.Definition)
 			return nil, err
@@ -297,7 +297,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 			provider:     provider,
 		}, nil
 	}
-	ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName)
+	ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "")
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	}
 
 	executionRefID := runExecutionRefID(uuid.NewString())
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -524,7 +524,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, executionRefPermissions)
+	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
@@ -683,7 +683,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return existing, nil
 	}
 	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -728,7 +728,10 @@ func managedScheduleMatchesUpsert(existing *ManagedSchedule, providerName string
 }
 
 func managedScheduleMatchesDefinitionUpsert(existing *ManagedSchedule, req ScheduleUpsert) bool {
-	if existing == nil || existing.Schedule == nil {
+	if existing == nil || existing.Schedule == nil || existing.ExecutionRef == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.ExecutionRef.SourceDefinitionID) != strings.TrimSpace(req.DefinitionID) {
 		return false
 	}
 	if strings.TrimSpace(existing.Schedule.Cron) != strings.TrimSpace(req.Cron) {
@@ -759,7 +762,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -942,7 +945,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return existing, nil
 	}
 	executionRefID := newEventTriggerExecutionRefID(triggerID, idempotencyScope)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -983,7 +986,10 @@ func managedEventTriggerMatchesUpsert(existing *ManagedEventTrigger, providerNam
 }
 
 func managedEventTriggerMatchesDefinitionUpsert(existing *ManagedEventTrigger, match coreworkflow.EventMatch, req EventTriggerUpsert) bool {
-	if existing == nil || existing.Trigger == nil {
+	if existing == nil || existing.Trigger == nil || existing.ExecutionRef == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.ExecutionRef.SourceDefinitionID) != strings.TrimSpace(req.DefinitionID) {
 		return false
 	}
 	if existing.Trigger.Paused != req.Paused {
@@ -1015,7 +1021,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1500,7 +1506,7 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 	return match, nil
 }
 
-func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName string) (*coreworkflow.ExecutionReference, error) {
+func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -1516,6 +1522,7 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
 		CallerPluginName:    strings.TrimSpace(callerPluginName),
+		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
 		DisplayName:         actor.DisplayName,
@@ -1525,7 +1532,7 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	})
 }
 
-func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -1543,7 +1550,7 @@ func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRef
 		return nil, err
 	}
 
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerPluginName)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerPluginName, sourceDefinitionID)
 	if err != nil {
 		return nil, err
 	}

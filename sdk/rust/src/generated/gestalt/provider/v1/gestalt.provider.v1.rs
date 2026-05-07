@@ -3064,6 +3064,8 @@ pub struct WorkflowExecutionReference {
     pub caller_plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "14")]
     pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
+    #[prost(string, tag = "15")]
+    pub source_definition_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowSignal {

@@ -191,6 +191,7 @@ message WorkflowExecutionReference {
   string auth_source = 12;
   string caller_plugin_name = 13;
   WorkflowRunAsSubject run_as = 14;
+  string source_definition_id = 15;
 }
 
 message WorkflowSignal {

@@ -81,6 +81,7 @@ type ExecutionReference struct {
 	ProviderName        string
 	Target              Target
 	CallerPluginName    string
+	SourceDefinitionID  string
 	SubjectID           string
 	SubjectKind         string
 	DisplayName         string
