@@ -19,8 +19,13 @@ import {
   WorkflowManagerPublishEventRequestSchema,
   WorkflowManagerResumeScheduleRequestSchema,
   WorkflowManagerResumeEventTriggerRequestSchema,
+  WorkflowManagerSignalOrStartRunRequestSchema,
+  WorkflowManagerSignalRunRequestSchema,
+  WorkflowManagerStartRunRequestSchema,
   WorkflowManagerUpdateScheduleRequestSchema,
   WorkflowManagerUpdateEventTriggerRequestSchema,
+  type ManagedWorkflowRun,
+  type ManagedWorkflowRunSignal,
   type ManagedWorkflowSchedule,
   type ManagedWorkflowEventTrigger,
   type WorkflowEvent,
@@ -39,8 +44,24 @@ const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
 export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
 /** Managed workflow event-trigger message returned by the host manager. */
 export type ManagedWorkflowEventTriggerMessage = ManagedWorkflowEventTrigger;
+/** Managed workflow run message returned by the host manager. */
+export type ManagedWorkflowRunMessage = ManagedWorkflowRun;
+/** Managed workflow run signal message returned by the host manager. */
+export type ManagedWorkflowRunSignalMessage = ManagedWorkflowRunSignal;
 /** Workflow event message returned after publishing an event. */
 export type WorkflowEventMessage = WorkflowEvent;
+/** Shape accepted when starting a workflow run. */
+export type WorkflowManagerStartRunInput = MessageInitShape<
+  typeof WorkflowManagerStartRunRequestSchema
+>;
+/** Shape accepted when signaling an existing workflow run. */
+export type WorkflowManagerSignalRunInput = MessageInitShape<
+  typeof WorkflowManagerSignalRunRequestSchema
+>;
+/** Shape accepted when signaling a run or starting it if missing. */
+export type WorkflowManagerSignalOrStartRunInput = MessageInitShape<
+  typeof WorkflowManagerSignalOrStartRunRequestSchema
+>;
 /** Shape accepted when creating a workflow schedule. */
 export type WorkflowManagerCreateScheduleInput = MessageInitShape<
   typeof WorkflowManagerCreateScheduleRequestSchema
@@ -129,6 +150,38 @@ export class WorkflowManager {
         : [],
     });
     this.client = createClient(WorkflowManagerHostService, transport);
+  }
+
+  /** Starts a workflow run immediately. */
+  async startRun(
+    request: WorkflowManagerStartRunInput,
+  ): Promise<ManagedWorkflowRunMessage> {
+    return await this.client.startRun({
+      ...request,
+      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Signals an existing workflow run. */
+  async signalRun(
+    request: WorkflowManagerSignalRunInput,
+  ): Promise<ManagedWorkflowRunSignalMessage> {
+    return await this.client.signalRun({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Signals a workflow run, or starts it when no run exists for the key. */
+  async signalOrStartRun(
+    request: WorkflowManagerSignalOrStartRunInput,
+  ): Promise<ManagedWorkflowRunSignalMessage> {
+    return await this.client.signalOrStartRun({
+      ...request,
+      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+      invocationToken: this.invocationToken,
+    });
   }
 
   /** Creates a workflow schedule. */

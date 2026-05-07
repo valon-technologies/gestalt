@@ -389,6 +389,501 @@ subcommands when automation needs stable JSON output.
 Omit `provider` when there is a sole/default agent provider. Include it when
 multiple providers are configured and you need to select one.
 
+## Using `AgentManager` from a plugin
+
+Plugins and other executable provider code can invoke agents through the SDK
+`AgentManager`. This is a Gestalt host-service client: construct it from the
+current provider request so the SDK can reuse the request's invocation token and
+the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    type AgentSummary struct {
+        TurnID     string `json:"turnId"`
+        Status     string `json:"status"`
+        EventCount int    `json:"eventCount"`
+    }
+
+    func summarizeWithAgent(ctx context.Context, request gestalt.Request) (AgentSummary, error) {
+        agents, err := request.AgentManager()
+        if err != nil {
+            return AgentSummary{}, err
+        }
+        defer agents.Close()
+
+        session, err := agents.CreateSession(ctx, &proto.AgentManagerCreateSessionRequest{
+            ProviderName: "simple",
+            Model:        "fast",
+            ClientRef:    "roadmap-risk",
+        })
+        if err != nil {
+            return AgentSummary{}, err
+        }
+
+        turn, err := agents.CreateTurn(ctx, &proto.AgentManagerCreateTurnRequest{
+            SessionId: session.GetId(),
+            Model:     "fast",
+            Messages: []*proto.AgentMessage{{
+                Role: "user",
+                Text: "Summarize the latest roadmap risk.",
+            }},
+            ToolRefs: []*proto.AgentToolRef{{
+                Plugin:    "roadmap",
+                Operation: "sync",
+            }},
+        })
+        if err != nil {
+            return AgentSummary{}, err
+        }
+
+        events, err := agents.ListTurnEvents(ctx, &proto.AgentManagerListTurnEventsRequest{
+            TurnId: turn.GetId(),
+            Limit:  100,
+        })
+        if err != nil {
+            return AgentSummary{}, err
+        }
+
+        return AgentSummary{
+            TurnID:     turn.GetId(),
+            Status:     turn.GetStatus().String(),
+            EventCount: len(events.GetEvents()),
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def summarize_with_agent(request: gestalt.Request) -> dict[str, object]:
+        with request.agent_manager() as agents:
+            session = agents.create_session(
+                gestalt.AgentManagerCreateSessionRequest(
+                    provider_name="simple",
+                    model="fast",
+                    client_ref="roadmap-risk",
+                )
+            )
+
+            turn = agents.create_turn(
+                gestalt.AgentManagerCreateTurnRequest(
+                    session_id=session.id,
+                    model="fast",
+                    messages=[
+                        gestalt.AgentMessage(
+                            role="user",
+                            text="Summarize the latest roadmap risk.",
+                        )
+                    ],
+                    tool_refs=[
+                        gestalt.AgentToolRef(plugin="roadmap", operation="sync")
+                    ],
+                )
+            )
+
+            events = agents.list_turn_events(
+                gestalt.AgentManagerListTurnEventsRequest(
+                    turn_id=turn.id,
+                    limit=100,
+                )
+            )
+
+        return {
+            "turnId": turn.id,
+            "status": turn.status,
+            "eventCount": len(events.events),
+        }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::proto::v1::{
+        AgentManagerCreateSessionRequest, AgentManagerCreateTurnRequest,
+        AgentManagerListTurnEventsRequest, AgentMessage, AgentToolRef,
+    };
+
+    struct AgentSummary {
+        turn_id: String,
+        status: i32,
+        event_count: usize,
+    }
+
+    async fn summarize_with_agent(
+        request: &gestalt::Request,
+    ) -> Result<AgentSummary, Box<dyn std::error::Error>> {
+        let mut agents = request.agent_manager().await?;
+
+        let session = agents
+            .create_session(AgentManagerCreateSessionRequest {
+                provider_name: "simple".to_string(),
+                model: "fast".to_string(),
+                client_ref: "roadmap-risk".to_string(),
+                ..Default::default()
+            })
+            .await?;
+
+        let turn = agents
+            .create_turn(AgentManagerCreateTurnRequest {
+                session_id: session.id,
+                model: "fast".to_string(),
+                messages: vec![AgentMessage {
+                    role: "user".to_string(),
+                    text: "Summarize the latest roadmap risk.".to_string(),
+                    ..Default::default()
+                }],
+                tool_refs: vec![AgentToolRef {
+                    plugin: "roadmap".to_string(),
+                    operation: "sync".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .await?;
+
+        let events = agents
+            .list_turn_events(AgentManagerListTurnEventsRequest {
+                turn_id: turn.id.clone(),
+                limit: 100,
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(AgentSummary {
+            turn_id: turn.id,
+            status: turn.status,
+            event_count: events.events.len(),
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { AgentManager, type Request } from "@valon-technologies/gestalt";
+
+    export async function summarizeWithAgent(request: Request) {
+      const agents = new AgentManager(request);
+
+      const session = await agents.createSession({
+        providerName: "simple",
+        model: "fast",
+        clientRef: "roadmap-risk",
+      });
+
+      const turn = await agents.createTurn({
+        sessionId: session.id,
+        model: "fast",
+        messages: [
+          {
+            role: "user",
+            text: "Summarize the latest roadmap risk.",
+          },
+        ],
+        toolRefs: [
+          {
+            plugin: "roadmap",
+            operation: "sync",
+          },
+        ],
+      });
+
+      const events = await agents.listTurnEvents({
+        turnId: turn.id,
+        limit: 100,
+      });
+
+      return {
+        turnId: turn.id,
+        status: turn.status,
+        eventCount: events.length,
+      };
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Omit `providerName` / `provider_name` / `ProviderName` when the deployment has
+a sole/default agent provider. Omit `toolRefs` when Gestalt should attach the
+caller's authorized safe tools by default, or set it to an explicit list when
+the agent turn should only receive selected plugin operations.
+
+## Invoking agents from workflows
+
+Workflows can target agents directly. Use `target.agent` anywhere a workflow
+accepts a target: config-managed schedules, config-managed event triggers,
+user-owned schedules, user-owned event triggers, or workflow-manager run
+requests.
+
+The workflow provider creates the run, then Gestalt creates an agent session
+and turn for that run. The workflow run finishes when the agent turn reaches a
+terminal state. If the workflow should hand the agent result to a plugin, add
+`outputDelivery`.
+
+```yaml
+workflows:
+  eventTriggers:
+    summarize_roadmap_item:
+      provider: local
+      match:
+        type: roadmap.item.updated
+        source: roadmap
+        subject: item
+      target:
+        agent:
+          provider: simple
+          model: fast
+          prompt: "Summarize the updated roadmap item for the engineering channel."
+          toolRefs:
+            - plugin: roadmap
+              operation: items.get
+          responseSchema:
+            type: object
+            properties:
+              summary:
+                type: string
+            required:
+              - summary
+          outputDelivery:
+            target:
+              name: slack
+              operation: chat.postMessage
+              connection: alerts
+              input:
+                channel: C123456
+            inputBindings:
+              - inputField: text
+                value:
+                  agentOutput: text
+      permissions:
+        - plugin: roadmap
+          operations:
+            - items.get
+        - plugin: slack
+          operations:
+            - chat.postMessage
+```
+
+For public HTTP callers, the enqueue pattern is to create a schedule or trigger
+with `target.agent`, then let the workflow provider fire it later. For
+event-driven work, publish a matching event:
+
+```sh
+curl -X POST "$GESTALT_URL/api/v1/workflow/event-triggers" \
+  -H "Authorization: Bearer $GESTALT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "provider": "local",
+    "match": {
+      "type": "roadmap.item.updated",
+      "source": "roadmap",
+      "subject": "item"
+    },
+    "target": {
+      "agent": {
+        "provider": "simple",
+        "model": "fast",
+        "prompt": "Summarize the updated roadmap item.",
+        "toolRefs": [
+          {
+            "plugin": "roadmap",
+            "operation": "items.get"
+          }
+        ]
+      }
+    }
+  }'
+
+curl -X POST "$GESTALT_URL/api/v1/workflow/events" \
+  -H "Authorization: Bearer $GESTALT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "roadmap.item.updated",
+    "source": "roadmap",
+    "subject": "item",
+    "dataContentType": "application/json",
+    "data": {
+      "id": "item-1"
+    }
+  }'
+```
+
+Provider code can enqueue an agent workflow immediately with the workflow
+manager. Use `StartRun` for a one-off run. Use `SignalOrStartRun` when events
+for the same logical workflow should reuse the same `workflowKey` and append
+signals instead of creating duplicate runs.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    func enqueueAgentWorkflow(ctx context.Context, request gestalt.Request, itemID string) (string, error) {
+        workflows, err := request.WorkflowManager()
+        if err != nil {
+            return "", err
+        }
+        defer workflows.Close()
+
+        queued, err := workflows.SignalOrStartRun(ctx, &proto.WorkflowManagerSignalOrStartRunRequest{
+            ProviderName: "local",
+            WorkflowKey:  "roadmap-summary:" + itemID,
+            Target: &proto.BoundWorkflowTarget{
+                Kind: &proto.BoundWorkflowTarget_Agent{
+                    Agent: &proto.BoundWorkflowAgentTarget{
+                        ProviderName: "simple",
+                        Model:        "fast",
+                        Prompt:       "Summarize the updated roadmap item.",
+                        ToolRefs: []*proto.AgentToolRef{{
+                            Plugin:    "roadmap",
+                            Operation: "items.get",
+                        }},
+                    },
+                },
+            },
+            Signal: &proto.WorkflowSignal{
+                Name:           "roadmap.item.updated",
+                IdempotencyKey: "roadmap-item-updated:" + itemID,
+            },
+        })
+        if err != nil {
+            return "", err
+        }
+        return queued.GetRun().GetId(), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def enqueue_agent_workflow(request: gestalt.Request, item_id: str) -> str:
+        with request.workflow_manager() as workflows:
+            queued = workflows.signal_or_start_run(
+                gestalt.WorkflowManagerSignalOrStartRunRequest(
+                    provider_name="local",
+                    workflow_key=f"roadmap-summary:{item_id}",
+                    target=gestalt.BoundWorkflowTarget(
+                        agent=gestalt.BoundWorkflowAgentTarget(
+                            provider_name="simple",
+                            model="fast",
+                            prompt="Summarize the updated roadmap item.",
+                            tool_refs=[
+                                gestalt.AgentToolRef(
+                                    plugin="roadmap",
+                                    operation="items.get",
+                                )
+                            ],
+                        )
+                    ),
+                    signal=gestalt.WorkflowSignal(
+                        name="roadmap.item.updated",
+                        idempotency_key=f"roadmap-item-updated:{item_id}",
+                    ),
+                )
+            )
+
+        return queued.run.id
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::proto::v1::{
+        bound_workflow_target, AgentToolRef, BoundWorkflowAgentTarget,
+        BoundWorkflowTarget, WorkflowManagerSignalOrStartRunRequest,
+        WorkflowSignal,
+    };
+
+    async fn enqueue_agent_workflow(
+        request: &gestalt::Request,
+        item_id: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let mut workflows = request.workflow_manager().await?;
+
+        let queued = workflows
+            .signal_or_start_run(WorkflowManagerSignalOrStartRunRequest {
+                provider_name: "local".to_string(),
+                workflow_key: format!("roadmap-summary:{item_id}"),
+                target: Some(BoundWorkflowTarget {
+                    kind: Some(bound_workflow_target::Kind::Agent(
+                        BoundWorkflowAgentTarget {
+                            provider_name: "simple".to_string(),
+                            model: "fast".to_string(),
+                            prompt: "Summarize the updated roadmap item.".to_string(),
+                            tool_refs: vec![AgentToolRef {
+                                plugin: "roadmap".to_string(),
+                                operation: "items.get".to_string(),
+                                ..Default::default()
+                            }],
+                            ..Default::default()
+                        },
+                    )),
+                }),
+                signal: Some(WorkflowSignal {
+                    name: "roadmap.item.updated".to_string(),
+                    idempotency_key: format!("roadmap-item-updated:{item_id}"),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(queued.run.map(|run| run.id).unwrap_or_default())
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { WorkflowManager, type Request } from "@valon-technologies/gestalt";
+
+    export async function enqueueAgentWorkflow(request: Request, itemId: string) {
+      const workflows = new WorkflowManager(request);
+
+      const queued = await workflows.signalOrStartRun({
+        providerName: "local",
+        workflowKey: `roadmap-summary:${itemId}`,
+        target: {
+          kind: {
+            case: "agent",
+            value: {
+              providerName: "simple",
+              model: "fast",
+              prompt: "Summarize the updated roadmap item.",
+              toolRefs: [
+                {
+                  plugin: "roadmap",
+                  operation: "items.get",
+                },
+              ],
+            },
+          },
+        },
+        signal: {
+          name: "roadmap.item.updated",
+          idempotencyKey: `roadmap-item-updated:${itemId}`,
+        },
+      });
+
+      return queued.run?.id ?? "";
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 ## What to read next
 
 - [Custom Providers > Agent](/custom-providers/agent): implementing your own agent backend

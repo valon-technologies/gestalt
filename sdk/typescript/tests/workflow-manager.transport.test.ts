@@ -12,9 +12,12 @@ import { expect, test } from "bun:test";
 
 import {
   BoundWorkflowEventTriggerSchema,
+  BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
-  ManagedWorkflowScheduleSchema,
   ManagedWorkflowEventTriggerSchema,
+  ManagedWorkflowRunSchema,
+  ManagedWorkflowRunSignalSchema,
+  ManagedWorkflowScheduleSchema,
   WorkflowEventSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
@@ -35,6 +38,15 @@ function workflowPluginTarget(pluginName: string, operation: string) {
   };
 }
 
+function workflowAgentTarget(providerName: string, prompt: string) {
+  return {
+    kind: {
+      case: "agent" as const,
+      value: { providerName, prompt },
+    },
+  };
+}
+
 test("WorkflowManager forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-manager-"));
   const socketPath = join(tempDir, "workflow-manager.sock");
@@ -47,6 +59,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     triggerId?: string;
     eventType?: string;
     providerName?: string;
+    runId?: string;
+    signalName?: string | undefined;
+    workflowKey?: string;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -55,6 +70,55 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     connect: false,
     routes(router) {
       router.service(WorkflowManagerHostService, {
+        async startRun(input) {
+          calls.push({
+            method: "start-run",
+            invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
+            providerName: input.providerName,
+            workflowKey: input.workflowKey,
+          });
+          return create(ManagedWorkflowRunSchema, {
+            providerName: input.providerName || "basic",
+            run: create(BoundWorkflowRunSchema, {
+              id: "run-1",
+              ...(input.target ? { target: input.target } : {}),
+            }),
+          });
+        },
+        async signalRun(input) {
+          calls.push({
+            method: "signal-run",
+            invocationToken: input.invocationToken,
+            runId: input.runId,
+            signalName: input.signal?.name,
+          });
+          return create(ManagedWorkflowRunSignalSchema, {
+            providerName: "basic",
+            run: create(BoundWorkflowRunSchema, { id: input.runId }),
+            signal: input.signal,
+          });
+        },
+        async signalOrStartRun(input) {
+          calls.push({
+            method: "signal-or-start-run",
+            invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
+            providerName: input.providerName,
+            signalName: input.signal?.name,
+            workflowKey: input.workflowKey,
+          });
+          return create(ManagedWorkflowRunSignalSchema, {
+            providerName: input.providerName || "basic",
+            run: create(BoundWorkflowRunSchema, {
+              id: "run-2",
+              ...(input.target ? { target: input.target } : {}),
+            }),
+            signal: input.signal,
+            startedRun: true,
+            workflowKey: input.workflowKey,
+          });
+        },
         async createSchedule(input) {
           calls.push({
             method: "create",
@@ -274,6 +338,25 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         "workflow-request-key-ts",
       ),
     );
+    const startedRun = await fromRequest.startRun({
+      providerName: "basic",
+      workflowKey: "roadmap-summary:item-1",
+      target: workflowAgentTarget("simple", "Summarize item 1."),
+    });
+    const signaledRun = await fromRequest.signalRun({
+      runId: "run-1",
+      signal: {
+        name: "roadmap.item.updated",
+      },
+    });
+    const signaledOrStartedRun = await fromRequest.signalOrStartRun({
+      providerName: "basic",
+      workflowKey: "roadmap-summary:item-1",
+      target: workflowAgentTarget("simple", "Summarize item 1."),
+      signal: {
+        name: "roadmap.item.updated",
+      },
+    });
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
     const updated = await fromRequest.updateSchedule({
       scheduleId: "sched-1",
@@ -320,6 +403,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       },
     });
 
+    expect(startedRun.run?.id).toBe("run-1");
+    expect(signaledRun.signal?.name).toBe("roadmap.item.updated");
+    expect(signaledOrStartedRun.startedRun).toBe(true);
     expect(fetched.schedule?.id).toBe("sched-1");
     expect(updated.providerName).toBe("secondary");
     expect(updated.schedule?.paused).toBe(true);
@@ -338,6 +424,27 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         method: "create",
         invocationToken: "invocation-token-123",
         idempotencyKey: "workflow-schedule-key-ts",
+      },
+      {
+        method: "start-run",
+        invocationToken: "invocation-token-456",
+        idempotencyKey: "workflow-request-key-ts",
+        providerName: "basic",
+        workflowKey: "roadmap-summary:item-1",
+      },
+      {
+        method: "signal-run",
+        invocationToken: "invocation-token-456",
+        runId: "run-1",
+        signalName: "roadmap.item.updated",
+      },
+      {
+        method: "signal-or-start-run",
+        invocationToken: "invocation-token-456",
+        idempotencyKey: "workflow-request-key-ts",
+        providerName: "basic",
+        signalName: "roadmap.item.updated",
+        workflowKey: "roadmap-summary:item-1",
       },
       {
         method: "get",
