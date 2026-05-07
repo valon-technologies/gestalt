@@ -2047,6 +2047,8 @@ type PluginInvocationRunAsSubjectConfig struct {
 	AuthSource          string `yaml:"authSource,omitempty"`
 }
 
+// TODO(#1823): Reconcile runAs.externalIdentity grants from readable refs at
+// deploy time.
 type PluginInvocationExternalIdentityConfig struct {
 	Type string `yaml:"type,omitempty"`
 	ID   string `yaml:"id,omitempty"`

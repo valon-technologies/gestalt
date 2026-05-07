@@ -9,6 +9,8 @@ import (
 // ExternalIdentityRef identifies a provider-owned external identity resource.
 // The Type names the provider namespace; the ID is opaque to Gestalt after any
 // config surface has rendered its own templates.
+// TODO(#1823): Add declarative grant reconciliation for subjects that may
+// assume provider-owned identities.
 type ExternalIdentityRef struct {
 	Type string
 	ID   string

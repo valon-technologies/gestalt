@@ -497,6 +497,7 @@ func (b *Broker) authorizeExternalIdentityAssumption(ctx context.Context, p *pri
 	if identity == nil {
 		return nil
 	}
+	// TODO(#1823): Validate accepted external identity types before invocation.
 	if b == nil || b.authorizer == nil {
 		return fmt.Errorf("%w: external identity %s/%s", ErrAuthorizationDenied, identity.Type, identity.ID)
 	}
