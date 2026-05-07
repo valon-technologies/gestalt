@@ -97,6 +97,46 @@ The same module includes host-service clients such as `CacheClient`,
 `AgentHostClient`, `AgentManagerClient`, `AuthorizationClient`,
 `ExternalCredentialClient`, `RuntimeLogHostClient`, and `InvokerClient`.
 
+## Use external credential clients
+
+Go provider code can call the selected host external-credential provider through
+`ExternalCredentials()`. Use this when trusted provider-side code needs to
+inspect or resolve stored connection credentials through the same provider that
+Gestalt uses at runtime.
+
+```go
+import (
+	"context"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func connectedInstances(ctx context.Context, subjectID, connectionID string) ([]string, error) {
+	credentials, err := gestalt.ExternalCredentials()
+	if err != nil {
+		return nil, err
+	}
+	defer credentials.Close()
+
+	resp, err := credentials.ListCredentials(ctx, &gestalt.ListExternalCredentialsRequest{
+		SubjectId:    subjectID,
+		ConnectionId: connectionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	instances := make([]string, 0, len(resp.GetCredentials()))
+	for _, credential := range resp.GetCredentials() {
+		instances = append(instances, credential.GetInstance())
+	}
+	return instances, nil
+}
+```
+
+Python, Rust, and TypeScript do not currently expose this external-credential
+host-service client.
+
 ## API reference
 
 The canonical Go API reference is published on pkg.go.dev:
