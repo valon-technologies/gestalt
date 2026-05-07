@@ -701,6 +701,8 @@ type WorkflowsConfig struct {
 type WorkflowScheduleConfig struct {
 	Provider    string                  `yaml:"provider,omitempty"`
 	Target      *WorkflowTargetConfig   `yaml:"target,omitempty"`
+	RunAs       *WorkflowRunAsConfig    `yaml:"runAs,omitempty"`
+	Invokes     []WorkflowInvokeConfig  `yaml:"invokes,omitempty"`
 	Permissions []core.AccessPermission `yaml:"permissions,omitempty"`
 	Cron        string                  `yaml:"cron,omitempty"`
 	Timezone    string                  `yaml:"timezone,omitempty"`
@@ -710,9 +712,39 @@ type WorkflowScheduleConfig struct {
 type WorkflowEventTriggerConfig struct {
 	Provider    string                  `yaml:"provider,omitempty"`
 	Target      *WorkflowTargetConfig   `yaml:"target,omitempty"`
+	RunAs       *WorkflowRunAsConfig    `yaml:"runAs,omitempty"`
+	Invokes     []WorkflowInvokeConfig  `yaml:"invokes,omitempty"`
 	Permissions []core.AccessPermission `yaml:"permissions,omitempty"`
 	Match       WorkflowEventMatch      `yaml:"match,omitempty"`
 	Paused      bool                    `yaml:"paused,omitempty"`
+}
+
+type WorkflowRunAsConfig struct {
+	Subject *WorkflowRunAsSubjectConfig `yaml:"subject,omitempty"`
+}
+
+type WorkflowRunAsSubjectConfig struct {
+	ID          string `yaml:"id,omitempty"`
+	Kind        string `yaml:"kind,omitempty"`
+	DisplayName string `yaml:"displayName,omitempty"`
+	AuthSource  string `yaml:"authSource,omitempty"`
+}
+
+func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
+	if r == nil || r.Subject == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:   r.Subject.ID,
+		SubjectKind: r.Subject.Kind,
+		DisplayName: r.Subject.DisplayName,
+		AuthSource:  r.Subject.AuthSource,
+	})
+}
+
+type WorkflowInvokeConfig struct {
+	Plugin    string `yaml:"plugin,omitempty"`
+	Operation string `yaml:"operation,omitempty"`
 }
 
 type WorkflowTargetConfig struct {

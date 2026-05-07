@@ -1298,29 +1298,30 @@ func cloneBootstrapAgentMessages(src []coreagent.Message) []coreagent.Message {
 }
 
 type recordingWorkflowProvider struct {
-	upsertedSchedules          []coreworkflow.UpsertScheduleRequest
-	listedSchedules            []*coreworkflow.Schedule
-	listSchedulesErr           error
-	deletedSchedules           []coreworkflow.DeleteScheduleRequest
-	deleteScheduleErr          error
-	getSchedule                *coreworkflow.Schedule
-	getScheduleErr             error
-	schedules                  map[string]*coreworkflow.Schedule
-	omitScheduleExecutionRef   bool
-	upsertedEventTriggers      []coreworkflow.UpsertEventTriggerRequest
-	listedEventTriggers        []*coreworkflow.EventTrigger
-	listEventTriggersErr       error
-	deletedEventTriggers       []coreworkflow.DeleteEventTriggerRequest
-	deleteEventTriggerErr      error
-	getEventTrigger            *coreworkflow.EventTrigger
-	getEventTriggerErr         error
-	eventTriggers              map[string]*coreworkflow.EventTrigger
-	executionRefs              map[string]*coreworkflow.ExecutionReference
-	getExecutionReferenceErrs  map[string]error
-	putExecutionReferenceErr   error
-	deleteMissingNotFound      bool
-	deleteEventMissingNotFound bool
-	closed                     *atomic.Bool
+	upsertedSchedules           []coreworkflow.UpsertScheduleRequest
+	listedSchedules             []*coreworkflow.Schedule
+	listSchedulesErr            error
+	deletedSchedules            []coreworkflow.DeleteScheduleRequest
+	deleteScheduleErr           error
+	getSchedule                 *coreworkflow.Schedule
+	getScheduleErr              error
+	schedules                   map[string]*coreworkflow.Schedule
+	omitScheduleExecutionRef    bool
+	upsertedEventTriggers       []coreworkflow.UpsertEventTriggerRequest
+	listedEventTriggers         []*coreworkflow.EventTrigger
+	listEventTriggersErr        error
+	deletedEventTriggers        []coreworkflow.DeleteEventTriggerRequest
+	deleteEventTriggerErr       error
+	getEventTrigger             *coreworkflow.EventTrigger
+	getEventTriggerErr          error
+	eventTriggers               map[string]*coreworkflow.EventTrigger
+	executionRefs               map[string]*coreworkflow.ExecutionReference
+	getExecutionReferenceErrs   map[string]error
+	putExecutionReferenceErr    error
+	dropExecutionReferenceRunAs bool
+	deleteMissingNotFound       bool
+	deleteEventMissingNotFound  bool
+	closed                      *atomic.Bool
 }
 
 func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -1483,6 +1484,9 @@ func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref
 		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
 	}
 	stored := cloneBootstrapWorkflowExecutionRef(ref)
+	if p.dropExecutionReferenceRunAs {
+		stored.RunAs = nil
+	}
 	p.executionRefs[stored.ID] = stored
 	return cloneBootstrapWorkflowExecutionRef(stored), nil
 }
@@ -1534,6 +1538,10 @@ func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *c
 	}
 	clone := *ref
 	clone.Target = cloneBootstrapWorkflowTarget(ref.Target)
+	if ref.RunAs != nil {
+		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
+		clone.RunAs = &runAs
+	}
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
@@ -5100,6 +5108,136 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	}
 }
 
+func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.RunAs = &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{
+			ID:          " service_account:roadmap-sync ",
+			DisplayName: " Roadmap sync ",
+		},
+	}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.SubjectID != "system:config" || ref.SubjectKind != "system" || ref.CredentialSubjectID != "system:config" {
+		t.Fatalf("owner subject fields = (%q, %q, %q), want config owner", ref.SubjectID, ref.SubjectKind, ref.CredentialSubjectID)
+	}
+	if ref.RunAs == nil {
+		t.Fatal("runAs = nil")
+	}
+	if ref.RunAs.SubjectID != "service_account:roadmap-sync" || ref.RunAs.SubjectKind != "service_account" || ref.RunAs.CredentialSubjectID != "service_account:roadmap-sync" {
+		t.Fatalf("runAs = %#v, want service account subject", ref.RunAs)
+	}
+	if ref.RunAs.DisplayName != "Roadmap sync" {
+		t.Fatalf("runAs displayName = %q", ref.RunAs.DisplayName)
+	}
+}
+
+func TestBootstrapRejectsConfiguredWorkflowScheduleWhenProviderDropsRunAs(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.RunAs = &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
+	}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &recordingWorkflowProvider{dropExecutionReferenceRunAs: true}, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected Bootstrap to reject a provider that drops config-managed runAs metadata")
+	}
+	if !strings.Contains(err.Error(), `provider did not preserve runAs subject "service_account:roadmap-sync"`) {
+		t.Fatalf("Bootstrap error = %v, want runAs preservation error", err)
+	}
+}
+
+func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.RunAs = &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{ID: "user:ada"},
+	}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &recordingWorkflowProvider{}, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected Bootstrap to reject user runAs subject")
+	}
+	if !strings.Contains(err.Error(), `workflows.schedules.nightly_sync.runAs.subject.id "user:ada" must identify a service_account subject`) {
+		t.Fatalf("Bootstrap error = %v", err)
+	}
+}
+
 func TestBootstrapAppliesConfiguredWorkflowSchedulesForPlatformConnectionOnUserDefaultPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -5218,6 +5356,107 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+	}
+}
+
+func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModeUser,
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://slack.example.invalid",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "conversations.list", Method: http.MethodPost, Path: "/conversations.list"},
+						},
+					},
+				},
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Invokes = []config.WorkflowInvokeConfig{{
+		Plugin:    " slack ",
+		Operation: " conversations.list ",
+	}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"conversations.list"}},
+	}
+	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+	}
+}
+
+func TestBootstrapRejectsConfiguredWorkflowScheduleInvokesAndPermissions(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+	nightly := cfg.Workflows.Schedules["nightly_sync"]
+	nightly.Invokes = []config.WorkflowInvokeConfig{{Plugin: "roadmap", Operation: "sync"}}
+	nightly.Permissions = []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}}
+	cfg.Workflows.Schedules["nightly_sync"] = nightly
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &recordingWorkflowProvider{}, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected Bootstrap to reject both invokes and permissions")
+	}
+	if !strings.Contains(err.Error(), "workflows.schedules.nightly_sync must not set both invokes and permissions") {
+		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
 
@@ -6121,6 +6360,63 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+	}
+}
+
+func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarget(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		EventTriggers: map[string]workflowFixtureEventTrigger{
+			"task_updated": {
+				Match: workflowFixtureEventMatch{
+					Type:   "task.updated",
+					Source: "roadmap",
+				},
+				Operation: "sync",
+			},
+		},
+	})
+	trigger := cfg.Workflows.EventTriggers["task_updated"]
+	trigger.RunAs = &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{
+			ID:   "service_account:roadmap-events",
+			Kind: "service_account",
+		},
+	}
+	cfg.Workflows.EventTriggers["task_updated"] = trigger
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("recorded event triggers = %#v", recorders)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedEventTriggers[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.SubjectID != "system:config" || ref.CredentialSubjectID != "system:config" {
+		t.Fatalf("owner subject fields = (%q, %q), want config owner", ref.SubjectID, ref.CredentialSubjectID)
+	}
+	if ref.RunAs == nil || ref.RunAs.SubjectID != "service_account:roadmap-events" || ref.RunAs.SubjectKind != "service_account" {
+		t.Fatalf("runAs = %#v, want service_account:roadmap-events", ref.RunAs)
 	}
 }
 

@@ -155,6 +155,50 @@ func TestWorkflowTargetFromProtoPreservesEmptyPluginKind(t *testing.T) {
 	}
 }
 
+func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
+	t.Parallel()
+
+	ref := &coreworkflow.ExecutionReference{
+		ID:                  "workflow_schedule:cfg_123:ref",
+		ProviderName:        "temporal",
+		Target:              coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "brain", Operation: "sources.sync"}},
+		SubjectID:           "system:config",
+		SubjectKind:         "system",
+		DisplayName:         "Gestalt config",
+		AuthSource:          "config",
+		CredentialSubjectID: "system:config",
+		RunAs: &core.RunAsSubject{
+			SubjectID:   "service_account:brain-sync",
+			DisplayName: "Brain sync",
+			AuthSource:  "config",
+		},
+		Permissions: []core.AccessPermission{{
+			Plugin:     "brain",
+			Operations: []string{"sources.sync"},
+		}},
+	}
+	pb, err := workflowExecutionReferenceToProto(ref)
+	if err != nil {
+		t.Fatalf("workflowExecutionReferenceToProto: %v", err)
+	}
+	if pb.GetSubjectId() != "system:config" || pb.GetCredentialSubjectId() != "system:config" {
+		t.Fatalf("owner fields = (%q, %q), want config owner", pb.GetSubjectId(), pb.GetCredentialSubjectId())
+	}
+	if pb.GetRunAs().GetSubjectId() != "service_account:brain-sync" || pb.GetRunAs().GetSubjectKind() != "service_account" {
+		t.Fatalf("runAs proto = %#v", pb.GetRunAs())
+	}
+	roundTrip, err := workflowExecutionReferenceFromProto(pb)
+	if err != nil {
+		t.Fatalf("workflowExecutionReferenceFromProto: %v", err)
+	}
+	if roundTrip.SubjectID != "system:config" || roundTrip.CredentialSubjectID != "system:config" {
+		t.Fatalf("round trip owner fields = (%q, %q)", roundTrip.SubjectID, roundTrip.CredentialSubjectID)
+	}
+	if roundTrip.RunAs == nil || roundTrip.RunAs.SubjectID != "service_account:brain-sync" || roundTrip.RunAs.CredentialSubjectID != "service_account:brain-sync" {
+		t.Fatalf("round trip runAs = %#v", roundTrip.RunAs)
+	}
+}
+
 func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
 	t.Parallel()
 

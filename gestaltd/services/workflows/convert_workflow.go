@@ -292,6 +292,31 @@ func workflowActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
 	}
 }
 
+func workflowRunAsSubjectToProto(subject *core.RunAsSubject) *proto.WorkflowRunAsSubject {
+	subject = core.NormalizeRunAsSubject(subject)
+	if subject == nil {
+		return nil
+	}
+	return &proto.WorkflowRunAsSubject{
+		SubjectId:   subject.SubjectID,
+		SubjectKind: subject.SubjectKind,
+		DisplayName: subject.DisplayName,
+		AuthSource:  subject.AuthSource,
+	}
+}
+
+func workflowRunAsSubjectFromProto(subject *proto.WorkflowRunAsSubject) *core.RunAsSubject {
+	if subject == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:   subject.GetSubjectId(),
+		SubjectKind: subject.GetSubjectKind(),
+		DisplayName: subject.GetDisplayName(),
+		AuthSource:  subject.GetAuthSource(),
+	})
+}
+
 func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*proto.WorkflowExecutionReference, error) {
 	if ref == nil {
 		return nil, nil
@@ -310,6 +335,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		DisplayName:         ref.DisplayName,
 		AuthSource:          ref.AuthSource,
 		CredentialSubjectId: ref.CredentialSubjectID,
+		RunAs:               workflowRunAsSubjectToProto(ref.RunAs),
 		Permissions:         workflowAccessPermissionsToProto(ref.Permissions),
 		CreatedAt:           timeToProto(ref.CreatedAt),
 		RevokedAt:           timeToProto(ref.RevokedAt),
@@ -331,6 +357,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		DisplayName:         strings.TrimSpace(ref.GetDisplayName()),
 		AuthSource:          strings.TrimSpace(ref.GetAuthSource()),
 		CredentialSubjectID: strings.TrimSpace(ref.GetCredentialSubjectId()),
+		RunAs:               workflowRunAsSubjectFromProto(ref.GetRunAs()),
 		Permissions:         workflowAccessPermissionsFromProto(ref.GetPermissions()),
 		CreatedAt:           timeFromProto(ref.GetCreatedAt()),
 		RevokedAt:           timeFromProto(ref.GetRevokedAt()),
