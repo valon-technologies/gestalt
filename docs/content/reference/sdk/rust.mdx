@@ -106,6 +106,13 @@ Use the export macro that matches the provider surface you are serving.
 The macros export the symbols that `gestaltd` calls when it synthesizes the
 source-provider wrapper.
 
+## Use host-service clients
+
+The crate also exposes clients for provider code that needs to call
+Gestalt-managed sibling host services, including `Cache`, `IndexedDB`, `S3`,
+`WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`,
+`PluginInvoker`, and `RuntimeLogHost`.
+
 ## Generated bindings
 
 The crate includes checked-in protobuf and gRPC bindings compiled from

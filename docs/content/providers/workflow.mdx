@@ -415,25 +415,161 @@ by the configured trigger.
 
 For a provider that receives external callbacks, the usual shape is to publish
 an integration-neutral workflow event from the provider and let a configured
-trigger route it to deployer-owned code:
+trigger route it to deployer-owned code.
 
-```ts
-const workflowManager = new WorkflowManager(request);
+## Using `WorkflowManager` from a plugin
 
-await workflowManager.publishEvent({
-  providerName: "local",
-  event: {
-    type: "slack.event.received",
-    source: "slack",
-    subject: "route:knowledge-ingest",
-    datacontenttype: "application/json",
-    data: {
-      event: slackEvent,
-      authorization: slackAuthorization,
-    },
-  },
-});
-```
+Plugins and other executable provider code can use `WorkflowManager` to publish
+workflow events, start runs, signal runs, and create schedules or triggers from
+the current provider request. The SDK attaches the request invocation token to
+each manager call, so the host keeps the same subject and permission ceiling.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+        "google.golang.org/protobuf/types/known/structpb"
+    )
+
+    func publishSlackEvent(
+        ctx context.Context,
+        request gestalt.Request,
+        slackEvent map[string]any,
+    ) (string, error) {
+        workflows, err := request.WorkflowManager()
+        if err != nil {
+            return "", err
+        }
+        defer workflows.Close()
+
+        data, err := structpb.NewStruct(map[string]any{
+            "event": slackEvent,
+        })
+        if err != nil {
+            return "", err
+        }
+
+        event, err := workflows.PublishEvent(ctx, &proto.WorkflowManagerPublishEventRequest{
+            ProviderName: "local",
+            Event: &proto.WorkflowEvent{
+                Type:            "slack.event.received",
+                Source:          "slack",
+                Subject:         "route:knowledge-ingest",
+                Datacontenttype: "application/json",
+                Data:            data,
+            },
+        })
+        if err != nil {
+            return "", err
+        }
+        return event.GetId(), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def publish_slack_event(
+        request: gestalt.Request,
+        slack_event: dict[str, object],
+    ) -> str:
+        event = gestalt.WorkflowEvent(
+            type="slack.event.received",
+            source="slack",
+            subject="route:knowledge-ingest",
+            datacontenttype="application/json",
+        )
+        event.data.update({"event": slack_event})
+
+        with request.workflow_manager() as workflows:
+            published = workflows.publish_event(
+                gestalt.WorkflowManagerPublishEventRequest(
+                    provider_name="local",
+                    event=event,
+                )
+            )
+
+        return published.id
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::collections::BTreeMap;
+
+    use gestalt::proto::v1::{WorkflowEvent, WorkflowManagerPublishEventRequest};
+    use prost_types::{value::Kind, Struct, Value};
+
+    async fn publish_slack_event(
+        request: &gestalt::Request,
+        slack_event_json: String,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let mut workflows = request.workflow_manager().await?;
+
+        let event = workflows
+            .publish_event(WorkflowManagerPublishEventRequest {
+                provider_name: "local".to_string(),
+                event: Some(WorkflowEvent {
+                    r#type: "slack.event.received".to_string(),
+                    source: "slack".to_string(),
+                    subject: "route:knowledge-ingest".to_string(),
+                    datacontenttype: "application/json".to_string(),
+                    data: Some(Struct {
+                        fields: BTreeMap::from([(
+                            "event_json".to_string(),
+                            Value {
+                                kind: Some(Kind::StringValue(slack_event_json)),
+                            },
+                        )]),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(event.id)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { WorkflowManager, type Request } from "@valon-technologies/gestalt";
+
+    export async function publishSlackEvent(
+      request: Request,
+      slackEvent: Record<string, unknown>,
+    ) {
+      const workflowManager = new WorkflowManager(request);
+
+      const event = await workflowManager.publishEvent({
+        providerName: "local",
+        event: {
+          type: "slack.event.received",
+          source: "slack",
+          subject: "route:knowledge-ingest",
+          datacontenttype: "application/json",
+          data: {
+            event: slackEvent,
+          },
+        },
+      });
+
+      return event.id;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The same client also exposes start-run, signal-run, signal-or-start-run, and
+schedule or trigger management methods in each SDK. Use `providerName` /
+`provider_name` / `ProviderName` only when the deployment has more than one
+workflow provider or the caller needs to target a specific backend.
 
 ```yaml
 workflows:
