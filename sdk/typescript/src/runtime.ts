@@ -596,6 +596,7 @@ export function createProviderService(
               kind: subject.kind,
               displayName: subject.displayName,
               authSource: subject.authSource,
+              email: subject.email ?? "",
             },
           }
         : {});
@@ -838,12 +839,14 @@ function providerRequest(
       kind: subject?.kind ?? "",
       displayName: subject?.displayName ?? "",
       authSource: subject?.authSource ?? "",
+      email: subject?.email ?? "",
     },
     agentSubject: {
       id: agentSubject?.id ?? "",
       kind: agentSubject?.kind ?? "",
       displayName: agentSubject?.displayName ?? "",
       authSource: agentSubject?.authSource ?? "",
+      email: agentSubject?.email ?? "",
     },
     externalIdentity: {
       type: externalIdentity?.type ?? "",

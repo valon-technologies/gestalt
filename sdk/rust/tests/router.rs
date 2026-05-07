@@ -131,6 +131,7 @@ struct GreetOutput {
     message: String,
     api_key: String,
     subject_id: String,
+    subject_email: String,
     credential_mode: String,
     idempotency_key: String,
 }
@@ -152,6 +153,7 @@ async fn greet(
             .unwrap_or_default()
             .to_owned(),
         subject_id: request.subject.id,
+        subject_email: request.subject.email,
         credential_mode: request.credential.mode,
         idempotency_key: request.idempotency_key,
     }))
@@ -279,6 +281,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_owned(),
                     kind: "user".to_owned(),
+                    email: "ada@example.com".to_owned(),
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
@@ -298,7 +301,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(success.status, 200);
     assert_eq!(
         success.body,
-        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"user","idempotency_key":"tool-call-123"}"#
+        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","credential_mode":"user","idempotency_key":"tool-call-123"}"#
     );
 
     let unknown = server

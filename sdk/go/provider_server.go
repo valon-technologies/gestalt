@@ -137,6 +137,7 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 			Kind:        subject.Kind,
 			DisplayName: subject.DisplayName,
 			AuthSource:  subject.AuthSource,
+			Email:       subject.Email,
 		},
 	}, nil
 }
@@ -274,6 +275,7 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			Kind:        subject.GetKind(),
 			DisplayName: subject.GetDisplayName(),
 			AuthSource:  subject.GetAuthSource(),
+			Email:       subject.GetEmail(),
 		})
 	}
 	if subject := reqCtx.GetAgentSubject(); subject != nil {
@@ -282,6 +284,7 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			Kind:        subject.GetKind(),
 			DisplayName: subject.GetDisplayName(),
 			AuthSource:  subject.GetAuthSource(),
+			Email:       subject.GetEmail(),
 		})
 	}
 	if identity := reqCtx.GetAgentExternalIdentity(); identity != nil {

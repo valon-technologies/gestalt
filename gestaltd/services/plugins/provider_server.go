@@ -206,9 +206,11 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	if subject == nil {
 		return nil
 	}
+	displayName := strings.TrimSpace(subject.GetDisplayName())
+	email := strings.TrimSpace(subject.GetEmail())
 	p := &principal.Principal{
 		SubjectID:   subject.GetId(),
-		DisplayName: subject.GetDisplayName(),
+		DisplayName: displayName,
 	}
 	principal.SetAuthSource(p, subject.GetAuthSource())
 	if kind := strings.TrimSpace(subject.GetKind()); kind != "" {
@@ -216,9 +218,10 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	}
 	p.UserID = principal.UserIDFromSubjectID(p.SubjectID)
 	p = principal.Canonicalized(p)
-	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
+	if p.Kind == principal.KindUser && (displayName != "" || email != "") {
 		p.Identity = &core.UserIdentity{
-			DisplayName: subject.GetDisplayName(),
+			Email:       email,
+			DisplayName: displayName,
 		}
 	}
 	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown && p.AuthSourceOverride == "" {

@@ -754,6 +754,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                     kind=subject.kind,
                     display_name=subject.display_name,
                     auth_source=subject.auth_source,
+                    email=subject.email,
                 )
             )
 
@@ -1072,6 +1073,7 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
         kind=getattr(subject, "kind", ""),
         display_name=getattr(subject, "display_name", ""),
         auth_source=getattr(subject, "auth_source", ""),
+        email=getattr(subject, "email", ""),
     )
 
 
