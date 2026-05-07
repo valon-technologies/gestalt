@@ -470,7 +470,7 @@ or `http` verification. The binding then targets an operation ID. Gestalt
 verifies the request, decodes query/body parameters, optionally resolves a more
 specific subject, and invokes the target operation.
 
-<Tabs items={['Manifest', 'Python Handler', 'TypeScript Handler']}>
+<Tabs items={['Manifest', 'Go Handler', 'Python Handler', 'TypeScript Handler']}>
   <Tabs.Tab>
     ```yaml
     kind: plugin
@@ -502,6 +502,73 @@ specific subject, and invokes the target operation.
             status: 200
             body:
               status: accepted
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "net/http"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    type SlackCommandInput struct {
+      TeamID    string `json:"team_id"    required:"true"`
+      UserID    string `json:"user_id"    required:"true"`
+      ChannelID string `json:"channel_id" required:"true"`
+      Text      string `json:"text,omitempty"`
+    }
+
+    type SlackCommandOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    var (
+      supportCommandOp = gestalt.Operation[SlackCommandInput, SlackCommandOutput]{
+        ID:     "handle_support_command",
+        Method: http.MethodPost,
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(supportCommandOp, (*Provider).handleSupportCommand),
+      )
+    )
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
+      return nil
+    }
+
+    func (p *Provider) handleSupportCommand(
+      ctx context.Context,
+      input SlackCommandInput,
+      req gestalt.Request,
+    ) (gestalt.Response[SlackCommandOutput], error) {
+      // Run the Slack command workflow. The host already verified the signature.
+      return gestalt.OK(SlackCommandOutput{OK: true}), nil
+    }
+
+    func (p *Provider) ResolveHTTPSubject(
+      ctx context.Context,
+      req gestalt.HTTPSubjectRequest,
+    ) (*gestalt.Subject, error) {
+      teamID, _ := req.Params["team_id"].(string)
+      userID, _ := req.Params["user_id"].(string)
+      if teamID == "" || userID == "" {
+        return nil, gestalt.Error(http.StatusBadRequest, "missing Slack subject fields")
+      }
+      return &gestalt.Subject{
+        ID:          "slack:" + teamID + ":" + userID,
+        Kind:        "user",
+        DisplayName: userID,
+        AuthSource:  "slack",
+      }, nil
+    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
