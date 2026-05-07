@@ -1,0 +1,245 @@
+import { Callout } from 'nextra/components'
+
+# Azure
+
+This guide deploys `gestaltd` to [Azure Container Apps](https://learn.microsoft.com/azure/container-apps/overview) with a prepared image in Azure Container Registry, app-scoped secrets, and a networked datastore such as Azure Database for PostgreSQL. For AKS, use the [Helm](/deploy/helm) guide instead.
+
+## Architecture
+
+The recommended Azure Container Apps shape is:
+
+- Azure Container Apps runs one prepared `gestaltd` container on port `8080`
+- Azure Container Registry stores the derived image that contains `config.yaml`, `gestalt.lock.json`, and vendored provider artifacts
+- Container Apps secrets provide `GESTALT_ENCRYPTION_KEY` and `DATABASE_URL` to the container
+- Azure Database for PostgreSQL, Azure Database for MySQL, or another networked datastore backs the `indexeddb/relationaldb` provider
+- Container Apps ingress or a custom domain terminates TLS and matches `server.baseUrl`
+
+<Callout type="warning">
+  Do not use SQLite for a durable Azure Container Apps deployment. Container
+  replicas have ephemeral filesystems and can scale beyond one instance. Use a
+  networked IndexedDB provider for persistent state.
+</Callout>
+
+## Prerequisites
+
+Install the Azure CLI and Docker, then set the values used by the examples:
+
+```sh
+export RESOURCE_GROUP="gestalt-prod"
+export LOCATION="eastus"
+export ENVIRONMENT="gestalt-env"
+export APP_NAME="gestalt"
+export REGISTRY_NAME="gestaltprodacr"
+export IMAGE_TAG="$(git rev-parse --short HEAD)"
+
+az login
+az extension add --name containerapp --upgrade
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
+
+az group create \
+  --name "${RESOURCE_GROUP}" \
+  --location "${LOCATION}"
+```
+
+`REGISTRY_NAME` must be globally unique and contain only lowercase letters and numbers.
+
+Create the Azure Container Registry and Container Apps environment:
+
+```sh
+az acr create \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${REGISTRY_NAME}" \
+  --sku Standard
+
+export REGISTRY_SERVER="$(az acr show \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${REGISTRY_NAME}" \
+  --query loginServer \
+  --output tsv)"
+
+export IMAGE="${REGISTRY_SERVER}/gestaltd:${IMAGE_TAG}"
+
+az containerapp env create \
+  --name "${ENVIRONMENT}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --location "${LOCATION}"
+```
+
+Configure local Docker authentication for the registry:
+
+```sh
+az acr login --name "${REGISTRY_NAME}"
+```
+
+Managed identity image pulls require the registry to allow ARM audience tokens. Check and enable that once:
+
+```sh
+az acr config authentication-as-arm show \
+  --registry "${REGISTRY_NAME}"
+
+az acr config authentication-as-arm update \
+  --registry "${REGISTRY_NAME}" \
+  --status enabled
+```
+
+## Prepare the config
+
+Create `deploy/config.yaml` with runtime placeholders for values supplied by Azure Container Apps:
+
+```yaml
+server:
+  public:
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+Set `DATABASE_URL` to the DSN expected by the RelationalDB provider. For Azure Database for PostgreSQL, use a `postgres://` DSN with TLS enabled:
+
+```sh
+export DATABASE_URL="postgres://gestalt:password@gestalt-db.postgres.database.azure.com:5432/gestalt?sslmode=require"
+```
+
+Set `GESTALT_BASE_URL` to the public HTTPS origin users will open in a browser. If you use a custom domain, set it before the first production deploy. If you use the generated Container Apps domain, deploy once, read the FQDN, then update `GESTALT_BASE_URL` to that exact `https://` URL.
+
+Prepare locked provider state before building the image:
+
+```sh
+export GESTALT_BASE_URL="https://gestalt.example.com"
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
+gestaltd init --config deploy/config.yaml --platform linux/amd64
+```
+
+The generated lockfile records resolved provider artifacts, not the environment variable values. Keep real secret values out of source control and CI logs.
+
+## Build the image
+
+Create `deploy/Dockerfile.azure`:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+Build and push the prepared image:
+
+```sh
+docker build -f deploy/Dockerfile.azure -t "${IMAGE}" .
+docker push "${IMAGE}"
+```
+
+Container Apps can run public Docker Hub images directly, but Azure Container Registry is the better production target and keeps image pulls inside your Azure control plane.
+
+## Configure registry pull access
+
+Create a user-assigned managed identity for Container Apps to pull the private image from Azure Container Registry:
+
+```sh
+az identity create \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${APP_NAME}-pull"
+
+export IDENTITY_ID="$(az identity show \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${APP_NAME}-pull" \
+  --query id \
+  --output tsv)"
+
+export IDENTITY_PRINCIPAL_ID="$(az identity show \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${APP_NAME}-pull" \
+  --query principalId \
+  --output tsv)"
+
+export REGISTRY_ID="$(az acr show \
+  --resource-group "${RESOURCE_GROUP}" \
+  --name "${REGISTRY_NAME}" \
+  --query id \
+  --output tsv)"
+
+az role assignment create \
+  --assignee "${IDENTITY_PRINCIPAL_ID}" \
+  --role AcrPull \
+  --scope "${REGISTRY_ID}"
+```
+
+If your registry uses Azure Container Registry ABAC, grant `Container Registry Repository Reader` instead of `AcrPull`.
+
+## Deploy to Container Apps
+
+Deploy the image with `GESTALT_BASE_URL` as a normal environment variable and sensitive values as Container Apps secrets. Container App secret names cannot be longer than 20 characters, so the examples use `gestalt-key` and `database-url`.
+
+```sh
+az containerapp create \
+  --name "${APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --environment "${ENVIRONMENT}" \
+  --image "${IMAGE}" \
+  --ingress external \
+  --target-port 8080 \
+  --user-assigned "${IDENTITY_ID}" \
+  --registry-server "${REGISTRY_SERVER}" \
+  --registry-identity "${IDENTITY_ID}" \
+  --secrets "gestalt-key=${GESTALT_ENCRYPTION_KEY}" "database-url=${DATABASE_URL}" \
+  --env-vars "GESTALT_BASE_URL=${GESTALT_BASE_URL}" "GESTALT_ENCRYPTION_KEY=secretref:gestalt-key" "DATABASE_URL=secretref:database-url" \
+  --min-replicas 1 \
+  --max-replicas 3
+```
+
+If you prefer centralized secret management, create the secrets in Azure Key Vault and set the Container Apps secrets with `keyvaultref:<secret-url>,identityref:<identity-resource-id>`. Use a versionless Key Vault secret URI when you want Container Apps to track the latest secret version; use a versioned URI when you want explicit pinning. The same `secretref:` environment variable pattern still applies.
+
+Use internal ingress only when another layer, such as an internal load balancer, Application Gateway, private endpoint, or identity-aware proxy, handles browser and API access. If users need to complete OAuth callbacks directly against Gestalt, the callback origin must be reachable from their browser.
+
+## Verify
+
+Read the generated Container Apps hostname:
+
+```sh
+export CONTAINER_APP_FQDN="$(az containerapp show \
+  --name "${APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --query properties.configuration.ingress.fqdn \
+  --output tsv)"
+
+echo "https://${CONTAINER_APP_FQDN}"
+```
+
+If you are using the generated hostname instead of a custom domain, update `GESTALT_BASE_URL` after the first deploy:
+
+```sh
+export GESTALT_BASE_URL="https://${CONTAINER_APP_FQDN}"
+
+az containerapp update \
+  --name "${APP_NAME}" \
+  --resource-group "${RESOURCE_GROUP}" \
+  --set-env-vars "GESTALT_BASE_URL=${GESTALT_BASE_URL}"
+```
+
+Then check the service endpoints:
+
+```sh
+curl -fsS "${GESTALT_BASE_URL}/health"
+curl -fsS "${GESTALT_BASE_URL}/ready"
+```
+
+`/health` confirms the process is running. `/ready` returns success only after providers and the datastore are ready.
+
+## Operational notes
+
+Set `--min-replicas` above zero only if cold starts are unacceptable. Keep `--max-replicas` within what your database can absorb, because each replica can open datastore connections.
+
+When you rotate the encryption key, existing sessions and stored tokens become unreadable. Treat that as a planned migration event. For database password rotation, update the `database-url` Container Apps secret and deploy a new revision or restart the active revision so replicas pick up the new value.
+
+For production domains, configure a custom domain on the Container App or place an Azure load-balancing layer in front of it, then keep `server.baseUrl` aligned with that public origin. Container Apps creates a new revision for template changes such as image, environment variable, and scaling updates. App-scoped secret value changes do not create a revision by themselves.
