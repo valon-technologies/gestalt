@@ -1332,6 +1332,24 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         self.assertIs(getattr(wrapped, "_provider"), provider)
         self.assertIs(registered_server, server)
 
+    def test_plugin_runtime_registration_accepts_snake_case_handlers(self) -> None:
+        class Provider(PluginRuntimeProvider):
+            def get_support(self, request: Any) -> Any:
+                return {"request": request}
+
+        provider = Provider()
+        server = mock.Mock()
+        with mock.patch.object(
+            pluginruntime_pb2_grpc,
+            "add_PluginRuntimeProviderServicer_to_server",
+        ) as add_runtime:
+            _runtime._register_plugin_runtime_services(server, provider)
+
+        wrapped, _registered_server = add_runtime.call_args.args
+        self.assertEqual(
+            wrapped.GetSupport("request", object()), {"request": "request"}
+        )
+
     def test_servable_target_wraps_plugin_runtime_provider(self) -> None:
         provider = self.StubPluginRuntimeProvider()
         servable = _runtime._servable_target(
