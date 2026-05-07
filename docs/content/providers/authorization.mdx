@@ -149,9 +149,9 @@ plugins:
     source: ./plugins/indexer/manifest.yaml
     invokes:
       - plugin: source
-        operations:
-          - messages.list
-          - messages.get
+        operation: messages.list
+      - plugin: source
+        operation: messages.get
       - plugin: github
         surface: graphql
 ```
@@ -256,12 +256,16 @@ Workflow authorization happens twice. Gestalt checks access when a user creates
 a schedule, then checks again when that schedule or trigger fires later.
 
 User-owned workflows keep the creating subject plus a permission ceiling for
-delayed execution. Config-managed workflows use the system config subject
-instead.
+delayed execution. Config-managed workflows are reconciled and listed under the
+system config subject. They may declare `runAs.subject.id` to execute as a
+service account at runtime; user-mode plugin connections then resolve
+credentials stored for that same service-account subject. Without `runAs`,
+config-managed workflows execute as `system:config` and user-mode targets are
+rejected.
 
 Config-managed workflows include the direct target operation automatically. If
 the target performs nested plugin calls, declare those additional operation
-scopes with `permissions`:
+grants with `invokes`:
 
 ```yaml
 workflows:
@@ -275,21 +279,27 @@ workflows:
           operation: sources.sync
           input:
             sourceId: primary-source
-      permissions:
+      runAs:
+        subject:
+          id: service_account:indexer-sync
+      invokes:
         - plugin: source
-          operations:
-            - messages.list
-            - messages.get
+          operation: messages.list
+        - plugin: source
+          operation: messages.get
 ```
 
-This grants the workflow execution principal `indexer.sources.sync` plus the
-listed source operation scopes. It does not grant source credentials. The
-source plugin still uses the connection selected by the target operation and
-deployment config.
+This grants the runtime principal `indexer.sources.sync` plus the listed
+source operation scopes. It does not grant source credentials or authorize the
+target plugin to mint arbitrary nested invocation tokens. The source plugin
+still uses the connection selected by the target operation and deployment
+config, and the target plugin must still declare compatible
+`plugins.<target>.invokes` entries for any nested calls it performs.
 
 Config-owned direct targets, agent tools, and output-delivery targets must
-resolve to non-user credentials. Mixed plugins are still supported when the
-target explicitly selects a platform-backed connection.
+resolve to non-user credentials unless the workflow declares `runAs`. Mixed
+plugins are still supported when the target explicitly selects a platform-backed
+connection.
 
 ## UI routes
 

@@ -2012,7 +2012,7 @@ func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Princi
 	}
 	targetPrincipal := p
 	if targetPrincipalSource == signalTargetPrincipalExecutionRef {
-		targetPrincipal = workflowprincipal.FromExecutionReference(ref)
+		targetPrincipal = workflowprincipal.RuntimePrincipalFromExecutionReference(ref)
 	}
 	if !executionRefOwnedBy(ref, p) || !executionRefActive(ref) || !m.allowTarget(ctx, targetPrincipal, ref.Target) || !runMatchesExecutionRef(providerName, resp.Run, ref) {
 		return nil, core.ErrNotFound

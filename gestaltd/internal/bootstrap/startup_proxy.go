@@ -736,6 +736,10 @@ func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *cor
 	}
 	clone := *ref
 	clone.Target = cloneStartupWorkflowTarget(ref.Target)
+	if ref.RunAs != nil {
+		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
+		clone.RunAs = &runAs
+	}
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)

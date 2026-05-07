@@ -108,6 +108,10 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 	}
 	clone := *ref
 	clone.Target = cloneRuntimeTarget(ref.Target)
+	if ref.RunAs != nil {
+		runAs := *core.NormalizeRunAsSubject(ref.RunAs)
+		clone.RunAs = &runAs
+	}
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), ref.Permissions[i].Operations...)
@@ -1125,6 +1129,80 @@ func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testi
 	}
 	if !gotInternalConnectionAccess {
 		t.Fatal("workflow execution ref did not authorize internal connection access")
+	}
+}
+
+func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal(t *testing.T) {
+	t.Parallel()
+
+	target := testWorkflowPluginTarget("brain", "sources.sync")
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-config-runas-source-sync",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           "system:config",
+		SubjectKind:         "system",
+		DisplayName:         "Gestalt config",
+		AuthSource:          "config",
+		CredentialSubjectID: "system:config",
+		RunAs: &core.RunAsSubject{
+			SubjectID:   "service_account:brain-sync",
+			SubjectKind: "service_account",
+			DisplayName: "Brain sync",
+			AuthSource:  "config",
+		},
+		Permissions: []core.AccessPermission{{
+			Plugin:     "brain",
+			Operations: []string{"sources.sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+
+	var gotPrincipal *principal.Principal
+	var gotAudit invocation.RunAsAuditContext
+	var gotInternalConnectionAccess bool
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, p *principal.Principal, providerName, _ string, operation string, _ map[string]any) (*core.OperationResult, error) {
+			gotPrincipal = p
+			gotAudit = invocation.RunAsAuditFromContext(ctx)
+			gotInternalConnectionAccess = invocation.InternalConnectionAccessFromContext(ctx)
+			if providerName != "brain" || operation != "sources.sync" {
+				t.Fatalf("target = %s.%s, want brain.sources.sync", providerName, operation)
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "exec-ref-config-runas-source-sync",
+		Target:       target,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotPrincipal == nil || gotPrincipal.SubjectID != "service_account:brain-sync" || gotPrincipal.Kind != principal.Kind("service_account") {
+		t.Fatalf("principal = %#v, want brain sync service account", gotPrincipal)
+	}
+	if gotPrincipal.CredentialSubjectID != "service_account:brain-sync" {
+		t.Fatalf("credential subject = %q, want runAs subject", gotPrincipal.CredentialSubjectID)
+	}
+	if gotPrincipal.DisplayName != "Brain sync" || gotPrincipal.AuthSource() != "config" {
+		t.Fatalf("principal display/auth = (%q, %q)", gotPrincipal.DisplayName, gotPrincipal.AuthSource())
+	}
+	if gotAudit.AgentSubject == nil || gotAudit.AgentSubject.SubjectID != "system:config" || gotAudit.AgentSubject.CredentialSubjectID != "system:config" {
+		t.Fatalf("audit agent subject = %#v, want config owner", gotAudit.AgentSubject)
+	}
+	if gotAudit.RunAsSubject == nil || gotAudit.RunAsSubject.SubjectID != "service_account:brain-sync" {
+		t.Fatalf("audit runAs subject = %#v, want brain sync service account", gotAudit.RunAsSubject)
+	}
+	if !gotInternalConnectionAccess {
+		t.Fatal("config-owned runAs execution ref did not authorize internal connection access")
 	}
 }
 

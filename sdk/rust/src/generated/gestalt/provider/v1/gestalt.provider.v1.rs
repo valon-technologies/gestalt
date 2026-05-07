@@ -2872,6 +2872,17 @@ pub struct WorkflowActor {
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowRunAsSubject {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub subject_kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub auth_source: ::prost::alloc::string::String,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEvent {
     #[prost(string, tag = "1")]
@@ -3038,6 +3049,8 @@ pub struct WorkflowExecutionReference {
     pub auth_source: ::prost::alloc::string::String,
     #[prost(string, tag = "13")]
     pub caller_plugin_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "14")]
+    pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowSignal {

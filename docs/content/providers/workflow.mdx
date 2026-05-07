@@ -111,6 +111,9 @@ workflows:
       provider: local
       cron: "0 3 * * *"
       timezone: America/New_York
+      runAs:
+        subject:
+          id: service_account:roadmap-sync
       target:
         plugin:
           name: roadmap
@@ -120,20 +123,24 @@ workflows:
           input:
             mode: incremental
             includeArchived: false
-      permissions:
+      invokes:
         - plugin: slack
-          operations:
-            - conversations.list
-            - conversations.history
+          operation: conversations.list
+        - plugin: slack
+          operation: conversations.history
 ```
 
 This creates a durable schedule named `nightly_sync` that invokes
-`roadmap.sync` every day at 3:00 AM New York time. `permissions` grants the
-config-owned execution principal additional plugin operations the target may
-invoke while it runs; Gestalt always includes the direct target operation.
-The extra scopes do not grant credentials. The invoked plugin still resolves
-its own connection, and config-owned workflow targets must resolve to non-user
-credentials.
+`roadmap.sync` every day at 3:00 AM New York time. `runAs` makes the runtime
+principal `service_account:roadmap-sync`; the schedule itself remains owned by
+config for reconciliation. `invokes` grants additional plugin operations the
+target may invoke while it runs; Gestalt always includes the direct target
+operation. These grants do not create credentials. User-mode connections use
+credentials stored for the `runAs.subject.id`, and platform or `none`
+connections keep their normal behavior.
+
+`permissions` is still accepted as a deprecated alias for `invokes` with the
+older `{ plugin, operations }` shape. Do not set both on the same workflow.
 
 ### Triggers
 
@@ -155,10 +162,12 @@ workflows:
           input:
             channel: C123456
             text: "A roadmap item changed."
-      permissions:
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+      invokes:
         - plugin: roadmap
-          operations:
-            - items.get
+          operation: items.get
 ```
 
 This creates a durable trigger that listens for published events with:
@@ -586,10 +595,9 @@ workflows:
           operation: ingestSlackEvent
           input:
             sourceId: slack-public
-      permissions:
+      invokes:
         - plugin: knowledge
-          operations:
-            - tokens.create
+          operation: tokens.create
 ```
 
 The target operation reads the published event from the workflow trigger
@@ -719,8 +727,10 @@ Gestalt through the workflow host. Gestalt invokes the target plugin operation,
 then the run is updated to `succeeded`, `failed`, or `canceled`.
 
 The execution identity depends on how the workflow was created. Config-managed
-schedules and triggers execute as `system:config`, while user-owned schedules
-and triggers execute as the creating subject.
+schedules and triggers are reconciled as `system:config`. At runtime they
+execute as `runAs.subject.id` when `runAs` is declared, otherwise as
+`system:config`. User-owned schedules and triggers execute as the creating
+subject.
 
 ## Building your own workflow provider
 

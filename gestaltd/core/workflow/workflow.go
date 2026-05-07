@@ -86,6 +86,7 @@ type ExecutionReference struct {
 	DisplayName         string
 	AuthSource          string
 	CredentialSubjectID string
+	RunAs               *core.RunAsSubject
 	Permissions         []core.AccessPermission
 	CreatedAt           *time.Time
 	RevokedAt           *time.Time

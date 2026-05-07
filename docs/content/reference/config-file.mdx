@@ -501,6 +501,9 @@ workflows:
       provider: local
       cron: "0 3 * * *"
       timezone: America/New_York
+      runAs:
+        subject:
+          id: service_account:roadmap-sync
       target:
         plugin:
           name: roadmap
@@ -676,11 +679,11 @@ workflows:
           instance: tenant-a
           input:
             mode: incremental
-      permissions:
+      invokes:
         - plugin: slack
-          operations:
-            - conversations.list
-            - conversations.history
+          operation: conversations.list
+        - plugin: slack
+          operation: conversations.history
       paused: false
 
   eventTriggers:
@@ -695,12 +698,17 @@ workflows:
           operation: sync_items
           input:
             reason: sync
-      permissions:
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+      invokes:
         - plugin: slack
-          operations:
-            - chat.postMessage
+          operation: chat.postMessage
       paused: false
 ```
+
+`permissions` is accepted as a deprecated alias for `invokes` using the older
+`{ plugin, operations }` shape. A workflow object must not set both fields.
 
 ### `workflows.schedules.*`
 
@@ -713,7 +721,11 @@ workflows:
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `modelOptions`, and `timeout`. |
-| `permissions` | Optional additional plugin-operation permissions granted to the config-owned execution principal. The direct target operation is always included. These scopes do not grant credentials; invoked operations still resolve credentials through their configured connection. |
+| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without `runAs`, config-managed workflows run as `system:config` and cannot target user-mode credentials. |
+| `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
+| `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
+| `invokes` | Optional additional plugin-operation grants as `{ plugin, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `plugins.<target>.invokes` for nested plugin calls. |
+| `permissions` | Deprecated alias for `invokes` using `{ plugin, operations }`. Do not set both. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
 | `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
@@ -728,7 +740,11 @@ workflows:
 | `target.plugin.connection` | Optional target connection name. |
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
-| `permissions` | Optional additional plugin-operation permissions granted to the config-owned execution principal. The direct target operation is always included. These scopes do not grant credentials; invoked operations still resolve credentials through their configured connection. |
+| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. |
+| `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
+| `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
+| `invokes` | Optional additional plugin-operation grants as `{ plugin, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `plugins.<target>.invokes` for nested plugin calls. |
+| `permissions` | Deprecated alias for `invokes` using `{ plugin, operations }`. Do not set both. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |

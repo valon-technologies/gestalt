@@ -277,6 +277,7 @@ type (
 	WorkflowOutputValueSource_Literal         = internal.WorkflowOutputValueSource_Literal
 	WorkflowOutputValueSource_SignalMetadata  = internal.WorkflowOutputValueSource_SignalMetadata
 	WorkflowOutputValueSource_SignalPayload   = internal.WorkflowOutputValueSource_SignalPayload
+	WorkflowRunAsSubject                      = internal.WorkflowRunAsSubject
 	WorkflowRunStatus                         = internal.WorkflowRunStatus
 	WorkflowRunTrigger                        = internal.WorkflowRunTrigger
 	WorkflowRunTrigger_Event                  = internal.WorkflowRunTrigger_Event

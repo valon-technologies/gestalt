@@ -1666,10 +1666,16 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
 				return err
 			}
-			permissions, err := normalizeWorkflowExecutionPermissions(cfg, "workflows.schedules."+key+".permissions", schedule.Permissions)
+			runAs, err := normalizeWorkflowRunAs("workflows.schedules."+key+".runAs", schedule.RunAs)
 			if err != nil {
 				return err
 			}
+			schedule.RunAs = runAs
+			invokes, permissions, err := normalizeWorkflowExecutionGrants(cfg, "workflows.schedules."+key, schedule.Invokes, schedule.Permissions)
+			if err != nil {
+				return err
+			}
+			schedule.Invokes = invokes
 			schedule.Permissions = permissions
 			schedule.Provider = strings.TrimSpace(schedule.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
@@ -1712,10 +1718,16 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
 				return err
 			}
-			permissions, err := normalizeWorkflowExecutionPermissions(cfg, "workflows.eventTriggers."+key+".permissions", trigger.Permissions)
+			runAs, err := normalizeWorkflowRunAs("workflows.eventTriggers."+key+".runAs", trigger.RunAs)
 			if err != nil {
 				return err
 			}
+			trigger.RunAs = runAs
+			invokes, permissions, err := normalizeWorkflowExecutionGrants(cfg, "workflows.eventTriggers."+key, trigger.Invokes, trigger.Permissions)
+			if err != nil {
+				return err
+			}
+			trigger.Invokes = invokes
 			trigger.Permissions = permissions
 			trigger.Provider = strings.TrimSpace(trigger.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
@@ -1770,6 +1782,93 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return nil
 	}
 	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
+}
+
+func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
+	if runAs == nil {
+		return nil, nil
+	}
+	if runAs.Subject == nil {
+		return nil, fmt.Errorf("config validation: %s.subject is required", path)
+	}
+	subject := *runAs.Subject
+	subject.ID = strings.TrimSpace(subject.ID)
+	subject.Kind = strings.TrimSpace(subject.Kind)
+	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
+	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
+	if subject.AuthSource == "" {
+		subject.AuthSource = "config"
+	}
+	if subject.ID == "" {
+		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
+	}
+	kind, _, ok := core.ParseSubjectID(subject.ID)
+	if !ok {
+		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.ID)
+	}
+	if kind != "service_account" {
+		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.ID)
+	}
+	if subject.Kind == "" {
+		subject.Kind = kind
+	} else if subject.Kind != kind {
+		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.Kind, kind)
+	}
+	return &WorkflowRunAsConfig{Subject: &subject}, nil
+}
+
+func normalizeWorkflowExecutionGrants(cfg *Config, path string, invokes []WorkflowInvokeConfig, permissions []core.AccessPermission) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
+	if len(invokes) > 0 && len(permissions) > 0 {
+		return nil, nil, fmt.Errorf("config validation: %s must not set both invokes and permissions", path)
+	}
+	if len(invokes) == 0 {
+		normalizedPermissions, err := normalizeWorkflowExecutionPermissions(cfg, path+".permissions", permissions)
+		return nil, normalizedPermissions, err
+	}
+	normalizedInvokes, _, err := normalizeWorkflowExecutionInvokes(cfg, path+".invokes", invokes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return normalizedInvokes, nil, nil
+}
+
+func normalizeWorkflowExecutionInvokes(cfg *Config, path string, values []WorkflowInvokeConfig) ([]WorkflowInvokeConfig, []core.AccessPermission, error) {
+	out := make([]WorkflowInvokeConfig, 0, len(values))
+	permissions := make([]core.AccessPermission, 0, len(values))
+	pluginIndexes := make(map[string]int, len(values))
+	seenOperations := make(map[string]map[string]struct{}, len(values))
+	for i, value := range values {
+		plugin := strings.TrimSpace(value.Plugin)
+		if plugin == "" {
+			return nil, nil, fmt.Errorf("config validation: %s[%d].plugin is required", path, i)
+		}
+		if _, ok := cfg.Plugins[plugin]; !ok {
+			return nil, nil, fmt.Errorf("config validation: %s[%d].plugin references unknown plugin %q", path, i, plugin)
+		}
+		operation := strings.TrimSpace(value.Operation)
+		if operation == "" {
+			return nil, nil, fmt.Errorf("config validation: %s[%d].operation is required", path, i)
+		}
+		if seenOperations[plugin] == nil {
+			seenOperations[plugin] = map[string]struct{}{}
+		}
+		if _, exists := seenOperations[plugin][operation]; exists {
+			continue
+		}
+		seenOperations[plugin][operation] = struct{}{}
+		out = append(out, WorkflowInvokeConfig{Plugin: plugin, Operation: operation})
+		idx, ok := pluginIndexes[plugin]
+		if !ok {
+			idx = len(permissions)
+			pluginIndexes[plugin] = idx
+			permissions = append(permissions, core.AccessPermission{Plugin: plugin})
+		}
+		permissions[idx].Operations = append(permissions[idx].Operations, operation)
+	}
+	if len(out) == 0 {
+		return nil, nil, nil
+	}
+	return out, permissions, nil
 }
 
 func normalizeWorkflowExecutionPermissions(cfg *Config, path string, values []core.AccessPermission) ([]core.AccessPermission, error) {

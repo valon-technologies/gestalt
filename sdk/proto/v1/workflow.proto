@@ -69,6 +69,13 @@ message WorkflowActor {
   string auth_source = 4;
 }
 
+message WorkflowRunAsSubject {
+  string subject_id = 1;
+  string subject_kind = 2;
+  string display_name = 3;
+  string auth_source = 4;
+}
+
 enum WorkflowRunStatus {
   WORKFLOW_RUN_STATUS_UNSPECIFIED = 0;
   WORKFLOW_RUN_STATUS_PENDING = 1;
@@ -176,6 +183,7 @@ message WorkflowExecutionReference {
   string display_name = 11;
   string auth_source = 12;
   string caller_plugin_name = 13;
+  WorkflowRunAsSubject run_as = 14;
 }
 
 message WorkflowSignal {

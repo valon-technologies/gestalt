@@ -73,7 +73,15 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if existing != nil {
 			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, schedule.Permissions)
+		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes, schedule.Permissions)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, runAs, permissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
@@ -351,6 +359,73 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 	return out
 }
 
+func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) (*core.RunAsSubject, error) {
+	if runAs == nil {
+		return nil, nil
+	}
+	subject := runAs.SubjectRef()
+	if subject == nil {
+		return nil, fmt.Errorf("config validation: %s.subject is required", path)
+	}
+	kind, _, ok := core.ParseSubjectID(subject.SubjectID)
+	if !ok {
+		return nil, fmt.Errorf("config validation: %s.subject.id %q must be a fully-qualified service_account subject", path, subject.SubjectID)
+	}
+	if kind != "service_account" {
+		return nil, fmt.Errorf("config validation: %s.subject.id %q must identify a service_account subject", path, subject.SubjectID)
+	}
+	if subject.SubjectKind != kind {
+		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.SubjectKind, kind)
+	}
+	if subject.AuthSource == "" {
+		subject.AuthSource = "config"
+	}
+	return subject, nil
+}
+
+func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig, permissions []core.AccessPermission) ([]core.AccessPermission, error) {
+	if len(invokes) > 0 && len(permissions) > 0 {
+		return nil, fmt.Errorf("config validation: %s must not set both invokes and permissions", path)
+	}
+	if len(invokes) == 0 {
+		return permissions, nil
+	}
+	out := make([]core.AccessPermission, 0, len(invokes))
+	pluginIndexes := make(map[string]int, len(invokes))
+	seenOperations := make(map[string]map[string]struct{}, len(invokes))
+	for i, invoke := range invokes {
+		plugin := strings.TrimSpace(invoke.Plugin)
+		if plugin == "" {
+			return nil, fmt.Errorf("config validation: %s.invokes[%d].plugin is required", path, i)
+		}
+		if cfg == nil || cfg.Plugins[plugin] == nil {
+			return nil, fmt.Errorf("config validation: %s.invokes[%d].plugin references unknown plugin %q", path, i, plugin)
+		}
+		operation := strings.TrimSpace(invoke.Operation)
+		if operation == "" {
+			return nil, fmt.Errorf("config validation: %s.invokes[%d].operation is required", path, i)
+		}
+		if seenOperations[plugin] == nil {
+			seenOperations[plugin] = map[string]struct{}{}
+		}
+		if _, exists := seenOperations[plugin][operation]; exists {
+			continue
+		}
+		seenOperations[plugin][operation] = struct{}{}
+		idx, ok := pluginIndexes[plugin]
+		if !ok {
+			idx = len(out)
+			pluginIndexes[plugin] = idx
+			out = append(out, core.AccessPermission{Plugin: plugin})
+		}
+		out[idx].Operations = append(out[idx].Operations, operation)
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 func workflowConfigActor() coreworkflow.Actor {
 	return coreworkflow.Actor{
 		SubjectID:   workflowConfigOwnerSubjectID(),
@@ -406,8 +481,18 @@ func workflowEnsureConfigExecutionRef(
 		}
 	}
 	desired.ID = refID
-	if _, err := store.PutExecutionReference(ctx, desired); err != nil {
+	stored, err := store.PutExecutionReference(ctx, desired)
+	if err != nil {
 		return "", false, "", nil, err
+	}
+	if desired.RunAs != nil && !workflowConfigExecutionRefMatches(stored, desired) {
+		verified, err := store.GetExecutionReference(ctx, refID)
+		if err != nil {
+			return "", false, "", nil, fmt.Errorf("workflow execution ref %q was written but could not be verified: %w", refID, err)
+		}
+		if !workflowConfigExecutionRefMatches(verified, desired) {
+			return "", false, "", nil, workflowConfigExecutionRefPersistenceError(refID, verified, desired)
+		}
 	}
 	return refID, true, replacedUnreadableCandidateID, replacedUnreadableCandidateErr, nil
 }
@@ -497,7 +582,8 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 	return out
 }
 
-func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, runAs *core.RunAsSubject, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+	runAs = core.NormalizeRunAsSubject(runAs)
 	ref := &coreworkflow.ExecutionReference{
 		ProviderName:        providerName,
 		Target:              target,
@@ -506,8 +592,10 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		DisplayName:         "Gestalt config",
 		AuthSource:          "config",
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
+		RunAs:               runAs,
 		Permissions:         workflowExecutionRefPermissionsForTarget(target, permissions),
 	}
+	hasRunAs := runAs != nil
 	if target.Agent != nil {
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
@@ -519,12 +607,12 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				Operation:  strings.TrimSpace(tool.Operation),
 				Connection: strings.TrimSpace(tool.Connection),
 				Instance:   strings.TrimSpace(tool.Instance),
-			}); err != nil {
+			}, hasRunAs); err != nil {
 				return nil, err
 			}
 		}
 		if delivery := target.Agent.OutputDelivery; delivery != nil {
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target); err != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target, hasRunAs); err != nil {
 				return nil, err
 			}
 		}
@@ -533,19 +621,22 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 	if target.Plugin == nil {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	if err := workflowConfigValidateNoUserCredentialTarget(cfg, *target.Plugin); err != nil {
+	if err := workflowConfigValidateNoUserCredentialTarget(cfg, *target.Plugin, hasRunAs); err != nil {
 		return nil, err
 	}
 	return ref, nil
 }
 
-func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget) error {
+func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget, hasRunAs bool) error {
 	modeOverride := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(target.CredentialMode))))
 	switch modeOverride {
 	case "":
 	case core.ConnectionModeNone:
 		return nil
 	case core.ConnectionModeUser:
+		if hasRunAs {
+			return nil
+		}
 		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(target.PluginName))
 	default:
 		return fmt.Errorf("unsupported credential mode %q for config-managed workflow target %q", modeOverride, strings.TrimSpace(target.PluginName))
@@ -559,6 +650,9 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 	case core.ConnectionModeNone, core.ConnectionModePlatform:
 		return nil
 	case core.ConnectionModeUser:
+		if hasRunAs {
+			return nil
+		}
 		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", pluginName)
 	default:
 		return fmt.Errorf("unsupported connection mode %q for config-managed workflow target %q", mode, pluginName)
@@ -691,12 +785,25 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 	if strings.TrimSpace(existing.AuthSource) != strings.TrimSpace(desired.AuthSource) {
 		return false
 	}
+	if strings.TrimSpace(existing.CredentialSubjectID) != strings.TrimSpace(desired.CredentialSubjectID) {
+		return false
+	}
+	if !core.RunAsSubjectsEqual(existing.RunAs, desired.RunAs) {
+		return false
+	}
 	if !coreworkflow.TargetsEqual(existing.Target, desired.Target) {
 		return false
 	}
 	existingJSON, existingErr := json.Marshal(existing.Permissions)
 	desiredJSON, desiredErr := json.Marshal(desired.Permissions)
 	return existingErr == nil && desiredErr == nil && bytes.Equal(existingJSON, desiredJSON)
+}
+
+func workflowConfigExecutionRefPersistenceError(refID string, stored, desired *coreworkflow.ExecutionReference) error {
+	if desired != nil && desired.RunAs != nil && (stored == nil || !core.RunAsSubjectsEqual(stored.RunAs, desired.RunAs)) {
+		return fmt.Errorf("workflow execution ref %q was written but provider did not preserve runAs subject %q", refID, strings.TrimSpace(desired.RunAs.SubjectID))
+	}
+	return fmt.Errorf("workflow execution ref %q was written but provider did not preserve config-managed execution reference metadata", refID)
 }
 
 func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {

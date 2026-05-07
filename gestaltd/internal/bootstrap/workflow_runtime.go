@@ -225,8 +225,9 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		if err != nil {
 			return nil, err
 		}
-		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
+		principalValue = workflowprincipal.RuntimePrincipalFromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
+		ctx = workflowExecutionRefWithRunAsAudit(ctx, resolvedRef)
 		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
 			ctx = invocation.WithInternalConnectionAccess(ctx)
 		}
@@ -319,6 +320,24 @@ func workflowExecutionRefAllowsInternalConnectionAccess(ref *coreworkflow.Execut
 		strings.TrimSpace(ref.CredentialSubjectID) == workflowConfigOwnerSubjectID()
 }
 
+func workflowExecutionRefWithRunAsAudit(ctx context.Context, ref *coreworkflow.ExecutionReference) context.Context {
+	if ref == nil {
+		return ctx
+	}
+	runAs := core.NormalizeRunAsSubject(ref.RunAs)
+	if runAs == nil {
+		return ctx
+	}
+	owner := core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:           ref.SubjectID,
+		SubjectKind:         ref.SubjectKind,
+		CredentialSubjectID: ref.CredentialSubjectID,
+		DisplayName:         ref.DisplayName,
+		AuthSource:          ref.AuthSource,
+	})
+	return invocation.WithRunAsAudit(ctx, owner, runAs)
+}
+
 func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker) (*coreworkflow.InvokeOperationResponse, error) {
 	if agentManager == nil {
 		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
@@ -334,9 +353,10 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		if err != nil {
 			return nil, err
 		}
-		principalValue = workflowprincipal.FromExecutionReference(resolvedRef)
+		principalValue = workflowprincipal.RuntimePrincipalFromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
 		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
+		ctx = workflowExecutionRefWithRunAsAudit(ctx, resolvedRef)
 		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
 			ctx = invocation.WithInternalConnectionAccess(ctx)
 		}
