@@ -136,6 +136,9 @@ jobs:
       - name: Build docs
         run: npm run build
 
+      - name: Test Linux installer
+        run: npm run test:linux-installer
+
   helm-validate:
     name: Helm Chart Validation
     runs-on: ubuntu-latest

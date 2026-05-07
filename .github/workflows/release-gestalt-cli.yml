@@ -55,6 +55,7 @@ jobs:
       component-summary: |
         Command-line client for authenticating with Gestalt, working with integrations and workflows, and running interactive agent sessions from the terminal.
       install-markdown: |
+        - Linux installer: `curl -fsSL https://gestaltd.ai/install.sh | sh -s -- --component both --version ${version}`
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestalt`
         - Docker: `docker pull valontechnologies/gestalt:${version}`
         - Docs: [CLI guide](https://gestaltd.ai/client/cli)

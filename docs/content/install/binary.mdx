@@ -4,6 +4,9 @@ import { Tabs } from 'nextra/components'
 
 Pre-built binaries are published for every release on GitHub.
 
+On Linux, the installer script is usually simpler than manual archive handling.
+See [Linux](/install/linux).
+
 ## Server
 
 `gestaltd` is the long-running process that manages authentication and plugins.
@@ -63,6 +66,10 @@ gestaltd --version
 
 `gestalt` is the CLI for communicating with the Gestalt server.
 
+On Unix platforms, the `gestalt` archive also includes a matching `gestaltd`
+helper binary. Install both files when you want the same behavior as the Linux
+installer's default `--component both` mode.
+
 ### Install
 
 <Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Linux ARMv7', 'Windows x86_64']}>
@@ -71,7 +78,7 @@ gestaltd --version
 
     ```sh
     tar xzf gestalt-macos-arm64.tar.gz
-    sudo mv gestalt /usr/local/bin/
+    sudo mv gestalt gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -79,7 +86,7 @@ gestaltd --version
 
     ```sh
     tar xzf gestalt-macos-x86_64.tar.gz
-    sudo mv gestalt /usr/local/bin/
+    sudo mv gestalt gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -87,7 +94,7 @@ gestaltd --version
 
     ```sh
     tar xzf gestalt-linux-x86_64.tar.gz
-    sudo mv gestalt /usr/local/bin/
+    sudo mv gestalt gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -95,7 +102,7 @@ gestaltd --version
 
     ```sh
     tar xzf gestalt-linux-arm64.tar.gz
-    sudo mv gestalt /usr/local/bin/
+    sudo mv gestalt gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -103,7 +110,7 @@ gestaltd --version
 
     ```sh
     tar xzf gestalt-linux-armv7.tar.gz
-    sudo mv gestalt /usr/local/bin/
+    sudo mv gestalt gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
