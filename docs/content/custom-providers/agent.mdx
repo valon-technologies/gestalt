@@ -168,6 +168,239 @@ Keep provider-specific discovery inside the provider. `gestaltd` authorizes the
 catalog scope, mints the run grant, pages tools, and executes selected tools; it
 does not rank tools for a model or add integration-specific aliases.
 
+## Agent host
+
+Agent providers call back into Gestalt through `AgentHost` while handling a
+turn. Use it to list the tools covered by the current `run_grant`, execute the
+tool selected by the model, or resolve a configured model connection for
+provider-owned inference.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+      "context"
+      "fmt"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+      "google.golang.org/protobuf/types/known/structpb"
+    )
+
+    func executeGrantedTool(ctx context.Context, turn *proto.CreateAgentProviderTurnRequest) (string, error) {
+      host, err := gestalt.AgentHost()
+      if err != nil {
+        return "", err
+      }
+      defer host.Close()
+
+      listed, err := host.ListTools(ctx, &proto.ListAgentToolsRequest{
+        SessionId: turn.GetSessionId(),
+        TurnId:    turn.GetTurnId(),
+        RunGrant:  turn.GetRunGrant(),
+        PageSize:  25,
+        Query:     "issue",
+      })
+      if err != nil {
+        return "", err
+      }
+      if len(listed.GetTools()) == 0 {
+        return "", fmt.Errorf("no granted tools matched the query")
+      }
+
+      args, err := structpb.NewStruct(map[string]any{"query": "AIT-231"})
+      if err != nil {
+        return "", err
+      }
+
+      result, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+        SessionId:      turn.GetSessionId(),
+        TurnId:         turn.GetTurnId(),
+        ToolCallId:     "call-1",
+        ToolId:         listed.GetTools()[0].GetId(),
+        RunGrant:       turn.GetRunGrant(),
+        IdempotencyKey: turn.GetIdempotencyKey() + ":call-1",
+        Arguments:      args,
+      })
+      if err != nil {
+        return "", err
+      }
+
+      connection, err := host.ResolveConnection(ctx, &proto.ResolveAgentConnectionRequest{
+        SessionId:  turn.GetSessionId(),
+        TurnId:     turn.GetTurnId(),
+        Connection: "model",
+        Instance:   "default",
+        RunGrant:   turn.GetRunGrant(),
+      })
+      if err != nil {
+        return "", err
+      }
+
+      _ = connection.GetHeaders()
+      return result.GetBody(), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from google.protobuf import struct_pb2
+    import gestalt
+
+
+    def execute_granted_tool(turn) -> str | None:
+        arguments = struct_pb2.Struct()
+        arguments.update({"query": "AIT-231"})
+
+        with gestalt.AgentHost() as host:
+            listed = host.list_tools(
+                gestalt.ListAgentToolsRequest(
+                    session_id=turn.session_id,
+                    turn_id=turn.turn_id,
+                    run_grant=turn.run_grant,
+                    page_size=25,
+                    query="issue",
+                )
+            )
+            if not listed.tools:
+                return None
+
+            result = host.execute_tool(
+                gestalt.ExecuteAgentToolRequest(
+                    session_id=turn.session_id,
+                    turn_id=turn.turn_id,
+                    tool_call_id="call-1",
+                    tool_id=listed.tools[0].id,
+                    run_grant=turn.run_grant,
+                    idempotency_key=f"{turn.idempotency_key}:call-1",
+                    arguments=arguments,
+                )
+            )
+
+            connection = host.resolve_connection(
+                gestalt.ResolveAgentConnectionRequest(
+                    session_id=turn.session_id,
+                    turn_id=turn.turn_id,
+                    connection="model",
+                    instance="default",
+                    run_grant=turn.run_grant,
+                )
+            )
+
+        _ = connection.headers
+        return result.body
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::proto::v1 as proto;
+    use prost_types::{value::Kind, Struct, Value};
+
+    async fn execute_granted_tool(
+        turn: &proto::CreateAgentProviderTurnRequest,
+    ) -> Result<Option<String>, gestalt::AgentHostError> {
+        let mut host = gestalt::AgentHost::connect().await?;
+
+        let listed = host
+            .list_tools(proto::ListAgentToolsRequest {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                run_grant: turn.run_grant.clone(),
+                page_size: 25,
+                query: "issue".to_string(),
+                ..Default::default()
+            })
+            .await?;
+
+        let Some(tool) = listed.tools.first() else {
+            return Ok(None);
+        };
+
+        let result = host
+            .execute_tool(proto::ExecuteAgentToolRequest {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                tool_call_id: "call-1".to_string(),
+                tool_id: tool.id.clone(),
+                run_grant: turn.run_grant.clone(),
+                idempotency_key: format!("{}:call-1", turn.idempotency_key),
+                arguments: Some(Struct {
+                    fields: [(
+                        "query".to_string(),
+                        Value {
+                            kind: Some(Kind::StringValue("AIT-231".to_string())),
+                        },
+                    )]
+                    .into(),
+                }),
+            })
+            .await?;
+
+        let connection = host
+            .resolve_connection(proto::ResolveAgentConnectionRequest {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                connection: "model".to_string(),
+                instance: "default".to_string(),
+                run_grant: turn.run_grant.clone(),
+            })
+            .await?;
+
+        let _headers = connection.headers;
+        Ok(Some(result.body))
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      AgentHost,
+      type CreateAgentProviderTurnRequest,
+    } from "@valon-technologies/gestalt";
+
+    export async function executeGrantedTool(
+      turn: CreateAgentProviderTurnRequest,
+    ): Promise<string | null> {
+      const host = new AgentHost();
+
+      const listed = await host.listTools({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        runGrant: turn.runGrant,
+        pageSize: 25,
+        query: "issue",
+      });
+
+      const tool = listed.tools[0];
+      if (!tool) {
+        return null;
+      }
+
+      const result = await host.executeTool({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        toolCallId: "call-1",
+        toolId: tool.id,
+        runGrant: turn.runGrant,
+        idempotencyKey: `${turn.idempotencyKey}:call-1`,
+        arguments: { query: "AIT-231" },
+      });
+
+      const connection = await host.resolveConnection({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        connection: "model",
+        instance: "default",
+        runGrant: turn.runGrant,
+      });
+
+      void connection.headers;
+      return result.body;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 ## Observability
 
 Provider authors do not need to emit the baseline `gestaltd` agent metrics.
