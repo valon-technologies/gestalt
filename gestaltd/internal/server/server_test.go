@@ -5223,6 +5223,10 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	escapedSubjectID := url.PathEscape(created.SubjectID)
 	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "owner-session", "", http.StatusOK)
 
+	encodedColonSubjectID := strings.ReplaceAll(created.SubjectID, ":", "%3A")
+	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+encodedColonSubjectID, "owner-session", "", http.StatusOK)
+	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+encodedColonSubjectID+"/tokens", "owner-session", "", http.StatusOK)
+
 	expectJSONStatus(http.MethodPut, "/api/v1/authorization/subjects/"+escapedSubjectID+"/members", "owner-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK)
 
 	expectJSONStatus(http.MethodGet, "/api/v1/authorization/subjects/"+escapedSubjectID, "viewer-session", "", http.StatusOK)

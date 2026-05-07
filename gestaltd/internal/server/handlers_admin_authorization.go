@@ -215,7 +215,12 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
 		return
 	}
-	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	subjectIDParam, err := decodedURLParam(r, "subjectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(subjectIDParam))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -327,7 +332,12 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
 		return
 	}
-	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	subjectIDParam, err := decodedURLParam(r, "subjectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(subjectIDParam))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

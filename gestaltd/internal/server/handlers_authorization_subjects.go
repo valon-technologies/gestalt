@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -299,7 +300,12 @@ func (s *Server) deleteManagedSubjectMember(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	memberSubjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "memberSubjectID")))
+	memberSubjectIDParam, err := decodedURLParam(r, "memberSubjectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	memberSubjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(memberSubjectIDParam))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -627,7 +633,12 @@ func (s *Server) managedSubjectIDFromPath(w http.ResponseWriter, r *http.Request
 	if !s.ensureManagedSubjectsAvailable(w) {
 		return "", false
 	}
-	subjectID, err := canonicalServiceAccountSubjectID(chi.URLParam(r, "subjectID"))
+	subjectIDParam, err := decodedURLParam(r, "subjectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return "", false
+	}
+	subjectID, err := canonicalServiceAccountSubjectID(subjectIDParam)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return "", false
@@ -929,6 +940,14 @@ func (s *Server) deleteAuthorizationRelationships(ctx context.Context, relations
 
 func managedSubjectResource(subjectID string) *core.ResourceRef {
 	return &core.ResourceRef{Type: authorization.ProviderResourceTypeManagedSubject, Id: strings.TrimSpace(subjectID)}
+}
+
+func decodedURLParam(r *http.Request, name string) (string, error) {
+	value, err := url.PathUnescape(chi.URLParam(r, name))
+	if err != nil {
+		return "", fmt.Errorf("%s path parameter is invalid", name)
+	}
+	return value, nil
 }
 
 func managedSubjectInfoFromCore(subject *core.ManagedSubject) managedSubjectInfo {
