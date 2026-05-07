@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
@@ -30,6 +31,7 @@ type ExecConfig struct {
 	PublicBaseURL    string
 	InvocationTokens *plugininvokerservice.InvocationTokenManager
 	InvocationGrants plugininvokerservice.InvocationGrants
+	WorkflowGrants   workflowgrants.Grants
 	ProviderName     string
 	Telemetry        metricutil.TelemetryProviders
 }
@@ -48,6 +50,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
 		opts = append(opts,
 			WithInvocationTokens(cfg.InvocationTokens),
 			WithInvocationTokenSubject(cfg.StaticSpec.Name, cfg.InvocationGrants),
+			WithWorkflowManagerGrants(cfg.WorkflowGrants),
 		)
 	}
 	prov, err := NewRemote(

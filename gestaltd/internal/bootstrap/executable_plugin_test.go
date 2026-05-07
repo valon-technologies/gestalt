@@ -61,6 +61,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
 	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1709,6 +1710,12 @@ func (m *stubWorkflowManager) ScheduleIdempotencyKeys() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return slices.Clone(m.scheduleKeys)
+}
+
+func (m *stubWorkflowManager) ScheduleCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.schedules)
 }
 
 type stubAgentTurnManagerProvider struct {
@@ -4588,6 +4595,105 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		"user:user-123",
 	}) {
 		t.Fatalf("manager subjects = %v, want all user:user-123", got)
+	}
+}
+
+func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "create_workflow_schedule", Method: http.MethodPost},
+			{ID: "publish_workflow_event", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Workflow manager capabilities")
+	manager := newStubWorkflowManager()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Capabilities: &config.PluginCapabilitiesConfig{
+					Workflow: &config.PluginWorkflowCapabilitiesConfig{
+						Operations: []string{workflowgrants.OperationEventsPublish},
+					},
+				},
+			},
+		},
+	}
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
+		EncryptionKey:   secret,
+		WorkflowManager: manager,
+	}))
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+		Scopes:    []string{"echo"},
+	})
+
+	publishEventResult, err := prov.Execute(ctx, "publish_workflow_event", map[string]any{
+		"provider_name": "advanced",
+		"type":          "roadmap.item.updated",
+		"source":        "roadmap",
+		"subject":       "item-123",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(publish_workflow_event): %v", err)
+	}
+	var publishedEvent struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(publishEventResult.Body), &publishedEvent); err != nil {
+		t.Fatalf("json.Unmarshal(publish event): %v", err)
+	}
+	if publishedEvent.ID == "" {
+		t.Fatalf("publish event result = %+v, want event id", publishedEvent)
+	}
+	if !slices.Equal(manager.publishedProviderNames, []string{"advanced"}) {
+		t.Fatalf("published provider names = %v, want [advanced]", manager.publishedProviderNames)
+	}
+
+	createResult, err := prov.Execute(ctx, "create_workflow_schedule", map[string]any{
+		"provider_name": "basic",
+		"cron":          "*/5 * * * *",
+		"target": map[string]any{
+			"plugin":    "roadmap",
+			"operation": "sync",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+	}
+	var createBody struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(createResult.Body), &createBody); err != nil {
+		t.Fatalf("json.Unmarshal(create): %v", err)
+	}
+	if !strings.Contains(createBody.Error, "PermissionDenied") || !strings.Contains(createBody.Error, workflowgrants.OperationSchedulesCreate) {
+		t.Fatalf("create workflow schedule error = %q, want permission denied for %s", createBody.Error, workflowgrants.OperationSchedulesCreate)
+	}
+	if got := manager.ScheduleCount(); got != 0 {
+		t.Fatalf("schedule count = %d, want 0 denied calls to skip manager", got)
 	}
 }
 

@@ -1078,6 +1078,9 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 					invocationconfig.PluginInvocationDependencies(entry.Invokes),
 				),
 			),
+			pluginservice.WithWorkflowManagerGrants(
+				invocationconfig.PluginWorkflowManagerGrants(entry.Capabilities),
+			),
 		)
 	}
 	prov, err := pluginservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
