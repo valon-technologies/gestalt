@@ -70,6 +70,13 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 	if socket == "" {
 		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
 	}
+	shutdownTelemetry, err := setupProviderTelemetryFromEnv(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = shutdownTelemetry(context.Background())
+	}()
 	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
 	}
