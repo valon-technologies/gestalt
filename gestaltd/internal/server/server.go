@@ -132,6 +132,7 @@ type Server struct {
 	s3                     map[string]s3store.Client
 	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
 	egressProxyTokens      *egressproxy.TokenManager
+	connectionRuntime      invocation.ConnectionRuntimeResolver
 	providerDevSessions    *providerdev.Manager
 	providerDevAttach      bool
 	mountedHTTPBindings    []MountedHTTPBinding
@@ -170,6 +171,7 @@ type Config struct {
 	PluginDefs            map[string]*config.ProviderEntry
 	AgentDefs             map[string]*config.ProviderEntry
 	ProviderUIs           map[string]*config.UIEntry
+	ConnectionRuntime     invocation.ConnectionRuntimeResolver
 	Authorizer            authorization.RuntimeAuthorizer
 	AuthorizationProvider core.AuthorizationProvider
 	PublicBaseURL         string
@@ -382,6 +384,7 @@ func New(cfg Config) (*Server, error) {
 		s3:                     cfg.S3,
 		s3ObjectAccessURLs:     s3ObjectAccessURLs,
 		egressProxyTokens:      egressProxyTokens,
+		connectionRuntime:      cfg.ConnectionRuntime,
 		providerDevSessions:    cfg.ProviderDevSessions,
 		providerDevAttach:      cfg.ProviderDevAttach,
 		mountedHTTPBindings:    mountedHTTPBindings,

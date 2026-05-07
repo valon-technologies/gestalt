@@ -239,6 +239,7 @@ type Result struct {
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
+	ConnectionRuntime     invocation.ConnectionRuntimeResolver
 	Invoker               invocation.Invoker
 	PluginInvoker         invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
@@ -1284,6 +1285,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:                   authz,
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
+		ConnectionRuntime:            connRuntime.Resolve,
 		Invoker:                      sharedInvoker,
 		PluginInvoker:                pluginInvoker,
 		CapabilityLister:             sharedInvoker,

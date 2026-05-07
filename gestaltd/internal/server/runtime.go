@@ -88,6 +88,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		CatalogConnection:     httpCatalogConnectionMap(connMaps),
 		ConnectionAuth:        result.ConnectionAuth,
 		ManualConnectionAuth:  result.ManualConnectionAuth,
+		ConnectionRuntime:     result.ConnectionRuntime,
 		PluginDefs:            cfg.Plugins,
 		AgentDefs:             cfg.Providers.Agent,
 		Authorizer:            result.Authorizer,

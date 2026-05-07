@@ -27,26 +27,32 @@ type TokenManager struct {
 }
 
 type TokenRequest struct {
-	PluginName    string
-	SessionID     string
-	AllowedHosts  []string
-	DefaultAction egress.PolicyAction
-	TTL           time.Duration
+	PluginName       string
+	SessionID        string
+	AllowedHosts     []string
+	DefaultAction    egress.PolicyAction
+	TTL              time.Duration
+	CallerSubjectID  string
+	MayImpersonate   bool
 }
 
 type Target struct {
-	PluginName    string
-	SessionID     string
-	AllowedHosts  []string
-	DefaultAction egress.PolicyAction
+	PluginName       string
+	SessionID        string
+	AllowedHosts     []string
+	DefaultAction    egress.PolicyAction
+	CallerSubjectID  string
+	MayImpersonate   bool
 }
 
 type tokenClaims struct {
 	jwt.RegisteredClaims
-	PluginName    string              `json:"plugin,omitempty"`
-	SessionID     string              `json:"session_id,omitempty"`
-	AllowedHosts  []string            `json:"allowed_hosts,omitempty"`
-	DefaultAction egress.PolicyAction `json:"default_action,omitempty"`
+	PluginName       string              `json:"plugin,omitempty"`
+	SessionID        string              `json:"session_id,omitempty"`
+	AllowedHosts     []string            `json:"allowed_hosts,omitempty"`
+	DefaultAction    egress.PolicyAction `json:"default_action,omitempty"`
+	CallerSubjectID  string              `json:"caller_subject_id,omitempty"`
+	MayImpersonate   bool                `json:"may_impersonate,omitempty"`
 }
 
 func NewTokenManager(secret []byte) (*TokenManager, error) {
@@ -73,6 +79,9 @@ func (m *TokenManager) MintToken(req TokenRequest) (string, error) {
 	expiresAt := now.Add(m.tokenTTL(req.TTL))
 	subject := strings.TrimSpace(req.PluginName)
 	if subject == "" {
+		subject = strings.TrimSpace(req.CallerSubjectID)
+	}
+	if subject == "" {
 		subject = "egress-proxy"
 	}
 
@@ -86,10 +95,12 @@ func (m *TokenManager) MintToken(req TokenRequest) (string, error) {
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
-		PluginName:    strings.TrimSpace(req.PluginName),
-		SessionID:     strings.TrimSpace(req.SessionID),
-		AllowedHosts:  normalizeAllowedHosts(req.AllowedHosts),
-		DefaultAction: normalizeDefaultAction(req.DefaultAction),
+		PluginName:      strings.TrimSpace(req.PluginName),
+		SessionID:       strings.TrimSpace(req.SessionID),
+		AllowedHosts:    normalizeAllowedHosts(req.AllowedHosts),
+		DefaultAction:   normalizeDefaultAction(req.DefaultAction),
+		CallerSubjectID: strings.TrimSpace(req.CallerSubjectID),
+		MayImpersonate:  req.MayImpersonate,
 	})
 }
 
@@ -102,10 +113,12 @@ func (m *TokenManager) ResolveToken(token string) (Target, error) {
 		return Target{}, err
 	}
 	return Target{
-		PluginName:    strings.TrimSpace(claims.PluginName),
-		SessionID:     strings.TrimSpace(claims.SessionID),
-		AllowedHosts:  normalizeAllowedHosts(claims.AllowedHosts),
-		DefaultAction: normalizeDefaultAction(claims.DefaultAction),
+		PluginName:      strings.TrimSpace(claims.PluginName),
+		SessionID:       strings.TrimSpace(claims.SessionID),
+		AllowedHosts:    normalizeAllowedHosts(claims.AllowedHosts),
+		DefaultAction:   normalizeDefaultAction(claims.DefaultAction),
+		CallerSubjectID: strings.TrimSpace(claims.CallerSubjectID),
+		MayImpersonate:  claims.MayImpersonate,
 	}, nil
 }
 
