@@ -114,6 +114,8 @@ export {
   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
   WorkflowManager,
   type ManagedWorkflowEventTriggerMessage,
+  type ManagedWorkflowRunMessage,
+  type ManagedWorkflowRunSignalMessage,
   type ManagedWorkflowScheduleMessage,
   type WorkflowEventMessage,
   type WorkflowManagerCreateTriggerInput,
@@ -127,6 +129,9 @@ export {
   type WorkflowManagerPublishEventInput,
   type WorkflowManagerResumeTriggerInput,
   type WorkflowManagerResumeScheduleInput,
+  type WorkflowManagerSignalOrStartRunInput,
+  type WorkflowManagerSignalRunInput,
+  type WorkflowManagerStartRunInput,
   type WorkflowManagerUpdateTriggerInput,
   type WorkflowManagerUpdateScheduleInput,
 } from "./workflow-manager.ts";
