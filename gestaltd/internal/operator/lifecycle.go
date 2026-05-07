@@ -2611,7 +2611,7 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			return
 		}
-		lockEntry.StaticManifest = entry.ResolvedManifest
+		lockEntry.StaticManifest = portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath)
 		entries[name] = lockEntry
 	}
 	for name, entry := range cfg.Plugins {
@@ -2660,6 +2660,79 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		}
 	}
 	return nil
+}
+
+func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {
+	if manifest == nil || manifest.Spec == nil || manifest.Spec.Surfaces == nil || strings.TrimSpace(manifestPath) == "" {
+		return manifest
+	}
+	manifestDir := filepath.Dir(manifestPath)
+	relativize := func(raw string) string {
+		if raw == "" {
+			return raw
+		}
+		if strings.HasPrefix(raw, "file://") {
+			path := strings.TrimPrefix(raw, "file://")
+			if rel, ok := relativePathWithin(manifestDir, path); ok {
+				return "file://" + rel
+			}
+			return raw
+		}
+		if strings.Contains(raw, "://") {
+			return raw
+		}
+		if rel, ok := relativePathWithin(manifestDir, raw); ok {
+			return rel
+		}
+		return raw
+	}
+
+	surfaces := *manifest.Spec.Surfaces
+	changed := false
+	if surfaces.OpenAPI != nil {
+		openapi := *surfaces.OpenAPI
+		if next := relativize(openapi.Document); next != openapi.Document {
+			openapi.Document = next
+			surfaces.OpenAPI = &openapi
+			changed = true
+		}
+	}
+	if surfaces.GraphQL != nil {
+		graphql := *surfaces.GraphQL
+		if next := relativize(graphql.URL); next != graphql.URL {
+			graphql.URL = next
+			surfaces.GraphQL = &graphql
+			changed = true
+		}
+	}
+	if surfaces.MCP != nil {
+		mcp := *surfaces.MCP
+		if next := relativize(mcp.URL); next != mcp.URL {
+			mcp.URL = next
+			surfaces.MCP = &mcp
+			changed = true
+		}
+	}
+	if !changed {
+		return manifest
+	}
+
+	spec := *manifest.Spec
+	spec.Surfaces = &surfaces
+	cloned := *manifest
+	cloned.Spec = &spec
+	return &cloned
+}
+
+func relativePathWithin(baseDir, path string) (string, bool) {
+	if !filepath.IsAbs(path) {
+		return filepath.ToSlash(filepath.Clean(path)), false
+	}
+	rel, err := filepath.Rel(baseDir, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
 }
 
 func staticCatalogOperationIDs(cat *catalog.Catalog) []string {

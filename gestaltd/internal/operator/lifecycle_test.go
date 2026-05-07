@@ -3001,6 +3001,46 @@ func createLocalPythonSDKVenv(t *testing.T, pythonPath, venvPath, sdkPath string
 	}
 }
 
+func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	outsidePath := filepath.Join(t.TempDir(), "mcp.json")
+	manifest := &providermanifestv1.Manifest{
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				OpenAPI: &providermanifestv1.OpenAPISurface{
+					Document: filepath.Join(dir, "openapi.yaml"),
+				},
+				GraphQL: &providermanifestv1.GraphQLSurface{
+					URL: "file://" + filepath.Join(dir, "schema.graphql"),
+				},
+				MCP: &providermanifestv1.MCPSurface{
+					URL: outsidePath,
+				},
+			},
+		},
+	}
+
+	got := portableStaticValidationManifest(manifest, manifestPath)
+	if got == manifest {
+		t.Fatal("portableStaticValidationManifest returned original manifest after changing local references")
+	}
+	if got.Spec.Surfaces.OpenAPI.Document != "openapi.yaml" {
+		t.Fatalf("OpenAPI document = %q, want openapi.yaml", got.Spec.Surfaces.OpenAPI.Document)
+	}
+	if got.Spec.Surfaces.GraphQL.URL != "file://schema.graphql" {
+		t.Fatalf("GraphQL URL = %q, want file://schema.graphql", got.Spec.Surfaces.GraphQL.URL)
+	}
+	if got.Spec.Surfaces.MCP.URL != outsidePath {
+		t.Fatalf("MCP URL = %q, want outside path unchanged", got.Spec.Surfaces.MCP.URL)
+	}
+	if manifest.Spec.Surfaces.OpenAPI.Document == "openapi.yaml" {
+		t.Fatal("portableStaticValidationManifest mutated original manifest")
+	}
+}
+
 func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	t.Parallel()
 
