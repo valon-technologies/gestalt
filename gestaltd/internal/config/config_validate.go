@@ -21,6 +21,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"github.com/valon-technologies/gestalt/server/services/s3"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
 // ValidateStructure checks config shape: integration references, plugin
@@ -834,6 +835,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 		}
 		seenInvokes[key] = i
 	}
+	if err := validatePluginCapabilities("plugins."+name+".capabilities", entry.Capabilities); err != nil {
+		return err
+	}
 	if entry.UI != "" && entry.MountPath == "" {
 		return fmt.Errorf("config validation: plugins.%s.ui.bundle requires plugins.%s.ui.path", name, name)
 	}
@@ -859,6 +863,32 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 		return err
 	}
 	return validatePluginIntegrationConnections(name, entry)
+}
+
+func validatePluginCapabilities(path string, capabilities *PluginCapabilitiesConfig) error {
+	if capabilities == nil || capabilities.Workflow == nil {
+		return nil
+	}
+	operations := capabilities.Workflow.Operations
+	if len(operations) == 0 {
+		return fmt.Errorf("config validation: %s.workflow.operations is required when workflow capabilities are set", path)
+	}
+	seen := make(map[string]int, len(operations))
+	for i := range operations {
+		operation := strings.TrimSpace(operations[i])
+		operations[i] = operation
+		switch {
+		case operation == "":
+			return fmt.Errorf("config validation: %s.workflow.operations[%d] is required", path, i)
+		case !workflowgrants.IsSupportedOperation(operation):
+			return fmt.Errorf("config validation: %s.workflow.operations[%d] %q is not supported; supported operations: %s", path, i, operation, strings.Join(workflowgrants.SupportedOperations(), ", "))
+		}
+		if prev, ok := seen[operation]; ok {
+			return fmt.Errorf("config validation: %s.workflow.operations[%d] duplicates operations[%d]", path, i, prev)
+		}
+		seen[operation] = i
+	}
+	return nil
 }
 
 func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) error {
@@ -1068,6 +1098,9 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Capabilities != nil {
+		return fmt.Errorf("config validation: %s.capabilities is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -1301,6 +1334,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
+	if entry.Capabilities != nil {
+		return fmt.Errorf("config validation: %s.capabilities is only supported on plugins.*", subject)
+	}
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)
 	}
@@ -1365,6 +1401,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Capabilities != nil {
+		return fmt.Errorf("config validation: %s.capabilities is only supported on plugins.*", subject)
 	}
 	if entry.Lifecycle != nil {
 		return fmt.Errorf("config validation: %s.lifecycle is only supported on providers.agent.*", subject)

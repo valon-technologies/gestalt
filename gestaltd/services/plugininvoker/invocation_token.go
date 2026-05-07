@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
 const (
@@ -43,6 +44,7 @@ type invocationTokenClaims struct {
 	CredentialSubjectID string                           `json:"credential_subject_id,omitempty"`
 	TokenPermissions    map[string][]string              `json:"token_permissions,omitempty"`
 	Grants              map[string]invocationGrantClaims `json:"grants,omitempty"`
+	WorkflowGrants      *workflowGrantClaims             `json:"workflow_grants,omitempty"`
 	RequestMeta         requestMetaClaims                `json:"request_meta,omitempty"`
 	Credential          credentialClaims                 `json:"credential,omitempty"`
 	Invocation          invocationClaims                 `json:"invocation,omitempty"`
@@ -70,6 +72,10 @@ type invocationClaims struct {
 	InternalConnectionAccess bool     `json:"internal_connection_access,omitempty"`
 }
 
+type workflowGrantClaims struct {
+	Operations []string `json:"operations,omitempty"`
+}
+
 type invocationTokenContext struct {
 	principal              *principal.Principal
 	requestMeta            invocation.RequestMeta
@@ -80,6 +86,7 @@ type invocationTokenContext struct {
 	internalConnection     bool
 	connection             string
 	grants                 InvocationGrants
+	workflowGrants         workflowgrants.Grants
 }
 
 func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
@@ -99,12 +106,16 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 }
 
 func (m *InvocationTokenManager) MintRootToken(ctx context.Context, pluginName string, grants InvocationGrants) (string, error) {
+	return m.MintRootTokenWithWorkflowGrants(ctx, pluginName, grants, nil)
+}
+
+func (m *InvocationTokenManager) MintRootTokenWithWorkflowGrants(ctx context.Context, pluginName string, grants InvocationGrants, workflowGrants workflowgrants.Grants) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
 	now := m.now()
 	expiresAt := now.Add(m.rootTTL)
-	return m.signClaims(claimsFromContext(ctx, pluginName, grants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
+	return m.signClaims(claimsFromContext(ctx, pluginName, grants, workflowGrants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
 }
 
 func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, grants InvocationGrants, ttl time.Duration) (string, error) {
@@ -175,6 +186,7 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 		internalConnection: claims.Invocation.InternalConnectionAccess,
 		connection:         strings.TrimSpace(claims.Connection),
 		grants:             decodeInvocationGrantClaims(claims.Grants),
+		workflowGrants:     decodeWorkflowGrantClaims(claims.WorkflowGrants),
 	}, nil
 }
 
@@ -195,6 +207,10 @@ func (m *InvocationTokenManager) ResolveToken(token, pluginName string) (TokenCo
 
 func (c TokenContext) Principal() *principal.Principal {
 	return principal.Canonicalized(c.inner.principal)
+}
+
+func (c TokenContext) AllowsWorkflowManagerOperation(operation string) bool {
+	return c.inner.workflowGrants.Allows(operation)
 }
 
 func (m *InvocationTokenManager) parseClaims(token string) (*invocationTokenClaims, error) {
@@ -259,7 +275,7 @@ func (m *InvocationTokenManager) delegationExpiresAt(claims *invocationTokenClai
 	return expiresAt, nil
 }
 
-func claimsFromContext(ctx context.Context, pluginName string, grants InvocationGrants, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
+func claimsFromContext(ctx context.Context, pluginName string, grants InvocationGrants, workflowGrants workflowgrants.Grants, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
 	p := principal.FromContext(ctx)
 	meta := invocation.MetaFromContext(ctx)
 	if meta == nil {
@@ -286,6 +302,7 @@ func claimsFromContext(ctx context.Context, pluginName string, grants Invocation
 		CredentialSubjectID: credentialSubjectIDForInvocationClaims(p),
 		TokenPermissions:    encodePermissionSet(tokenPermissionsForInvocationClaims(p)),
 		Grants:              encodeInvocationGrantClaims(grants),
+		WorkflowGrants:      encodeWorkflowGrantClaims(workflowGrants),
 		RequestMeta: requestMetaClaims{
 			ClientIP:   reqMeta.ClientIP,
 			RemoteAddr: reqMeta.RemoteAddr,
@@ -306,6 +323,24 @@ func claimsFromContext(ctx context.Context, pluginName string, grants Invocation
 		},
 		Connection: invocation.ConnectionFromContext(ctx),
 	}
+}
+
+func encodeWorkflowGrantClaims(src workflowgrants.Grants) *workflowGrantClaims {
+	if src == nil {
+		return nil
+	}
+	return &workflowGrantClaims{Operations: workflowgrants.EncodeClaims(src)}
+}
+
+func decodeWorkflowGrantClaims(src *workflowGrantClaims) workflowgrants.Grants {
+	if src == nil {
+		return nil
+	}
+	grants := workflowgrants.DecodeClaims(src.Operations)
+	if grants == nil {
+		return workflowgrants.Grants{}
+	}
+	return grants
 }
 
 func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationTokenContext, connectionOverride string) context.Context {

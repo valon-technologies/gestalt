@@ -784,6 +784,89 @@ func TestPrepareAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 	}
 }
 
+func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "missing operations",
+			body: `plugins:
+    caller:
+      source:
+        path: ./caller/manifest.yaml
+      capabilities:
+        workflow: {}
+`,
+			want: `plugins.caller.capabilities.workflow.operations is required`,
+		},
+		{
+			name: "unsupported operation",
+			body: `plugins:
+    caller:
+      source:
+        path: ./caller/manifest.yaml
+      capabilities:
+        workflow:
+          operations:
+            - workflow.create
+`,
+			want: `plugins.caller.capabilities.workflow.operations[0] "workflow.create" is not supported`,
+		},
+		{
+			name: "duplicate operation",
+			body: `plugins:
+    caller:
+      source:
+        path: ./caller/manifest.yaml
+      capabilities:
+        workflow:
+          operations:
+            - events.publish
+            - events.publish
+`,
+			want: `plugins.caller.capabilities.workflow.operations[1] duplicates operations[0]`,
+		},
+		{
+			name: "non plugin provider",
+			body: `  cache:
+    shared:
+      source:
+        path: ./cache-manifest.yaml
+      capabilities:
+        workflow:
+          operations:
+            - events.publish
+`,
+			want: `providers.cache.shared.capabilities is only supported on plugins.*`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			caseDir := t.TempDir()
+			cfgPath := filepath.Join(caseDir, "config.yaml")
+			cfg := requiredComponentConfigWithAPIVersionYAML(t, caseDir, filepath.Join(caseDir, "gestalt.db")) + tc.body + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			_, err := NewLifecycle().PrepareAtPath(cfgPath)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestPrepareAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
 	t.Parallel()
 

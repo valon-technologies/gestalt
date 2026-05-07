@@ -433,6 +433,28 @@ workflow events, start runs, signal runs, and create schedules or triggers from
 the current provider request. The SDK attaches the request invocation token to
 each manager call, so the host keeps the same subject and permission ceiling.
 
+Deployments can make this host-service access explicit with plugin workflow
+capabilities. When `capabilities.workflow` is omitted, plugins keep the legacy
+behavior and workflow-manager calls are allowed subject to the current principal
+and target authorization. When it is present, `operations` is an allowlist for
+the workflow-manager methods that plugin code may call:
+
+```yaml
+plugins:
+  slack:
+    capabilities:
+      workflow:
+        operations:
+          - runs.signalOrStart
+          - schedules.create
+          - eventTriggers.create
+          - events.publish
+```
+
+Workflow capabilities gate the manager method only. The workflow target still
+has to pass the same provider, operation, credential-mode, catalog, and runtime
+authorization checks as any other delayed workflow invocation.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go

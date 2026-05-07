@@ -412,6 +412,7 @@ type ProviderEntry struct {
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
+	Capabilities      *PluginCapabilitiesConfig     `yaml:"capabilities,omitempty"`
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
@@ -2034,6 +2035,14 @@ type PluginInvocationDependency struct {
 	Surface        string                            `yaml:"surface,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
 	RunAs          *PluginInvocationRunAsConfig      `yaml:"runAs,omitempty"`
+}
+
+type PluginCapabilitiesConfig struct {
+	Workflow *PluginWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
+}
+
+type PluginWorkflowCapabilitiesConfig struct {
+	Operations []string `yaml:"operations,omitempty"`
 }
 
 type PluginInvocationRunAsConfig struct {

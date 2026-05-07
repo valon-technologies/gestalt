@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -34,23 +35,24 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client        proto.IntegrationProviderClient
-	support       integrationProviderSupport
-	name          string
-	displayName   string
-	description   string
-	connection    core.ConnectionMode
-	catalog       *catalog.Catalog
-	iconSVG       string
-	authTypes     []string
-	connParams    map[string]core.ConnectionParamDef
-	credFields    []core.CredentialFieldDef
-	discovery     *core.DiscoveryConfig
-	closer        io.Closer
-	publicBaseURL string
-	invTokens     *plugininvokerservice.InvocationTokenManager
-	callerPlugin  string
-	invokeGrants  plugininvokerservice.InvocationGrants
+	client         proto.IntegrationProviderClient
+	support        integrationProviderSupport
+	name           string
+	displayName    string
+	description    string
+	connection     core.ConnectionMode
+	catalog        *catalog.Catalog
+	iconSVG        string
+	authTypes      []string
+	connParams     map[string]core.ConnectionParamDef
+	credFields     []core.CredentialFieldDef
+	discovery      *core.DiscoveryConfig
+	closer         io.Closer
+	publicBaseURL  string
+	invTokens      *plugininvokerservice.InvocationTokenManager
+	callerPlugin   string
+	invokeGrants   plugininvokerservice.InvocationGrants
+	workflowGrants workflowgrants.Grants
 }
 
 var (
@@ -84,6 +86,12 @@ func WithInvocationTokenSubject(pluginName string, grants plugininvokerservice.I
 	return func(b *remoteProviderBase) {
 		b.callerPlugin = strings.TrimSpace(pluginName)
 		b.invokeGrants = plugininvokerservice.CloneInvocationGrants(grants)
+	}
+}
+
+func WithWorkflowManagerGrants(grants workflowgrants.Grants) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		b.workflowGrants = workflowgrants.Clone(grants)
 	}
 }
 
@@ -173,7 +181,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	}
 	requestToken := ""
 	if p != nil && p.invTokens != nil && p.callerPlugin != "" {
-		requestToken, err = p.invTokens.MintRootToken(ctx, p.callerPlugin, p.invokeGrants)
+		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(ctx, p.callerPlugin, p.invokeGrants, p.workflowGrants)
 		if err != nil {
 			return nil, err
 		}

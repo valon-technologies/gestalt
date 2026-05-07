@@ -4,6 +4,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
 func PluginInvocationDependencies(deps []config.PluginInvocationDependency) []invocation.PluginInvocationDependency {
@@ -22,4 +23,11 @@ func PluginInvocationDependencies(deps []config.PluginInvocationDependency) []in
 		})
 	}
 	return out
+}
+
+func PluginWorkflowManagerGrants(capabilities *config.PluginCapabilitiesConfig) workflowgrants.Grants {
+	if capabilities == nil || capabilities.Workflow == nil {
+		return nil
+	}
+	return workflowgrants.DecodeClaims(capabilities.Workflow.Operations)
 }

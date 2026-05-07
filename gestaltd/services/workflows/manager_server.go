@@ -10,6 +10,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -47,6 +48,9 @@ func (s *ManagerServer) CreateSchedule(ctx context.Context, req *proto.WorkflowM
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesCreate); err != nil {
+		return nil, err
+	}
 	upsert, err := workflowManagerScheduleUpsert(
 		req.GetProviderName(),
 		req.GetCron(),
@@ -78,6 +82,9 @@ func (s *ManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManager
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsStart); err != nil {
+		return nil, err
+	}
 	target, err := workflowManagerTarget(req.GetTarget())
 	if err != nil {
 		return nil, err
@@ -107,6 +114,9 @@ func (s *ManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManage
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsSignal); err != nil {
+		return nil, err
+	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
@@ -131,6 +141,9 @@ func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.Workflo
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsSignalOrStart); err != nil {
 		return nil, err
 	}
 	target, err := workflowManagerTarget(req.GetTarget())
@@ -163,6 +176,9 @@ func (s *ManagerServer) GetSchedule(ctx context.Context, req *proto.WorkflowMana
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesGet); err != nil {
+		return nil, err
+	}
 	scheduleID := strings.TrimSpace(req.GetScheduleId())
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
@@ -184,6 +200,9 @@ func (s *ManagerServer) UpdateSchedule(ctx context.Context, req *proto.WorkflowM
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesUpdate); err != nil {
 		return nil, err
 	}
 	scheduleID := strings.TrimSpace(req.GetScheduleId())
@@ -220,6 +239,9 @@ func (s *ManagerServer) DeleteSchedule(ctx context.Context, req *proto.WorkflowM
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesDelete); err != nil {
+		return nil, err
+	}
 	scheduleID := strings.TrimSpace(req.GetScheduleId())
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
@@ -236,6 +258,9 @@ func (s *ManagerServer) PauseSchedule(ctx context.Context, req *proto.WorkflowMa
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesPause); err != nil {
 		return nil, err
 	}
 	scheduleID := strings.TrimSpace(req.GetScheduleId())
@@ -261,6 +286,9 @@ func (s *ManagerServer) ResumeSchedule(ctx context.Context, req *proto.WorkflowM
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesResume); err != nil {
+		return nil, err
+	}
 	scheduleID := strings.TrimSpace(req.GetScheduleId())
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
@@ -282,6 +310,9 @@ func (s *ManagerServer) CreateEventTrigger(ctx context.Context, req *proto.Workf
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersCreate); err != nil {
 		return nil, err
 	}
 	upsert, err := workflowManagerEventTriggerUpsert(
@@ -314,6 +345,9 @@ func (s *ManagerServer) GetEventTrigger(ctx context.Context, req *proto.Workflow
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersGet); err != nil {
+		return nil, err
+	}
 	triggerID := strings.TrimSpace(req.GetTriggerId())
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
@@ -335,6 +369,9 @@ func (s *ManagerServer) UpdateEventTrigger(ctx context.Context, req *proto.Workf
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersUpdate); err != nil {
 		return nil, err
 	}
 	triggerID := strings.TrimSpace(req.GetTriggerId())
@@ -370,6 +407,9 @@ func (s *ManagerServer) DeleteEventTrigger(ctx context.Context, req *proto.Workf
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersDelete); err != nil {
+		return nil, err
+	}
 	triggerID := strings.TrimSpace(req.GetTriggerId())
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
@@ -386,6 +426,9 @@ func (s *ManagerServer) PauseEventTrigger(ctx context.Context, req *proto.Workfl
 	}
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
+		return nil, err
+	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersPause); err != nil {
 		return nil, err
 	}
 	triggerID := strings.TrimSpace(req.GetTriggerId())
@@ -411,6 +454,9 @@ func (s *ManagerServer) ResumeEventTrigger(ctx context.Context, req *proto.Workf
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersResume); err != nil {
+		return nil, err
+	}
 	triggerID := strings.TrimSpace(req.GetTriggerId())
 	if triggerID == "" {
 		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
@@ -434,6 +480,9 @@ func (s *ManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowMan
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventsPublish); err != nil {
+		return nil, err
+	}
 	event, err := workflowEventFromProto(req.GetEvent())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
@@ -455,6 +504,13 @@ func (s *ManagerServer) tokenContext(token string) (plugininvokerservice.TokenCo
 		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return tokenCtx, nil
+}
+
+func (s *ManagerServer) requireWorkflowGrant(tokenCtx plugininvokerservice.TokenContext, operation string) error {
+	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
+		return nil
+	}
+	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for plugin %q", operation, strings.TrimSpace(s.pluginName))
 }
 
 func workflowManagerScheduleUpsert(
