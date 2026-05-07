@@ -1,0 +1,182 @@
+import { Callout } from 'nextra/components'
+
+# Render.com
+
+Gestalt runs on Render as a Docker web service. Render terminates TLS at the
+edge, so set `server.baseUrl` to the final public `https://` origin that users
+and OAuth providers will see.
+
+Render web services must bind their public HTTP listener on `0.0.0.0`. Gestalt
+does that by default and listens on `8080`, while Render's default expected port
+is `10000`. Set `PORT=8080` on the Render service and keep
+`server.public.port` at `8080` in the Gestalt config.
+
+## Dashboard quick start
+
+Use this path when you want to deploy the published `gestaltd` image directly.
+It stores generated lock state and prepared provider artifacts on `/data`.
+
+1. In Render, create a **Web Service** and choose **Existing Image**.
+2. Use the image `docker.io/valontechnologies/gestaltd:latest`. Pin an
+   explicit version tag for production deployments.
+3. Add a persistent disk mounted at `/data` if you use SQLite or want lock and
+   artifact state to survive redeploys.
+4. Set the health check path to `/ready`.
+5. Add these environment variables:
+
+```text
+PORT=8080
+GESTALT_BASE_URL=https://<your-service>.onrender.com
+GESTALT_ENCRYPTION_KEY=<64-character hex key from openssl rand -hex 32>
+```
+
+If you later add a custom domain, update `GESTALT_BASE_URL` and any OAuth
+redirect URLs to match that domain.
+
+Add a Render secret file named `config.yaml`:
+
+```yaml
+apiVersion: gestaltd.config/v3
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+
+plugins: {}
+```
+
+Set the Docker Command to:
+
+```sh
+serve --config /etc/secrets/config.yaml --artifacts-dir /data --lockfile /data/gestalt.lock.json
+```
+
+The published image already sets the `gestaltd` entrypoint, so the Docker
+Command should contain only the arguments above.
+
+Services deployed from prebuilt images do not auto-deploy when a repository
+changes. Redeploy manually after pushing a new image, or use the Git-backed
+Dockerfile pattern below.
+
+<Callout type="warning">
+  This quick start lets `serve` initialize missing or stale provider artifacts at
+  startup. For deterministic production deployments, prepare deployment state in
+  CI and serve with `--locked`.
+</Callout>
+
+After the first deploy has written `/data/gestalt.lock.json`, you can require
+the existing lock state by changing the Docker Command to:
+
+```sh
+serve --locked --config /etc/secrets/config.yaml --artifacts-dir /data --lockfile /data/gestalt.lock.json
+```
+
+Run without `--locked` again when you intentionally change provider sources and
+need Render to refresh the prepared state.
+
+## Production image pattern
+
+For production, prepare the Gestalt deployment state before Render starts the
+container. Commit or build the generated `deploy/` directory, including
+`gestalt.lock.json` and `.gestaltd/`, before building the image.
+
+```sh
+gestaltd init \
+  --config deploy/config.yaml \
+  --artifacts-dir deploy \
+  --platform linux/amd64
+```
+
+Then use a derived Docker image:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+COPY --chown=nobody:nobody deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml", "--artifacts-dir", "/app", "--lockfile", "/app/gestalt.lock.json"]
+```
+
+The corresponding `render.yaml` can build that Dockerfile:
+
+```yaml
+services:
+  - type: web
+    name: gestalt
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /ready
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: GESTALT_BASE_URL
+        value: https://gestalt.onrender.com
+      - key: GESTALT_ENCRYPTION_KEY
+        sync: false
+    disk:
+      name: gestalt-data
+      mountPath: /data
+      sizeGB: 10
+```
+
+Keep the disk only if your Gestalt config stores SQLite data under `/data`.
+If you use Render Postgres or another networked datastore, set the indexeddb DSN
+from an environment variable such as `${DATABASE_URL}` and omit the disk.
+
+For a Render-managed Postgres database, wire the connection string into the web
+service and use it in the config:
+
+```yaml
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+```yaml
+databases:
+  - name: gestalt-db
+
+services:
+  - type: web
+    name: gestalt
+    runtime: docker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestalt-db
+          property: connectionString
+```
+
+## Operational notes
+
+- Render secret files are mounted at `/etc/secrets/<filename>` for Docker
+  services. Do not point lockfiles or generated artifacts at `/etc/secrets`.
+- The direct-image quick start uses the static `gestaltd:latest` image because
+  it runs as root and can read Render runtime secret files. The `latest-alpine`
+  image runs as `nobody`; if you use it with runtime secret files, build a
+  derived image that adds the runtime user to group `1000`.
+- Persistent disks are single-instance state. A service with an attached disk
+  cannot scale horizontally, and attaching a disk disables Render's zero-downtime
+  deploys.
+- Render exposes Docker service environment variables as build arguments during
+  image builds. Do not reference secret environment variables with `ARG` in your
+  Dockerfile.
+- Use `/health` for a basic process liveness check and `/ready` when Render
+  should wait for providers and the datastore before routing traffic.
+- Use a custom Dockerfile based on `gestaltd:latest-alpine` when you need a
+  shell for service-shell debugging.
+
+See [Docker](/deploy/docker) for the image contract and
+[Configuration](/configuration) for the full config model.
