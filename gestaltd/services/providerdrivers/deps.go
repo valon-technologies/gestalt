@@ -12,6 +12,7 @@ type AuthenticationDeps struct {
 
 type WorkflowDeps struct {
 	EgressDefaultAction egress.PolicyAction
+	Telemetry           runtimehost.TelemetryProviders
 }
 
 type AgentDeps struct {

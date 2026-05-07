@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -220,6 +221,9 @@ func TestProviderProcessEnvAddsTelemetryDefaultsWithoutOverridingProviderEnv(t *
 	}
 	if got := env["OTEL_SERVICE_NAME"]; got != "custom-provider-service" {
 		t.Fatalf("OTEL_SERVICE_NAME = %q, want provider env override", got)
+	}
+	if got := env[proto.EnvProviderTelemetry]; got != "otel" {
+		t.Fatalf("%s = %q, want otel", proto.EnvProviderTelemetry, got)
 	}
 	if got := env["CUSTOM"]; got != "host" {
 		t.Fatalf("CUSTOM = %q, want reserved exec env override", got)

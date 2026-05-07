@@ -28,6 +28,9 @@ const (
 	// providers.
 	EnvProviderName = "GESTALT_PLUGIN_NAME"
 
+	// EnvProviderTelemetry enables SDK-owned provider telemetry initialization.
+	EnvProviderTelemetry = "GESTALT_PROVIDER_TELEMETRY"
+
 	// CurrentProtocolVersion is the provider protocol version spoken by this
 	// build of the host and SDK. Providers must echo this version in their
 	// StartProviderResponse.

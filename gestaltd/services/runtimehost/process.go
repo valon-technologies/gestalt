@@ -500,7 +500,16 @@ func providerTelemetryEnv(telemetry metricutil.TelemetryProviders, providerName 
 	if !ok {
 		return nil
 	}
-	return provider.ProviderTelemetryEnv(providerName)
+	env := provider.ProviderTelemetryEnv(providerName)
+	if len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(env)+1)
+	for key, value := range env {
+		out[key] = value
+	}
+	out[proto.EnvProviderTelemetry] = "otel"
+	return out
 }
 
 func envSlice(values map[string]string) []string {

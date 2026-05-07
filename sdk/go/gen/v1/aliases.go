@@ -21,6 +21,7 @@ const (
 	CursorDirection_CURSOR_PREV                                   = internal.CursorDirection_CURSOR_PREV
 	CursorDirection_CURSOR_PREV_UNIQUE                            = internal.CursorDirection_CURSOR_PREV_UNIQUE
 	EnvProviderSocket                                             = internal.EnvProviderSocket
+	EnvProviderTelemetry                                          = internal.EnvProviderTelemetry
 	ProviderKind_PROVIDER_KIND_AUTHORIZATION                      = internal.ProviderKind_PROVIDER_KIND_AUTHORIZATION
 	ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL                = internal.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL
 	TransactionMode_TRANSACTION_READONLY                          = internal.TransactionMode_TRANSACTION_READONLY

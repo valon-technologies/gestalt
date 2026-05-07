@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -27,7 +29,24 @@ func NewHostServer(providerName string, invoke InvokeFunc) *HostServer {
 	}
 }
 
-func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkflowOperationRequest) (out *proto.InvokeWorkflowOperationResponse, err error) {
+	startedAt := time.Now()
+	providerName := ""
+	if s != nil {
+		providerName = s.providerName
+	}
+	dims := observability.WorkflowMetricDims{
+		ProviderName:    providerName,
+		OperationName:   observability.WorkflowOperationInvokeOperation,
+		TriggerKind:     workflowProtoTriggerKind(req),
+		TargetKind:      workflowProtoTargetKind(req.GetTarget()),
+		TelemetrySource: observability.WorkflowTelemetrySourceCore,
+	}
+	ctx, span := observability.StartSpan(ctx, "workflow.host.operation", observability.WorkflowMetricAttributes(dims)...)
+	defer func() {
+		observability.EndSpan(span, err)
+		observability.RecordWorkflowHostOperation(ctx, startedAt, err, dims)
+	}()
 	if s == nil || s.invoke == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow host invoker is not configured")
 	}
@@ -59,6 +78,34 @@ func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkf
 		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow invoke operation: %v", err)
 	}
 	return workflowInvokeResponseToProto(resp), nil
+}
+
+func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
+	if target.GetPlugin() != nil {
+		return observability.WorkflowTargetKindPlugin
+	}
+	if target.GetAgent() != nil {
+		return observability.WorkflowTargetKindAgent
+	}
+	return observability.WorkflowTargetKindUnknown
+}
+
+func workflowProtoTriggerKind(req *proto.InvokeWorkflowOperationRequest) string {
+	if req == nil {
+		return observability.WorkflowTriggerKindNone
+	}
+	switch {
+	case req.GetTrigger().GetManual() != nil:
+		return observability.WorkflowTriggerKindManual
+	case req.GetTrigger().GetSchedule() != nil:
+		return observability.WorkflowTriggerKindSchedule
+	case req.GetTrigger().GetEvent() != nil:
+		return observability.WorkflowTriggerKindEvent
+	case len(req.GetSignals()) > 0:
+		return observability.WorkflowTriggerKindSignal
+	default:
+		return observability.WorkflowTriggerKindNone
+	}
 }
 
 func workflowInvokeErrorCode(err error) codes.Code {

@@ -38,5 +38,6 @@ func WorkflowFactory(ctx context.Context, name string, node yaml.Node, hostServi
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
+		Telemetry:    deps.Telemetry,
 	})
 }

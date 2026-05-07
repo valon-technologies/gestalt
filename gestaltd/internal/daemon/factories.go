@@ -137,6 +137,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Workflow = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
 		return providerdrivers.WorkflowFactory(ctx, name, node, hostServices, providerdrivers.WorkflowDeps{
 			EgressDefaultAction: deps.Egress.DefaultAction,
+			Telemetry:           deps.Telemetry,
 		})
 	}
 	factories.Agent = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
