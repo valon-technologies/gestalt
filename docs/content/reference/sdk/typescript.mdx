@@ -95,15 +95,15 @@ surface.
 | `definePlugin` | Integration operations and session catalogs. |
 | `defineAuthenticationProvider` | Login flows and optional bearer-token validation. |
 | `defineCacheProvider` | Plugin-bound cache storage. |
-| `defineIndexedDBProvider` | IndexedDB-style system state. |
 | `defineS3Provider` | S3-compatible object storage. |
 | `defineSecretsProvider` | Secret resolution. |
 | `defineWorkflowProvider` | Workflow runs, schedules, and event triggers. |
 | `defineAgentProvider` | Agent sessions, turns, events, interactions, and capabilities. |
 | `definePluginRuntimeProvider` | Hosted plugin execution backends. |
 
-The TypeScript SDK does not currently expose an authored authorization-provider
-helper. Use the Go SDK when you need to build a custom authorization provider.
+The TypeScript SDK does not currently expose authored authorization-provider or
+IndexedDB-provider helpers. Use the Go SDK when you need high-level SDK
+authoring APIs for custom authorization or IndexedDB providers.
 
 ## Use host-service clients
 

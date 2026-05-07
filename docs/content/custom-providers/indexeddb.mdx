@@ -52,189 +52,87 @@ spec:
 
 ## Provider interface
 
-You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers should implement `gestalt.IndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
+You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. The Go SDK currently provides the high-level typed provider surface for this contract. Go providers should implement `gestalt.IndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The example below shows the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
 
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    package relationaldb
+```go
+package relationaldb
 
-    import (
-      "context"
-      "database/sql"
-      "fmt"
-      "strings"
+import (
+  "context"
+  "database/sql"
+  "fmt"
+  "strings"
 
-      gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    )
+  gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
 
-    type RelationalDB struct {
-      db *sql.DB
-    }
+type RelationalDB struct {
+  db *sql.DB
+}
 
-    func New() *RelationalDB { return &RelationalDB{} }
+func New() *RelationalDB { return &RelationalDB{} }
 
-    func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
-      dsn, _ := config["dsn"].(string)
-      if dsn == "" {
-        return fmt.Errorf("relationaldb: dsn is required")
-      }
-      driver := "sqlite"
-      connStr := dsn
-      switch {
-      case strings.HasPrefix(dsn, "postgres://"):
-        driver, connStr = "pgx", dsn
-      case strings.HasPrefix(dsn, "mysql://"):
-        driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
-      case strings.HasPrefix(dsn, "sqlserver://"):
-        driver, connStr = "sqlserver", dsn
-      case strings.HasPrefix(dsn, "sqlite://"):
-        driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
-      }
-      var err error
-      r.db, err = sql.Open(driver, connStr)
-      return err
-    }
+func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
+  dsn, _ := config["dsn"].(string)
+  if dsn == "" {
+    return fmt.Errorf("relationaldb: dsn is required")
+  }
+  driver := "sqlite"
+  connStr := dsn
+  switch {
+  case strings.HasPrefix(dsn, "postgres://"):
+    driver, connStr = "pgx", dsn
+  case strings.HasPrefix(dsn, "mysql://"):
+    driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
+  case strings.HasPrefix(dsn, "sqlserver://"):
+    driver, connStr = "sqlserver", dsn
+  case strings.HasPrefix(dsn, "sqlite://"):
+    driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
+  }
+  var err error
+  r.db, err = sql.Open(driver, connStr)
+  return err
+}
 
-    func (r *RelationalDB) HealthCheck(ctx context.Context) error {
-      return r.db.PingContext(ctx)
-    }
+func (r *RelationalDB) HealthCheck(ctx context.Context) error {
+  return r.db.PingContext(ctx)
+}
 
-    func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
-      return nil
-    }
+func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+  return nil
+}
 
-    func (r *RelationalDB) DeleteObjectStore(ctx context.Context, name string) error {
-      return nil
-    }
+func (r *RelationalDB) DeleteObjectStore(ctx context.Context, name string) error {
+  return nil
+}
 
-    // Get retrieves a single record by primary key.
-    func (r *RelationalDB) Get(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) (gestalt.Record, error) {
-      return gestalt.Record{}, nil
-    }
+// Get retrieves a single record by primary key.
+func (r *RelationalDB) Get(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) (gestalt.Record, error) {
+  return gestalt.Record{}, nil
+}
 
-    // Add inserts a new record. Fails if the key already exists.
-    func (r *RelationalDB) Add(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
-      return nil
-    }
+// Add inserts a new record. Fails if the key already exists.
+func (r *RelationalDB) Add(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+  return nil
+}
 
-    // Put inserts or replaces the record at the given key.
-    func (r *RelationalDB) Put(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
-      return nil
-    }
+// Put inserts or replaces the record at the given key.
+func (r *RelationalDB) Put(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+  return nil
+}
 
-    // Delete removes a record by primary key.
-    func (r *RelationalDB) Delete(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) error {
-      return nil
-    }
+// Delete removes a record by primary key.
+func (r *RelationalDB) Delete(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) error {
+  return nil
+}
 
-    // See the W3C IndexedDB specification for the remaining methods:
-    // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    from typing import Any
+// See the W3C IndexedDB specification for the remaining methods:
+// https://www.w3.org/TR/IndexedDB/#object-store-interface
+```
 
-    import gestalt
-
-    class RelationalDB(gestalt.IndexedDBProvider):
-        def configure(self, name: str, config: dict) -> None:
-            dsn = config.get("dsn", "")
-            if not dsn:
-                raise ValueError("relationaldb: dsn is required")
-            self.dsn = dsn
-
-        def get(self, store: str, id: str) -> dict[str, Any]:
-            """Retrieve a single record by primary key."""
-            ...
-
-        def add(self, store: str, record: dict[str, Any]) -> None:
-            """Insert a new record. Fails if the key already exists."""
-            ...
-
-        def put(self, store: str, record: dict[str, Any]) -> None:
-            """Insert or replace the record at the given key."""
-            ...
-
-        def delete(self, store: str, id: str) -> None:
-            """Remove a record by primary key."""
-            ...
-
-        # See the W3C IndexedDB specification for the remaining methods:
-        # https://www.w3.org/TR/IndexedDB/#object-store-interface
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    pub struct RelationalDB { /* database connection */ }
-
-    #[gestalt::async_trait]
-    impl gestalt::IndexedDBProvider for RelationalDB {
-        async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
-            let dsn = config.get("dsn")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| gestalt::Error::Config("dsn is required"))?;
-            // Parse DSN prefix to select driver, open connection.
-            Ok(())
-        }
-
-        /// Retrieves a single record by primary key.
-        async fn get(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<proto::RecordResponse> {
-            todo!()
-        }
-
-        /// Inserts a new record. Fails if the key already exists.
-        async fn add(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        /// Inserts or replaces the record at the given key.
-        async fn put(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        /// Removes a record by primary key.
-        async fn delete(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        // See the W3C IndexedDB specification for the remaining methods:
-        // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    }
-
-    gestalt::export_indexeddb_provider!(constructor = RelationalDB::default);
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { defineIndexedDBProvider } from "@valon-technologies/gestalt";
-
-    export const provider = defineIndexedDBProvider({
-      async configure(name, config) {
-        const dsn = config.dsn;
-        if (!dsn) throw new Error("relationaldb: dsn is required");
-        // Parse DSN prefix to select driver, open connection.
-      },
-
-      /** Retrieves a single record by primary key. */
-      async get(store: string, id: string): Promise<Record> {},
-
-      /** Inserts a new record. Fails if the key already exists. */
-      async add(store: string, record: Record): Promise<void> {},
-
-      /** Inserts or replaces the record at the given key. */
-      async put(store: string, record: Record): Promise<void> {},
-
-      /** Removes a record by primary key. */
-      async delete(store: string, id: string): Promise<void> {},
-
-      // See the W3C IndexedDB specification for the remaining methods:
-      // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    });
-    ```
-  </Tabs.Tab>
-</Tabs>
+Python, Rust, and TypeScript currently expose IndexedDB clients for plugin code,
+but not comparable high-level IndexedDB provider authoring helpers in their
+public runtime APIs.
 
 ## Plugin SDK
 
@@ -281,14 +179,14 @@ the host rejects stores outside that set.
     tasks.Add(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "pending"})
     task, err := tasks.Get(ctx, "t1")
     tasks.Put(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "done"})
-    tasks.Delete(ctx, "t1")
+    tasks.Add(ctx, gestalt.Record{"id": "t2", "user_id": "u2", "status": "done"})
 
     // Query by named index
-    pending, err := tasks.Index("by_status").GetAll(ctx, nil, "pending")
+    doneTasks, err := tasks.Index("by_status").GetAll(ctx, nil, "done")
     userTasks, err := tasks.Index("by_user").GetAll(ctx, nil, "u1")
 
     // Atomic delete by index
-    deleted, err := tasks.Index("by_user").Delete(ctx, "u1")
+    deleted, err := tasks.Index("by_user").Delete(ctx, "u2")
 
     // Key range queries
     recent, err := tasks.GetAll(ctx, gestalt.LowerBound("2024-01-01", false))
@@ -307,6 +205,8 @@ the host rejects stores outside that set.
     if err == nil {
         err = tx.Commit(ctx)
     }
+
+    tasks.Delete(ctx, "t1")
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -328,14 +228,14 @@ the host rejects stores outside that set.
     tasks.add({"id": "t1", "user_id": "u1", "status": "pending"})
     task = tasks.get("t1")
     tasks.put({"id": "t1", "user_id": "u1", "status": "done"})
-    tasks.delete("t1")
+    tasks.add({"id": "t2", "user_id": "u2", "status": "done"})
 
     # Query by named index
-    pending = tasks.index("by_status").get_all("pending")
+    done_tasks = tasks.index("by_status").get_all("done")
     user_tasks = tasks.index("by_user").get_all("u1")
 
     # Atomic delete by index
-    deleted = tasks.index("by_user").delete("u1")
+    deleted = tasks.index("by_user").delete("u2")
 
     # Atomic read-modify-write
     with db.transaction(["tasks"], "readwrite") as tx:
@@ -343,36 +243,56 @@ the host rejects stores outside that set.
         task = tx_tasks.get("t1")
         task["status"] = "done"
         tx_tasks.put(task)
+
+    tasks.delete("t1")
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt_plugin_sdk as gestalt;
+    use std::collections::BTreeMap;
+
+    use gestalt::indexeddb::{IndexSchema, ObjectStoreSchema};
+    use gestalt::{IndexedDB, TransactionMode, TransactionOptions};
     use serde_json::json;
 
-    let mut db = gestalt::IndexedDB::connect().await?;
+    let mut db = IndexedDB::connect().await?;
 
     // Create an object store with indexes
-    db.create_object_store("tasks", gestalt::indexeddb::ObjectStoreSchema {
+    db.create_object_store("tasks", ObjectStoreSchema {
         indexes: vec![
-            gestalt::indexeddb::IndexSchema { name: "by_user".into(), key_path: vec!["user_id".into()], unique: false },
-            gestalt::indexeddb::IndexSchema { name: "by_status".into(), key_path: vec!["status".into()], unique: false },
+            IndexSchema { name: "by_user".into(), key_path: vec!["user_id".into()], unique: false },
+            IndexSchema { name: "by_status".into(), key_path: vec!["status".into()], unique: false },
         ],
     }).await?;
 
     // CRUD by primary key
     let mut tasks = db.object_store("tasks");
-    tasks.add(record).await?;
+    tasks.add(BTreeMap::from([
+        ("id".to_string(), json!("t1")),
+        ("user_id".to_string(), json!("u1")),
+        ("status".to_string(), json!("pending")),
+    ])).await?;
     let task = tasks.get("t1").await?;
-    tasks.delete("t1").await?;
+    tasks.put(BTreeMap::from([
+        ("id".to_string(), json!("t1")),
+        ("user_id".to_string(), json!("u1")),
+        ("status".to_string(), json!("done")),
+    ])).await?;
+    tasks.add(BTreeMap::from([
+        ("id".to_string(), json!("t2")),
+        ("user_id".to_string(), json!("u2")),
+        ("status".to_string(), json!("done")),
+    ])).await?;
 
     // Query by named index
+    let mut idx = tasks.index("by_status");
+    let done_tasks = idx.get_all(&[json!("done")], None).await?;
     let mut idx = tasks.index("by_user");
-    let user_tasks = idx.get_all(&[json!("u1")]).await?;
-    let deleted = idx.delete(&[json!("u1")]).await?;
+    let user_tasks = idx.get_all(&[json!("u1")], None).await?;
+    let deleted = idx.delete(&[json!("u2")]).await?;
 
     // Atomic read-modify-write
-    let mut tx = db.transaction(&["tasks"], gestalt::TransactionMode::Readwrite, gestalt::TransactionOptions::default()).await?;
+    let mut tx = db.transaction(&["tasks"], TransactionMode::Readwrite, TransactionOptions::default()).await?;
     {
         let mut tx_tasks = tx.object_store("tasks");
         let mut task = tx_tasks.get("t1").await?;
@@ -380,6 +300,8 @@ the host rejects stores outside that set.
         tx_tasks.put(task).await?;
     }
     tx.commit().await?;
+
+    tasks.delete("t1").await?;
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -407,14 +329,14 @@ the host rejects stores outside that set.
     await tasks.add({ id: "t1", user_id: "u1", status: "pending" });
     const task = await tasks.get("t1");
     await tasks.put({ id: "t1", user_id: "u1", status: "done" });
-    await tasks.delete("t1");
+    await tasks.add({ id: "t2", user_id: "u2", status: "done" });
 
     // Query by named index
-    const pending = await tasks.index("by_status").getAll(undefined, "pending");
+    const doneTasks = await tasks.index("by_status").getAll(undefined, "done");
     const userTasks = await tasks.index("by_user").getAll(undefined, "u1");
 
     // Atomic delete by index
-    const deleted = await tasks.index("by_user").delete("u1");
+    const deleted = await tasks.index("by_user").delete("u2");
 
     // Atomic read-modify-write
     const tx = await db.transaction(["tasks"], "readwrite");
@@ -422,6 +344,8 @@ the host rejects stores outside that set.
     const current = await txTasks.get("t1");
     await txTasks.put({ ...current, status: "done" });
     await tx.commit();
+
+    await tasks.delete("t1");
     ```
   </Tabs.Tab>
 </Tabs>

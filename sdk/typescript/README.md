@@ -62,8 +62,8 @@ is omitted, the runtime looks for `provider`, then `plugin`, then the default
 export.
 
 Use `"plugin"` as the kind token for executable plugin providers. Use an object
-target with an explicit kind for authentication, cache, IndexedDB, S3, secrets,
-workflow, agent, and hosted-runtime providers.
+target with an explicit kind for authentication, cache, S3, secrets, workflow,
+agent, and hosted-runtime providers.
 
 ## Public surface
 
@@ -71,8 +71,8 @@ The root package exports provider definition helpers:
 
 - `definePlugin` for integration operations and session catalogs.
 - `defineAuthenticationProvider` for authentication surfaces.
-- `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
-  `defineSecretsProvider` for host-service backends.
+- `defineCacheProvider`, `defineS3Provider`, and `defineSecretsProvider` for
+  host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and
   `definePluginRuntimeProvider` for workflow, agent, and hosted-runtime
   backends.
@@ -80,8 +80,9 @@ The root package exports provider definition helpers:
 - Host-service clients for cache, IndexedDB, S3, workflows, agents,
   invocations, and telemetry.
 
-The TypeScript SDK does not currently expose an authored authorization-provider
-helper. Use the Go SDK when you need to build a custom authorization provider.
+The TypeScript SDK does not currently expose authored authorization-provider or
+IndexedDB-provider helpers. Use the Go SDK when you need high-level SDK
+authoring APIs for custom authorization or IndexedDB providers.
 
 TypeScript types are not enough to describe runtime payloads. Use the schema
 builders for every operation input and output that should appear in the
