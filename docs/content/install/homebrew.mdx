@@ -2,7 +2,8 @@
 
 Gestalt publishes a Homebrew tap for macOS and Linux.
 
-If you need a direct-download install or a Linux-specific release artifact, see [Binary Releases](/install/binary).
+For the native Linux installer script, see [Linux](/install/linux). If you need
+a direct-download archive, see [Binary Releases](/install/binary).
 
 Tap the repository first:
 
@@ -10,9 +11,10 @@ Tap the repository first:
 brew tap valon-technologies/gestalt
 ```
 
-## Server
+## Server only
 
 `gestaltd` is the long-running process that manages authentication and plugins.
+Install this formula when you only want the server daemon.
 
 ### Install
 
@@ -26,9 +28,10 @@ brew install valon-technologies/gestalt/gestaltd
 gestaltd --version
 ```
 
-## Client
+## Client and bundled server
 
-`gestalt` is the CLI for communicating with the Gestalt server.
+`gestalt` is the CLI for communicating with the Gestalt server. This formula
+also installs the bundled `gestaltd` helper binary from the CLI release archive.
 
 ### Install
 
