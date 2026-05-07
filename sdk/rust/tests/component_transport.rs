@@ -21,7 +21,6 @@ use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
 use tonic::Code;
-use tonic::Status;
 use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
 use tower::service_fn;
@@ -142,18 +141,15 @@ impl gestalt::S3Provider for TestS3Provider {
         vec!["set STORAGE_BUCKET".to_string()]
     }
 
-    async fn head_object(
-        &self,
-        request: HeadObjectRequest,
-    ) -> std::result::Result<HeadObjectResponse, Status> {
+    async fn head_object(&self, request: HeadObjectRequest) -> gestalt::Result<HeadObjectResponse> {
         let reference = request
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
-            .ok_or_else(|| Status::not_found("object not found"))?;
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         Ok(HeadObjectResponse {
             meta: Some(object_meta(
                 reference,
@@ -166,16 +162,16 @@ impl gestalt::S3Provider for TestS3Provider {
     async fn read_object(
         &self,
         request: ReadObjectRequest,
-    ) -> std::result::Result<gestalt::S3ReadObjectStream, Status> {
+    ) -> gestalt::Result<gestalt::S3ReadObjectStream> {
         let reference = request
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
             .cloned()
-            .ok_or_else(|| Status::not_found("object not found"))?;
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         drop(objects);
 
         let mut messages = vec![Ok(ReadObjectChunk {
@@ -195,7 +191,7 @@ impl gestalt::S3Provider for TestS3Provider {
     async fn write_object(
         &self,
         mut stream: gestalt::S3WriteObjectStream,
-    ) -> std::result::Result<WriteObjectResponse, Status> {
+    ) -> gestalt::Result<WriteObjectResponse> {
         let mut reference = None;
         let mut content_type = String::new();
         let mut body = Vec::new();
@@ -213,7 +209,8 @@ impl gestalt::S3Provider for TestS3Provider {
             }
         }
 
-        let reference = reference.ok_or_else(|| Status::invalid_argument("missing open frame"))?;
+        let reference =
+            reference.ok_or_else(|| gestalt::Error::bad_request("missing open frame"))?;
         self.objects
             .lock()
             .expect("lock objects")
@@ -224,10 +221,10 @@ impl gestalt::S3Provider for TestS3Provider {
         })
     }
 
-    async fn delete_object(&self, request: DeleteObjectRequest) -> std::result::Result<(), Status> {
+    async fn delete_object(&self, request: DeleteObjectRequest) -> gestalt::Result<()> {
         let reference = request
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         self.objects
             .lock()
             .expect("lock objects")
@@ -238,7 +235,7 @@ impl gestalt::S3Provider for TestS3Provider {
     async fn list_objects(
         &self,
         request: ListObjectsRequest,
-    ) -> std::result::Result<ListObjectsResponse, Status> {
+    ) -> gestalt::Result<ListObjectsResponse> {
         let objects = self.objects.lock().expect("lock objects");
         let mut metas = Vec::new();
         for (key, body) in objects.iter() {
@@ -267,21 +264,18 @@ impl gestalt::S3Provider for TestS3Provider {
         })
     }
 
-    async fn copy_object(
-        &self,
-        request: CopyObjectRequest,
-    ) -> std::result::Result<CopyObjectResponse, Status> {
+    async fn copy_object(&self, request: CopyObjectRequest) -> gestalt::Result<CopyObjectResponse> {
         let source = request
             .source
-            .ok_or_else(|| Status::invalid_argument("missing source"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing source"))?;
         let destination = request
             .destination
-            .ok_or_else(|| Status::invalid_argument("missing destination"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing destination"))?;
         let mut objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&object_key(&source.bucket, &source.key))
             .cloned()
-            .ok_or_else(|| Status::not_found("object not found"))?;
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         objects.insert(
             object_key(&destination.bucket, &destination.key),
             body.clone(),
@@ -298,10 +292,10 @@ impl gestalt::S3Provider for TestS3Provider {
     async fn presign_object(
         &self,
         request: PresignObjectRequest,
-    ) -> std::result::Result<PresignObjectResponse, Status> {
+    ) -> gestalt::Result<PresignObjectResponse> {
         let reference = request
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         Ok(PresignObjectResponse {
             url: format!(
                 "https://example.invalid/{}/{}",
