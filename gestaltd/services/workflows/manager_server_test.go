@@ -47,7 +47,7 @@ func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testin
 
 	for name, target := range map[string]*proto.BoundWorkflowTarget{
 		"nil target":   nil,
-		"empty target": &proto.BoundWorkflowTarget{},
+		"empty target": {},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
