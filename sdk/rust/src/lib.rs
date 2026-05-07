@@ -62,6 +62,78 @@ pub use cache::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
+pub use generated::v1::{
+    AgentActor, AgentExecutionStatus, AgentInteraction, AgentInteractionState,
+    AgentInteractionType, AgentManagerCancelTurnRequest, AgentManagerCreateSessionRequest,
+    AgentManagerCreateTurnRequest, AgentManagerGetSessionRequest, AgentManagerGetTurnRequest,
+    AgentManagerListInteractionsRequest, AgentManagerListInteractionsResponse,
+    AgentManagerListSessionsRequest, AgentManagerListSessionsResponse,
+    AgentManagerListTurnEventsRequest, AgentManagerListTurnEventsResponse,
+    AgentManagerListTurnsRequest, AgentManagerListTurnsResponse,
+    AgentManagerResolveInteractionRequest, AgentManagerUpdateSessionRequest, AgentMessage,
+    AgentMessagePart, AgentMessagePartImageRef, AgentMessagePartToolCall,
+    AgentMessagePartToolResult, AgentMessagePartType, AgentProviderCapabilities, AgentSession,
+    AgentSessionStartConfig, AgentSessionStartHook, AgentSessionStartHookOutput, AgentSessionState,
+    AgentSubjectContext, AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnDisplay,
+    AgentTurnEvent, AgentWorkspace as AgentProtocolWorkspace,
+    AgentWorkspaceGitCheckout as AgentProtocolWorkspaceGitCheckout, CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest, ExecuteAgentToolRequest,
+    ExecuteAgentToolResponse, GetAgentProviderCapabilitiesRequest,
+    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
+    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
+    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
+    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
+    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
+    ListAgentProviderTurnsResponse, ListAgentToolsRequest, ListAgentToolsResponse, ListedAgentTool,
+    PreparedAgentWorkspace as AgentPreparedWorkspace, ResolveAgentConnectionRequest,
+    ResolveAgentProviderInteractionRequest, ResolvedAgentConnection, ResolvedAgentTool,
+    UpdateAgentProviderSessionRequest,
+};
+pub use generated::v1::{
+    BoundWorkflowAgentTarget, BoundWorkflowEventTrigger, BoundWorkflowPluginTarget,
+    BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
+    DeleteWorkflowProviderEventTriggerRequest, DeleteWorkflowProviderScheduleRequest,
+    GetWorkflowExecutionReferenceRequest, GetWorkflowProviderEventTriggerRequest,
+    GetWorkflowProviderRunRequest, GetWorkflowProviderScheduleRequest,
+    InvokeWorkflowOperationRequest, InvokeWorkflowOperationResponse,
+    ListWorkflowExecutionReferencesRequest, ListWorkflowExecutionReferencesResponse,
+    ListWorkflowProviderEventTriggersRequest, ListWorkflowProviderEventTriggersResponse,
+    ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse,
+    ListWorkflowProviderSchedulesRequest, ListWorkflowProviderSchedulesResponse,
+    ManagedWorkflowEventTrigger, ManagedWorkflowRun, ManagedWorkflowRunSignal,
+    ManagedWorkflowSchedule, PauseWorkflowProviderEventTriggerRequest,
+    PauseWorkflowProviderScheduleRequest, PublishWorkflowProviderEventRequest,
+    PutWorkflowExecutionReferenceRequest, ResumeWorkflowProviderEventTriggerRequest,
+    ResumeWorkflowProviderScheduleRequest, SignalOrStartWorkflowProviderRunRequest,
+    SignalWorkflowProviderRunRequest, SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
+    UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
+    WorkflowAccessPermission, WorkflowActor, WorkflowEvent, WorkflowEventMatch,
+    WorkflowEventTriggerInvocation, WorkflowExecutionReference,
+    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
+    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
+    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
+    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
+    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
+    WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
+    WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
+    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest,
+    WorkflowManualTrigger, WorkflowOutputBinding, WorkflowOutputDelivery,
+    WorkflowOutputValueSource, WorkflowRunStatus, WorkflowRunTrigger, WorkflowScheduleTrigger,
+    WorkflowSignal, bound_workflow_target, workflow_output_value_source, workflow_run_trigger,
+};
+pub use generated::v1::{
+    CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
+    HeadObjectResponse, ListObjectsRequest, ListObjectsResponse, PresignObjectRequest,
+    PresignObjectResponse, ReadObjectChunk, ReadObjectRequest, WriteObjectOpen, WriteObjectRequest,
+    WriteObjectResponse,
+};
+pub use generated::v1::{
+    GetPluginRuntimeSessionRequest, HostedPlugin, ListPluginRuntimeSessionsRequest,
+    ListPluginRuntimeSessionsResponse, PluginRuntimeImagePullAuth, PluginRuntimeSession,
+    PluginRuntimeSessionLifecycle, PluginRuntimeSupport, PreparePluginRuntimeWorkspaceRequest,
+    PreparePluginRuntimeWorkspaceResponse, RemovePluginRuntimeWorkspaceRequest,
+    StartHostedPluginRequest, StartPluginRuntimeSessionRequest, StopPluginRuntimeSessionRequest,
+};
 pub use indexeddb::{
     Cursor, CursorDirection, ENV_INDEXEDDB_SOCKET, IndexedDB, IndexedDBError, Transaction,
     TransactionDurabilityHint, TransactionIndexClient, TransactionMode, TransactionObjectStore,
@@ -82,6 +154,7 @@ pub use runtime_log_host::{
 pub use s3::{
     ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, S3, S3Error, S3Provider, s3_socket_env, s3_socket_token_env,
 };
+pub use s3::{S3ReadObjectStream, S3WriteObjectStream};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{

@@ -47,7 +47,7 @@ use crate::{
 #[cfg(unix)]
 use crate::{
     agent::AgentServer, auth_server::AuthenticationServer, cache_server::CacheRpcServer,
-    plugin_runtime::PluginRuntimeServer, runtime_server::RuntimeServer,
+    plugin_runtime::PluginRuntimeServer, runtime_server::RuntimeServer, s3::S3RpcServer,
     secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
@@ -239,7 +239,7 @@ where
                 .add_service(ProviderLifecycleServer::new(RuntimeServer::for_s3(
                     Arc::clone(&provider),
                 )))
-                .add_service(S3Server::new(Arc::clone(&provider)))
+                .add_service(S3Server::new(S3RpcServer::new(Arc::clone(&provider))))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },

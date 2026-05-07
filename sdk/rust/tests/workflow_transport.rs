@@ -8,7 +8,6 @@ use gestalt::proto::v1::workflow_host_server::{
     WorkflowHost as WorkflowHostRpc, WorkflowHostServer as WorkflowHostGrpcServer,
 };
 use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
-use gestalt::proto::v1::workflow_provider_server::WorkflowProvider as WorkflowProviderGrpc;
 use gestalt::proto::v1::{
     self as pb, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget,
     ConfigureProviderRequest, ProviderKind, PublishWorkflowProviderEventRequest,
@@ -56,199 +55,34 @@ impl WorkflowProvider for TestWorkflowProvider {
     fn warnings(&self) -> Vec<String> {
         vec!["set TEMPORAL_ADDRESS".to_string()]
     }
-}
 
-#[tonic::async_trait]
-impl WorkflowProviderGrpc for TestWorkflowProvider {
     async fn start_run(
         &self,
-        request: GrpcRequest<StartWorkflowProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
-        let request = request.into_inner();
+        request: StartWorkflowProviderRunRequest,
+    ) -> gestalt::Result<BoundWorkflowRun> {
         let target = request
             .target
-            .ok_or_else(|| Status::invalid_argument("missing target"))?;
-        Ok(GrpcResponse::new(BoundWorkflowRun {
+            .ok_or_else(|| gestalt::Error::bad_request("missing target"))?;
+        Ok(BoundWorkflowRun {
             id: request.idempotency_key,
             status: WorkflowRunStatus::Pending as i32,
             target: Some(target),
             ..Default::default()
-        }))
-    }
-
-    async fn get_run(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::GetWorkflowProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn list_runs(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ListWorkflowProviderRunsRequest>,
-    ) -> std::result::Result<
-        GrpcResponse<gestalt::proto::v1::ListWorkflowProviderRunsResponse>,
-        Status,
-    > {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn cancel_run(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::CancelWorkflowProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn signal_run(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::SignalWorkflowProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::SignalWorkflowRunResponse>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn signal_or_start_run(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::SignalOrStartWorkflowProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::SignalWorkflowRunResponse>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn upsert_schedule(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::UpsertWorkflowProviderScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowSchedule>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn get_schedule(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::GetWorkflowProviderScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowSchedule>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn list_schedules(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ListWorkflowProviderSchedulesRequest>,
-    ) -> std::result::Result<
-        GrpcResponse<gestalt::proto::v1::ListWorkflowProviderSchedulesResponse>,
-        Status,
-    > {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn delete_schedule(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::DeleteWorkflowProviderScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn pause_schedule(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::PauseWorkflowProviderScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowSchedule>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn resume_schedule(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ResumeWorkflowProviderScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowSchedule>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn upsert_event_trigger(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::UpsertWorkflowProviderEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowEventTrigger>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn get_event_trigger(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::GetWorkflowProviderEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowEventTrigger>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn list_event_triggers(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ListWorkflowProviderEventTriggersRequest>,
-    ) -> std::result::Result<
-        GrpcResponse<gestalt::proto::v1::ListWorkflowProviderEventTriggersResponse>,
-        Status,
-    > {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn delete_event_trigger(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::DeleteWorkflowProviderEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn pause_event_trigger(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::PauseWorkflowProviderEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowEventTrigger>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn resume_event_trigger(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ResumeWorkflowProviderEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::BoundWorkflowEventTrigger>, Status>
-    {
-        Err(Status::unimplemented("not used"))
+        })
     }
 
     async fn publish_event(
         &self,
-        request: GrpcRequest<PublishWorkflowProviderEventRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        let request = request.into_inner();
+        request: PublishWorkflowProviderEventRequest,
+    ) -> gestalt::Result<()> {
         let event = request
             .event
-            .ok_or_else(|| Status::invalid_argument("missing event"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing event"))?;
         self.published_events
             .lock()
             .expect("published_events lock")
             .push((request.plugin_name, event.r#type));
-        Ok(GrpcResponse::new(()))
-    }
-
-    async fn put_execution_reference(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::PutWorkflowExecutionReferenceRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::WorkflowExecutionReference>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn get_execution_reference(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::GetWorkflowExecutionReferenceRequest>,
-    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::WorkflowExecutionReference>, Status>
-    {
-        Err(Status::unimplemented("not used"))
-    }
-
-    async fn list_execution_references(
-        &self,
-        _request: GrpcRequest<gestalt::proto::v1::ListWorkflowExecutionReferencesRequest>,
-    ) -> std::result::Result<
-        GrpcResponse<gestalt::proto::v1::ListWorkflowExecutionReferencesResponse>,
-        Status,
-    > {
-        Err(Status::unimplemented("not used"))
+        Ok(())
     }
 }
 

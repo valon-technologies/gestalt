@@ -16,6 +16,7 @@ use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
 };
 use crate::protocol;
+use crate::rpc_status::rpc_status;
 
 type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
 
@@ -296,7 +297,7 @@ fn parse_agent_host_target(raw: &str) -> std::result::Result<AgentHostTarget, Ag
 
 #[async_trait]
 /// Provider trait for serving the Gestalt agent-provider protocol.
-pub trait AgentProvider: pb::agent_provider_server::AgentProvider + Send + Sync + 'static {
+pub trait AgentProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -330,6 +331,123 @@ pub trait AgentProvider: pb::agent_provider_server::AgentProvider + Send + Sync 
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }
+
+    async fn create_session(
+        &self,
+        _request: pb::CreateAgentProviderSessionRequest,
+    ) -> ProviderResult<pb::AgentSession> {
+        Err(crate::Error::unimplemented(
+            "agent create session is not implemented",
+        ))
+    }
+
+    async fn get_session(
+        &self,
+        _request: pb::GetAgentProviderSessionRequest,
+    ) -> ProviderResult<pb::AgentSession> {
+        Err(crate::Error::unimplemented(
+            "agent get session is not implemented",
+        ))
+    }
+
+    async fn list_sessions(
+        &self,
+        _request: pb::ListAgentProviderSessionsRequest,
+    ) -> ProviderResult<pb::ListAgentProviderSessionsResponse> {
+        Err(crate::Error::unimplemented(
+            "agent list sessions is not implemented",
+        ))
+    }
+
+    async fn update_session(
+        &self,
+        _request: pb::UpdateAgentProviderSessionRequest,
+    ) -> ProviderResult<pb::AgentSession> {
+        Err(crate::Error::unimplemented(
+            "agent update session is not implemented",
+        ))
+    }
+
+    async fn create_turn(
+        &self,
+        _request: pb::CreateAgentProviderTurnRequest,
+    ) -> ProviderResult<pb::AgentTurn> {
+        Err(crate::Error::unimplemented(
+            "agent create turn is not implemented",
+        ))
+    }
+
+    async fn get_turn(
+        &self,
+        _request: pb::GetAgentProviderTurnRequest,
+    ) -> ProviderResult<pb::AgentTurn> {
+        Err(crate::Error::unimplemented(
+            "agent get turn is not implemented",
+        ))
+    }
+
+    async fn list_turns(
+        &self,
+        _request: pb::ListAgentProviderTurnsRequest,
+    ) -> ProviderResult<pb::ListAgentProviderTurnsResponse> {
+        Err(crate::Error::unimplemented(
+            "agent list turns is not implemented",
+        ))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: pb::CancelAgentProviderTurnRequest,
+    ) -> ProviderResult<pb::AgentTurn> {
+        Err(crate::Error::unimplemented(
+            "agent cancel turn is not implemented",
+        ))
+    }
+
+    async fn list_turn_events(
+        &self,
+        _request: pb::ListAgentProviderTurnEventsRequest,
+    ) -> ProviderResult<pb::ListAgentProviderTurnEventsResponse> {
+        Err(crate::Error::unimplemented(
+            "agent list turn events is not implemented",
+        ))
+    }
+
+    async fn get_interaction(
+        &self,
+        _request: pb::GetAgentProviderInteractionRequest,
+    ) -> ProviderResult<pb::AgentInteraction> {
+        Err(crate::Error::unimplemented(
+            "agent get interaction is not implemented",
+        ))
+    }
+
+    async fn list_interactions(
+        &self,
+        _request: pb::ListAgentProviderInteractionsRequest,
+    ) -> ProviderResult<pb::ListAgentProviderInteractionsResponse> {
+        Err(crate::Error::unimplemented(
+            "agent list interactions is not implemented",
+        ))
+    }
+
+    async fn resolve_interaction(
+        &self,
+        _request: pb::ResolveAgentProviderInteractionRequest,
+    ) -> ProviderResult<pb::AgentInteraction> {
+        Err(crate::Error::unimplemented(
+            "agent resolve interaction is not implemented",
+        ))
+    }
+
+    async fn get_capabilities(
+        &self,
+        _request: pb::GetAgentProviderCapabilitiesRequest,
+    ) -> ProviderResult<pb::AgentProviderCapabilities> {
+        Err(crate::Error::unimplemented(
+            "agent get capabilities is not implemented",
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -352,90 +470,155 @@ where
         &self,
         request: GrpcRequest<pb::CreateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        self.provider.create_session(request).await
+        let session = self
+            .provider
+            .create_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent create session", error))?;
+        Ok(GrpcResponse::new(session))
     }
 
     async fn get_session(
         &self,
         request: GrpcRequest<pb::GetAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        self.provider.get_session(request).await
+        let session = self
+            .provider
+            .get_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent get session", error))?;
+        Ok(GrpcResponse::new(session))
     }
 
     async fn list_sessions(
         &self,
         request: GrpcRequest<pb::ListAgentProviderSessionsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderSessionsResponse>, Status> {
-        self.provider.list_sessions(request).await
+        let response = self
+            .provider
+            .list_sessions(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent list sessions", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn update_session(
         &self,
         request: GrpcRequest<pb::UpdateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        self.provider.update_session(request).await
+        let session = self
+            .provider
+            .update_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent update session", error))?;
+        Ok(GrpcResponse::new(session))
     }
 
     async fn create_turn(
         &self,
         request: GrpcRequest<pb::CreateAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        self.provider.create_turn(request).await
+        let turn = self
+            .provider
+            .create_turn(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent create turn", error))?;
+        Ok(GrpcResponse::new(turn))
     }
 
     async fn get_turn(
         &self,
         request: GrpcRequest<pb::GetAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        self.provider.get_turn(request).await
+        let turn = self
+            .provider
+            .get_turn(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent get turn", error))?;
+        Ok(GrpcResponse::new(turn))
     }
 
     async fn list_turns(
         &self,
         request: GrpcRequest<pb::ListAgentProviderTurnsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnsResponse>, Status> {
-        self.provider.list_turns(request).await
+        let response = self
+            .provider
+            .list_turns(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent list turns", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn cancel_turn(
         &self,
         request: GrpcRequest<pb::CancelAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        self.provider.cancel_turn(request).await
+        let turn = self
+            .provider
+            .cancel_turn(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent cancel turn", error))?;
+        Ok(GrpcResponse::new(turn))
     }
 
     async fn list_turn_events(
         &self,
         request: GrpcRequest<pb::ListAgentProviderTurnEventsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnEventsResponse>, Status> {
-        self.provider.list_turn_events(request).await
+        let response = self
+            .provider
+            .list_turn_events(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent list turn events", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn get_interaction(
         &self,
         request: GrpcRequest<pb::GetAgentProviderInteractionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        self.provider.get_interaction(request).await
+        let interaction = self
+            .provider
+            .get_interaction(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent get interaction", error))?;
+        Ok(GrpcResponse::new(interaction))
     }
 
     async fn list_interactions(
         &self,
         request: GrpcRequest<pb::ListAgentProviderInteractionsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderInteractionsResponse>, Status> {
-        self.provider.list_interactions(request).await
+        let response = self
+            .provider
+            .list_interactions(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent list interactions", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn resolve_interaction(
         &self,
         request: GrpcRequest<pb::ResolveAgentProviderInteractionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        self.provider.resolve_interaction(request).await
+        let interaction = self
+            .provider
+            .resolve_interaction(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent resolve interaction", error))?;
+        Ok(GrpcResponse::new(interaction))
     }
 
     async fn get_capabilities(
         &self,
         request: GrpcRequest<pb::GetAgentProviderCapabilitiesRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentProviderCapabilities>, Status> {
-        self.provider.get_capabilities(request).await
+        let capabilities = self
+            .provider
+            .get_capabilities(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("agent get capabilities", error))?;
+        Ok(GrpcResponse::new(capabilities))
     }
 }

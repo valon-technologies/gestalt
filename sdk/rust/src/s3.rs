@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
 use serde::de::DeserializeOwned;
+use tokio_stream::Stream;
 use tokio_stream::iter;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
+use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 use crate::api::RuntimeMetadata;
@@ -21,6 +24,9 @@ use crate::generated::v1::{
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
+pub type S3ReadObjectStream =
+    Pin<Box<dyn Stream<Item = std::result::Result<pb::ReadObjectChunk, Status>> + Send + 'static>>;
+pub type S3WriteObjectStream = tonic::Streaming<pb::WriteObjectRequest>;
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
@@ -228,7 +234,7 @@ pub type ObjectAccessURL = PresignResult;
 
 #[async_trait]
 /// Lifecycle and RPC contract for S3-compatible providers.
-pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
+pub trait S3Provider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -262,62 +268,121 @@ pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }
-}
-
-#[async_trait]
-impl<T> pb::s3_server::S3 for Arc<T>
-where
-    T: S3Provider,
-{
-    type ReadObjectStream = <T as pb::s3_server::S3>::ReadObjectStream;
 
     async fn head_object(
         &self,
-        request: tonic::Request<pb::HeadObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::HeadObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::head_object(self.as_ref(), request).await
+        request: pb::HeadObjectRequest,
+    ) -> std::result::Result<pb::HeadObjectResponse, Status>;
+
+    async fn read_object(
+        &self,
+        request: pb::ReadObjectRequest,
+    ) -> std::result::Result<S3ReadObjectStream, Status>;
+
+    async fn write_object(
+        &self,
+        request: S3WriteObjectStream,
+    ) -> std::result::Result<pb::WriteObjectResponse, Status>;
+
+    async fn delete_object(
+        &self,
+        request: pb::DeleteObjectRequest,
+    ) -> std::result::Result<(), Status>;
+
+    async fn list_objects(
+        &self,
+        request: pb::ListObjectsRequest,
+    ) -> std::result::Result<pb::ListObjectsResponse, Status>;
+
+    async fn copy_object(
+        &self,
+        request: pb::CopyObjectRequest,
+    ) -> std::result::Result<pb::CopyObjectResponse, Status>;
+
+    async fn presign_object(
+        &self,
+        request: pb::PresignObjectRequest,
+    ) -> std::result::Result<pb::PresignObjectResponse, Status>;
+}
+
+#[derive(Clone)]
+pub(crate) struct S3RpcServer<P> {
+    provider: Arc<P>,
+}
+
+impl<P> S3RpcServer<P> {
+    pub(crate) fn new(provider: Arc<P>) -> Self {
+        Self { provider }
+    }
+}
+
+#[async_trait]
+impl<P> pb::s3_server::S3 for S3RpcServer<P>
+where
+    P: S3Provider,
+{
+    type ReadObjectStream = S3ReadObjectStream;
+
+    async fn head_object(
+        &self,
+        request: GrpcRequest<pb::HeadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::HeadObjectResponse>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.head_object(request.into_inner()).await?,
+        ))
     }
 
     async fn read_object(
         &self,
-        request: tonic::Request<pb::ReadObjectRequest>,
-    ) -> std::result::Result<tonic::Response<Self::ReadObjectStream>, tonic::Status> {
-        <T as pb::s3_server::S3>::read_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::ReadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<Self::ReadObjectStream>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.read_object(request.into_inner()).await?,
+        ))
     }
 
     async fn write_object(
         &self,
-        request: tonic::Request<tonic::Streaming<pb::WriteObjectRequest>>,
-    ) -> std::result::Result<tonic::Response<pb::WriteObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::write_object(self.as_ref(), request).await
+        request: GrpcRequest<tonic::Streaming<pb::WriteObjectRequest>>,
+    ) -> std::result::Result<GrpcResponse<pb::WriteObjectResponse>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.write_object(request.into_inner()).await?,
+        ))
     }
 
     async fn delete_object(
         &self,
-        request: tonic::Request<pb::DeleteObjectRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        <T as pb::s3_server::S3>::delete_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::DeleteObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        self.provider.delete_object(request.into_inner()).await?;
+        Ok(GrpcResponse::new(()))
     }
 
     async fn list_objects(
         &self,
-        request: tonic::Request<pb::ListObjectsRequest>,
-    ) -> std::result::Result<tonic::Response<pb::ListObjectsResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::list_objects(self.as_ref(), request).await
+        request: GrpcRequest<pb::ListObjectsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListObjectsResponse>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.list_objects(request.into_inner()).await?,
+        ))
     }
 
     async fn copy_object(
         &self,
-        request: tonic::Request<pb::CopyObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::CopyObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::copy_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::CopyObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::CopyObjectResponse>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.copy_object(request.into_inner()).await?,
+        ))
     }
 
     async fn presign_object(
         &self,
-        request: tonic::Request<pb::PresignObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::PresignObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::presign_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::PresignObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::PresignObjectResponse>, Status> {
+        Ok(GrpcResponse::new(
+            self.provider.presign_object(request.into_inner()).await?,
+        ))
     }
 }
 

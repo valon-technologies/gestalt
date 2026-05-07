@@ -18,6 +18,7 @@ from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
+    AgentProvider,
     AuthenticationProvider,
     CacheEntry,
     CacheProvider,
@@ -41,6 +42,7 @@ from gestalt import (
     _grpc_transport,
     _runtime,
 )
+from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
 from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
@@ -50,6 +52,7 @@ from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
+agent_pb2_grpc: Any = _agent_pb2_grpc
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 duration_pb2: Any = _duration_pb2
@@ -1341,6 +1344,26 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         self.assertIs(servable.provider, provider)
 
 
+class AgentRuntimeTests(unittest.TestCase):
+    class StubAgentProvider(AgentProvider):
+        pass
+
+    def test_agent_wrapper_accepts_snake_case_one_arg_handler(self) -> None:
+        class Provider(AgentProvider):
+            def create_session(self, request: Any) -> Any:
+                return {"request": request}
+
+        wrapped = _runtime._service_wrapper(
+            Provider(),
+            agent_pb2_grpc.AgentProviderServicer,
+            (("CreateSession", "create_session"),),
+        )
+
+        self.assertEqual(
+            wrapped.CreateSession("request", object()), {"request": "request"}
+        )
+
+
 class WorkflowRuntimeTests(unittest.TestCase):
     class StubWorkflowProvider(
         WorkflowProvider,
@@ -1396,6 +1419,34 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertIsNot(wrapped, provider)
         self.assertIs(getattr(wrapped, "_provider"), provider)
         self.assertIs(registered_server, server)
+
+    def test_workflow_wrapper_accepts_snake_case_one_arg_handler(self) -> None:
+        class Provider(WorkflowProvider):
+            def start_run(self, request: Any) -> Any:
+                return {"request": request}
+
+        wrapped = _runtime._service_wrapper(
+            Provider(),
+            workflow_pb2_grpc.WorkflowProviderServicer,
+            (("StartRun", "start_run"),),
+        )
+
+        self.assertEqual(wrapped.StartRun("request", object()), {"request": "request"})
+
+    def test_workflow_wrapper_keeps_pascal_case_rpc_handlers(self) -> None:
+        context = object()
+
+        class Provider(WorkflowProvider):
+            def StartRun(self, request: Any, rpc_context: Any) -> Any:
+                return (request, rpc_context)
+
+        wrapped = _runtime._service_wrapper(
+            Provider(),
+            workflow_pb2_grpc.WorkflowProviderServicer,
+            (("StartRun", "start_run"),),
+        )
+
+        self.assertEqual(wrapped.StartRun("request", context), ("request", context))
 
     def test_servable_target_wraps_workflow_provider(self) -> None:
         provider = self.StubWorkflowProvider()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import functools
 import importlib
+import inspect
 import json
 import os
 import pathlib
@@ -504,19 +505,19 @@ def _register_agent_services(server: Any, provider: PluginProvider) -> None:
             provider,
             agent_pb2_grpc.AgentProviderServicer,
             (
-                "CreateSession",
-                "GetSession",
-                "ListSessions",
-                "UpdateSession",
-                "CreateTurn",
-                "GetTurn",
-                "ListTurns",
-                "CancelTurn",
-                "ListTurnEvents",
-                "GetInteraction",
-                "ListInteractions",
-                "ResolveInteraction",
-                "GetCapabilities",
+                ("CreateSession", "create_session"),
+                ("GetSession", "get_session"),
+                ("ListSessions", "list_sessions"),
+                ("UpdateSession", "update_session"),
+                ("CreateTurn", "create_turn"),
+                ("GetTurn", "get_turn"),
+                ("ListTurns", "list_turns"),
+                ("CancelTurn", "cancel_turn"),
+                ("ListTurnEvents", "list_turn_events"),
+                ("GetInteraction", "get_interaction"),
+                ("ListInteractions", "list_interactions"),
+                ("ResolveInteraction", "resolve_interaction"),
+                ("GetCapabilities", "get_capabilities"),
             ),
         ),
         server,
@@ -577,25 +578,28 @@ def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
             provider,
             workflow_pb2_grpc.WorkflowProviderServicer,
             (
-                "StartRun",
-                "GetRun",
-                "ListRuns",
-                "CancelRun",
-                "SignalRun",
-                "SignalOrStartRun",
-                "UpsertSchedule",
-                "GetSchedule",
-                "ListSchedules",
-                "DeleteSchedule",
-                "PauseSchedule",
-                "ResumeSchedule",
-                "UpsertEventTrigger",
-                "GetEventTrigger",
-                "ListEventTriggers",
-                "DeleteEventTrigger",
-                "PauseEventTrigger",
-                "ResumeEventTrigger",
-                "PublishEvent",
+                ("StartRun", "start_run"),
+                ("GetRun", "get_run"),
+                ("ListRuns", "list_runs"),
+                ("CancelRun", "cancel_run"),
+                ("SignalRun", "signal_run"),
+                ("SignalOrStartRun", "signal_or_start_run"),
+                ("UpsertSchedule", "upsert_schedule"),
+                ("GetSchedule", "get_schedule"),
+                ("ListSchedules", "list_schedules"),
+                ("DeleteSchedule", "delete_schedule"),
+                ("PauseSchedule", "pause_schedule"),
+                ("ResumeSchedule", "resume_schedule"),
+                ("UpsertEventTrigger", "upsert_event_trigger"),
+                ("GetEventTrigger", "get_event_trigger"),
+                ("ListEventTriggers", "list_event_triggers"),
+                ("DeleteEventTrigger", "delete_event_trigger"),
+                ("PauseEventTrigger", "pause_event_trigger"),
+                ("ResumeEventTrigger", "resume_event_trigger"),
+                ("PutExecutionReference", "put_execution_reference"),
+                ("GetExecutionReference", "get_execution_reference"),
+                ("ListExecutionReferences", "list_execution_references"),
+                ("PublishEvent", "publish_event"),
             ),
         ),
         server,
@@ -645,7 +649,7 @@ def _register_cache_services(server: Any, provider: PluginProvider) -> None:
 def _service_wrapper(
     provider: PluginProvider,
     base_cls: type[Any],
-    method_names: tuple[str, ...],
+    method_names: tuple[str | tuple[str, str], ...],
 ) -> Any:
     methods: dict[str, Any] = {"__slots__": ("_provider",)}
 
@@ -654,15 +658,23 @@ def _service_wrapper(
 
     methods["__init__"] = __init__
 
-    for method_name in method_names:
+    for method in method_names:
+        if isinstance(method, tuple):
+            method_name, sdk_method_name = method
+        else:
+            method_name = sdk_method_name = method
         base_method = getattr(base_cls, method_name)
 
         def _delegated(
             self,
             *args: Any,
             _method_name: str = method_name,
+            _sdk_method_name: str = sdk_method_name,
             _base_method: Any = base_method,
         ) -> Any:
+            handler = getattr(self._provider, _sdk_method_name, None)
+            if handler is not None:
+                return _call_provider_handler(handler, *args)
             handler = getattr(self._provider, _method_name, None)
             if handler is None:
                 return _base_method(self, *args)
@@ -676,6 +688,30 @@ def _service_wrapper(
         methods,
     )
     return wrapped_cls(provider)
+
+
+def _call_provider_handler(handler: Any, *args: Any) -> Any:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return handler(*args)
+
+    positional = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if any(
+        parameter.kind is inspect.Parameter.VAR_POSITIONAL
+        for parameter in signature.parameters.values()
+    ):
+        return handler(*args)
+    if len(positional) == 0:
+        return handler()
+    if len(positional) == 1 and args:
+        return handler(args[0])
+    return handler(*args)
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
