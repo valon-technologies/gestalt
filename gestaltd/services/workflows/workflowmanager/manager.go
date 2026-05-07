@@ -282,12 +282,24 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(existing.ProviderName) != providerName {
+		if _, err := m.revokeExecutionRefWithError(ctx, existing.Definition); err != nil {
+			return nil, err
+		}
+		ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName)
+		if err != nil {
+			m.restoreExecutionRef(ctx, existing.Definition)
+			return nil, err
+		}
+		return &ManagedDefinition{
+			ProviderName: providerName,
+			Definition:   ref,
+			provider:     provider,
+		}, nil
+	}
 	ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
-	}
-	if existing.ProviderName != providerName {
-		m.revokeExecutionRef(ctx, existing.Definition)
 	}
 	return &ManagedDefinition{
 		ProviderName: providerName,
@@ -1619,6 +1631,29 @@ func addWorkflowPermission(permissions principal.PermissionSet, pluginName, oper
 }
 
 func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
+	_, _ = m.revokeExecutionRefWithError(ctx, ref)
+}
+
+func (m *Manager) revokeExecutionRefWithError(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
+		return nil, nil
+	}
+	providerName := strings.TrimSpace(ref.ProviderName)
+	provider, err := m.resolveProviderByName(providerName)
+	if err != nil {
+		return nil, err
+	}
+	store, err := workflowExecutionReferenceStore(providerName, provider)
+	if err != nil {
+		return nil, err
+	}
+	cloned := *ref
+	now := m.now().UTC().Truncate(time.Second)
+	cloned.RevokedAt = &now
+	return store.PutExecutionReference(ctx, &cloned)
+}
+
+func (m *Manager) restoreExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
 	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
 		return
 	}
@@ -1632,8 +1667,6 @@ func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.Exec
 		return
 	}
 	cloned := *ref
-	now := m.now().UTC().Truncate(time.Second)
-	cloned.RevokedAt = &now
 	_, _ = store.PutExecutionReference(ctx, &cloned)
 }
 

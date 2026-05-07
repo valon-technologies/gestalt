@@ -3,6 +3,7 @@ package workflowmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -386,6 +387,97 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	})
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("StartRun with mismatched provider error = %v, want invalid invocation", err)
+	}
+}
+
+func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testing.T) {
+	t.Parallel()
+
+	localProvider := newTestWorkflowProvider()
+	remoteProvider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: namedTestWorkflowControl{
+			defaultName: "local",
+			names:       []string{"local", "remote"},
+			providers: map[string]coreworkflow.Provider{
+				"local":  localProvider,
+				"remote": remoteProvider,
+			},
+		},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	var hookErr error
+	remoteProvider.putExecutionReferenceHook = func(ref *coreworkflow.ExecutionReference) {
+		if strings.TrimSpace(ref.ID) != definition.Definition.ID || ref.RevokedAt != nil {
+			return
+		}
+		managed, err := manager.GetDefinition(context.Background(), caller, definition.Definition.ID)
+		if err != nil {
+			hookErr = err
+			return
+		}
+		if managed.ProviderName != "remote" {
+			hookErr = fmt.Errorf("definition provider during update = %q, want remote", managed.ProviderName)
+		}
+	}
+
+	updated, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
+		ProviderName:     "remote",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdateDefinition: %v", err)
+	}
+	if hookErr != nil {
+		t.Fatalf("GetDefinition during provider change: %v", hookErr)
+	}
+	if updated.ProviderName != "remote" {
+		t.Fatalf("updated provider = %q, want remote", updated.ProviderName)
+	}
+	localRef := localProvider.refs[definition.Definition.ID]
+	if localRef == nil || localRef.RevokedAt == nil {
+		t.Fatalf("local definition ref = %#v, want revoked", localRef)
+	}
+	remoteRef := remoteProvider.refs[definition.Definition.ID]
+	if remoteRef == nil || remoteRef.RevokedAt != nil {
+		t.Fatalf("remote definition ref = %#v, want active", remoteRef)
 	}
 }
 
@@ -1310,6 +1402,7 @@ type testWorkflowProvider struct {
 	signalOrStartErr                error
 	signalOrStartCalls              int
 	getMissingExecutionReferenceErr error
+	putExecutionReferenceHook       func(*coreworkflow.ExecutionReference)
 	putExecutionReferenceCalls      int
 }
 
@@ -1441,6 +1534,9 @@ func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *cor
 	p.putExecutionReferenceCalls++
 	copied := *ref
 	p.refs[copied.ID] = &copied
+	if p.putExecutionReferenceHook != nil {
+		p.putExecutionReferenceHook(&copied)
+	}
 	return &copied, nil
 }
 
