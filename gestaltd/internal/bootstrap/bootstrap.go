@@ -1913,6 +1913,13 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		hostServices = append(hostServices, indexedDBHostServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	if !entry.UsesRuntimePlacement() {
+		publicWorkflowHostServicesCleanup, err := registerPublicWorkflowHostServices(name, hostServices, deps)
+		if err != nil {
+			return nil, fmt.Errorf("workflow provider: %w", err)
+		}
+		cleanup = chainCleanup(cleanup, publicWorkflowHostServicesCleanup)
+	}
 	if factories.Workflow == nil {
 		return nil, fmt.Errorf("workflow factory is not registered")
 	}

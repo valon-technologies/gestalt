@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -129,6 +130,34 @@ func (p startupTestWorkflowProvider) PublishEvent(context.Context, coreworkflow.
 
 func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }
 func (p startupTestWorkflowProvider) Close() error               { return nil }
+
+func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
+	t.Parallel()
+
+	factories := NewFactoryRegistry()
+	factories.Workflow = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (coreworkflow.Provider, error) {
+		return startupTestWorkflowProvider{}, nil
+	}
+	deps := Deps{
+		BaseURL:            "https://gestalt.example.test",
+		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
+		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
+	}
+	provider, err := buildWorkflow(context.Background(), "local", &config.ProviderEntry{
+		Config: mustNode(t, map[string]any{"command": "/bin/workflow-provider"}),
+	}, factories, deps)
+	if err != nil {
+		t.Fatalf("buildWorkflow: %v", err)
+	}
+
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
+	if err := provider.Close(); err != nil {
+		t.Fatalf("provider.Close: %v", err)
+	}
+	if services := deps.PublicHostServices.Snapshot(); len(services) != 0 {
+		t.Fatalf("public host services after provider close = %#v, want none", services)
+	}
+}
 
 func (noopTelemetryProvider) Logger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, nil))
