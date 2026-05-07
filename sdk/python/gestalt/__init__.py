@@ -147,6 +147,7 @@ _WORKFLOW_PROTOCOL_EXPORTS = (
     "WORKFLOW_RUN_STATUS_SUCCEEDED",
     "WORKFLOW_RUN_STATUS_UNSPECIFIED",
     "WorkflowActor",
+    "WorkflowEvent",
     "WorkflowManagerCreateEventTriggerRequest",
     "WorkflowManagerCreateScheduleRequest",
     "WorkflowManagerDeleteEventTriggerRequest",

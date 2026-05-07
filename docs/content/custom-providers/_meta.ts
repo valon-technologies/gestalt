@@ -3,6 +3,7 @@ export default {
   authentication: "Authentication",
   authorization: "Authorization",
   cache: "Cache",
+  "external-credentials": "External Credentials",
   indexeddb: "IndexedDB",
   plugins: "Plugin",
   runtime: "Runtime",

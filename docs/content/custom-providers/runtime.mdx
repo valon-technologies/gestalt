@@ -400,6 +400,74 @@ runtime log host service. The SDK environment exposes that service as
 Use this for logs that originate in the runtime backend or in hosted provider
 processes before Gestalt has dialed the provider directly.
 
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func recordRuntimeStartup(ctx context.Context) error {
+        logs, err := gestalt.RuntimeLogHost()
+        if err != nil {
+            return err
+        }
+        defer logs.Close()
+
+        return logs.Append(
+            ctx,
+            "started hosted provider process",
+            gestalt.WithRuntimeLogStream(gestalt.RuntimeLogStreamRuntime),
+        )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def record_runtime_startup() -> None:
+        with gestalt.RuntimeLogHost() as logs:
+            logs.append(
+                "started hosted provider process",
+                stream="runtime",
+            )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn record_runtime_startup() -> Result<(), Box<dyn std::error::Error>> {
+        let mut logs = gestalt::RuntimeLogHost::connect().await?;
+        logs.append_current_runtime("started hosted provider process")
+            .await?;
+        Ok(())
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { RuntimeLogHost } from "@valon-technologies/gestalt";
+
+    export async function recordRuntimeStartup() {
+      const logs = new RuntimeLogHost();
+
+      await logs.append({
+        stream: "runtime",
+        message: "started hosted provider process",
+      });
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+`append` uses `GESTALT_RUNTIME_SESSION_ID` by default. Pass an explicit session
+ID only when the runtime backend is forwarding logs for a different hosted
+session. Python and TypeScript also expose writer helpers for redirecting
+standard streams.
+
 ## Releasing
 
 Runtime providers use the same release flow as other executable providers:

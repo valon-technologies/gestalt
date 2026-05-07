@@ -73,6 +73,12 @@ def WorkflowSignal(*args: Any, **kwargs: Any) -> Any:
     return pb.WorkflowSignal(*args, **kwargs)
 
 
+def WorkflowEvent(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow event protocol value."""
+
+    return pb.WorkflowEvent(*args, **kwargs)
+
+
 def BoundWorkflowRun(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-provider run protocol value."""
 

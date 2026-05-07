@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Authorization
 
 Authorization providers back dynamic subject authorization state. They are
@@ -363,6 +365,115 @@ provider:
 Every managed resource type follows the same pattern: a resource instance
 has relations, and relations have subject types. Actions are computed from
 relations. This is the core Zanzibar model.
+
+## Using `Authorization` from provider code
+
+Provider code can query the selected host authorization provider through the
+read-only SDK authorization client. Use this when a plugin or provider needs to
+look up authorization-derived routing information, such as the Gestalt users
+allowed to assume an external identity. This client is for reads only; Gestalt
+still owns relationship writes and model lifecycle for managed authorization
+state.
+
+<Tabs items={['Go', 'Python', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func usersForSlackIdentity(
+        ctx context.Context,
+        request gestalt.Request,
+        teamID string,
+        slackUserID string,
+    ) ([]string, error) {
+        authz, err := request.Authorization()
+        if err != nil {
+            return nil, err
+        }
+        defer authz.Close()
+
+        subjects, err := authz.SearchSubjects(ctx, &gestalt.SubjectSearchRequest{
+            Resource: &gestalt.AuthorizationResource{
+                Type: "slack_identity",
+                Id:   "team:" + teamID + ":user:" + slackUserID,
+            },
+            Action: &gestalt.AuthorizationAction{Name: "assume"},
+            SubjectType: "user",
+            PageSize:    10,
+        })
+        if err != nil {
+            return nil, err
+        }
+
+        ids := make([]string, 0, len(subjects.GetSubjects()))
+        for _, subject := range subjects.GetSubjects() {
+            ids = append(ids, subject.GetId())
+        }
+        return ids, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def users_for_slack_identity(
+        request: gestalt.Request,
+        team_id: str,
+        slack_user_id: str,
+    ) -> list[str]:
+        with request.authorization() as authz:
+            subjects = authz.search_subjects(
+                gestalt.SubjectSearchRequest(
+                    resource=gestalt.AuthorizationResource(
+                        type="slack_identity",
+                        id=f"team:{team_id}:user:{slack_user_id}",
+                    ),
+                    action=gestalt.AuthorizationAction(name="assume"),
+                    subject_type="user",
+                    page_size=10,
+                )
+            )
+
+        return [subject.id for subject in subjects.subjects]
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { Authorization, type Request } from "@valon-technologies/gestalt";
+
+    export async function usersForSlackIdentity(
+      _request: Request,
+      teamId: string,
+      slackUserId: string,
+    ) {
+      const authz = Authorization();
+
+      const subjects = await authz.searchSubjects({
+        resource: {
+          type: "slack_identity",
+          id: `team:${teamId}:user:${slackUserId}`,
+        },
+        action: {
+          name: "assume",
+        },
+        subjectType: "user",
+        pageSize: 10,
+      });
+
+      return subjects.subjects.map((subject) => subject.id);
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The Rust SDK does not currently expose a read-only authorization host-service
+client wrapper.
 
 ## First-party authorization providers
 
