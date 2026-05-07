@@ -18,7 +18,7 @@ max_release_pages="${GESTALT_INSTALL_MAX_PAGES:-5}"
 
 usage() {
   cat <<'USAGE'
-Install Gestalt on Linux.
+Install Gestalt on Linux or macOS.
 
 Usage:
   install.sh [options]
@@ -128,8 +128,11 @@ detect_platform() {
     linux)
       os_part="linux"
       ;;
+    darwin)
+      os_part="macos"
+      ;;
     *)
-      fail "this installer supports Linux; use Homebrew or binary releases for ${os_name}"
+      fail "unsupported operating system: ${os_name}"
       ;;
   esac
 
@@ -141,10 +144,13 @@ detect_platform() {
       arch_part="arm64"
       ;;
     armv7 | armv7l)
+      if [ "$os_part" != "linux" ]; then
+        fail "unsupported ${os_name} architecture: ${arch_name}"
+      fi
       arch_part="armv7"
       ;;
     *)
-      fail "unsupported Linux architecture: ${arch_name}"
+      fail "unsupported ${os_name} architecture: ${arch_name}"
       ;;
   esac
 

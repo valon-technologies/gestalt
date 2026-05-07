@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
-    "test:linux-installer": "bash scripts/test-linux-installer.sh",
+    "test:installer": "bash scripts/test-installer.sh",
+    "test:linux-installer": "npm run test:installer",
     "test:registry": "node scripts/check-registry-static.mjs",
     "test:registry-docs": "node scripts/check-registry-docs-render.mjs"
   },

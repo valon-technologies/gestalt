@@ -15,7 +15,7 @@ cleanup() {
 trap cleanup EXIT
 
 fail() {
-  printf 'test-linux-installer: %s\n' "$*" >&2
+  printf 'test-installer: %s\n' "$*" >&2
   exit 1
 }
 
@@ -118,6 +118,7 @@ make_archive gestaltd 3.0.0 linux-x86_64 gestalt
 make_archive gestalt 4.0.0 linux-x86_64 gestalt
 make_archive gestalt 5.0.0 linux-x86_64 gestalt
 make_archive gestalt 6.0.0 linux-x86_64 gestalt
+make_archive gestalt 8.0.0 macos-arm64 gestalt
 
 symlink_stage="$tmp_dir/stage/gestalt-7.0.0-linux-x86_64"
 symlink_dest="$download_root/gestalt/v7.0.0"
@@ -140,6 +141,15 @@ default_bin="$tmp_dir/bin-default"
 run_core_installer --version 1.2.3 --bin-dir "$default_bin" >/dev/null
 assert_executable "$default_bin/gestalt"
 assert_not_exists "$default_bin/gestaltd"
+
+macos_bin="$tmp_dir/bin-macos"
+env \
+  GESTALT_INSTALL_DOWNLOAD_BASE="file://${download_root}" \
+  GESTALT_INSTALL_OS=Darwin \
+  GESTALT_INSTALL_ARCH=arm64 \
+  sh "$installer" --component gestalt --version 8.0.0 --bin-dir "$macos_bin" >/dev/null
+assert_executable "$macos_bin/gestalt"
+assert_not_exists "$macos_bin/gestaltd"
 
 cat >"$tmp_dir/releases-page-1.json" <<'JSON'
 [
@@ -211,6 +221,25 @@ dry_run_dead_base="$(
 )"
 assert_contains "$dry_run_dead_base" "archive: file:///does-not-exist/gestalt/v1.2.3/gestalt-linux-x86_64.tar.gz"
 
+dry_run_macos="$(
+  env \
+    GESTALT_INSTALL_SCRIPT_URL="file://${installer}" \
+    GESTALT_INSTALL_DOWNLOAD_BASE="file:///does-not-exist" \
+    GESTALT_INSTALL_OS=darwin \
+    GESTALT_INSTALL_ARCH=arm64 \
+    sh "$cli_installer" --version 8.0.0 --dry-run --bin-dir "$tmp_dir/dry-run-bin"
+)"
+assert_contains "$dry_run_macos" "platform: macos-arm64"
+assert_contains "$dry_run_macos" "archive: file:///does-not-exist/gestalt/v8.0.0/gestalt-macos-arm64.tar.gz"
+
+unsupported_macos_output="$(
+  assert_fails env \
+    GESTALT_INSTALL_OS=darwin \
+    GESTALT_INSTALL_ARCH=armv7l \
+    sh "$installer" --component gestalt --dry-run --bin-dir "$tmp_dir/unsupported-bin"
+)"
+assert_contains "$unsupported_macos_output" "unsupported darwin architecture: armv7l"
+
 mismatch_output="$(
   assert_fails env \
     GESTALT_INSTALL_OS=linux \
@@ -226,10 +255,10 @@ wrapper_component_output="$(assert_fails sh "$cli_installer" --component gestalt
 assert_contains "$wrapper_component_output" "install-gestalt.sh does not accept --component"
 
 cli_help_output="$(sh "$cli_installer" --help)"
-assert_contains "$cli_help_output" "Install the Gestalt CLI on Linux."
+assert_contains "$cli_help_output" "Install the Gestalt CLI on Linux or macOS."
 
 daemon_help_output="$(sh "$daemon_installer" --help)"
-assert_contains "$daemon_help_output" "Install gestaltd on Linux."
+assert_contains "$daemon_help_output" "Install gestaltd on Linux or macOS."
 
 conflict_output="$(assert_fails sh "$installer" --user --bin-dir "$tmp_dir/conflict-bin")"
 assert_contains "$conflict_output" "mutually exclusive"
@@ -294,4 +323,4 @@ else
   printf 'Skipping static export assertion because docs/out does not exist; run npm run build first.\n'
 fi
 
-printf 'Linux installer integration tests passed.\n'
+printf 'Installer integration tests passed.\n'
