@@ -1901,6 +1901,37 @@ func registerPublicRuntimeHostServices(providerName string, hostServices []runti
 	}, nil
 }
 
+type workflowHostServiceSessionVerifier struct{}
+
+func (workflowHostServiceSessionVerifier) VerifyHostServiceSession(context.Context, string) error {
+	// Non-runtime workflow providers do not allocate runtime sessions; the
+	// signed relay token is scoped by provider, service, and method.
+	return nil
+}
+
+func registerPublicWorkflowHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
+	if deps.PublicHostServices == nil || !hostCanRelayPluginRuntimeHostServices(deps) {
+		return nil, nil
+	}
+	registerHostServices := make([]runtimehost.HostService, 0, len(hostServices))
+	for _, hostService := range hostServices {
+		if strings.TrimSpace(hostService.EnvVar) != workflowservice.DefaultHostSocketEnv || hostService.Register == nil {
+			continue
+		}
+		if strings.TrimSpace(hostService.Name) == "" {
+			return nil, fmt.Errorf("host service %q requires a service name for public relay", hostService.EnvVar)
+		}
+		registerHostServices = append(registerHostServices, hostService)
+	}
+	if len(registerHostServices) == 0 {
+		return nil, nil
+	}
+	registration := deps.PublicHostServices.RegisterVerified(providerName, workflowHostServiceSessionVerifier{}, registerHostServices...)
+	return func() {
+		registration.Unregister()
+	}, nil
+}
+
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
 	baseURL, explicitRelayBaseURL := hostedRuntimeRelayBaseURL(deps)
 	if baseURL == "" || len(deps.EncryptionKey) == 0 {
