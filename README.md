@@ -32,18 +32,19 @@ Gestalt also does not replace your existing APIs. It sits between agents and ups
 
 ## Quick Start
 
-On Linux, install both binaries with the installer script:
+On Linux, install the server and CLI with the installer scripts:
 
 ```sh
-curl -fsSL https://gestaltd.ai/install.sh | sh
+curl -fsSL https://gestaltd.ai/install-gestaltd.sh | sh
+curl -fsSL https://gestaltd.ai/install-gestalt.sh | sh
 ```
 
 On macOS, or on Linux when you prefer Homebrew, tap the Gestalt Homebrew
-repository and install the CLI package. The CLI package also includes the
-bundled `gestaltd` helper binary:
+repository and install the packages you need:
 
 ```sh
 brew tap valon-technologies/gestalt
+brew install valon-technologies/gestalt/gestaltd
 brew install valon-technologies/gestalt/gestalt
 ```
 

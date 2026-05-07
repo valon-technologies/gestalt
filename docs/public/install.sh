@@ -2,7 +2,7 @@
 set -eu
 
 repo="valon-technologies/gestalt"
-component="both"
+component="${GESTALT_INSTALL_COMPONENT:-gestalt}"
 version="latest"
 prefix="/usr/local"
 prefix_set=0
@@ -24,7 +24,7 @@ Usage:
   install.sh [options]
 
 Options:
-  --component both|gestalt|gestaltd  Component to install. Default: both.
+  --component gestalt|gestaltd       Component to install. Default: gestalt.
   --version VERSION                  Release version or family-prefixed tag. Default: latest, including prereleases.
   --prefix PATH                      Install into PATH/bin. Default: /usr/local/bin.
   --bin-dir PATH                     Install directly into PATH.
@@ -94,16 +94,12 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$component" in
-  both | gestalt)
-    release_family="gestalt"
-    ;;
-  gestaltd)
-    release_family="gestaltd"
-    ;;
-  *)
-    fail "--component must be one of: both, gestalt, gestaltd"
-    ;;
+  gestalt | gestaltd) ;;
+  both) fail "--component both is no longer supported; run install-gestalt.sh and install-gestaltd.sh separately" ;;
+  *) fail "--component must be one of: gestalt, gestaltd" ;;
 esac
+
+release_family="$component"
 
 if [ "$path_flags" -gt 1 ]; then
   fail "--bin-dir, --prefix, and --user are mutually exclusive"
@@ -318,9 +314,6 @@ verify_checksum() {
 
 expected_binaries() {
   case "$component" in
-    both)
-      printf '%s\n' "gestalt gestaltd"
-      ;;
     gestalt)
       printf '%s\n' "gestalt"
       ;;

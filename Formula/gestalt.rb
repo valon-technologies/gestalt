@@ -31,7 +31,7 @@ class Gestalt < Formula
   end
 
   def install
-    bin.install "gestalt", "gestaltd"
+    bin.install "gestalt"
   end
 
   test do
