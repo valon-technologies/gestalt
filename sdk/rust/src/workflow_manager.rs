@@ -37,7 +37,7 @@ pub enum WorkflowManagerError {
     Env(String),
 }
 
-/// Client for starting workflow runs and managing schedules or triggers.
+/// Client for creating workflow definitions, starting runs, and managing schedules or triggers.
 pub struct WorkflowManager {
     client: ProtoWorkflowManagerHostClient<WorkflowManagerTransport>,
     invocation_token: String,
@@ -96,6 +96,46 @@ impl WorkflowManager {
             invocation_token,
             idempotency_key: idempotency_key.as_ref().trim().to_owned(),
         })
+    }
+
+    /// Creates a reusable workflow definition.
+    pub async fn create_definition(
+        &mut self,
+        mut request: pb::WorkflowManagerCreateDefinitionRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        if request.idempotency_key.trim().is_empty() {
+            request.idempotency_key = self.idempotency_key.clone();
+        }
+        Ok(self.client.create_definition(request).await?.into_inner())
+    }
+
+    /// Fetches one workflow definition.
+    pub async fn get_definition(
+        &mut self,
+        mut request: pb::WorkflowManagerGetDefinitionRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_definition(request).await?.into_inner())
+    }
+
+    /// Updates a workflow definition.
+    pub async fn update_definition(
+        &mut self,
+        mut request: pb::WorkflowManagerUpdateDefinitionRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.update_definition(request).await?.into_inner())
+    }
+
+    /// Deletes a workflow definition.
+    pub async fn delete_definition(
+        &mut self,
+        mut request: pb::WorkflowManagerDeleteDefinitionRequest,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        self.client.delete_definition(request).await?;
+        Ok(())
     }
 
     /// Creates a workflow schedule.

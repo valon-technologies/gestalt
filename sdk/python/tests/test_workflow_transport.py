@@ -43,6 +43,24 @@ class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
 
 
 class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
+    def CreateDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_manager_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "create_definition",
+                "invocation_token": request.invocation_token,
+                "idempotency_key": request.idempotency_key,
+                "provider_name": request.provider_name,
+            }
+        )
+        return workflow_pb2.ManagedWorkflowDefinition(
+            provider_name=request.provider_name or "basic",
+            definition=workflow_pb2.BoundWorkflowDefinition(
+                id="def-1",
+                target=request.target,
+            ),
+        )
+
     def CreateSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
@@ -199,6 +217,17 @@ class WorkflowTransportTests(unittest.TestCase):
         )
 
         with request.workflow_manager() as manager:
+            created_definition = manager.create_definition(
+                workflow_pb2.WorkflowManagerCreateDefinitionRequest(
+                    provider_name="managed",
+                    target=workflow_pb2.BoundWorkflowTarget(
+                        plugin=workflow_pb2.BoundWorkflowPluginTarget(
+                            plugin_name="demo",
+                            operation="sync",
+                        ),
+                    ),
+                )
+            )
             created = manager.create_schedule(
                 workflow_pb2.WorkflowManagerCreateScheduleRequest(
                     provider_name="managed",
@@ -217,12 +246,22 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
+        self.assertEqual(created_definition.definition.id, "def-1")
         self.assertEqual(created.schedule.id, "sched-1")
         self.assertEqual(published.id, "published-event-1")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(
+            _manager_relay_tokens,
+            ["relay-token-py", "relay-token-py", "relay-token-py"],
+        )
         self.assertEqual(
             _manager_requests,
             [
+                {
+                    "method": "create_definition",
+                    "invocation_token": "token-embedded",
+                    "idempotency_key": "workflow-request-key-py",
+                    "provider_name": "managed",
+                },
                 {
                     "method": "create_schedule",
                     "invocation_token": "token-embedded",

@@ -97,6 +97,12 @@ def BoundWorkflowEventTrigger(*args: Any, **kwargs: Any) -> Any:
     return pb.BoundWorkflowEventTrigger(*args, **kwargs)
 
 
+def BoundWorkflowDefinition(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow definition protocol value."""
+
+    return pb.BoundWorkflowDefinition(*args, **kwargs)
+
+
 def ListWorkflowProviderRunsResponse(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-provider list-runs response."""
 
@@ -131,6 +137,30 @@ def WorkflowManagerSignalOrStartRunRequest(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-manager signal-or-start-run request."""
 
     return pb.WorkflowManagerSignalOrStartRunRequest(*args, **kwargs)
+
+
+def WorkflowManagerCreateDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager create-definition request."""
+
+    return pb.WorkflowManagerCreateDefinitionRequest(*args, **kwargs)
+
+
+def WorkflowManagerGetDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager get-definition request."""
+
+    return pb.WorkflowManagerGetDefinitionRequest(*args, **kwargs)
+
+
+def WorkflowManagerUpdateDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager update-definition request."""
+
+    return pb.WorkflowManagerUpdateDefinitionRequest(*args, **kwargs)
+
+
+def WorkflowManagerDeleteDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-manager delete-definition request."""
+
+    return pb.WorkflowManagerDeleteDefinitionRequest(*args, **kwargs)
 
 
 def WorkflowManagerCreateScheduleRequest(*args: Any, **kwargs: Any) -> Any:
@@ -315,6 +345,32 @@ class WorkflowManager:
 
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.SignalOrStartRun, request)
+
+    def create_definition(self, request: Any) -> Any:
+        """Create a reusable workflow definition."""
+
+        request.invocation_token = self._invocation_token
+        if not getattr(request, "idempotency_key", "").strip():
+            request.idempotency_key = self._idempotency_key
+        return _grpc_call(self._stub.CreateDefinition, request)
+
+    def get_definition(self, request: Any) -> Any:
+        """Fetch one workflow definition."""
+
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.GetDefinition, request)
+
+    def update_definition(self, request: Any) -> Any:
+        """Update a workflow definition."""
+
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.UpdateDefinition, request)
+
+    def delete_definition(self, request: Any) -> Any:
+        """Delete a workflow definition."""
+
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.DeleteDefinition, request)
 
     def create_schedule(self, request: Any) -> Any:
         """Create a workflow schedule."""

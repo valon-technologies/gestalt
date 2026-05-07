@@ -74,6 +74,7 @@ type (
 	AuthorizationProviderClient               = internal.AuthorizationProviderClient
 	BeginTransactionRequest                   = internal.BeginTransactionRequest
 	BoundWorkflowAgentTarget                  = internal.BoundWorkflowAgentTarget
+	BoundWorkflowDefinition                   = internal.BoundWorkflowDefinition
 	BoundWorkflowEventTrigger                 = internal.BoundWorkflowEventTrigger
 	BoundWorkflowPluginTarget                 = internal.BoundWorkflowPluginTarget
 	BoundWorkflowRun                          = internal.BoundWorkflowRun
@@ -157,6 +158,7 @@ type (
 	ListWorkflowProviderSchedulesRequest      = internal.ListWorkflowProviderSchedulesRequest
 	ListWorkflowProviderSchedulesResponse     = internal.ListWorkflowProviderSchedulesResponse
 	ManagedWorkflowEventTrigger               = internal.ManagedWorkflowEventTrigger
+	ManagedWorkflowDefinition                 = internal.ManagedWorkflowDefinition
 	ManagedWorkflowRun                        = internal.ManagedWorkflowRun
 	ManagedWorkflowRunSignal                  = internal.ManagedWorkflowRunSignal
 	ManagedWorkflowSchedule                   = internal.ManagedWorkflowSchedule
@@ -254,10 +256,13 @@ type (
 	WorkflowEventTriggerInvocation            = internal.WorkflowEventTriggerInvocation
 	WorkflowExecutionReference                = internal.WorkflowExecutionReference
 	WorkflowHostServer                        = internal.WorkflowHostServer
+	WorkflowManagerCreateDefinitionRequest    = internal.WorkflowManagerCreateDefinitionRequest
 	WorkflowManagerCreateEventTriggerRequest  = internal.WorkflowManagerCreateEventTriggerRequest
 	WorkflowManagerCreateScheduleRequest      = internal.WorkflowManagerCreateScheduleRequest
+	WorkflowManagerDeleteDefinitionRequest    = internal.WorkflowManagerDeleteDefinitionRequest
 	WorkflowManagerDeleteEventTriggerRequest  = internal.WorkflowManagerDeleteEventTriggerRequest
 	WorkflowManagerDeleteScheduleRequest      = internal.WorkflowManagerDeleteScheduleRequest
+	WorkflowManagerGetDefinitionRequest       = internal.WorkflowManagerGetDefinitionRequest
 	WorkflowManagerGetEventTriggerRequest     = internal.WorkflowManagerGetEventTriggerRequest
 	WorkflowManagerGetScheduleRequest         = internal.WorkflowManagerGetScheduleRequest
 	WorkflowManagerPauseEventTriggerRequest   = internal.WorkflowManagerPauseEventTriggerRequest
@@ -268,6 +273,7 @@ type (
 	WorkflowManagerSignalOrStartRunRequest    = internal.WorkflowManagerSignalOrStartRunRequest
 	WorkflowManagerSignalRunRequest           = internal.WorkflowManagerSignalRunRequest
 	WorkflowManagerStartRunRequest            = internal.WorkflowManagerStartRunRequest
+	WorkflowManagerUpdateDefinitionRequest    = internal.WorkflowManagerUpdateDefinitionRequest
 	WorkflowManagerUpdateEventTriggerRequest  = internal.WorkflowManagerUpdateEventTriggerRequest
 	WorkflowManagerUpdateScheduleRequest      = internal.WorkflowManagerUpdateScheduleRequest
 	WorkflowManualTrigger                     = internal.WorkflowManualTrigger

@@ -685,6 +685,27 @@ func workflowEventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.Bou
 	}, nil
 }
 
+func workflowDefinitionToProto(ref *coreworkflow.ExecutionReference) (*proto.BoundWorkflowDefinition, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(ref.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowDefinition{
+		Id:     ref.ID,
+		Target: target,
+		CreatedBy: workflowActorToProto(coreworkflow.Actor{
+			SubjectID:   ref.SubjectID,
+			SubjectKind: ref.SubjectKind,
+			DisplayName: ref.DisplayName,
+			AuthSource:  ref.AuthSource,
+		}),
+		CreatedAt: timeToProto(ref.CreatedAt),
+	}, nil
+}
+
 func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (coreworkflow.InvokeOperationRequest, error) {
 	if req == nil {
 		return coreworkflow.InvokeOperationRequest{}, nil
@@ -805,6 +826,20 @@ func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTri
 	return &proto.ManagedWorkflowEventTrigger{
 		ProviderName: managed.ProviderName,
 		Trigger:      trigger,
+	}, nil
+}
+
+func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.ManagedWorkflowDefinition, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	definition, err := workflowDefinitionToProto(managed.Definition)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowDefinition{
+		ProviderName: managed.ProviderName,
+		Definition:   definition,
 	}, nil
 }
 

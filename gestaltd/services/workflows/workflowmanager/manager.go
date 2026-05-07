@@ -38,6 +38,7 @@ var (
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 const workflowRunExecutionRefBasePrefix = "workflow_run:"
+const workflowDefinitionExecutionRefBasePrefix = "workflow_definition:"
 const workflowNoProviderPermissionsPlugin = "__gestalt.workflow.no_provider_permissions__"
 const defaultWorkflowEventSpecVersion = "1.0"
 
@@ -59,6 +60,10 @@ type AgentControl interface {
 }
 
 type Service interface {
+	CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (*ManagedDefinition, error)
+	GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error)
+	UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (*ManagedDefinition, error)
+	DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error
 	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
 	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
 	GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
@@ -113,7 +118,15 @@ type ScheduleUpsert struct {
 	Cron             string
 	Timezone         string
 	Target           coreworkflow.Target
+	DefinitionID     string
 	Paused           bool
+	IdempotencyKey   string
+	CallerPluginName string
+}
+
+type DefinitionUpsert struct {
+	ProviderName     string
+	Target           coreworkflow.Target
 	IdempotencyKey   string
 	CallerPluginName string
 }
@@ -122,6 +135,7 @@ type EventTriggerUpsert struct {
 	ProviderName     string
 	Match            coreworkflow.EventMatch
 	Target           coreworkflow.Target
+	DefinitionID     string
 	Paused           bool
 	IdempotencyKey   string
 	CallerPluginName string
@@ -130,6 +144,7 @@ type EventTriggerUpsert struct {
 type RunStart struct {
 	ProviderName     string
 	Target           coreworkflow.Target
+	DefinitionID     string
 	IdempotencyKey   string
 	WorkflowKey      string
 	CallerPluginName string
@@ -144,9 +159,16 @@ type RunSignalOrStart struct {
 	ProviderName     string
 	WorkflowKey      string
 	Target           coreworkflow.Target
+	DefinitionID     string
 	IdempotencyKey   string
 	Signal           coreworkflow.Signal
 	CallerPluginName string
+}
+
+type ManagedDefinition struct {
+	ProviderName string
+	Definition   *coreworkflow.ExecutionReference
+	provider     coreworkflow.Provider
 }
 
 type ManagedSchedule struct {
@@ -197,6 +219,100 @@ func New(cfg Config) *Manager {
 		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
 		now:               now,
 	}
+}
+
+func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (*ManagedDefinition, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	definitionID := newDefinitionID("")
+	if idempotencyKey != "" {
+		definitionID = newDefinitionID(workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey))
+		existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
+		if err == nil {
+			if !managedDefinitionMatchesUpsert(existing, providerName, target) {
+				return nil, fmt.Errorf("%w: workflow definition idempotency key reused with different request", invocation.ErrInvalidInvocation)
+			}
+			return existing, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+	}
+	ref, err := m.putExecutionRef(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	return &ManagedDefinition{
+		ProviderName: providerName,
+		Definition:   ref,
+		provider:     provider,
+	}, nil
+}
+
+func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error) {
+	return m.requireOwnedDefinition(ctx, definitionID, p)
+}
+
+func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (*ManagedDefinition, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	if err != nil {
+		return nil, err
+	}
+	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	if existing.ProviderName != providerName {
+		m.revokeExecutionRef(ctx, existing.Definition)
+	}
+	return &ManagedDefinition{
+		ProviderName: providerName,
+		Definition:   ref,
+		provider:     provider,
+	}, nil
+}
+
+func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
+	existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	if err != nil {
+		return err
+	}
+	m.revokeExecutionRef(ctx, existing.Definition)
+	return nil
+}
+
+func managedDefinitionMatchesUpsert(existing *ManagedDefinition, providerName string, target coreworkflow.Target) bool {
+	if existing == nil || existing.Definition == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(providerName) {
+		return false
+	}
+	return coreworkflow.TargetsEqual(existing.Definition.Target, target)
 }
 
 func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error) {
@@ -256,11 +372,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -383,11 +495,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if workflowKey == "" {
 		return nil, ErrWorkflowKeyRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -526,11 +634,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -608,11 +712,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	if err != nil {
 		return nil, err
 	}
-	nextProviderName, nextProvider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -760,11 +860,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -842,11 +938,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	if err != nil {
 		return nil, err
 	}
-	nextProviderName, nextProvider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -950,6 +1042,46 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 		return nil, ErrWorkflowNotConfigured
 	}
 	return m.workflow.ResolveProvider(strings.TrimSpace(providerName))
+}
+
+func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, target coreworkflow.Target, definitionID, callerPluginName string) (string, coreworkflow.Provider, coreworkflow.Target, error) {
+	definitionID = strings.TrimSpace(definitionID)
+	if definitionID == "" {
+		providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(providerSelection))
+		if err != nil {
+			return "", nil, coreworkflow.Target{}, err
+		}
+		resolvedTarget, err := m.resolveTarget(ctx, p, target, callerPluginName)
+		if err != nil {
+			return "", nil, coreworkflow.Target{}, err
+		}
+		return providerName, provider, resolvedTarget, nil
+	}
+	if workflowTargetIsSet(target) {
+		return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
+	}
+	definition, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	if err != nil {
+		return "", nil, coreworkflow.Target{}, err
+	}
+	if strings.TrimSpace(providerSelection) != "" {
+		selectedProviderName, _, err := m.resolveProviderSelection(strings.TrimSpace(providerSelection))
+		if err != nil {
+			return "", nil, coreworkflow.Target{}, err
+		}
+		if selectedProviderName != definition.ProviderName {
+			return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow definition %s belongs to provider %q, not %q", invocation.ErrInvalidInvocation, definitionID, definition.ProviderName, selectedProviderName)
+		}
+	}
+	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerPluginName)
+	if err != nil {
+		return "", nil, coreworkflow.Target{}, err
+	}
+	return definition.ProviderName, definition.provider, resolvedTarget, nil
+}
+
+func workflowTargetIsSet(target coreworkflow.Target) bool {
+	return target.Plugin != nil || target.Agent != nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerPluginName string) (coreworkflow.Target, error) {
@@ -1207,6 +1339,39 @@ func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Princ
 		}
 	}
 	return out, nil
+}
+
+func (m *Manager) requireOwnedDefinition(ctx context.Context, definitionID string, p *principal.Principal) (*ManagedDefinition, error) {
+	definitionID = strings.TrimSpace(definitionID)
+	if definitionID == "" || !strings.HasPrefix(definitionID, workflowDefinitionExecutionRefBasePrefix) {
+		return nil, core.ErrNotFound
+	}
+	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
+	if err != nil {
+		return nil, err
+	}
+	var match *coreworkflow.ExecutionReference
+	for _, ref := range refs {
+		if ref == nil || strings.TrimSpace(ref.ID) != definitionID {
+			continue
+		}
+		if match != nil {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, definitionID)
+		}
+		match = ref
+	}
+	if match == nil || !m.allowTarget(ctx, p, match.Target) {
+		return nil, core.ErrNotFound
+	}
+	provider, err := m.resolveProviderByName(strings.TrimSpace(match.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	return &ManagedDefinition{
+		ProviderName: strings.TrimSpace(match.ProviderName),
+		Definition:   match,
+		provider:     provider,
+	}, nil
 }
 
 func (m *Manager) findOwnedExecutionRef(ctx context.Context, scheduleID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
@@ -1833,6 +1998,14 @@ func principalSubjectID(p *principal.Principal) string {
 		return ""
 	}
 	return p.SubjectID
+}
+
+func newDefinitionID(idempotencyScope string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return workflowDefinitionExecutionRefBasePrefix + uuid.NewString()
+	}
+	return workflowDefinitionExecutionRefBasePrefix + uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.definition:"+idempotencyScope)).String()
 }
 
 func scheduleExecutionRefID(scheduleID string) string {

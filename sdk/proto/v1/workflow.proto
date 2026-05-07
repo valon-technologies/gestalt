@@ -162,6 +162,13 @@ message BoundWorkflowEventTrigger {
   string execution_ref = 8;
 }
 
+message BoundWorkflowDefinition {
+  string id = 1;
+  BoundWorkflowTarget target = 2;
+  WorkflowActor created_by = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
 message WorkflowAccessPermission {
   string plugin = 1;
   repeated string operations = 2;
@@ -352,6 +359,11 @@ message ManagedWorkflowEventTrigger {
   BoundWorkflowEventTrigger trigger = 2;
 }
 
+message ManagedWorkflowDefinition {
+  string provider_name = 1;
+  BoundWorkflowDefinition definition = 2;
+}
+
 message ManagedWorkflowRun {
   string provider_name = 1;
   BoundWorkflowRun run = 2;
@@ -375,6 +387,7 @@ message WorkflowManagerCreateScheduleRequest {
   bool paused = 6;
   string invocation_token = 7;
   string idempotency_key = 8;
+  string definition_id = 9;
 }
 
 message WorkflowManagerGetScheduleRequest {
@@ -394,6 +407,7 @@ message WorkflowManagerUpdateScheduleRequest {
   BoundWorkflowTarget target = 6;
   bool paused = 7;
   string invocation_token = 8;
+  string definition_id = 9;
 }
 
 message WorkflowManagerDeleteScheduleRequest {
@@ -426,6 +440,7 @@ message WorkflowManagerCreateEventTriggerRequest {
   bool paused = 5;
   string invocation_token = 6;
   string idempotency_key = 7;
+  string definition_id = 8;
 }
 
 message WorkflowManagerGetEventTriggerRequest {
@@ -444,6 +459,7 @@ message WorkflowManagerUpdateEventTriggerRequest {
   BoundWorkflowTarget target = 5;
   bool paused = 6;
   string invocation_token = 7;
+  string definition_id = 8;
 }
 
 message WorkflowManagerDeleteEventTriggerRequest {
@@ -483,6 +499,7 @@ message WorkflowManagerStartRunRequest {
   string idempotency_key = 4;
   string workflow_key = 5;
   string invocation_token = 6;
+  string definition_id = 7;
 }
 
 message WorkflowManagerSignalRunRequest {
@@ -502,6 +519,39 @@ message WorkflowManagerSignalOrStartRunRequest {
   string idempotency_key = 5;
   WorkflowSignal signal = 6;
   string invocation_token = 7;
+  string definition_id = 8;
+}
+
+message WorkflowManagerCreateDefinitionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string provider_name = 2;
+  BoundWorkflowTarget target = 3;
+  string invocation_token = 4;
+  string idempotency_key = 5;
+}
+
+message WorkflowManagerGetDefinitionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string definition_id = 2;
+  string invocation_token = 3;
+}
+
+message WorkflowManagerUpdateDefinitionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string definition_id = 2;
+  string provider_name = 3;
+  BoundWorkflowTarget target = 4;
+  string invocation_token = 5;
+}
+
+message WorkflowManagerDeleteDefinitionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string definition_id = 2;
+  string invocation_token = 3;
 }
 
 service WorkflowProvider {
@@ -541,6 +591,11 @@ service WorkflowManagerHost {
   rpc StartRun(WorkflowManagerStartRunRequest) returns (ManagedWorkflowRun);
   rpc SignalRun(WorkflowManagerSignalRunRequest) returns (ManagedWorkflowRunSignal);
   rpc SignalOrStartRun(WorkflowManagerSignalOrStartRunRequest) returns (ManagedWorkflowRunSignal);
+
+  rpc CreateDefinition(WorkflowManagerCreateDefinitionRequest) returns (ManagedWorkflowDefinition);
+  rpc GetDefinition(WorkflowManagerGetDefinitionRequest) returns (ManagedWorkflowDefinition);
+  rpc UpdateDefinition(WorkflowManagerUpdateDefinitionRequest) returns (ManagedWorkflowDefinition);
+  rpc DeleteDefinition(WorkflowManagerDeleteDefinitionRequest) returns (google.protobuf.Empty);
 
   rpc CreateSchedule(WorkflowManagerCreateScheduleRequest) returns (ManagedWorkflowSchedule);
   rpc GetSchedule(WorkflowManagerGetScheduleRequest) returns (ManagedWorkflowSchedule);

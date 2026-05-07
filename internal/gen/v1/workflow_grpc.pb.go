@@ -1025,6 +1025,10 @@ const (
 	WorkflowManagerHost_StartRun_FullMethodName           = "/gestalt.provider.v1.WorkflowManagerHost/StartRun"
 	WorkflowManagerHost_SignalRun_FullMethodName          = "/gestalt.provider.v1.WorkflowManagerHost/SignalRun"
 	WorkflowManagerHost_SignalOrStartRun_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun"
+	WorkflowManagerHost_CreateDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/CreateDefinition"
+	WorkflowManagerHost_GetDefinition_FullMethodName      = "/gestalt.provider.v1.WorkflowManagerHost/GetDefinition"
+	WorkflowManagerHost_UpdateDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/UpdateDefinition"
+	WorkflowManagerHost_DeleteDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition"
 	WorkflowManagerHost_CreateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule"
 	WorkflowManagerHost_GetSchedule_FullMethodName        = "/gestalt.provider.v1.WorkflowManagerHost/GetSchedule"
 	WorkflowManagerHost_UpdateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule"
@@ -1047,6 +1051,10 @@ type WorkflowManagerHostClient interface {
 	StartRun(ctx context.Context, in *WorkflowManagerStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRun, error)
 	SignalRun(ctx context.Context, in *WorkflowManagerSignalRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
 	SignalOrStartRun(ctx context.Context, in *WorkflowManagerSignalOrStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
+	CreateDefinition(ctx context.Context, in *WorkflowManagerCreateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
+	GetDefinition(ctx context.Context, in *WorkflowManagerGetDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
+	UpdateDefinition(ctx context.Context, in *WorkflowManagerUpdateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
+	DeleteDefinition(ctx context.Context, in *WorkflowManagerDeleteDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
 	GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
 	UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
@@ -1094,6 +1102,46 @@ func (c *workflowManagerHostClient) SignalOrStartRun(ctx context.Context, in *Wo
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ManagedWorkflowRunSignal)
 	err := c.cc.Invoke(ctx, WorkflowManagerHost_SignalOrStartRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) CreateDefinition(ctx context.Context, in *WorkflowManagerCreateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_CreateDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) GetDefinition(ctx context.Context, in *WorkflowManagerGetDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_GetDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) UpdateDefinition(ctx context.Context, in *WorkflowManagerUpdateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_UpdateDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) DeleteDefinition(ctx context.Context, in *WorkflowManagerDeleteDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_DeleteDefinition_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1237,6 +1285,10 @@ type WorkflowManagerHostServer interface {
 	StartRun(context.Context, *WorkflowManagerStartRunRequest) (*ManagedWorkflowRun, error)
 	SignalRun(context.Context, *WorkflowManagerSignalRunRequest) (*ManagedWorkflowRunSignal, error)
 	SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error)
+	CreateDefinition(context.Context, *WorkflowManagerCreateDefinitionRequest) (*ManagedWorkflowDefinition, error)
+	GetDefinition(context.Context, *WorkflowManagerGetDefinitionRequest) (*ManagedWorkflowDefinition, error)
+	UpdateDefinition(context.Context, *WorkflowManagerUpdateDefinitionRequest) (*ManagedWorkflowDefinition, error)
+	DeleteDefinition(context.Context, *WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error)
 	CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error)
 	GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error)
 	UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error)
@@ -1268,6 +1320,18 @@ func (UnimplementedWorkflowManagerHostServer) SignalRun(context.Context, *Workfl
 }
 func (UnimplementedWorkflowManagerHostServer) SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error) {
 	return nil, status.Error(codes.Unimplemented, "method SignalOrStartRun not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) CreateDefinition(context.Context, *WorkflowManagerCreateDefinitionRequest) (*ManagedWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateDefinition not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) GetDefinition(context.Context, *WorkflowManagerGetDefinitionRequest) (*ManagedWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDefinition not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) UpdateDefinition(context.Context, *WorkflowManagerUpdateDefinitionRequest) (*ManagedWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateDefinition not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) DeleteDefinition(context.Context, *WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteDefinition not implemented")
 }
 func (UnimplementedWorkflowManagerHostServer) CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
@@ -1379,6 +1443,78 @@ func _WorkflowManagerHost_SignalOrStartRun_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WorkflowManagerHostServer).SignalOrStartRun(ctx, req.(*WorkflowManagerSignalOrStartRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_CreateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerCreateDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).CreateDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_CreateDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).CreateDefinition(ctx, req.(*WorkflowManagerCreateDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_GetDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerGetDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).GetDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_GetDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).GetDefinition(ctx, req.(*WorkflowManagerGetDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_UpdateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerUpdateDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).UpdateDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_UpdateDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).UpdateDefinition(ctx, req.(*WorkflowManagerUpdateDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_DeleteDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerDeleteDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).DeleteDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_DeleteDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).DeleteDefinition(ctx, req.(*WorkflowManagerDeleteDefinitionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1635,6 +1771,22 @@ var WorkflowManagerHost_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SignalOrStartRun",
 			Handler:    _WorkflowManagerHost_SignalOrStartRun_Handler,
+		},
+		{
+			MethodName: "CreateDefinition",
+			Handler:    _WorkflowManagerHost_CreateDefinition_Handler,
+		},
+		{
+			MethodName: "GetDefinition",
+			Handler:    _WorkflowManagerHost_GetDefinition_Handler,
+		},
+		{
+			MethodName: "UpdateDefinition",
+			Handler:    _WorkflowManagerHost_UpdateDefinition_Handler,
+		},
+		{
+			MethodName: "DeleteDefinition",
+			Handler:    _WorkflowManagerHost_DeleteDefinition_Handler,
 		},
 		{
 			MethodName: "CreateSchedule",

@@ -41,3 +41,24 @@ func TestManagerServerEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T
 		t.Fatalf("CreateSchedule error = %v, want PermissionDenied", err)
 	}
 }
+
+func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testing.T) {
+	t.Parallel()
+
+	for name, target := range map[string]*proto.BoundWorkflowTarget{
+		"nil target":   nil,
+		"empty target": &proto.BoundWorkflowTarget{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := workflowManagerTargetOrDefinition(target, "workflow_definition:abc")
+			if err != nil {
+				t.Fatalf("workflowManagerTargetOrDefinition: %v", err)
+			}
+			if got.Plugin != nil || got.Agent != nil {
+				t.Fatalf("target = %#v, want empty target for definition-only request", got)
+			}
+		})
+	}
+}

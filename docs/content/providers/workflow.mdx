@@ -428,10 +428,11 @@ trigger route it to deployer-owned code.
 
 ## Using `WorkflowManager` from a plugin
 
-Plugins and other executable provider code can use `WorkflowManager` to publish
-workflow events, start runs, signal runs, and create schedules or triggers from
-the current provider request. The SDK attaches the request invocation token to
-each manager call, so the host keeps the same subject and permission ceiling.
+Plugins and other executable provider code can use `WorkflowManager` to create
+reusable workflow definitions, publish workflow events, start runs, signal runs,
+and create schedules or triggers from the current provider request. The SDK
+attaches the request invocation token to each manager call, so the host keeps
+the same subject and permission ceiling.
 
 Deployments can make this host-service access explicit with plugin workflow
 capabilities. When `capabilities.workflow` is omitted, plugins keep the legacy
@@ -445,6 +446,8 @@ plugins:
     capabilities:
       workflow:
         operations:
+          - definitions.create
+          - definitions.get
           - runs.signalOrStart
           - schedules.create
           - eventTriggers.create
@@ -454,6 +457,11 @@ plugins:
 Workflow capabilities gate the manager method only. The workflow target still
 has to pass the same provider, operation, credential-mode, catalog, and runtime
 authorization checks as any other delayed workflow invocation.
+
+A workflow definition stores a reusable workflow target on a workflow provider.
+Runs, schedules, and event triggers that reference a `definition_id` use that
+provider and snapshot the target when they are created, so later edits to the
+definition do not silently change existing automation.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>

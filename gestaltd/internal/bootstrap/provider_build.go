@@ -2353,6 +2353,22 @@ func (unavailablePluginInvoker) InvokeGraphQL(context.Context, *principal.Princi
 
 type unavailableWorkflowManager struct{}
 
+func (unavailableWorkflowManager) CreateDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetDefinition(context.Context, *principal.Principal, string) (*workflowmanager.ManagedDefinition, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) UpdateDefinition(context.Context, *principal.Principal, string, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) DeleteDefinition(context.Context, *principal.Principal, string) error {
+	return fmt.Errorf("workflow manager is not available")
+}
+
 func (unavailableWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
