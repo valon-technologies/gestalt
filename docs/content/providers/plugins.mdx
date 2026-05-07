@@ -13,7 +13,7 @@ fully declarative, and some are hybrid packages that combine both models.
 From a deployment point of view, `source` chooses the package, `config`
 passes provider-specific settings such as OAuth app credentials,
 `allowedOperations` publishes only part of a large catalog,
-`egress.allowedHosts` declares outbound egress policy, and `execution` opts an
+`egress.allowedHosts` declares outbound egress policy, and `runtime` opts an
 executable plugin into hosted execution.
 
 If the manifest enables MCP, the same operations are also exposed through the
@@ -102,8 +102,7 @@ plugins:
 ```
 
 By default, executable plugins run on the same machine as `gestaltd`. A plugin
-only uses a hosted runtime when it sets `execution.mode: hosted` with
-`execution.runtime`.
+only uses a hosted runtime when it sets `runtime`.
 
 ## Choosing a runtime
 
@@ -122,23 +121,21 @@ runtime:
 
 server:
   runtime:
-    defaultHostedProvider: modal
+    defaultProvider: modal
 
 plugins:
   support:
     source: ./plugins/support/manifest.yaml
-    execution:
-      mode: hosted
-      runtime:
-        template: python-dev
-        image: ghcr.io/example/support-plugin:2026-04-21
-        metadata:
-          environment: production
+    runtime:
+      template: python-dev
+      image: ghcr.io/example/support-plugin:2026-04-21
+      metadata:
+        environment: production
 ```
 
-`plugins.<name>.execution.runtime.provider` selects a named backend from
+`plugins.<name>.runtime.provider` selects a named backend from
 `runtime.providers`. When `provider` is omitted, Gestalt uses
-`server.runtime.defaultHostedProvider` or the one runtime entry marked
+`server.runtime.defaultProvider` or the one runtime entry marked
 `default: true`.
 
 `template`, `image`, and `metadata` are forwarded to the runtime backend. Their
@@ -148,7 +145,7 @@ them to choose a sandbox template, container image, or lifecycle labels.
 A built-in `local` runtime is always available for same-machine execution. The
 first installable hosted runtime provider is `modal`. It requires
 `runtime.providers.<name>.config.app` and
-`plugins.<name>.execution.runtime.image`.
+`plugins.<name>.runtime.image`.
 Gestalt only uses it for plain executable plugins today. Modal can still run
 plugins that need Gestalt-owned services or hostname-based egress when the host
 is configured for the public relay and proxy path. In practice that means

@@ -1,4 +1,4 @@
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
 /**
@@ -52,7 +52,7 @@ export interface AuthenticationSessionSettings {
 /**
  * Runtime hooks required to implement a Gestalt authentication provider.
  */
-export interface AuthenticationProviderOptions extends RuntimeProviderOptions {
+export interface AuthenticationProviderOptions extends ProviderBaseOptions {
   beginLogin: (
     request: BeginLoginRequest,
   ) => MaybePromise<BeginLoginResponse>;
@@ -68,7 +68,7 @@ export interface AuthenticationProviderOptions extends RuntimeProviderOptions {
 /**
  * Authentication provider implementation consumed by the Gestalt runtime.
  */
-export class AuthenticationProvider extends RuntimeProvider {
+export class AuthenticationProvider extends ProviderBase {
   readonly kind = "authentication" as const;
 
   private readonly beginLoginHandler: AuthenticationProviderOptions["beginLogin"];

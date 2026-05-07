@@ -55,9 +55,9 @@ export type StartHandler = () => MaybePromise<void>;
 export type CloseHandler = () => MaybePromise<void>;
 
 /**
- * Shared runtime metadata and lifecycle hooks for authored providers.
+ * Shared provider metadata and lifecycle hooks for authored providers.
  */
-export interface RuntimeProviderOptions {
+export interface ProviderBaseOptions {
   name?: string;
   displayName?: string;
   description?: string;
@@ -72,7 +72,7 @@ export interface RuntimeProviderOptions {
 /**
  * Base class shared by all TypeScript SDK provider implementations.
  */
-export abstract class RuntimeProvider {
+export abstract class ProviderBase {
   abstract readonly kind: ProviderKind;
 
   name: string;
@@ -86,7 +86,7 @@ export abstract class RuntimeProvider {
   private readonly startHandler: StartHandler | undefined;
   private readonly closeHandler: CloseHandler | undefined;
 
-  protected constructor(options: RuntimeProviderOptions) {
+  protected constructor(options: ProviderBaseOptions) {
     this.name = slugName(options.name ?? "");
     this.displayName = options.displayName?.trim() ?? "";
     this.description = options.description?.trim() ?? "";
@@ -106,7 +106,7 @@ export abstract class RuntimeProvider {
     }
   }
 
-  runtimeMetadata(): ProviderMetadata {
+  providerMetadata(): ProviderMetadata {
     const metadata: ProviderMetadata = {
       kind: this.kind,
     };
@@ -157,11 +157,11 @@ export abstract class RuntimeProvider {
 }
 
 /**
- * Runtime type guard for values that implement the provider base contract.
+ * Type guard for values that implement the provider base contract.
  */
-export function isRuntimeProvider(value: unknown): value is RuntimeProvider {
+export function isProviderBase(value: unknown): value is ProviderBase {
   return (
-    value instanceof RuntimeProvider ||
+    value instanceof ProviderBase ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&

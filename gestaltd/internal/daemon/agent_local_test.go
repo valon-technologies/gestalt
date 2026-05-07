@@ -32,9 +32,8 @@ providers:
           OPENAI_API_KEY: secret
           PLAIN: visible
     deployment_only:
-      execution:
-        runtime:
-          provider: missing
+      runtime:
+        provider: missing
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

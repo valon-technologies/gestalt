@@ -3537,9 +3537,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: missing
 runtime:
   providers:
@@ -3548,7 +3546,7 @@ runtime:
         path: ./providers/runtime/modal
 server:
   runtime:
-    defaultHostedProvider: hosted
+    defaultProvider: hosted
   encryptionKey: server-key
 `)
 
@@ -3556,7 +3554,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `providers.agent.simple.execution.runtime.provider references unknown runtime "missing"`) {
+		if !strings.Contains(err.Error(), `providers.agent.simple.runtime.provider references unknown runtime "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3579,7 +3577,7 @@ runtime:
         path: ./providers/runtime/modal
 server:
   runtime:
-    defaultHostedProvider: hosted
+    defaultProvider: hosted
   encryptionKey: server-key
 `)
 
@@ -3603,9 +3601,7 @@ providers:
       source:
         path: ./providers/agent/simple
       indexeddb: agent_state
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -3626,7 +3622,7 @@ runtime:
 server:
   encryptionKey: server-key
 `
-	t.Run("accepts required lifecycle fields under agent execution runtime pool", func(t *testing.T) {
+	t.Run("accepts required lifecycle fields under agent runtime pool", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, base)
@@ -3634,19 +3630,19 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		runtimeCfg := cfg.Providers.Agent["simple"].Execution.Runtime
+		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
 		if runtimeCfg.Pool == nil {
 			t.Fatal("runtime pool = nil")
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
 			t.Fatalf("runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
-		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		if runtimeCfg.Pool.RestartPolicy != RuntimePlacementRestartPolicyAlways {
+			t.Fatalf("restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, RuntimePlacementRestartPolicyAlways)
 		}
 	})
 
-	t.Run("accepts required lifecycle fields under agent execution runtime", func(t *testing.T) {
+	t.Run("accepts required lifecycle fields under agent runtime", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3656,9 +3652,7 @@ providers:
       source:
         path: ./providers/agent/simple
       indexeddb: agent_state
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -3683,15 +3677,15 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		runtimeCfg := cfg.Providers.Agent["simple"].Execution.Runtime
+		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
 		if runtimeCfg.Pool == nil {
-			t.Fatal("execution runtime pool = nil")
+			t.Fatal("runtime pool = nil")
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
-			t.Fatalf("execution runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
+			t.Fatalf("runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
-		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("execution restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		if runtimeCfg.Pool.RestartPolicy != RuntimePlacementRestartPolicyAlways {
+			t.Fatalf("runtime restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, RuntimePlacementRestartPolicyAlways)
 		}
 	})
 
@@ -3734,15 +3728,15 @@ server:
 		if runtimeCfg == nil || runtimeCfg.Pool == nil {
 			t.Fatalf("runtime pool = %#v", runtimeCfg)
 		}
-		if cfg.Providers.Agent["simple"].HostedRuntimeConfig() != runtimeCfg {
-			t.Fatal("HostedRuntimeConfig did not return top-level runtime")
+		if cfg.Providers.Agent["simple"].RuntimePlacementConfig() != runtimeCfg {
+			t.Fatal("RuntimePlacementConfig did not return top-level runtime")
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
 			t.Fatalf("runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
 	})
 
-	t.Run("accepts Docker config JSON image pull auth under agent execution runtime", func(t *testing.T) {
+	t.Run("accepts Docker config JSON image pull auth under agent runtime", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3751,9 +3745,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           image: ghcr.io/example/simple-agent:latest
           imagePullAuth:
@@ -3777,7 +3769,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
 		}
@@ -3786,7 +3778,7 @@ server:
 		}
 	})
 
-	t.Run("accepts secret ref Docker config JSON image pull auth under agent execution runtime", func(t *testing.T) {
+	t.Run("accepts secret ref Docker config JSON image pull auth under agent runtime", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3798,9 +3790,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           image: ghcr.io/example/simple-agent:latest
           imagePullAuth:
@@ -3827,7 +3817,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		auth := cfg.Providers.Agent["simple"].Execution.Runtime.ImagePullAuth
+		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
 		}
@@ -3849,9 +3839,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           image: ghcr.io/example/simple-agent:latest
           imagePullAuth:
@@ -3864,7 +3852,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: `providers.agent.simple.execution.runtime.imagePullAuth.dockerConfigJson: must contain a non-empty "auths" object`,
+			want: `providers.agent.simple.runtime.imagePullAuth.dockerConfigJson: must contain a non-empty "auths" object`,
 		},
 		{
 			name: "rejects missing runtime pool",
@@ -3874,9 +3862,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
 runtime:
   providers:
@@ -3886,7 +3872,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.pool.minReadyInstances is required",
+			want: "providers.agent.simple.runtime.pool.minReadyInstances is required",
 		},
 		{
 			name: "rejects missing lifecycle fields",
@@ -3896,9 +3882,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -3914,10 +3898,10 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances is required",
+			want: "providers.agent.simple.runtime.pool.maxReadyInstances is required",
 		},
 		{
-			name: "rejects missing execution runtime on hosted agent",
+			name: "rejects removed execution config",
 			yaml: `
 providers:
   agent:
@@ -3934,19 +3918,17 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime is required",
+			want: "provider execution has been removed; use runtime instead",
 		},
 		{
-			name: "rejects missing lifecycle fields under execution runtime",
+			name: "rejects missing lifecycle fields under runtime",
 			yaml: `
 providers:
   agent:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -3962,7 +3944,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances is required",
+			want: "providers.agent.simple.runtime.pool.maxReadyInstances is required",
 		},
 		{
 			name: "rejects max below min",
@@ -3972,9 +3954,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 2
@@ -3991,7 +3971,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances must be greater than or equal to minReadyInstances",
+			want: "providers.agent.simple.runtime.pool.maxReadyInstances must be greater than or equal to minReadyInstances",
 		},
 		{
 			name: "rejects unknown restart policy",
@@ -4001,9 +3981,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -4020,7 +3998,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.pool.restartPolicy must be one of",
+			want: "providers.agent.simple.runtime.pool.restartPolicy must be one of",
 		},
 		{
 			name: "rejects restart without agent indexeddb",
@@ -4030,9 +4008,7 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -4049,7 +4025,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: `providers.agent.simple.execution.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
+			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
 		},
 		{
 			name: "rejects lifecycle fields on plugin runtime",
@@ -4058,9 +4034,7 @@ plugins:
   service:
     source:
       path: ./plugins/service/manifest.yaml
-    execution:
-      mode: hosted
-      runtime:
+    runtime:
         provider: hosted
         pool:
           minReadyInstances: 1
@@ -4077,7 +4051,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "plugins.service.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers",
+			want: "plugins.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
 		{
 			name: "rejects lifecycle fields on plugin top-level runtime",
@@ -4106,35 +4080,7 @@ server:
 			want: "plugins.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
 		{
-			name: "rejects duplicate runtime config",
-			yaml: `
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-      indexeddb: agent_state
-      runtime:
-        provider: hosted
-      execution:
-        runtime:
-          provider: hosted
-  indexeddb:
-    agent_state:
-      source:
-        path: ./providers/datastore/sqlite
-runtime:
-  providers:
-    hosted:
-      source:
-        path: ./providers/runtime/modal
-server:
-  encryptionKey: server-key
-`,
-			want: "providers.agent.simple.runtime may not be set with providers.agent.simple.execution.runtime",
-		},
-		{
-			name: "rejects runtime with local execution mode",
+			name: "rejects removed local execution mode",
 			yaml: `
 providers:
   agent:
@@ -4153,7 +4099,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: `providers.agent.simple.runtime is only valid when execution.mode is "hosted"`,
+			want: "provider execution has been removed; use runtime instead",
 		},
 	}
 	for _, tc := range cases {
@@ -4184,9 +4130,7 @@ providers:
     temporal:
       source:
         path: ./providers/workflow/temporal
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           template: workflow-workers
           metadata:
@@ -4210,15 +4154,15 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		runtimeCfg := cfg.Providers.Workflow["temporal"].Execution.Runtime
+		runtimeCfg := cfg.Providers.Workflow["temporal"].Runtime
 		if runtimeCfg == nil || runtimeCfg.Pool == nil {
-			t.Fatalf("workflow execution runtime pool = %#v", runtimeCfg)
+			t.Fatalf("workflow runtime pool = %#v", runtimeCfg)
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 2 || runtimeCfg.Pool.MaxReadyInstances != 2 {
 			t.Fatalf("workflow pool ready instances = %d/%d, want 2/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
-		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		if runtimeCfg.Pool.RestartPolicy != RuntimePlacementRestartPolicyAlways {
+			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, RuntimePlacementRestartPolicyAlways)
 		}
 	})
 
@@ -4259,14 +4203,14 @@ server:
 		if runtimeCfg == nil || runtimeCfg.Pool == nil {
 			t.Fatalf("workflow runtime pool = %#v", runtimeCfg)
 		}
-		if cfg.Providers.Workflow["temporal"].HostedRuntimeConfig() != runtimeCfg {
-			t.Fatal("HostedRuntimeConfig did not return top-level workflow runtime")
+		if cfg.Providers.Workflow["temporal"].RuntimePlacementConfig() != runtimeCfg {
+			t.Fatal("RuntimePlacementConfig did not return top-level workflow runtime")
 		}
 		if runtimeCfg.Pool.MinReadyInstances != 2 || runtimeCfg.Pool.MaxReadyInstances != 2 {
 			t.Fatalf("workflow pool ready instances = %d/%d, want 2/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
 		}
-		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		if runtimeCfg.Pool.RestartPolicy != RuntimePlacementRestartPolicyAlways {
+			t.Fatalf("workflow restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, RuntimePlacementRestartPolicyAlways)
 		}
 	})
 
@@ -4279,9 +4223,7 @@ providers:
     temporal:
       source:
         path: ./providers/workflow/temporal
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
 runtime:
   providers:
@@ -4295,7 +4237,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool is required for runtime-placed workflow providers") {
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.runtime.pool is required for runtime-placed workflow providers") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -4309,9 +4251,7 @@ providers:
     temporal:
       source:
         path: ./providers/workflow/temporal
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 1
@@ -4331,7 +4271,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool.maxReadyInstances is required") {
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.runtime.pool.maxReadyInstances is required") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -4345,9 +4285,7 @@ providers:
     temporal:
       source:
         path: ./providers/workflow/temporal
-      execution:
-        mode: hosted
-        runtime:
+      runtime:
           provider: hosted
           pool:
             minReadyInstances: 2
@@ -4368,7 +4306,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), "providers.workflow.temporal.execution.runtime.pool.maxReadyInstances must equal minReadyInstances") {
+		if !strings.Contains(err.Error(), "providers.workflow.temporal.runtime.pool.maxReadyInstances must equal minReadyInstances") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -4556,9 +4494,27 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("rejects removed default hosted provider", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  runtime:
+    defaultHostedProvider: modal
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.runtime.defaultHostedProvider has been removed; use server.runtime.defaultProvider") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
-func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
+func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4572,9 +4528,7 @@ plugins:
   service:
     source:
       path: ./plugins/service/manifest.yaml
-    execution:
-      mode: hosted
-      runtime:
+    runtime:
         provider: hosted
     egress:
       allowedHosts:
@@ -4591,9 +4545,7 @@ runtime:
 apiVersion: gestaltd.config/v5
 plugins:
   service:
-    execution:
-      mode: local
-      runtime: null
+    runtime: null
     egress:
       allowedHosts: []
 `), 0o644); err != nil {
@@ -4605,8 +4557,8 @@ plugins:
 		t.Fatalf("LoadPaths: %v", err)
 	}
 	entry := cfg.Plugins["service"]
-	if entry.UsesHostedExecution() {
-		t.Fatal("UsesHostedExecution = true, want execution.mode: local override")
+	if entry.UsesRuntimePlacement() {
+		t.Fatal("UsesRuntimePlacement = true, want runtime override removed")
 	}
 	if got := entry.EffectiveAllowedHosts(); len(got) != 0 {
 		t.Fatalf("EffectiveAllowedHosts = %#v, want empty after egress override", got)

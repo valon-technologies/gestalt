@@ -189,15 +189,15 @@ export {
   type SessionCatalogHandler,
 } from "./plugin.ts";
 export {
-  RuntimeProvider,
-  isRuntimeProvider,
+  ProviderBase,
+  isProviderBase,
   slugName,
   type CloseHandler,
   type ConfigureHandler,
   type HealthCheckHandler,
   type ProviderKind,
   type ProviderMetadata,
-  type RuntimeProviderOptions,
+  type ProviderBaseOptions,
   type StartHandler,
   type WarningsHandler,
 } from "./provider.ts";

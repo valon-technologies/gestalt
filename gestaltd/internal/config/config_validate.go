@@ -719,7 +719,7 @@ func validateRuntimeConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
+	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
 	cfg.Server.Runtime.RelayBaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.RelayBaseURL), "/")
 	if err := validateRuntimeRelayBaseURL(cfg.Server.Runtime.RelayBaseURL); err != nil {
 		return err
@@ -855,7 +855,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
 		return err
 	}
-	if _, err := cfg.EffectiveHostedRuntime("plugins."+name, entry); err != nil {
+	if _, err := cfg.EffectiveRuntimePlacement("plugins."+name, entry); err != nil {
 		return err
 	}
 	return validatePluginIntegrationConnections(name, entry)
@@ -1075,11 +1075,11 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
 	}
-	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
+	if _, err := cfg.EffectiveRuntimePlacement(subject, entry); err != nil {
 		return err
 	}
 	if entry.UsesRuntimePlacement() {
-		if err := validateHostedAgentRuntimeLifecyclePolicy(subject, entry); err != nil {
+		if err := validateRuntimePlacedAgentLifecyclePolicy(subject, entry); err != nil {
 			return err
 		}
 	}
@@ -1103,14 +1103,14 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	return nil
 }
 
-func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfig) error {
+func normalizeRuntimePlacementConfig(subject string, runtimeCfg *RuntimePlacementConfig) error {
 	if runtimeCfg == nil {
 		return nil
 	}
 	if runtimeCfg.Pool != nil {
 		runtimeCfg.Pool.StartupTimeout = strings.TrimSpace(runtimeCfg.Pool.StartupTimeout)
 		runtimeCfg.Pool.HealthCheckInterval = strings.TrimSpace(runtimeCfg.Pool.HealthCheckInterval)
-		runtimeCfg.Pool.RestartPolicy = HostedRuntimeRestartPolicy(strings.TrimSpace(string(runtimeCfg.Pool.RestartPolicy)))
+		runtimeCfg.Pool.RestartPolicy = RuntimePlacementRestartPolicy(strings.TrimSpace(string(runtimeCfg.Pool.RestartPolicy)))
 		runtimeCfg.Pool.DrainTimeout = strings.TrimSpace(runtimeCfg.Pool.DrainTimeout)
 	}
 	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
@@ -1123,7 +1123,7 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 		if strings.TrimSpace(runtimeCfg.ImagePullAuth.DockerConfigJSON) == "" {
 			return fmt.Errorf("config validation: %s.runtime.imagePullAuth.dockerConfigJson is required when imagePullAuth is set", subject)
 		}
-		if err := validateHostedRuntimeDockerConfigJSON(runtimeCfg.ImagePullAuth.DockerConfigJSON); err != nil {
+		if err := validateRuntimePlacementDockerConfigJSON(runtimeCfg.ImagePullAuth.DockerConfigJSON); err != nil {
 			return fmt.Errorf("config validation: %s.runtime.imagePullAuth.dockerConfigJson: %w", subject, err)
 		}
 	}
@@ -1138,13 +1138,13 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	if runtimeCfg.Metadata != nil {
 		runtimeCfg.Metadata = trimmed
 	}
-	if err := normalizeHostedRuntimeWorkspaceConfig(subject, runtimeCfg.Workspace); err != nil {
+	if err := normalizeRuntimePlacementWorkspaceConfig(subject, runtimeCfg.Workspace); err != nil {
 		return err
 	}
 	return nil
 }
 
-func normalizeHostedRuntimeWorkspaceConfig(subject string, workspace *HostedRuntimeWorkspaceConfig) error {
+func normalizeRuntimePlacementWorkspaceConfig(subject string, workspace *RuntimePlacementWorkspaceConfig) error {
 	if workspace == nil {
 		return nil
 	}
@@ -1185,7 +1185,7 @@ func normalizeHostedRuntimeWorkspaceConfig(subject string, workspace *HostedRunt
 	return nil
 }
 
-func validateHostedRuntimeDockerConfigJSON(value string) error {
+func validateRuntimePlacementDockerConfigJSON(value string) error {
 	if _, isSecretRef, err := ParseSecretRefTransport(value); isSecretRef || err != nil {
 		return err
 	}
@@ -1201,19 +1201,19 @@ func validateHostedRuntimeDockerConfigJSON(value string) error {
 	return nil
 }
 
-func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
-	return validateHostedRuntimeLifecyclePolicy(subject, entry, true, "agent")
+func validateRuntimePlacedAgentLifecyclePolicy(subject string, entry *ProviderEntry) error {
+	return validateRuntimePlacementLifecyclePolicy(subject, entry, true, "agent")
 }
 
-func validateHostedWorkflowRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
-	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
+func validateRuntimePlacedWorkflowLifecyclePolicy(subject string, entry *ProviderEntry) error {
+	runtimeCfg, runtimePath := runtimePlacementConfigAndPath(subject, entry)
 	if runtimeCfg == nil {
 		return fmt.Errorf("config validation: %s is required for runtime-placed workflow providers", runtimePath)
 	}
 	if !runtimeCfg.LifecyclePolicyFieldsSet() {
 		return fmt.Errorf("config validation: %s.pool is required for runtime-placed workflow providers", runtimePath)
 	}
-	if err := validateHostedRuntimeLifecyclePolicy(subject, entry, false, "workflow"); err != nil {
+	if err := validateRuntimePlacementLifecyclePolicy(subject, entry, false, "workflow"); err != nil {
 		return err
 	}
 	lifecycle := runtimeCfg.lifecyclePolicyConfig()
@@ -1223,11 +1223,11 @@ func validateHostedWorkflowRuntimeLifecyclePolicy(subject string, entry *Provide
 	return nil
 }
 
-func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, requireIndexedDB bool, providerKind string) error {
+func validateRuntimePlacementLifecyclePolicy(subject string, entry *ProviderEntry, requireIndexedDB bool, providerKind string) error {
 	if entry == nil || !entry.UsesRuntimePlacement() {
 		return nil
 	}
-	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
+	runtimeCfg, runtimePath := runtimePlacementConfigAndPath(subject, entry)
 	if runtimeCfg == nil {
 		if providerKind == "" {
 			providerKind = "provider"
@@ -1255,12 +1255,12 @@ func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, 
 		return fmt.Errorf("config validation: %s.drainTimeout is required", lifecycleSubject)
 	}
 	switch lifecycle.RestartPolicy {
-	case HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever:
+	case RuntimePlacementRestartPolicyAlways, RuntimePlacementRestartPolicyNever:
 	default:
-		return fmt.Errorf("config validation: %s.restartPolicy must be one of %q or %q", lifecycleSubject, HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever)
+		return fmt.Errorf("config validation: %s.restartPolicy must be one of %q or %q", lifecycleSubject, RuntimePlacementRestartPolicyAlways, RuntimePlacementRestartPolicyNever)
 	}
-	if requireIndexedDB && lifecycle.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
-		return fmt.Errorf("config validation: %s.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", lifecycleSubject, HostedRuntimeRestartPolicyAlways, subject)
+	if requireIndexedDB && lifecycle.RestartPolicy == RuntimePlacementRestartPolicyAlways && entry.IndexedDB == nil {
+		return fmt.Errorf("config validation: %s.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", lifecycleSubject, RuntimePlacementRestartPolicyAlways, subject)
 	}
 	if _, err := runtimeCfg.LifecyclePolicy(); err != nil {
 		return fmt.Errorf("config validation: %s.%w", lifecycleSubject, err)
@@ -1268,15 +1268,12 @@ func validateHostedRuntimeLifecyclePolicy(subject string, entry *ProviderEntry, 
 	return nil
 }
 
-func hostedRuntimeConfigAndPath(subject string, entry *ProviderEntry) (*HostedRuntimeConfig, string) {
+func runtimePlacementConfigAndPath(subject string, entry *ProviderEntry) (*RuntimePlacementConfig, string) {
 	if entry == nil {
 		return nil, subject + ".runtime"
 	}
 	if entry.Runtime != nil {
 		return entry.Runtime, subject + ".runtime"
-	}
-	if entry.Execution != nil {
-		return entry.Execution.Runtime, subject + ".execution.runtime"
 	}
 	return nil, subject + ".runtime"
 }
@@ -1310,11 +1307,11 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if err := normalizeProviderRuntimeConfig(subject, entry, true); err != nil {
 		return err
 	}
-	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
+	if _, err := cfg.EffectiveRuntimePlacement(subject, entry); err != nil {
 		return err
 	}
 	if entry.UsesRuntimePlacement() {
-		if err := validateHostedWorkflowRuntimeLifecyclePolicy(subject, entry); err != nil {
+		if err := validateRuntimePlacedWorkflowLifecyclePolicy(subject, entry); err != nil {
 			return err
 		}
 	}
@@ -1374,9 +1371,6 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.Runtime != nil {
 		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.* and providers.agent.* and providers.workflow.*", subject)
-	}
-	if entry.Execution != nil {
-		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.* and providers.workflow.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -1456,50 +1450,14 @@ func validSessionStartHookID(value string) bool {
 	return true
 }
 
-func normalizeExecutionConfig(subject string, execution *ExecutionConfig, allowLifecycle bool) error {
-	if execution == nil {
-		return nil
-	}
-	execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(execution.Mode))))
-	switch execution.Mode {
-	case "", ExecutionModeLocal, ExecutionModeHosted:
-	default:
-		return fmt.Errorf("config validation: %s.execution.mode must be %q or %q, got %q", subject, ExecutionModeLocal, ExecutionModeHosted, execution.Mode)
-	}
-	if execution.Mode == ExecutionModeLocal && execution.Runtime != nil {
-		return fmt.Errorf("config validation: %s.execution.runtime is only valid when execution.mode is %q", subject, ExecutionModeHosted)
-	}
-	if execution.Runtime == nil {
-		return nil
-	}
-	if err := normalizeHostedRuntimeConfig(subject+".execution", execution.Runtime); err != nil {
-		return err
-	}
-	if !allowLifecycle && execution.Runtime.LifecyclePolicyFieldsSet() {
-		return fmt.Errorf("config validation: %s.execution.runtime lifecycle fields are only supported on hosted agent and workflow providers", subject)
-	}
-	return nil
-}
-
 func normalizeProviderRuntimeConfig(subject string, entry *ProviderEntry, allowLifecycle bool) error {
 	if entry == nil {
 		return nil
 	}
-	if entry.Runtime != nil && entry.Execution != nil && entry.Execution.Runtime != nil {
-		return fmt.Errorf("config validation: %s.runtime may not be set with %s.execution.runtime", subject, subject)
-	}
-	if entry.Execution != nil {
-		if err := normalizeExecutionConfig(subject, entry.Execution, allowLifecycle); err != nil {
-			return err
-		}
-		if entry.Runtime != nil && entry.Execution.Mode == ExecutionModeLocal {
-			return fmt.Errorf("config validation: %s.runtime is only valid when execution.mode is %q", subject, ExecutionModeHosted)
-		}
-	}
 	if entry.Runtime == nil {
 		return nil
 	}
-	if err := normalizeHostedRuntimeConfig(subject, entry.Runtime); err != nil {
+	if err := normalizeRuntimePlacementConfig(subject, entry.Runtime); err != nil {
 		return err
 	}
 	if !allowLifecycle && entry.Runtime.LifecyclePolicyFieldsSet() {

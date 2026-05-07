@@ -109,7 +109,7 @@ func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error
 	if c == nil {
 		return "", nil, nil
 	}
-	return ResolveSelectedRuntimeProvider(c.Server.Runtime.SelectedDefaultHostedProvider(), c.Runtime.Providers)
+	return ResolveSelectedRuntimeProvider(c.Server.Runtime.SelectedDefaultProvider(), c.Runtime.Providers)
 }
 
 type EffectiveHostIndexedDBBinding struct {
@@ -120,20 +120,15 @@ type EffectiveHostIndexedDBBinding struct {
 	ObjectStores []string
 }
 
-type EffectiveHostedRuntime struct {
+type EffectiveRuntimePlacement struct {
 	Enabled       bool
 	ProviderName  string
 	Provider      *RuntimeProviderEntry
 	Template      string
 	Image         string
-	ImagePullAuth *HostedRuntimeImagePullAuth
+	ImagePullAuth *RuntimePlacementImagePullAuth
 	Metadata      map[string]string
-	Workspace     *HostedRuntimeWorkspaceConfig
-}
-
-type EffectiveExecution struct {
-	Mode   ExecutionMode
-	Hosted EffectiveHostedRuntime
+	Workspace     *RuntimePlacementWorkspaceConfig
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
@@ -182,23 +177,15 @@ func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (Eff
 	return ResolveEffectiveAgentIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
-func (c *Config) EffectiveHostedRuntime(configPath string, entry *ProviderEntry) (EffectiveHostedRuntime, error) {
-	execution, err := c.EffectiveExecution(configPath, entry)
-	if err != nil {
-		return EffectiveHostedRuntime{}, err
-	}
-	return execution.Hosted, nil
-}
-
-func (c *Config) EffectiveExecution(configPath string, entry *ProviderEntry) (EffectiveExecution, error) {
+func (c *Config) EffectiveRuntimePlacement(configPath string, entry *ProviderEntry) (EffectiveRuntimePlacement, error) {
 	if c == nil {
-		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
+		return EffectiveRuntimePlacement{}, nil
 	}
 	selectedName, _, err := c.SelectedRuntimeProvider()
 	if err != nil {
-		return EffectiveExecution{}, err
+		return EffectiveRuntimePlacement{}, err
 	}
-	return ResolveEffectiveExecution(configPath, entry, selectedName, c.Runtime.Providers)
+	return ResolveEffectiveRuntimePlacement(configPath, entry, selectedName, c.Runtime.Providers)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectiveHostIndexedDBBinding, error) {
@@ -302,39 +289,15 @@ func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries m
 	}, nil
 }
 
-func ResolveEffectiveHostedRuntime(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveHostedRuntime, error) {
-	execution, err := ResolveEffectiveExecution(configPath, entry, selectedName, entries)
-	if err != nil {
-		return EffectiveHostedRuntime{}, err
-	}
-	return execution.Hosted, nil
-}
-
-func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveExecution, error) {
+func ResolveEffectiveRuntimePlacement(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveRuntimePlacement, error) {
 	if entry == nil {
-		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
+		return EffectiveRuntimePlacement{}, nil
 	}
-	var runtimeCfg *HostedRuntimeConfig
-	runtimePath := "runtime"
-	enabled := false
-	mode := ExecutionMode("")
-	if entry.Execution != nil {
-		mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
-	}
-	if entry.Runtime != nil {
-		runtimeCfg = entry.Runtime
-		enabled = true
-	} else if entry.Execution != nil {
-		runtimeCfg = entry.Execution.Runtime
-		runtimePath = "execution.runtime"
-		enabled = runtimeCfg != nil || mode == ExecutionModeHosted
-	}
-	if !enabled {
-		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
-	}
+	runtimeCfg := entry.Runtime
 	if runtimeCfg == nil {
-		runtimeCfg = &HostedRuntimeConfig{}
+		return EffectiveRuntimePlacement{}, nil
 	}
+	runtimePath := "runtime"
 
 	providerName := strings.TrimSpace(runtimeCfg.Provider)
 	if providerName == "" {
@@ -346,25 +309,25 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 		var ok bool
 		provider, ok = entries[providerName]
 		if !ok || provider == nil {
-			return EffectiveExecution{}, fmt.Errorf("config validation: %s.%s.provider references unknown runtime %q", configPath, runtimePath, providerName)
+			return EffectiveRuntimePlacement{}, fmt.Errorf("config validation: %s.%s.provider references unknown runtime %q", configPath, runtimePath, providerName)
 		}
 	}
 
-	runtime := EffectiveHostedRuntime{
+	runtime := EffectiveRuntimePlacement{
 		Enabled:       true,
 		ProviderName:  providerName,
 		Provider:      provider,
 		Template:      strings.TrimSpace(runtimeCfg.Template),
 		Image:         strings.TrimSpace(runtimeCfg.Image),
-		ImagePullAuth: cloneHostedRuntimeImagePullAuth(runtimeCfg.ImagePullAuth),
+		ImagePullAuth: cloneRuntimePlacementImagePullAuth(runtimeCfg.ImagePullAuth),
 		Metadata:      maps.Clone(runtimeCfg.Metadata),
-		Workspace:     cloneHostedRuntimeWorkspaceConfig(runtimeCfg.Workspace),
+		Workspace:     cloneRuntimePlacementWorkspaceConfig(runtimeCfg.Workspace),
 	}
-	return EffectiveExecution{Mode: ExecutionModeHosted, Hosted: runtime}, nil
+	return runtime, nil
 }
 
-func (s ServerRuntimeConfig) SelectedDefaultHostedProvider() string {
-	return strings.TrimSpace(s.DefaultHostedProvider)
+func (s ServerRuntimeConfig) SelectedDefaultProvider() string {
+	return strings.TrimSpace(s.DefaultProvider)
 }
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {
 	if len(entries) == 0 {
@@ -411,11 +374,11 @@ func ResolveSelectedRuntimeProvider(explicit string, entries map[string]*Runtime
 	explicit = strings.TrimSpace(explicit)
 	if explicit != "" {
 		if len(entries) == 0 {
-			return "", nil, fmt.Errorf("config validation: server.runtime.defaultHostedProvider references unknown runtime %q", explicit)
+			return "", nil, fmt.Errorf("config validation: server.runtime.defaultProvider references unknown runtime %q", explicit)
 		}
 		entry, ok := entries[explicit]
 		if !ok || entry == nil {
-			return "", nil, fmt.Errorf("config validation: server.runtime.defaultHostedProvider references unknown runtime %q", explicit)
+			return "", nil, fmt.Errorf("config validation: server.runtime.defaultProvider references unknown runtime %q", explicit)
 		}
 		return explicit, entry, nil
 	}

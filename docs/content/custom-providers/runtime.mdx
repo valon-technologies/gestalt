@@ -62,8 +62,12 @@ runtime:
         pool: default
 ```
 
-Plugins then opt into that runtime with `plugins.<name>.execution.mode: hosted`
-and `plugins.<name>.execution.runtime`.
+Plugins and hosted providers then opt into that runtime with their own
+`runtime` block, for example `plugins.<name>.runtime`,
+`providers.agent.<name>.runtime`, or `providers.workflow.<name>.runtime`.
+They can select the backend explicitly with `runtime.provider`, or inherit the
+default runtime selected by `server.runtime.defaultProvider` or
+`runtime.providers.<name>.default`.
 
 ## Provider interface
 
@@ -72,13 +76,13 @@ The runtime surface is intentionally small but lifecycle-oriented:
 | Method | Purpose |
 | --- | --- |
 | `GetSupport` | Advertise grouped runtime support for this backend. |
-| `StartSession` | Create a hosted runtime session for a plugin. |
+| `StartSession` | Create a hosted runtime session for the placed plugin, agent provider, or workflow provider. |
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
 | `ListSessions` | Return sessions currently known to the runtime backend. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
 | `PrepareWorkspace` | Optional. Prepare a per-agent workspace inside an existing runtime session before the hosted agent provider creates a session. |
 | `RemoveWorkspace` | Optional. Remove a per-agent workspace by runtime session and agent session ID. |
-| `StartPlugin` | Start the hosted plugin with the provided env and return a host-reachable dial target. |
+| `StartPlugin` | Start the hosted provider process with the provided env and return a host-reachable dial target. The RPC name is retained for wire compatibility even when the placed provider is an agent or workflow provider. |
 
 In addition to the runtime-specific RPCs, the provider still implements the
 normal provider lifecycle surface, including `Configure`.

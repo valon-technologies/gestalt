@@ -147,7 +147,7 @@ server:
   apiTokenTtl: 30d
   artifactsDir: ./state
   runtime:
-    defaultHostedProvider: modal
+    defaultProvider: modal
     relayBaseUrl: https://gestalt.example.com
   agent:
     defaultToolNarrowingThreshold: 200
@@ -180,7 +180,7 @@ authorization:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
-`runtime.defaultHostedProvider` selects the runtime provider used when a plugin or agent opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
+`runtime.defaultProvider` selects the runtime provider used when a plugin, agent provider, or workflow provider opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
 
@@ -210,7 +210,7 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `agent.defaultToolNarrowingThreshold` | `200` | Visible catalog size above which implicit default agent catalog grants may be narrowed to exactly mentioned providers. Set `0` to narrow whenever a matching provider has any visible tools. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `dev.attachmentState` | | Enables private remote provider-dev attach routes and selects where attachment state is stored. The only supported value is `indexeddb`, which stores attachment state in the configured host IndexedDB for shared and load-balanced servers. |
-| `runtime.defaultHostedProvider` | | Default runtime-provider selector for plugins that opt into `execution.mode: hosted`. This does not move plugins into hosted runtimes by itself. |
+| `runtime.defaultProvider` | | Default runtime-provider selector for plugins and providers that opt into `runtime`. This does not move anything into hosted runtimes by itself. |
 | `runtime.relayBaseUrl` | `server.baseUrl` | Absolute HTTP(S) URL that hosted runtimes use for Gestalt host-service relay and egress proxy callbacks. |
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
@@ -223,10 +223,9 @@ The management listener is intended to be protected by deployment infrastructure
 
 ## `runtime`
 
-`runtime.providers` defines named execution backends for executable plugins.
-These backends are only used when a plugin opts into `execution.mode: hosted`.
-If a plugin omits `execution` or sets `execution.mode: local`, it still runs on
-the same machine as `gestaltd`.
+`runtime.providers` defines named execution backends for runtime-placed providers.
+These backends are only used when a plugin, agent provider, or workflow provider opts into `runtime`.
+If a provider omits `runtime`, it still runs on the same machine as `gestaltd`.
 
 See [Providers > Runtime](/providers/runtime) for the lifecycle and capability
 model behind these fields.
@@ -245,15 +244,15 @@ runtime:
         environment: main
 ```
 
-`server.runtime.defaultHostedProvider` supplies the default runtime name for
-plugins that set `execution.mode: hosted` without an explicit
-`execution.runtime.provider`.
+`server.runtime.defaultProvider` supplies the default runtime name for
+plugins, agent providers, or workflow providers that set `runtime` without an explicit
+`runtime.provider`.
 
 | Field | Description |
 | --- | --- |
 | `providers.<name>.driver` | Optional built-in runtime selector. The only built-in runtime is `local`. |
 | `providers.<name>.source` | Package source, local manifest path, metadata URL, `source.url`, or `source.githubRelease` for an installable `kind: runtime` provider such as Modal. |
-| `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.defaultHostedProvider` is omitted. Only one runtime may be default. |
+| `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.defaultProvider` is omitted. Only one runtime may be default. |
 | `providers.<name>.config` | Runtime-provider-specific config blob. Built-ins such as `local` reject custom config entirely. |
 
 ### `runtime.providers.*.config` for the Modal runtime provider
@@ -293,7 +292,7 @@ runtime:
 | `regions` | Optional region allowlist passed through to Modal. |
 
 When a plugin uses the Modal runtime provider,
-`plugins.<name>.execution.runtime.image` is required. Modal can still run
+`plugins.<name>.runtime.image` is required. Modal can still run
 hosted plugins that need Gestalt-owned services or hostname-based egress when
 the host is configured for the public relay and proxy path. In practice that
 means `server.baseUrl` (or `server.runtime.relayBaseUrl`) and
@@ -314,11 +313,9 @@ manifest entrypoint and passes the manifest entrypoint args:
 plugins:
   support:
     source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
-    execution:
-      mode: hosted
-      runtime:
-        provider: modal
-        image: ghcr.io/example/support-plugin@sha256:...
+    runtime:
+      provider: modal
+      image: ghcr.io/example/support-plugin@sha256:...
 ```
 
 There is no separate launch source or runtime command override. If
@@ -527,7 +524,7 @@ allowlist logical stores exposed through that binding.
 Workflow providers can also opt into hosted execution. `gestaltd serve`
 starts hosted workflow workers automatically after the provider graph is ready;
 there is no separate worker command to run. A hosted workflow provider may set
-`execution.runtime.pool` to keep a fixed pool of runtime sessions ready for
+`runtime.pool` to keep a fixed pool of runtime sessions ready for
 polling backends such as Temporal. Workflow runtime pools are fixed-size:
 `maxReadyInstances` must match `minReadyInstances`.
 
@@ -536,18 +533,16 @@ providers:
   workflow:
     temporal:
       source: https://artifacts.example.com/workflow/temporal/v0.0.1-alpha.1/provider-release.yaml
-      execution:
-        mode: hosted
-        runtime:
-          provider: gke
-          template: workflow-workers
-          pool:
-            minReadyInstances: 2
-            maxReadyInstances: 2
-            startupTimeout: 5m
-            healthCheckInterval: 30s
-            restartPolicy: always
-            drainTimeout: 2m
+      runtime:
+        provider: gke
+        template: workflow-workers
+        pool:
+          minReadyInstances: 2
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
       config:
         namespace: default
 
@@ -565,7 +560,7 @@ runtime:
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `execution` | Optional hosted execution selection for this workflow provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `pool` contains hosted workflow worker lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
+| `runtime` | Optional runtime placement for this workflow provider. Supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `pool` contains hosted workflow worker lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.agent`
@@ -586,23 +581,21 @@ providers:
       indexeddb:
         provider: default
         db: simple_agent
-      execution:
-        mode: hosted
-        runtime:
-          provider: modal
-          image: ghcr.io/valon/gestalt-python-runtime:latest
-          workspace:
-            prepareTimeout: 10m
-            git:
-              allowedRepositories:
-                - github.com/valon-technologies/*
-          pool:
-            minReadyInstances: 1
-            maxReadyInstances: 4
-            startupTimeout: 2m
-            healthCheckInterval: 30s
-            restartPolicy: always
-            drainTimeout: 1m
+      runtime:
+        provider: modal
+        image: ghcr.io/valon/gestalt-python-runtime:latest
+        workspace:
+          prepareTimeout: 10m
+          git:
+            allowedRepositories:
+              - github.com/valon-technologies/*
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 4
+          startupTimeout: 2m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 1m
       config:
         runStore: runs
         idempotencyStore: run_idempotency
@@ -619,15 +612,15 @@ IndexedDB binding with `indexeddb`; the provider process then uses the SDK
 IndexedDB helper against `GESTALT_INDEXEDDB_SOCKET`.
 
 Agent providers may also opt into a hosted runtime with
-`execution.mode: hosted`, using the same runtime-provider selection model as
-executable plugins. When `providers.agent.<name>.execution.mode` is `hosted`,
+`runtime`, using the same runtime-provider selection model as
+executable plugins. When `providers.agent.<name>.runtime` is set,
 `gestaltd` starts the agent provider inside the selected hosted runtime instead
 of launching it directly on the `gestaltd` host. Tool callbacks still route
 back through the host agent socket, and `egress.allowedHosts` remains the
 operator-facing egress policy.
 
 When hosted agents accept caller-supplied workspaces,
-`execution.runtime.workspace` controls the pre-session checkout step. Gestalt
+`runtime.workspace` controls the pre-session checkout step. Gestalt
 validates the requested repositories against `workspace.git.allowedRepositories`,
 then asks the selected runtime provider to prepare the checkout before calling
 the agent provider's `CreateSession`. `workspace.prepareTimeout` defaults to
@@ -652,7 +645,7 @@ through the platform shell.
 | `env` | Extra environment variables passed to the provider process. |
 | `defaultHarness` | Optional default local harness name used by `gestalt agent` and `gestalt agent doctor` when `--harness` is omitted. |
 | `harnesses` | Optional named local harness configs for `gestalt agent`. Each harness can define `command`, `args`, `env`, `workingDirectory`, `requiredCommands`, and `install` guidance. |
-| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, `workspace`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `workspace.prepareTimeout` bounds runtime workspace preparation, and `workspace.git.allowedRepositories` is an allowlist of canonical Git repository identities or path-style wildcards such as `github.com/valon-technologies/*`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
+| `runtime` | Optional runtime placement for this agent provider. Supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, `workspace`, and `pool`. `imagePullAuth.dockerConfigJson` contains Docker config JSON used by runtime providers when pulling private OCI images. `workspace.prepareTimeout` bounds runtime workspace preparation, and `workspace.git.allowedRepositories` is an allowlist of canonical Git repository identities or path-style wildcards such as `github.com/valon-technologies/*`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `workflows`
@@ -1144,7 +1137,7 @@ plugins:
 | `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local plugin connection name; single-use platform or `none` connections may be declared inline. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `dev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
-| `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. |
+| `runtime` | Optional runtime placement for executable plugins. Supports hosted runtime fields such as `provider`, `template`, `image`, `imagePullAuth`, and `metadata`. |
 | `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Supported providers derive plugin scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for SDK clients. |

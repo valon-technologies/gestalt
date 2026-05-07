@@ -1095,15 +1095,15 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	if err != nil {
 		return nil, err
 	}
-	runtimeCfg := entry.HostedRuntimeConfig()
+	runtimeCfg := entry.RuntimePlacementConfig()
 	policy, err := runtimeCfg.LifecyclePolicy()
 	if err != nil {
 		launch.close()
 		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
 	}
-	if policy.RestartPolicy == config.HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
+	if policy.RestartPolicy == config.RuntimePlacementRestartPolicyAlways && entry.IndexedDB == nil {
 		launch.close()
-		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.HostedRuntimeRestartPolicyAlways)
+		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.RuntimePlacementRestartPolicyAlways)
 	}
 	hostServices = appendRuntimeLogHostService(hostServices, launch.runtimeConfig, deps, launch.runtimePlan)
 	publicHostServicesCleanup, err := registerPublicRuntimeHostServices(name, hostServices, deps, launch.runtimePlan, launch.runtimeProvider)
@@ -1117,10 +1117,10 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 
 type hostedAgentProviderLaunch struct {
 	name            string
-	runtimeConfig   config.EffectiveHostedRuntime
+	runtimeConfig   config.EffectiveRuntimePlacement
 	runtimeProvider pluginruntime.Provider
 	runtimeOwned    bool
-	runtimePlan     HostedRuntimePlan
+	runtimePlan     RuntimePlacementPlan
 	cfg             componentprovider.YAMLConfig
 	allowedHosts    []string
 	launch          hostedProcessLaunch
@@ -1169,7 +1169,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		}
 		return nil, err
 	}
-	runtimePlan := buildHostedRuntimePlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
+	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
 	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1376,57 +1376,57 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}, nil
 }
 
-func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
+func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, pluginruntime.Provider, bool, error) {
 	if entry == nil || !entry.UsesRuntimePlacement() {
-		return config.EffectiveHostedRuntime{}, nil, false, nil
+		return config.EffectiveRuntimePlacement{}, nil, false, nil
 	}
-	explicitRuntimeConfig := providerEntryHostedRuntimeConfig(entry)
+	explicitRuntimeConfig := providerEntryRuntimePlacementConfig(entry)
 	if deps.PluginRuntime != nil {
 		return explicitRuntimeConfig, deps.PluginRuntime, false, nil
 	}
 	if deps.PluginRuntimeRegistry != nil {
 		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, configPath, entry)
 		if err != nil {
-			return config.EffectiveHostedRuntime{}, nil, false, err
+			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
 		if runtimeProvider != nil {
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localHostedRuntimeConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localHostedRuntimeConfig(explicitRuntimeConfig), newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
+	return localRuntimePlacementConfig(explicitRuntimeConfig), newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
 }
 
-func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
+func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, pluginruntime.Provider, bool, error) {
 	if deps.PluginRuntime != nil {
-		return providerEntryHostedRuntimeConfig(entry), deps.PluginRuntime, false, nil
+		return providerEntryRuntimePlacementConfig(entry), deps.PluginRuntime, false, nil
 	}
 	if deps.PluginRuntimeRegistry != nil {
 		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, "plugins."+name, entry)
 		if err != nil {
-			return config.EffectiveHostedRuntime{}, nil, false, err
+			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
 		if runtimeProvider != nil {
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localHostedRuntimeConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localHostedRuntimeConfig(config.EffectiveHostedRuntime{}), newLocalPluginRuntime("", deps), true, nil
+	return localRuntimePlacementConfig(config.EffectiveRuntimePlacement{}), newLocalPluginRuntime("", deps), true, nil
 }
 
-func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.EffectiveHostedRuntime {
+func providerEntryRuntimePlacementConfig(entry *config.ProviderEntry) config.EffectiveRuntimePlacement {
 	if entry == nil {
-		return config.EffectiveHostedRuntime{}
+		return config.EffectiveRuntimePlacement{}
 	}
-	runtimeCfg := entry.HostedRuntimeConfig()
+	runtimeCfg := entry.RuntimePlacementConfig()
 	if runtimeCfg == nil {
-		return config.EffectiveHostedRuntime{Enabled: entry.UsesRuntimePlacement()}
+		return config.EffectiveRuntimePlacement{Enabled: entry.UsesRuntimePlacement()}
 	}
-	effective := config.EffectiveHostedRuntime{
+	effective := config.EffectiveRuntimePlacement{
 		Enabled:       entry.UsesRuntimePlacement(),
 		ProviderName:  strings.TrimSpace(runtimeCfg.Provider),
 		Template:      strings.TrimSpace(runtimeCfg.Template),
@@ -1438,31 +1438,31 @@ func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.Effect
 	return effective
 }
 
-func hostedRuntimeConfigImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *config.HostedRuntimeImagePullAuth {
+func hostedRuntimeConfigImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *config.RuntimePlacementImagePullAuth {
 	if auth == nil {
 		return nil
 	}
-	return &config.HostedRuntimeImagePullAuth{
+	return &config.RuntimePlacementImagePullAuth{
 		DockerConfigJSON: auth.DockerConfigJSON,
 	}
 }
 
-func hostedRuntimeWorkspaceConfig(workspace *config.HostedRuntimeWorkspaceConfig) *config.HostedRuntimeWorkspaceConfig {
+func hostedRuntimeWorkspaceConfig(workspace *config.RuntimePlacementWorkspaceConfig) *config.RuntimePlacementWorkspaceConfig {
 	if workspace == nil {
 		return nil
 	}
-	out := &config.HostedRuntimeWorkspaceConfig{
+	out := &config.RuntimePlacementWorkspaceConfig{
 		PrepareTimeout: workspace.PrepareTimeout,
 	}
 	if workspace.Git != nil {
-		out.Git = &config.HostedRuntimeWorkspaceGitConfig{
+		out.Git = &config.RuntimePlacementWorkspaceGitConfig{
 			AllowedRepositories: slices.Clone(workspace.Git.AllowedRepositories),
 		}
 	}
 	return out
 }
 
-func localHostedRuntimeConfig(runtimeConfig config.EffectiveHostedRuntime) config.EffectiveHostedRuntime {
+func localRuntimePlacementConfig(runtimeConfig config.EffectiveRuntimePlacement) config.EffectiveRuntimePlacement {
 	if runtimeConfig.Provider == nil {
 		runtimeConfig.Provider = &config.RuntimeProviderEntry{Driver: config.RuntimeProviderDriverLocal}
 	}
@@ -1495,14 +1495,14 @@ type RuntimeEgressLaunchPlan struct {
 	RuntimeAllowedHosts []string
 }
 
-func hostedRuntimeLabel(runtimeConfig config.EffectiveHostedRuntime) string {
+func hostedRuntimeLabel(runtimeConfig config.EffectiveRuntimePlacement) string {
 	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
 		return fmt.Sprintf("runtime provider %q", name)
 	}
 	return "hosted runtime"
 }
 
-func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveHostedRuntime) pluginruntime.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) pluginruntime.StartSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -1522,7 +1522,7 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	}
 }
 
-func hostedRuntimeImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *pluginruntime.ImagePullAuth {
+func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *pluginruntime.ImagePullAuth {
 	if auth == nil {
 		return nil
 	}
@@ -1531,7 +1531,7 @@ func hostedRuntimeImagePullAuth(auth *config.HostedRuntimeImagePullAuth) *plugin
 	}
 }
 
-func buildHostedRuntimeEgressLaunchPlan(providerName, sessionID string, policy egress.Policy, runtimeAllowedHosts []string, runtimePlan HostedRuntimePlan, deps Deps) (RuntimeEgressLaunchPlan, error) {
+func buildHostedRuntimeEgressLaunchPlan(providerName, sessionID string, policy egress.Policy, runtimeAllowedHosts []string, runtimePlan RuntimePlacementPlan, deps Deps) (RuntimeEgressLaunchPlan, error) {
 	plan := RuntimeEgressLaunchPlan{
 		Policy: egress.Policy{
 			AllowedHosts:  slices.Clone(policy.AllowedHosts),
@@ -1698,7 +1698,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	return hostServices, invTokens, cleanup, nil
 }
 
-func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveHostedRuntime, deps Deps, runtimePlan HostedRuntimePlan) []runtimehost.HostService {
+func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {
 	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil || runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
 		return hostServices
 	}
@@ -1712,7 +1712,7 @@ func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtime
 	})
 }
 
-func runtimeSessionLogProviderName(runtimeConfig config.EffectiveHostedRuntime) string {
+func runtimeSessionLogProviderName(runtimeConfig config.EffectiveRuntimePlacement) string {
 	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
 		return name
 	}
@@ -1879,7 +1879,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan HostedRuntimePlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider pluginruntime.Provider) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
@@ -2051,7 +2051,7 @@ func appendAllowedHost(allowedHosts []string, host string) []string {
 	return append(allowedHosts, host)
 }
 
-func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan HostedRuntimePlan) []string {
+func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan RuntimePlacementPlan) []string {
 	cloned := slices.Clone(allowedHosts)
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || runtimePlan.RequiresHostnameEgress {
 		return cloned

@@ -415,8 +415,7 @@ type ProviderEntry struct {
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
-	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
-	Execution         *ExecutionConfig              `yaml:"execution,omitempty"`
+	Runtime           *RuntimePlacementConfig       `yaml:"runtime,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
@@ -522,6 +521,9 @@ type uiEntryMarshalYAML struct {
 
 func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 	normalized := cloneYAMLNode(value)
+	if mappingValueNode(normalized, "execution") != nil {
+		return fmt.Errorf("config validation: provider execution has been removed; use runtime instead")
+	}
 	uiBinding, err := normalizeProviderEntryUINode(normalized)
 	if err != nil {
 		return err
@@ -587,74 +589,62 @@ type ProviderEgressConfig struct {
 	AllowedHosts []string `yaml:"allowedHosts,omitempty"`
 }
 
-type ExecutionMode string
-
-const (
-	ExecutionModeLocal  ExecutionMode = "local"
-	ExecutionModeHosted ExecutionMode = "hosted"
-)
-
-type ExecutionConfig struct {
-	Mode    ExecutionMode        `yaml:"mode,omitempty"`
-	Runtime *HostedRuntimeConfig `yaml:"runtime,omitempty"`
+type RuntimePlacementConfig struct {
+	Provider      string                           `yaml:"provider,omitempty"`
+	Template      string                           `yaml:"template,omitempty"`
+	Image         string                           `yaml:"image,omitempty"`
+	ImagePullAuth *RuntimePlacementImagePullAuth   `yaml:"imagePullAuth,omitempty"`
+	Metadata      map[string]string                `yaml:"metadata,omitempty"`
+	Pool          *RuntimePlacementPoolConfig      `yaml:"pool,omitempty"`
+	Workspace     *RuntimePlacementWorkspaceConfig `yaml:"workspace,omitempty"`
 }
 
-type HostedRuntimeConfig struct {
-	Provider      string                        `yaml:"provider,omitempty"`
-	Template      string                        `yaml:"template,omitempty"`
-	Image         string                        `yaml:"image,omitempty"`
-	ImagePullAuth *HostedRuntimeImagePullAuth   `yaml:"imagePullAuth,omitempty"`
-	Metadata      map[string]string             `yaml:"metadata,omitempty"`
-	Pool          *HostedRuntimePoolConfig      `yaml:"pool,omitempty"`
-	Workspace     *HostedRuntimeWorkspaceConfig `yaml:"workspace,omitempty"`
-}
-
-type HostedRuntimeImagePullAuth struct {
+type RuntimePlacementImagePullAuth struct {
 	DockerConfigJSON string `yaml:"dockerConfigJson,omitempty"`
 }
 
-type HostedRuntimeWorkspaceConfig struct {
-	PrepareTimeout string                           `yaml:"prepareTimeout,omitempty"`
-	Git            *HostedRuntimeWorkspaceGitConfig `yaml:"git,omitempty"`
+type RuntimePlacementWorkspaceConfig struct {
+	PrepareTimeout string                              `yaml:"prepareTimeout,omitempty"`
+	Git            *RuntimePlacementWorkspaceGitConfig `yaml:"git,omitempty"`
 }
 
-type HostedRuntimeWorkspaceGitConfig struct {
+type RuntimePlacementWorkspaceGitConfig struct {
 	AllowedRepositories []string `yaml:"allowedRepositories,omitempty"`
 }
 
-type HostedRuntimePoolConfig struct {
-	MinReadyInstances   int                        `yaml:"minReadyInstances,omitempty"`
-	MaxReadyInstances   int                        `yaml:"maxReadyInstances,omitempty"`
-	StartupTimeout      string                     `yaml:"startupTimeout,omitempty"`
-	HealthCheckInterval string                     `yaml:"healthCheckInterval,omitempty"`
-	RestartPolicy       HostedRuntimeRestartPolicy `yaml:"restartPolicy,omitempty"`
-	DrainTimeout        string                     `yaml:"drainTimeout,omitempty"`
+type RuntimePlacementPoolConfig struct {
+	MinReadyInstances   int                           `yaml:"minReadyInstances,omitempty"`
+	MaxReadyInstances   int                           `yaml:"maxReadyInstances,omitempty"`
+	StartupTimeout      string                        `yaml:"startupTimeout,omitempty"`
+	HealthCheckInterval string                        `yaml:"healthCheckInterval,omitempty"`
+	RestartPolicy       RuntimePlacementRestartPolicy `yaml:"restartPolicy,omitempty"`
+	DrainTimeout        string                        `yaml:"drainTimeout,omitempty"`
 }
 
-type HostedRuntimeRestartPolicy string
+type RuntimePlacementRestartPolicy string
 
 const (
-	HostedRuntimeRestartPolicyAlways HostedRuntimeRestartPolicy = "always"
-	HostedRuntimeRestartPolicyNever  HostedRuntimeRestartPolicy = "never"
+	RuntimePlacementRestartPolicyAlways RuntimePlacementRestartPolicy = "always"
+	RuntimePlacementRestartPolicyNever  RuntimePlacementRestartPolicy = "never"
 )
 
-type HostedRuntimeLifecyclePolicy struct {
+type RuntimePlacementLifecyclePolicy struct {
 	MinReadyInstances   int
 	MaxReadyInstances   int
 	StartupTimeout      time.Duration
 	HealthCheckInterval time.Duration
-	RestartPolicy       HostedRuntimeRestartPolicy
+	RestartPolicy       RuntimePlacementRestartPolicy
 	DrainTimeout        time.Duration
 }
 
-func (c *HostedRuntimeConfig) LifecyclePolicyFieldsSet() bool {
+func (c *RuntimePlacementConfig) LifecyclePolicyFieldsSet() bool {
 	if c == nil {
 		return false
 	}
 	return c.Pool != nil && c.Pool.lifecyclePolicyFieldsSet()
 }
 
-func (c *HostedRuntimePoolConfig) lifecyclePolicyFieldsSet() bool {
+func (c *RuntimePlacementPoolConfig) lifecyclePolicyFieldsSet() bool {
 	if c == nil {
 		return false
 	}
@@ -666,41 +656,41 @@ func (c *HostedRuntimePoolConfig) lifecyclePolicyFieldsSet() bool {
 		strings.TrimSpace(c.DrainTimeout) != ""
 }
 
-func (c *HostedRuntimeConfig) LifecyclePolicy() (HostedRuntimeLifecyclePolicy, error) {
+func (c *RuntimePlacementConfig) LifecyclePolicy() (RuntimePlacementLifecyclePolicy, error) {
 	if c == nil {
-		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("runtime config is required")
+		return RuntimePlacementLifecyclePolicy{}, fmt.Errorf("runtime config is required")
 	}
 	lifecycle := c.lifecyclePolicyConfig()
 	startupTimeout, err := ParseDuration(strings.TrimSpace(lifecycle.StartupTimeout))
 	if err != nil {
-		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("startupTimeout: %w", err)
+		return RuntimePlacementLifecyclePolicy{}, fmt.Errorf("startupTimeout: %w", err)
 	}
 	healthCheckInterval, err := ParseDuration(strings.TrimSpace(lifecycle.HealthCheckInterval))
 	if err != nil {
-		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("healthCheckInterval: %w", err)
+		return RuntimePlacementLifecyclePolicy{}, fmt.Errorf("healthCheckInterval: %w", err)
 	}
 	drainTimeout, err := ParseDuration(strings.TrimSpace(lifecycle.DrainTimeout))
 	if err != nil {
-		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("drainTimeout: %w", err)
+		return RuntimePlacementLifecyclePolicy{}, fmt.Errorf("drainTimeout: %w", err)
 	}
-	return HostedRuntimeLifecyclePolicy{
+	return RuntimePlacementLifecyclePolicy{
 		MinReadyInstances:   lifecycle.MinReadyInstances,
 		MaxReadyInstances:   lifecycle.MaxReadyInstances,
 		StartupTimeout:      startupTimeout,
 		HealthCheckInterval: healthCheckInterval,
-		RestartPolicy:       HostedRuntimeRestartPolicy(strings.TrimSpace(string(lifecycle.RestartPolicy))),
+		RestartPolicy:       RuntimePlacementRestartPolicy(strings.TrimSpace(string(lifecycle.RestartPolicy))),
 		DrainTimeout:        drainTimeout,
 	}, nil
 }
 
-func (c *HostedRuntimeConfig) lifecyclePolicyConfig() HostedRuntimePoolConfig {
+func (c *RuntimePlacementConfig) lifecyclePolicyConfig() RuntimePlacementPoolConfig {
 	if c == nil {
-		return HostedRuntimePoolConfig{}
+		return RuntimePlacementPoolConfig{}
 	}
 	if c.Pool != nil {
 		return *c.Pool
 	}
-	return HostedRuntimePoolConfig{}
+	return RuntimePlacementPoolConfig{}
 }
 
 type WorkflowsConfig struct {
@@ -943,8 +933,7 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	e.Egress = cloneProviderEgressConfig(e.Egress)
-	e.Runtime = cloneHostedRuntimeConfig(e.Runtime)
-	e.Execution = cloneExecutionConfig(e.Execution)
+	e.Runtime = cloneRuntimePlacementConfig(e.Runtime)
 	e.Dev = cloneProviderEntryDevConfig(e.Dev)
 	e.Harnesses = cloneProviderEntryHarnessConfigMap(e.Harnesses)
 	e.LocalHarness = cloneProviderEntryHarnessConfig(e.LocalHarness)
@@ -1023,9 +1012,6 @@ func normalizeProviderEntryAliases(entry *ProviderEntry) {
 	}
 	if entry.Egress != nil {
 		entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
-	}
-	if entry.Execution != nil {
-		entry.Execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
 	}
 	if entry.Dev != nil {
 		entry.Dev.Attach.AllowedRoles = trimStringSlice(entry.Dev.Attach.AllowedRoles)
@@ -1134,38 +1120,18 @@ func (e *ProviderEntry) EffectiveAllowedHosts() []string {
 	return nil
 }
 
-func (e *ProviderEntry) UsesHostedExecution() bool {
-	return e.UsesRuntimePlacement()
-}
-
 func (e *ProviderEntry) UsesRuntimePlacement() bool {
 	if e == nil {
 		return false
 	}
-	if e.Runtime != nil {
-		return true
-	}
-	if e.Execution != nil {
-		mode := ExecutionMode(strings.ToLower(strings.TrimSpace(string(e.Execution.Mode))))
-		if mode == "" {
-			return e.Execution.Runtime != nil
-		}
-		return mode == ExecutionModeHosted
-	}
-	return false
+	return e.Runtime != nil
 }
 
-func (e *ProviderEntry) HostedRuntimeConfig() *HostedRuntimeConfig {
+func (e *ProviderEntry) RuntimePlacementConfig() *RuntimePlacementConfig {
 	if e == nil {
 		return nil
 	}
-	if e.Runtime != nil {
-		return e.Runtime
-	}
-	if e.Execution != nil {
-		return e.Execution.Runtime
-	}
-	return nil
+	return e.Runtime
 }
 
 func cloneProviderEgressConfig(src *ProviderEgressConfig) *ProviderEgressConfig {
@@ -1175,45 +1141,35 @@ func cloneProviderEgressConfig(src *ProviderEgressConfig) *ProviderEgressConfig 
 	return &ProviderEgressConfig{AllowedHosts: slices.Clone(src.AllowedHosts)}
 }
 
-func cloneExecutionConfig(src *ExecutionConfig) *ExecutionConfig {
+func cloneRuntimePlacementConfig(src *RuntimePlacementConfig) *RuntimePlacementConfig {
 	if src == nil {
 		return nil
 	}
-	return &ExecutionConfig{
-		Mode:    src.Mode,
-		Runtime: cloneHostedRuntimeConfig(src.Runtime),
-	}
-}
-
-func cloneHostedRuntimeConfig(src *HostedRuntimeConfig) *HostedRuntimeConfig {
-	if src == nil {
-		return nil
-	}
-	return &HostedRuntimeConfig{
+	return &RuntimePlacementConfig{
 		Provider:      src.Provider,
 		Template:      src.Template,
 		Image:         src.Image,
-		ImagePullAuth: cloneHostedRuntimeImagePullAuth(src.ImagePullAuth),
+		ImagePullAuth: cloneRuntimePlacementImagePullAuth(src.ImagePullAuth),
 		Metadata:      maps.Clone(src.Metadata),
-		Pool:          cloneHostedRuntimePoolConfig(src.Pool),
-		Workspace:     cloneHostedRuntimeWorkspaceConfig(src.Workspace),
+		Pool:          cloneRuntimePlacementPoolConfig(src.Pool),
+		Workspace:     cloneRuntimePlacementWorkspaceConfig(src.Workspace),
 	}
 }
 
-func cloneHostedRuntimeImagePullAuth(src *HostedRuntimeImagePullAuth) *HostedRuntimeImagePullAuth {
+func cloneRuntimePlacementImagePullAuth(src *RuntimePlacementImagePullAuth) *RuntimePlacementImagePullAuth {
 	if src == nil {
 		return nil
 	}
-	return &HostedRuntimeImagePullAuth{
+	return &RuntimePlacementImagePullAuth{
 		DockerConfigJSON: src.DockerConfigJSON,
 	}
 }
 
-func cloneHostedRuntimePoolConfig(src *HostedRuntimePoolConfig) *HostedRuntimePoolConfig {
+func cloneRuntimePlacementPoolConfig(src *RuntimePlacementPoolConfig) *RuntimePlacementPoolConfig {
 	if src == nil {
 		return nil
 	}
-	return &HostedRuntimePoolConfig{
+	return &RuntimePlacementPoolConfig{
 		MinReadyInstances:   src.MinReadyInstances,
 		MaxReadyInstances:   src.MaxReadyInstances,
 		StartupTimeout:      src.StartupTimeout,
@@ -1223,21 +1179,21 @@ func cloneHostedRuntimePoolConfig(src *HostedRuntimePoolConfig) *HostedRuntimePo
 	}
 }
 
-func cloneHostedRuntimeWorkspaceConfig(src *HostedRuntimeWorkspaceConfig) *HostedRuntimeWorkspaceConfig {
+func cloneRuntimePlacementWorkspaceConfig(src *RuntimePlacementWorkspaceConfig) *RuntimePlacementWorkspaceConfig {
 	if src == nil {
 		return nil
 	}
-	return &HostedRuntimeWorkspaceConfig{
+	return &RuntimePlacementWorkspaceConfig{
 		PrepareTimeout: src.PrepareTimeout,
-		Git:            cloneHostedRuntimeWorkspaceGitConfig(src.Git),
+		Git:            cloneRuntimePlacementWorkspaceGitConfig(src.Git),
 	}
 }
 
-func cloneHostedRuntimeWorkspaceGitConfig(src *HostedRuntimeWorkspaceGitConfig) *HostedRuntimeWorkspaceGitConfig {
+func cloneRuntimePlacementWorkspaceGitConfig(src *RuntimePlacementWorkspaceGitConfig) *RuntimePlacementWorkspaceGitConfig {
 	if src == nil {
 		return nil
 	}
-	return &HostedRuntimeWorkspaceGitConfig{
+	return &RuntimePlacementWorkspaceGitConfig{
 		AllowedRepositories: slices.Clone(src.AllowedRepositories),
 	}
 }
@@ -1720,8 +1676,22 @@ type DevAttachmentState string
 const DevAttachmentStateIndexedDB DevAttachmentState = "indexeddb"
 
 type ServerRuntimeConfig struct {
-	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`
-	RelayBaseURL          string `yaml:"relayBaseUrl,omitempty"`
+	DefaultProvider string `yaml:"defaultProvider,omitempty"`
+	RelayBaseURL    string `yaml:"relayBaseUrl,omitempty"`
+}
+
+type serverRuntimeConfigFields ServerRuntimeConfig
+
+func (s *ServerRuntimeConfig) UnmarshalYAML(value *yaml.Node) error {
+	if mappingValueNode(value, "defaultHostedProvider") != nil {
+		return fmt.Errorf("config validation: server.runtime.defaultHostedProvider has been removed; use server.runtime.defaultProvider")
+	}
+	var decoded serverRuntimeConfigFields
+	if err := decodeYAMLNodeKnownFields(value, &decoded); err != nil {
+		return err
+	}
+	*s = ServerRuntimeConfig(decoded)
+	return nil
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -2194,7 +2164,7 @@ func normalizeServerRuntimeConfig(cfg *Config) {
 	if cfg == nil {
 		return
 	}
-	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
+	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
 }
 
 func normalizeProviderEntries(cfg *Config) {

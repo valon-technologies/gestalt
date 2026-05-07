@@ -1121,8 +1121,8 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 
 func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string, port int, mountPath, uiName, uiManifestPath string) error {
 	pluginEntry := map[string]any{
-		"source":    providerLocalSourceOverride(manifestPath),
-		"execution": nil,
+		"source":  providerLocalSourceOverride(manifestPath),
+		"runtime": nil,
 	}
 	if mountPath != "" || uiName != "" {
 		ui := map[string]any{}
@@ -1165,8 +1165,8 @@ func writeProviderRemotePluginOverlayConfig(path, pluginKey, manifestPath string
 		"apiVersion": config.ConfigAPIVersion,
 		"plugins": map[string]any{
 			pluginKey: map[string]any{
-				"source":    providerLocalSourceOverride(manifestPath),
-				"execution": nil,
+				"source":  providerLocalSourceOverride(manifestPath),
+				"runtime": nil,
 			},
 		},
 	}

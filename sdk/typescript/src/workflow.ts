@@ -45,7 +45,7 @@ import {
   WorkflowRunStatus,
 } from "./internal/gen/v1/workflow_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the workflow-host service target. */
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
@@ -87,7 +87,7 @@ export type {
 export { WorkflowRunStatus };
 
 /** Handlers and runtime metadata for a workflow provider. */
-export interface WorkflowProviderOptions extends RuntimeProviderOptions {
+export interface WorkflowProviderOptions extends ProviderBaseOptions {
   startRun: (
     request: StartWorkflowProviderRunRequest,
   ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
@@ -142,7 +142,7 @@ export interface WorkflowProviderOptions extends RuntimeProviderOptions {
 }
 
 /** Runtime provider implementation for the Gestalt workflow host contract. */
-export class WorkflowProvider extends RuntimeProvider {
+export class WorkflowProvider extends ProviderBase {
   readonly kind = "workflow" as const;
 
   private readonly startRunHandler: WorkflowProviderOptions["startRun"];
