@@ -634,25 +634,41 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
 
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
 	scheduleID := newScheduleID(idempotencyScope)
+	var existing *ManagedSchedule
 	if idempotencyKey != "" {
-		existing, err := m.requireOwnedSchedule(ctx, scheduleID, p)
+		var err error
+		existing, err = m.requireOwnedSchedule(ctx, scheduleID, p)
 		if err == nil {
-			if !managedScheduleMatchesUpsert(existing, providerName, target, req) {
-				return nil, fmt.Errorf("%w: workflow schedule idempotency key reused with different request", invocation.ErrInvalidInvocation)
+			if strings.TrimSpace(req.DefinitionID) != "" {
+				if workflowTargetIsSet(req.Target) {
+					return nil, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
+				}
+				if err := m.validateExistingProviderSelection(req.ProviderName, existing.ProviderName); err != nil {
+					return nil, err
+				}
+				if !managedScheduleMatchesDefinitionUpsert(existing, req) {
+					return nil, fmt.Errorf("%w: workflow schedule idempotency key reused with different request", invocation.ErrInvalidInvocation)
+				}
+				return existing, nil
 			}
-			return existing, nil
-		}
-		if !errors.Is(err, core.ErrNotFound) {
+		} else if !errors.Is(err, core.ErrNotFound) {
 			return nil, err
 		}
+	}
+
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		if !managedScheduleMatchesUpsert(existing, providerName, target, req) {
+			return nil, fmt.Errorf("%w: workflow schedule idempotency key reused with different request", invocation.ErrInvalidInvocation)
+		}
+		return existing, nil
 	}
 	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
 	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
@@ -697,6 +713,19 @@ func managedScheduleMatchesUpsert(existing *ManagedSchedule, providerName string
 		return false
 	}
 	return coreworkflow.TargetsEqual(existing.Schedule.Target, target)
+}
+
+func managedScheduleMatchesDefinitionUpsert(existing *ManagedSchedule, req ScheduleUpsert) bool {
+	if existing == nil || existing.Schedule == nil {
+		return false
+	}
+	if strings.TrimSpace(existing.Schedule.Cron) != strings.TrimSpace(req.Cron) {
+		return false
+	}
+	if strings.TrimSpace(existing.Schedule.Timezone) != strings.TrimSpace(req.Timezone) {
+		return false
+	}
+	return existing.Schedule.Paused == req.Paused
 }
 
 func (m *Manager) GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error) {
@@ -860,10 +889,6 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
 	match := normalizeEventMatch(req.Match)
 	if strings.TrimSpace(match.Type) == "" {
 		return nil, ErrWorkflowEventMatchRequired
@@ -872,17 +897,37 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
 	triggerID := newEventTriggerID(idempotencyScope)
+	var existing *ManagedEventTrigger
 	if idempotencyKey != "" {
-		existing, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+		var err error
+		existing, err = m.requireOwnedEventTrigger(ctx, triggerID, p)
 		if err == nil {
-			if !managedEventTriggerMatchesUpsert(existing, providerName, target, match, req) {
-				return nil, fmt.Errorf("%w: workflow trigger idempotency key reused with different request", invocation.ErrInvalidInvocation)
+			if strings.TrimSpace(req.DefinitionID) != "" {
+				if workflowTargetIsSet(req.Target) {
+					return nil, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
+				}
+				if err := m.validateExistingProviderSelection(req.ProviderName, existing.ProviderName); err != nil {
+					return nil, err
+				}
+				if !managedEventTriggerMatchesDefinitionUpsert(existing, match, req) {
+					return nil, fmt.Errorf("%w: workflow trigger idempotency key reused with different request", invocation.ErrInvalidInvocation)
+				}
+				return existing, nil
 			}
-			return existing, nil
-		}
-		if !errors.Is(err, core.ErrNotFound) {
+		} else if !errors.Is(err, core.ErrNotFound) {
 			return nil, err
 		}
+	}
+
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		if !managedEventTriggerMatchesUpsert(existing, providerName, target, match, req) {
+			return nil, fmt.Errorf("%w: workflow trigger idempotency key reused with different request", invocation.ErrInvalidInvocation)
+		}
+		return existing, nil
 	}
 	executionRefID := newEventTriggerExecutionRefID(triggerID, idempotencyScope)
 	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
@@ -923,6 +968,16 @@ func managedEventTriggerMatchesUpsert(existing *ManagedEventTrigger, providerNam
 		return false
 	}
 	return coreworkflow.TargetsEqual(existing.Trigger.Target, target)
+}
+
+func managedEventTriggerMatchesDefinitionUpsert(existing *ManagedEventTrigger, match coreworkflow.EventMatch, req EventTriggerUpsert) bool {
+	if existing == nil || existing.Trigger == nil {
+		return false
+	}
+	if existing.Trigger.Paused != req.Paused {
+		return false
+	}
+	return normalizeEventMatch(existing.Trigger.Match) == match
 }
 
 func (m *Manager) GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error) {
@@ -1078,6 +1133,21 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 		return "", nil, coreworkflow.Target{}, err
 	}
 	return definition.ProviderName, definition.provider, resolvedTarget, nil
+}
+
+func (m *Manager) validateExistingProviderSelection(providerSelection, existingProviderName string) error {
+	providerSelection = strings.TrimSpace(providerSelection)
+	if providerSelection == "" {
+		return nil
+	}
+	selectedProviderName, _, err := m.resolveProviderSelection(providerSelection)
+	if err != nil {
+		return err
+	}
+	if selectedProviderName != strings.TrimSpace(existingProviderName) {
+		return fmt.Errorf("%w: workflow idempotency key reused with different provider", invocation.ErrInvalidInvocation)
+	}
+	return nil
 }
 
 func workflowTargetIsSet(target coreworkflow.Target) bool {

@@ -199,6 +199,118 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	}
 }
 
+func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+					{ID: "issues.updated", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage", "issues.updated"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+			Input:      map[string]any{"mode": "initial"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	scheduleReq := ScheduleUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		IdempotencyKey:   "triage-schedule",
+		Cron:             "*/5 * * * *",
+		Timezone:         "UTC",
+	}
+	schedule, err := manager.CreateSchedule(context.Background(), caller, scheduleReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule: %v", err)
+	}
+
+	if _, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.updated",
+			Input:      map[string]any{"mode": "updated"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateDefinition: %v", err)
+	}
+
+	replayedSchedule, err := manager.CreateSchedule(context.Background(), caller, scheduleReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule replay after definition update: %v", err)
+	}
+	if replayedSchedule.Schedule.ID != schedule.Schedule.ID {
+		t.Fatalf("replayed schedule ID = %q, want %q", replayedSchedule.Schedule.ID, schedule.Schedule.ID)
+	}
+	if got := replayedSchedule.Schedule.Target.Plugin.Operation; got != "issues.triage" {
+		t.Fatalf("replayed schedule target operation = %q, want original snapshot", got)
+	}
+	if len(provider.upsertedSchedules) != 1 {
+		t.Fatalf("provider upserted schedules = %d, want 1", len(provider.upsertedSchedules))
+	}
+
+	triggerReq := EventTriggerUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		IdempotencyKey:   "triage-trigger",
+		Match:            coreworkflow.EventMatch{Type: "github.issue.opened"},
+	}
+	trigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
+	if err != nil {
+		t.Fatalf("CreateEventTrigger: %v", err)
+	}
+
+	if err := manager.DeleteDefinition(context.Background(), caller, definition.Definition.ID); err != nil {
+		t.Fatalf("DeleteDefinition: %v", err)
+	}
+	replayedTrigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
+	if err != nil {
+		t.Fatalf("CreateEventTrigger replay after definition delete: %v", err)
+	}
+	if replayedTrigger.Trigger.ID != trigger.Trigger.ID {
+		t.Fatalf("replayed trigger ID = %q, want %q", replayedTrigger.Trigger.ID, trigger.Trigger.ID)
+	}
+	if got := replayedTrigger.Trigger.Target.Plugin.Operation; got != "issues.updated" {
+		t.Fatalf("replayed trigger target operation = %q, want stored snapshot", got)
+	}
+	if len(provider.upsertedEventTriggers) != 1 {
+		t.Fatalf("provider upserted event triggers = %d, want 1", len(provider.upsertedEventTriggers))
+	}
+}
+
 func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	t.Parallel()
 
