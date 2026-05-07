@@ -1,5 +1,5 @@
 export default {
-  linux: "Linux",
+  installer: "Installer",
   homebrew: "Homebrew",
   binary: "Binary Releases",
   source: "Build from Source",
