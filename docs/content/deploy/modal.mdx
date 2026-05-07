@@ -1,0 +1,202 @@
+import { Callout } from 'nextra/components'
+
+# Modal
+
+Deploy Gestalt to [Modal](https://modal.com/) by wrapping the published
+`gestaltd` image in a Modal web endpoint. Modal owns the public HTTPS endpoint
+and container lifecycle; Gestalt still listens on port `8080` inside the
+container.
+
+<Callout type="warning">
+  Modal is serverless infrastructure. For durable production use, back Gestalt
+  with a networked datastore such as Postgres, MySQL, SQL Server, MongoDB, or
+  DynamoDB. Do not rely on the Modal container filesystem for credentials,
+  sessions, or OAuth state.
+</Callout>
+
+## Prerequisites
+
+Install and authenticate the Modal CLI:
+
+```sh
+python -m pip install modal
+python -m modal setup
+```
+
+Choose the public endpoint first. The `label="gestalt"` setting in the Modal app
+below makes the default URL `https://<workspace>--gestalt.modal.run`. If you use
+a Modal custom domain, use that domain for `GESTALT_BASE_URL` and add it to the
+`custom_domains` option on `@modal.web_server`.
+
+Export the values locally so `gestaltd init` can resolve the same `${VAR}`
+placeholders that Modal will provide at runtime:
+
+```sh
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export GESTALT_BASE_URL="https://<workspace>--gestalt.modal.run"
+export DATABASE_URL="postgres://user:password@host:5432/gestalt"
+```
+
+Create one Modal Secret from those values:
+
+```sh
+modal secret create gestalt-server \
+  GESTALT_ENCRYPTION_KEY="$GESTALT_ENCRYPTION_KEY" \
+  GESTALT_BASE_URL="$GESTALT_BASE_URL" \
+  DATABASE_URL="$DATABASE_URL"
+```
+
+OAuth callback URLs are derived from `GESTALT_BASE_URL`, so it must match the
+browser-facing URL exactly.
+
+## Config
+
+Put the deployment config at `deploy/modal/config.yaml`. Replace the provider
+release URL with the RelationalDB provider version you have tested.
+
+```yaml
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+For a throwaway smoke test, you can use `dsn: sqlite:///tmp/gestalt.db` and omit
+`DATABASE_URL`, but state will be lost when the container is replaced.
+
+See [IndexedDB Providers](/providers/indexeddb) for the supported datastore
+providers and DSN formats.
+
+## Prepare Artifacts
+
+Modal's existing-image support requires `linux/amd64`, so prepare the lockfile
+and provider artifacts for that platform even when you run `gestaltd init` from
+macOS.
+
+```sh
+gestaltd init \
+  --config deploy/modal/config.yaml \
+  --artifacts-dir deploy/modal \
+  --lockfile deploy/modal/gestalt.lock.json \
+  --platform linux/amd64
+```
+
+This writes the lockfile and prepared provider files under `deploy/modal/`.
+Commit those files when you want deployment startup to avoid resolving provider
+metadata at runtime. Keep `GESTALT_ENCRYPTION_KEY` and `DATABASE_URL` out of the
+repository; they are only expanded from the local environment during validation
+and from Modal Secrets at runtime.
+
+## Modal App
+
+Create `modal_app.py` next to the `deploy/` directory:
+
+```python
+import subprocess
+
+import modal
+
+PORT = 8080
+
+app = modal.App("gestalt-server")
+
+image = (
+    modal.Image.from_registry(
+        "valontechnologies/gestaltd:latest-alpine",
+        add_python="3.12",
+    )
+    .dockerfile_commands(
+        "RUN printf '#!/bin/sh\\nexec \"$@\"\\n' > /usr/local/bin/modal-entrypoint",
+        "RUN chmod +x /usr/local/bin/modal-entrypoint",
+    )
+    .entrypoint(["/usr/local/bin/modal-entrypoint"])
+    .add_local_dir("deploy/modal", "/app", copy=True)
+)
+
+
+@app.function(
+    image=image,
+    secrets=[modal.Secret.from_name("gestalt-server")],
+    max_containers=1,
+    min_containers=1,
+    scaledown_window=1200,
+    timeout=24 * 60 * 60,
+)
+@modal.concurrent(max_inputs=100, target_inputs=20)
+@modal.web_server(
+    PORT,
+    startup_timeout=120,
+    label="gestalt",
+    # custom_domains=["gestalt.example.com"],
+)
+def serve():
+    subprocess.Popen(
+        [
+            "/gestaltd",
+            "serve",
+            "--locked",
+            "--config",
+            "/app/config.yaml",
+            "--artifacts-dir",
+            "/app",
+            "--lockfile",
+            "/app/gestalt.lock.json",
+        ]
+    )
+```
+
+The Gestalt image uses `/gestaltd` as its Docker entrypoint. Modal Functions
+also need to run Modal's Python entrypoint, so the wrapper image resets
+`ENTRYPOINT` to a small script that delegates to Modal. `add_python` is required
+because Modal Functions need `python` and `pip` on the image path.
+
+## Deploy
+
+Deploy the app:
+
+```sh
+modal deploy modal_app.py
+```
+
+Smoke test the endpoint:
+
+```sh
+curl "$GESTALT_BASE_URL/health"
+curl "$GESTALT_BASE_URL/ready"
+```
+
+Use `modal serve modal_app.py` for a temporary development deployment, and
+`modal deploy modal_app.py` for a persistent deployment.
+
+## Production Notes
+
+Pin the Gestalt image tag or digest and every provider release URL once you have
+tested the deployment. `:latest-alpine` is convenient for an initial rollout, but
+it is not a reproducible production reference.
+
+`min_containers=1` keeps one Gestalt container warm and reduces callback and UI
+latency, but it also means Modal will keep billing for that warm container. Set
+it to `0` if scale-to-zero cost behavior is more important than cold-start
+latency.
+
+Keep `max_containers=1` until your datastore and configured providers have been
+validated for horizontal serving. `@modal.concurrent` lets one warm container
+serve many HTTP requests while preserving a single Gestalt process.
+
+Use Modal Secrets for `GESTALT_ENCRYPTION_KEY`, database credentials, OAuth
+client secrets, and provider tokens. Reuse the same encryption key across
+redeploys; changing it invalidates encrypted credentials and sessions.
+
+If you configure a custom domain with Modal, update `GESTALT_BASE_URL` to that
+domain before enabling OAuth providers.
