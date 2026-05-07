@@ -127,17 +127,22 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if err != nil {
 		return nil, err
 	}
+	sessionCreatedDelivery, err := workflowLifecycleDeliveryToProto(target.SessionCreatedDelivery)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.BoundWorkflowAgentTarget{
-		ProviderName:   target.ProviderName,
-		Model:          target.Model,
-		Prompt:         target.Prompt,
-		Messages:       messages,
-		ToolRefs:       agentwire.ToolRefsToProto(target.ToolRefs),
-		ResponseSchema: responseSchema,
-		Metadata:       metadata,
-		ModelOptions:   modelOptions,
-		TimeoutSeconds: int32(target.TimeoutSeconds),
-		OutputDelivery: outputDelivery,
+		ProviderName:           target.ProviderName,
+		Model:                  target.Model,
+		Prompt:                 target.Prompt,
+		Messages:               messages,
+		ToolRefs:               agentwire.ToolRefsToProto(target.ToolRefs),
+		ResponseSchema:         responseSchema,
+		Metadata:               metadata,
+		ModelOptions:           modelOptions,
+		TimeoutSeconds:         int32(target.TimeoutSeconds),
+		OutputDelivery:         outputDelivery,
+		SessionCreatedDelivery: sessionCreatedDelivery,
 	}, nil
 }
 
@@ -146,16 +151,17 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		return nil
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(target.GetProviderName()),
-		Model:          strings.TrimSpace(target.GetModel()),
-		Prompt:         target.GetPrompt(),
-		Messages:       agentwire.MessagesFromProto(target.GetMessages()),
-		ToolRefs:       agentwire.ToolRefsFromProto(target.GetToolRefs()),
-		ResponseSchema: mapFromStruct(target.GetResponseSchema()),
-		Metadata:       mapFromStruct(target.GetMetadata()),
-		ModelOptions:   mapFromStruct(target.GetModelOptions()),
-		TimeoutSeconds: int(target.GetTimeoutSeconds()),
-		OutputDelivery: workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+		ProviderName:           strings.TrimSpace(target.GetProviderName()),
+		Model:                  strings.TrimSpace(target.GetModel()),
+		Prompt:                 target.GetPrompt(),
+		Messages:               agentwire.MessagesFromProto(target.GetMessages()),
+		ToolRefs:               agentwire.ToolRefsFromProto(target.GetToolRefs()),
+		ResponseSchema:         mapFromStruct(target.GetResponseSchema()),
+		Metadata:               mapFromStruct(target.GetMetadata()),
+		ModelOptions:           mapFromStruct(target.GetModelOptions()),
+		TimeoutSeconds:         int(target.GetTimeoutSeconds()),
+		OutputDelivery:         workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
+		SessionCreatedDelivery: workflowLifecycleDeliveryFromProto(target.GetSessionCreatedDelivery()),
 	}
 }
 
@@ -265,6 +271,126 @@ func workflowOutputValueSourceFromProto(source *proto.WorkflowOutputValueSource)
 		return coreworkflow.OutputValueSource{Literal: protoValueToAny(typed.Literal)}
 	default:
 		return coreworkflow.OutputValueSource{}
+	}
+}
+
+func workflowLifecycleDeliveryToProto(delivery *coreworkflow.LifecycleDelivery) (*proto.WorkflowLifecycleDelivery, error) {
+	if delivery == nil {
+		return nil, nil
+	}
+	bindings := make([]*proto.WorkflowLifecycleBinding, 0, len(delivery.InputBindings))
+	for i := range delivery.InputBindings {
+		binding := delivery.InputBindings[i]
+		value, err := workflowLifecycleValueSourceToProto(binding.Value)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent session_created_delivery.input_bindings[%d].value: %w", i, err)
+		}
+		bindings = append(bindings, &proto.WorkflowLifecycleBinding{
+			InputField: binding.InputField,
+			Value:      value,
+		})
+	}
+	deliveryTarget := delivery.Target
+	deliveryTarget.CredentialMode = ""
+	target, err := workflowPluginTargetToProto(&deliveryTarget)
+	if err != nil {
+		return nil, fmt.Errorf("workflow agent session_created_delivery.target: %w", err)
+	}
+	return &proto.WorkflowLifecycleDelivery{
+		Target:         target,
+		InputBindings:  bindings,
+		CredentialMode: string(delivery.CredentialMode),
+		FailurePolicy:  delivery.FailurePolicy,
+	}, nil
+}
+
+func workflowLifecycleDeliveryFromProto(delivery *proto.WorkflowLifecycleDelivery) *coreworkflow.LifecycleDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := &coreworkflow.LifecycleDelivery{
+		Target:         workflowPluginTargetFromProto(delivery.GetTarget()),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.GetCredentialMode()))),
+		FailurePolicy:  strings.TrimSpace(delivery.GetFailurePolicy()),
+	}
+	for _, binding := range delivery.GetInputBindings() {
+		if binding == nil {
+			continue
+		}
+		out.InputBindings = append(out.InputBindings, coreworkflow.LifecycleBinding{
+			InputField: strings.TrimSpace(binding.GetInputField()),
+			Value:      workflowLifecycleValueSourceFromProto(binding.GetValue()),
+		})
+	}
+	return out
+}
+
+func workflowLifecycleValueSourceToProto(source coreworkflow.LifecycleValueSource) (*proto.WorkflowLifecycleValueSource, error) {
+	set := 0
+	if strings.TrimSpace(source.AgentSession) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalPayload) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.SignalMetadata) != "" {
+		set++
+	}
+	if strings.TrimSpace(source.WorkflowContext) != "" {
+		set++
+	}
+	if source.Literal != nil {
+		set++
+	}
+	if set != 1 {
+		return nil, fmt.Errorf("must set exactly one source")
+	}
+	switch {
+	case strings.TrimSpace(source.AgentSession) != "":
+		return &proto.WorkflowLifecycleValueSource{
+			Kind: &proto.WorkflowLifecycleValueSource_AgentSession{AgentSession: source.AgentSession},
+		}, nil
+	case strings.TrimSpace(source.SignalPayload) != "":
+		return &proto.WorkflowLifecycleValueSource{
+			Kind: &proto.WorkflowLifecycleValueSource_SignalPayload{SignalPayload: source.SignalPayload},
+		}, nil
+	case strings.TrimSpace(source.SignalMetadata) != "":
+		return &proto.WorkflowLifecycleValueSource{
+			Kind: &proto.WorkflowLifecycleValueSource_SignalMetadata{SignalMetadata: source.SignalMetadata},
+		}, nil
+	case strings.TrimSpace(source.WorkflowContext) != "":
+		return &proto.WorkflowLifecycleValueSource{
+			Kind: &proto.WorkflowLifecycleValueSource_WorkflowContext{WorkflowContext: source.WorkflowContext},
+		}, nil
+	case source.Literal != nil:
+		value, err := protoValueFromAny(source.Literal)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowLifecycleValueSource{
+			Kind: &proto.WorkflowLifecycleValueSource_Literal{Literal: value},
+		}, nil
+	}
+	return nil, fmt.Errorf("must set exactly one source")
+}
+
+func workflowLifecycleValueSourceFromProto(source *proto.WorkflowLifecycleValueSource) coreworkflow.LifecycleValueSource {
+	if source == nil {
+		return coreworkflow.LifecycleValueSource{}
+	}
+	switch typed := source.GetKind().(type) {
+	case *proto.WorkflowLifecycleValueSource_AgentSession:
+		return coreworkflow.LifecycleValueSource{AgentSession: strings.TrimSpace(typed.AgentSession)}
+	case *proto.WorkflowLifecycleValueSource_SignalPayload:
+		return coreworkflow.LifecycleValueSource{SignalPayload: strings.TrimSpace(typed.SignalPayload)}
+	case *proto.WorkflowLifecycleValueSource_SignalMetadata:
+		return coreworkflow.LifecycleValueSource{SignalMetadata: strings.TrimSpace(typed.SignalMetadata)}
+	case *proto.WorkflowLifecycleValueSource_WorkflowContext:
+		return coreworkflow.LifecycleValueSource{WorkflowContext: strings.TrimSpace(typed.WorkflowContext)}
+	case *proto.WorkflowLifecycleValueSource_Literal:
+		return coreworkflow.LifecycleValueSource{Literal: protoValueToAny(typed.Literal)}
+	default:
+		return coreworkflow.LifecycleValueSource{}
 	}
 }
 

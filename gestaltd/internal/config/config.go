@@ -762,16 +762,17 @@ type WorkflowPluginTargetConfig struct {
 }
 
 type WorkflowAgentConfig struct {
-	Provider       string                        `yaml:"provider,omitempty"`
-	Model          string                        `yaml:"model,omitempty"`
-	Prompt         string                        `yaml:"prompt,omitempty"`
-	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata       map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout        string                        `yaml:"timeout,omitempty"`
+	Provider               string                           `yaml:"provider,omitempty"`
+	Model                  string                           `yaml:"model,omitempty"`
+	Prompt                 string                           `yaml:"prompt,omitempty"`
+	Messages               []WorkflowAgentMessage           `yaml:"messages,omitempty"`
+	Tools                  []WorkflowAgentToolRef           `yaml:"tools,omitempty"`
+	OutputDelivery         *WorkflowOutputDeliveryConfig    `yaml:"outputDelivery,omitempty"`
+	SessionCreatedDelivery *WorkflowLifecycleDeliveryConfig `yaml:"sessionCreatedDelivery,omitempty"`
+	ResponseSchema         map[string]any                   `yaml:"responseSchema,omitempty"`
+	Metadata               map[string]any                   `yaml:"metadata,omitempty"`
+	ModelOptions           map[string]any                   `yaml:"modelOptions,omitempty"`
+	Timeout                string                           `yaml:"timeout,omitempty"`
 }
 
 type WorkflowOutputDeliveryConfig struct {
@@ -790,6 +791,26 @@ type WorkflowOutputValueSourceConfig struct {
 	SignalPayload  string `yaml:"signalPayload,omitempty"`
 	SignalMetadata string `yaml:"signalMetadata,omitempty"`
 	Literal        any    `yaml:"literal,omitempty"`
+}
+
+type WorkflowLifecycleDeliveryConfig struct {
+	Target         WorkflowPluginTargetConfig        `yaml:"target,omitempty"`
+	InputBindings  []WorkflowLifecycleBindingConfig  `yaml:"inputBindings,omitempty"`
+	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+	FailurePolicy  string                            `yaml:"failurePolicy,omitempty"`
+}
+
+type WorkflowLifecycleBindingConfig struct {
+	InputField string                             `yaml:"inputField,omitempty"`
+	Value      WorkflowLifecycleValueSourceConfig `yaml:"value,omitempty"`
+}
+
+type WorkflowLifecycleValueSourceConfig struct {
+	AgentSession    string `yaml:"agentSession,omitempty"`
+	SignalPayload   string `yaml:"signalPayload,omitempty"`
+	SignalMetadata  string `yaml:"signalMetadata,omitempty"`
+	WorkflowContext string `yaml:"workflowContext,omitempty"`
+	Literal         any    `yaml:"literal,omitempty"`
 }
 
 type WorkflowAgentMessage struct {

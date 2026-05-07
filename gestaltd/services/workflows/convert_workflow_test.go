@@ -107,6 +107,21 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 				{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
 			},
 		},
+		SessionCreatedDelivery: &coreworkflow.LifecycleDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName:     "notification",
+				Operation:      "sessionLink",
+				CredentialMode: core.ConnectionModeUser,
+				Input:          map[string]any{"format": "plain"},
+			},
+			CredentialMode: core.ConnectionModeNone,
+			FailurePolicy:  coreworkflow.LifecycleFailurePolicyContinue,
+			InputBindings: []coreworkflow.LifecycleBinding{
+				{InputField: "session_id", Value: coreworkflow.LifecycleValueSource{AgentSession: "id"}},
+				{InputField: "ref", Value: coreworkflow.LifecycleValueSource{SignalPayload: "reply_ref"}},
+				{InputField: "run", Value: coreworkflow.LifecycleValueSource{WorkflowContext: "runId"}},
+			},
+		},
 	}})
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
@@ -122,6 +137,15 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if got := target.GetAgent().GetOutputDelivery().GetTarget().GetCredentialMode(); got != "" {
 		t.Fatalf("output delivery nested target credential mode = %q, want empty", got)
+	}
+	if target.GetAgent().GetSessionCreatedDelivery().GetTarget().GetPluginName() != "notification" {
+		t.Fatalf("session-created delivery = %#v", target.GetAgent().GetSessionCreatedDelivery())
+	}
+	if got := target.GetAgent().GetSessionCreatedDelivery().GetFailurePolicy(); got != coreworkflow.LifecycleFailurePolicyContinue {
+		t.Fatalf("session-created delivery failure policy = %q", got)
+	}
+	if got := target.GetAgent().GetSessionCreatedDelivery().GetTarget().GetCredentialMode(); got != "" {
+		t.Fatalf("session-created delivery nested target credential mode = %q, want empty", got)
 	}
 	roundTrip := workflowTargetFromProto(target)
 	if roundTrip.Agent == nil || roundTrip.Agent.ProviderName != "managed" {
@@ -141,6 +165,18 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if got := roundTrip.Agent.OutputDelivery.InputBindings[2].Value.Literal; got != "workflow" {
 		t.Fatalf("round trip literal = %#v", got)
+	}
+	if roundTrip.Agent.SessionCreatedDelivery == nil {
+		t.Fatalf("round trip session-created delivery is nil")
+	}
+	if got := roundTrip.Agent.SessionCreatedDelivery.Target.Input["format"]; got != "plain" {
+		t.Fatalf("round trip session-created delivery input = %#v", roundTrip.Agent.SessionCreatedDelivery.Target.Input)
+	}
+	if got := roundTrip.Agent.SessionCreatedDelivery.InputBindings[0].Value.AgentSession; got != "id" {
+		t.Fatalf("round trip agent session binding = %q", got)
+	}
+	if got := roundTrip.Agent.SessionCreatedDelivery.InputBindings[2].Value.WorkflowContext; got != "runId" {
+		t.Fatalf("round trip workflow context binding = %q", got)
 	}
 }
 

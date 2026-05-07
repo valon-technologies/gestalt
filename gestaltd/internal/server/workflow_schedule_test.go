@@ -600,6 +600,24 @@ type workflowAgentTargetResponse struct {
 			} `json:"value"`
 		} `json:"inputBindings"`
 	} `json:"outputDelivery"`
+	SessionCreatedDelivery *struct {
+		Target struct {
+			Name       string         `json:"name"`
+			Operation  string         `json:"operation"`
+			Connection string         `json:"connection"`
+			Instance   string         `json:"instance"`
+			Input      map[string]any `json:"input"`
+		} `json:"target"`
+		CredentialMode string `json:"credentialMode"`
+		FailurePolicy  string `json:"failurePolicy"`
+		InputBindings  []struct {
+			InputField string `json:"inputField"`
+			Value      struct {
+				AgentSession  string `json:"agentSession"`
+				SignalPayload string `json:"signalPayload"`
+			} `json:"value"`
+		} `json:"inputBindings"`
+	} `json:"sessionCreatedDelivery"`
 }
 
 func requireWorkflowPluginTarget(t *testing.T, target workflowTargetResponse) *workflowPluginTargetResponse {
@@ -866,7 +884,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]}}}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]},"sessionCreatedDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"link"}},"failurePolicy":"continue","inputBindings":[{"inputField":"session_id","value":{"agentSession":"id"}},{"inputField":"reply_ref","value":{"signalPayload":"reply_ref"}}]}}}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -892,6 +910,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if created.Target.Agent.OutputDelivery == nil || created.Target.Agent.OutputDelivery.Target.Name != "roadmap" || created.Target.Agent.OutputDelivery.Target.Operation != "sync" {
 		t.Fatalf("created agent output delivery = %#v", created.Target.Agent.OutputDelivery)
 	}
+	if created.Target.Agent.SessionCreatedDelivery == nil || created.Target.Agent.SessionCreatedDelivery.Target.Name != "roadmap" || created.Target.Agent.SessionCreatedDelivery.FailurePolicy != "continue" {
+		t.Fatalf("created agent session-created delivery = %#v", created.Target.Agent.SessionCreatedDelivery)
+	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
@@ -901,6 +922,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if storedTarget.Agent.OutputDelivery == nil || storedTarget.Agent.OutputDelivery.Target.PluginName != "roadmap" || len(storedTarget.Agent.OutputDelivery.InputBindings) != 2 {
 		t.Fatalf("stored agent output delivery = %#v", storedTarget.Agent.OutputDelivery)
+	}
+	if storedTarget.Agent.SessionCreatedDelivery == nil || storedTarget.Agent.SessionCreatedDelivery.Target.PluginName != "roadmap" || storedTarget.Agent.SessionCreatedDelivery.FailurePolicy != "continue" || len(storedTarget.Agent.SessionCreatedDelivery.InputBindings) != 2 {
+		t.Fatalf("stored agent session-created delivery = %#v", storedTarget.Agent.SessionCreatedDelivery)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {
 		t.Fatal("expected execution ref")
@@ -935,6 +959,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if listed[0].Target.Agent.OutputDelivery == nil || listed[0].Target.Agent.OutputDelivery.Target.Operation != "sync" {
 		t.Fatalf("listed agent output delivery = %#v", listed[0].Target.Agent.OutputDelivery)
+	}
+	if listed[0].Target.Agent.SessionCreatedDelivery == nil || listed[0].Target.Agent.SessionCreatedDelivery.Target.Operation != "sync" {
+		t.Fatalf("listed agent session-created delivery = %#v", listed[0].Target.Agent.SessionCreatedDelivery)
 	}
 }
 

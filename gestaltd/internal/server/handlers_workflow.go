@@ -35,16 +35,17 @@ type workflowPluginTargetRequest struct {
 }
 
 type workflowAgentTargetRequest struct {
-	ProviderName   string                         `json:"provider,omitempty"`
-	Model          string                         `json:"model,omitempty"`
-	Prompt         string                         `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest          `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest          `json:"toolRefs,omitempty"`
-	OutputDelivery *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                 `json:"responseSchema,omitempty"`
-	Metadata       map[string]any                 `json:"metadata,omitempty"`
-	ModelOptions   map[string]any                 `json:"modelOptions,omitempty"`
-	TimeoutSeconds int                            `json:"timeoutSeconds,omitempty"`
+	ProviderName           string                            `json:"provider,omitempty"`
+	Model                  string                            `json:"model,omitempty"`
+	Prompt                 string                            `json:"prompt,omitempty"`
+	Messages               []agentMessageRequest             `json:"messages,omitempty"`
+	ToolRefs               []agentToolRefRequest             `json:"toolRefs,omitempty"`
+	OutputDelivery         *workflowOutputDeliveryRequest    `json:"outputDelivery,omitempty"`
+	SessionCreatedDelivery *workflowLifecycleDeliveryRequest `json:"sessionCreatedDelivery,omitempty"`
+	ResponseSchema         map[string]any                    `json:"responseSchema,omitempty"`
+	Metadata               map[string]any                    `json:"metadata,omitempty"`
+	ModelOptions           map[string]any                    `json:"modelOptions,omitempty"`
+	TimeoutSeconds         int                               `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryRequest struct {
@@ -63,6 +64,26 @@ type workflowOutputValueSourceRequest struct {
 	SignalPayload  string `json:"signalPayload,omitempty"`
 	SignalMetadata string `json:"signalMetadata,omitempty"`
 	Literal        any    `json:"literal,omitempty"`
+}
+
+type workflowLifecycleDeliveryRequest struct {
+	Target         workflowPluginTargetRequest       `json:"target"`
+	InputBindings  []workflowLifecycleBindingRequest `json:"inputBindings,omitempty"`
+	CredentialMode string                            `json:"credentialMode,omitempty"`
+	FailurePolicy  string                            `json:"failurePolicy,omitempty"`
+}
+
+type workflowLifecycleBindingRequest struct {
+	InputField string                              `json:"inputField"`
+	Value      workflowLifecycleValueSourceRequest `json:"value"`
+}
+
+type workflowLifecycleValueSourceRequest struct {
+	AgentSession    string `json:"agentSession,omitempty"`
+	SignalPayload   string `json:"signalPayload,omitempty"`
+	SignalMetadata  string `json:"signalMetadata,omitempty"`
+	WorkflowContext string `json:"workflowContext,omitempty"`
+	Literal         any    `json:"literal,omitempty"`
 }
 
 type workflowScheduleUpsertRequest struct {
@@ -88,16 +109,17 @@ type workflowPluginTargetInfo struct {
 }
 
 type workflowAgentTargetInfo struct {
-	ProviderName   string                      `json:"provider,omitempty"`
-	Model          string                      `json:"model,omitempty"`
-	Prompt         string                      `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest       `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest       `json:"toolRefs,omitempty"`
-	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any              `json:"responseSchema,omitempty"`
-	Metadata       map[string]any              `json:"metadata,omitempty"`
-	ModelOptions   map[string]any              `json:"modelOptions,omitempty"`
-	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
+	ProviderName           string                         `json:"provider,omitempty"`
+	Model                  string                         `json:"model,omitempty"`
+	Prompt                 string                         `json:"prompt,omitempty"`
+	Messages               []agentMessageRequest          `json:"messages,omitempty"`
+	ToolRefs               []agentToolRefRequest          `json:"toolRefs,omitempty"`
+	OutputDelivery         *workflowOutputDeliveryInfo    `json:"outputDelivery,omitempty"`
+	SessionCreatedDelivery *workflowLifecycleDeliveryInfo `json:"sessionCreatedDelivery,omitempty"`
+	ResponseSchema         map[string]any                 `json:"responseSchema,omitempty"`
+	Metadata               map[string]any                 `json:"metadata,omitempty"`
+	ModelOptions           map[string]any                 `json:"modelOptions,omitempty"`
+	TimeoutSeconds         int                            `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryInfo struct {
@@ -116,6 +138,26 @@ type workflowOutputValueSourceInfo struct {
 	SignalPayload  string `json:"signalPayload,omitempty"`
 	SignalMetadata string `json:"signalMetadata,omitempty"`
 	Literal        any    `json:"literal,omitempty"`
+}
+
+type workflowLifecycleDeliveryInfo struct {
+	Target         workflowPluginTargetInfo       `json:"target"`
+	InputBindings  []workflowLifecycleBindingInfo `json:"inputBindings,omitempty"`
+	CredentialMode string                         `json:"credentialMode,omitempty"`
+	FailurePolicy  string                         `json:"failurePolicy,omitempty"`
+}
+
+type workflowLifecycleBindingInfo struct {
+	InputField string                           `json:"inputField"`
+	Value      workflowLifecycleValueSourceInfo `json:"value"`
+}
+
+type workflowLifecycleValueSourceInfo struct {
+	AgentSession    string `json:"agentSession,omitempty"`
+	SignalPayload   string `json:"signalPayload,omitempty"`
+	SignalMetadata  string `json:"signalMetadata,omitempty"`
+	WorkflowContext string `json:"workflowContext,omitempty"`
+	Literal         any    `json:"literal,omitempty"`
 }
 
 type workflowScheduleInfo struct {
@@ -332,6 +374,9 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 	if target.Agent != nil && target.Agent.OutputDelivery != nil && strings.TrimSpace(target.Agent.OutputDelivery.Target.CredentialMode) != "" {
 		return fmt.Errorf("workflow target agent.outputDelivery.target.credentialMode is not supported")
 	}
+	if target.Agent != nil && target.Agent.SessionCreatedDelivery != nil && strings.TrimSpace(target.Agent.SessionCreatedDelivery.Target.CredentialMode) != "" {
+		return fmt.Errorf("workflow target agent.sessionCreatedDelivery.target.credentialMode is not supported")
+	}
 	return nil
 }
 
@@ -340,16 +385,17 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		return coreworkflow.AgentTarget{}
 	}
 	return coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(target.ProviderName),
-		Model:          strings.TrimSpace(target.Model),
-		Prompt:         strings.TrimSpace(target.Prompt),
-		Messages:       agentMessagesFromRequest(target.Messages),
-		ToolRefs:       agentToolRefsFromRequest(target.ToolRefs),
-		OutputDelivery: workflowOutputDeliveryFromRequest(target.OutputDelivery),
-		ResponseSchema: maps.Clone(target.ResponseSchema),
-		Metadata:       maps.Clone(target.Metadata),
-		ModelOptions:   maps.Clone(target.ModelOptions),
-		TimeoutSeconds: target.TimeoutSeconds,
+		ProviderName:           strings.TrimSpace(target.ProviderName),
+		Model:                  strings.TrimSpace(target.Model),
+		Prompt:                 strings.TrimSpace(target.Prompt),
+		Messages:               agentMessagesFromRequest(target.Messages),
+		ToolRefs:               agentToolRefsFromRequest(target.ToolRefs),
+		OutputDelivery:         workflowOutputDeliveryFromRequest(target.OutputDelivery),
+		SessionCreatedDelivery: workflowLifecycleDeliveryFromRequest(target.SessionCreatedDelivery),
+		ResponseSchema:         maps.Clone(target.ResponseSchema),
+		Metadata:               maps.Clone(target.Metadata),
+		ModelOptions:           maps.Clone(target.ModelOptions),
+		TimeoutSeconds:         target.TimeoutSeconds,
 	}
 }
 
@@ -384,6 +430,45 @@ func workflowOutputBindingsFromRequest(bindings []workflowOutputBindingRequest) 
 				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
 				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
 				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
+}
+
+func workflowLifecycleDeliveryFromRequest(delivery *workflowLifecycleDeliveryRequest) *coreworkflow.LifecycleDelivery {
+	if delivery == nil {
+		return nil
+	}
+	return &coreworkflow.LifecycleDelivery{
+		Target: coreworkflow.PluginTarget{
+			PluginName:     strings.TrimSpace(delivery.Target.Name),
+			Operation:      strings.TrimSpace(delivery.Target.Operation),
+			Connection:     strings.TrimSpace(delivery.Target.Connection),
+			Instance:       strings.TrimSpace(delivery.Target.Instance),
+			CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.Target.CredentialMode))),
+			Input:          maps.Clone(delivery.Target.Input),
+		},
+		InputBindings:  workflowLifecycleBindingsFromRequest(delivery.InputBindings),
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.CredentialMode))),
+		FailurePolicy:  strings.TrimSpace(delivery.FailurePolicy),
+	}
+}
+
+func workflowLifecycleBindingsFromRequest(bindings []workflowLifecycleBindingRequest) []coreworkflow.LifecycleBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.LifecycleBinding, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, coreworkflow.LifecycleBinding{
+			InputField: strings.TrimSpace(binding.InputField),
+			Value: coreworkflow.LifecycleValueSource{
+				AgentSession:    strings.TrimSpace(binding.Value.AgentSession),
+				SignalPayload:   strings.TrimSpace(binding.Value.SignalPayload),
+				SignalMetadata:  strings.TrimSpace(binding.Value.SignalMetadata),
+				WorkflowContext: strings.TrimSpace(binding.Value.WorkflowContext),
+				Literal:         binding.Value.Literal,
 			},
 		})
 	}
@@ -440,16 +525,17 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 		agentTarget := *target.Agent
 		return workflowScheduleTargetInfo{
 			Agent: &workflowAgentTargetInfo{
-				ProviderName:   agentTarget.ProviderName,
-				Model:          agentTarget.Model,
-				Prompt:         agentTarget.Prompt,
-				Messages:       agentMessageInfoFromCore(agentTarget.Messages),
-				ToolRefs:       agentToolRefsToRequest(agentTarget.ToolRefs),
-				OutputDelivery: workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
-				ResponseSchema: maps.Clone(agentTarget.ResponseSchema),
-				Metadata:       maps.Clone(agentTarget.Metadata),
-				ModelOptions:   maps.Clone(agentTarget.ModelOptions),
-				TimeoutSeconds: agentTarget.TimeoutSeconds,
+				ProviderName:           agentTarget.ProviderName,
+				Model:                  agentTarget.Model,
+				Prompt:                 agentTarget.Prompt,
+				Messages:               agentMessageInfoFromCore(agentTarget.Messages),
+				ToolRefs:               agentToolRefsToRequest(agentTarget.ToolRefs),
+				OutputDelivery:         workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
+				SessionCreatedDelivery: workflowLifecycleDeliveryInfoFromCore(agentTarget.SessionCreatedDelivery),
+				ResponseSchema:         maps.Clone(agentTarget.ResponseSchema),
+				Metadata:               maps.Clone(agentTarget.Metadata),
+				ModelOptions:           maps.Clone(agentTarget.ModelOptions),
+				TimeoutSeconds:         agentTarget.TimeoutSeconds,
 			},
 		}
 	}
@@ -499,6 +585,44 @@ func workflowOutputBindingInfoFromCore(bindings []coreworkflow.OutputBinding) []
 				SignalPayload:  binding.Value.SignalPayload,
 				SignalMetadata: binding.Value.SignalMetadata,
 				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
+}
+
+func workflowLifecycleDeliveryInfoFromCore(delivery *coreworkflow.LifecycleDelivery) *workflowLifecycleDeliveryInfo {
+	if delivery == nil {
+		return nil
+	}
+	return &workflowLifecycleDeliveryInfo{
+		Target: workflowPluginTargetInfo{
+			Name:       delivery.Target.PluginName,
+			Operation:  delivery.Target.Operation,
+			Connection: userFacingConnectionName(delivery.Target.Connection),
+			Instance:   delivery.Target.Instance,
+			Input:      maps.Clone(delivery.Target.Input),
+		},
+		InputBindings:  workflowLifecycleBindingInfoFromCore(delivery.InputBindings),
+		CredentialMode: string(delivery.CredentialMode),
+		FailurePolicy:  delivery.FailurePolicy,
+	}
+}
+
+func workflowLifecycleBindingInfoFromCore(bindings []coreworkflow.LifecycleBinding) []workflowLifecycleBindingInfo {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]workflowLifecycleBindingInfo, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, workflowLifecycleBindingInfo{
+			InputField: binding.InputField,
+			Value: workflowLifecycleValueSourceInfo{
+				AgentSession:    binding.Value.AgentSession,
+				SignalPayload:   binding.Value.SignalPayload,
+				SignalMetadata:  binding.Value.SignalMetadata,
+				WorkflowContext: binding.Value.WorkflowContext,
+				Literal:         binding.Value.Literal,
 			},
 		})
 	}

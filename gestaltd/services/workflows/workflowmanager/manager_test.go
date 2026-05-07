@@ -52,6 +52,7 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 				{Plugin: "github", Operation: "bot.commitFiles"},
 				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: core.ConnectionModeNone},
 				{Plugin: "github", Operation: "bot.openPullRequest"},
+				{Plugin: "github", Operation: "bot.sessionLink", CredentialMode: core.ConnectionModeNone},
 			},
 		},
 	})
@@ -89,6 +90,15 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 				},
 			},
+			SessionCreatedDelivery: &coreworkflow.LifecycleDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "github",
+					Operation:  "bot.sessionLink",
+				},
+				InputBindings: []coreworkflow.LifecycleBinding{
+					{InputField: "session_id", Value: coreworkflow.LifecycleValueSource{AgentSession: "id"}},
+				},
+			},
 		}},
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
@@ -105,6 +115,7 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 			"bot.commentFinal",
 			"bot.commitFiles",
 			"bot.openPullRequest",
+			"bot.sessionLink",
 			"events.handle",
 		},
 	}, {
@@ -118,6 +129,9 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 	if got := managed.ExecutionRef.Target.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+	if got := managed.ExecutionRef.Target.Agent.SessionCreatedDelivery.CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("session-created delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 }
 

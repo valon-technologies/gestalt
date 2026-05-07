@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -148,6 +149,12 @@ func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 			delivery.InputBindings = slices.Clone(delivery.InputBindings)
 			agent.OutputDelivery = &delivery
 		}
+		if agent.SessionCreatedDelivery != nil {
+			delivery := *agent.SessionCreatedDelivery
+			delivery.Target.Input = cloneMapAny(delivery.Target.Input)
+			delivery.InputBindings = slices.Clone(delivery.InputBindings)
+			agent.SessionCreatedDelivery = &delivery
+		}
 		clone.Agent = &agent
 	}
 	return clone
@@ -191,12 +198,17 @@ type workflowRuntimeAgentManagerStub struct {
 	getTurnDeadlines                []time.Duration
 	getTurnProviderCallDeadlines    []time.Duration
 	cancelTurnIDs                   []string
+	onCreateSession                 func(coreagent.ManagerCreateSessionRequest)
+	onCreateTurn                    func(coreagent.ManagerCreateTurnRequest)
 	returnNilTurn                   bool
 	completeTurnViaGet              bool
 }
 
 func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	m.createSessionRequests = append(m.createSessionRequests, req)
+	if m.onCreateSession != nil {
+		m.onCreateSession(req)
+	}
 	if deadline, ok := ctx.Deadline(); ok {
 		m.createSessionDeadlines = append(m.createSessionDeadlines, time.Until(deadline))
 	} else {
@@ -212,6 +224,9 @@ func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *
 
 func (m *workflowRuntimeAgentManagerStub) CreateTurn(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	m.createTurnRequests = append(m.createTurnRequests, req)
+	if m.onCreateTurn != nil {
+		m.onCreateTurn(req)
+	}
 	m.createTurnDeadlines = append(m.createTurnDeadlines, remainingDeadline(ctx))
 	callCtx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	m.createTurnProviderCallDeadlines = append(m.createTurnProviderCallDeadlines, remainingDeadline(callCtx))
@@ -723,6 +738,242 @@ func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(
 	}
 	if got := agentManager.getTurnProviderCallDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
 		t.Fatalf("GetTurn provider call deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionCreatedLifecycle(t *testing.T) {
+	t.Parallel()
+
+	var order []string
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	agentManager.onCreateSession = func(coreagent.ManagerCreateSessionRequest) {
+		order = append(order, "create_session")
+	}
+	agentManager.onCreateTurn = func(coreagent.ManagerCreateTurnRequest) {
+		order = append(order, "create_turn")
+	}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+
+	var gotProvider string
+	var gotOperation string
+	var gotParams map[string]any
+	var gotIdempotencyKey string
+	var gotCredentialMode core.ConnectionMode
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			order = append(order, "session_created_delivery")
+			gotProvider = providerName
+			gotOperation = operation
+			gotParams = maps.Clone(params)
+			gotIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
+			gotCredentialMode = invocation.CredentialModeOverrideFromContext(ctx)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-session-link-123",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			SessionCreatedDelivery: &coreworkflow.LifecycleDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "sessionLink",
+					Input:      map[string]any{"format": "plain"},
+				},
+				CredentialMode: core.ConnectionModeNone,
+				FailurePolicy:  coreworkflow.LifecycleFailurePolicyFail,
+				InputBindings: []coreworkflow.LifecycleBinding{
+					{InputField: "reply_ref", Value: coreworkflow.LifecycleValueSource{SignalPayload: "reply_ref"}},
+					{InputField: "session_id", Value: coreworkflow.LifecycleValueSource{AgentSession: "id"}},
+					{InputField: "provider", Value: coreworkflow.LifecycleValueSource{AgentSession: "providerName"}},
+					{InputField: "workflow_run_id", Value: coreworkflow.LifecycleValueSource{WorkflowContext: "runId"}},
+					{InputField: "event_type", Value: coreworkflow.LifecycleValueSource{SignalMetadata: "event.type"}},
+					{InputField: "source", Value: coreworkflow.LifecycleValueSource{Literal: "workflow"}},
+				},
+			},
+		}},
+		Signals: []coreworkflow.Signal{
+			{
+				ID:             "signal-1",
+				IdempotencyKey: "evt-1",
+				Payload:        map[string]any{"reply_ref": "older-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "message"}},
+			},
+			{
+				ID:             "signal-2",
+				IdempotencyKey: "evt-2",
+				Payload:        map[string]any{"reply_ref": "newer-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "app_mention"}},
+			},
+		},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "notification",
+			Operations: []string{"sessionLink"},
+		}}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !reflect.DeepEqual(order, []string{"create_session", "session_created_delivery", "create_turn"}) {
+		t.Fatalf("operation order = %#v", order)
+	}
+	if gotProvider != "notification" || gotOperation != "sessionLink" {
+		t.Fatalf("delivery target = %s.%s, want notification.sessionLink", gotProvider, gotOperation)
+	}
+	if gotParams["format"] != "plain" || gotParams["reply_ref"] != "newer-ref" || gotParams["session_id"] != "session-1" || gotParams["provider"] != "managed" || gotParams["workflow_run_id"] != "run-agent-session-link-123" || gotParams["event_type"] != "app_mention" || gotParams["source"] != "workflow" {
+		t.Fatalf("delivery params = %#v", gotParams)
+	}
+	if gotIdempotencyKey != "workflow:temporal:run-agent-session-link-123:lifecycle:session-created" {
+		t.Fatalf("delivery idempotency key = %q", gotIdempotencyKey)
+	}
+	if gotCredentialMode != core.ConnectionModeNone {
+		t.Fatalf("delivery credential mode = %q, want %q", gotCredentialMode, core.ConnectionModeNone)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetContinuesAfterSessionLifecycleDeliveryFailure(t *testing.T) {
+	t.Parallel()
+
+	var createdTurn bool
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	agentManager.onCreateTurn = func(coreagent.ManagerCreateTurnRequest) {
+		createdTurn = true
+	}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: http.StatusInternalServerError, Body: `{"error":"failed"}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-session-link-continue",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			SessionCreatedDelivery: &coreworkflow.LifecycleDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "sessionLink",
+				},
+				FailurePolicy: coreworkflow.LifecycleFailurePolicyContinue,
+				InputBindings: []coreworkflow.LifecycleBinding{
+					{InputField: "session_id", Value: coreworkflow.LifecycleValueSource{AgentSession: "id"}},
+				},
+			},
+		}},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "notification",
+			Operations: []string{"sessionLink"},
+		}}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !createdTurn {
+		t.Fatal("CreateTurn was not called after continued lifecycle delivery failure")
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetContinuesAfterSlowSessionLifecycleDelivery(t *testing.T) {
+	previousTimeout := workflowLifecycleContinueTimeout
+	workflowLifecycleContinueTimeout = 10 * time.Millisecond
+	defer func() {
+		workflowLifecycleContinueTimeout = previousTimeout
+	}()
+
+	var createdTurn bool
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	agentManager.onCreateTurn = func(coreagent.ManagerCreateTurnRequest) {
+		createdTurn = true
+	}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	lifecycleStarted := make(chan struct{})
+	unblockLifecycle := make(chan struct{})
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
+			close(lifecycleStarted)
+			select {
+			case <-unblockLifecycle:
+				return &core.OperationResult{Status: http.StatusOK}, nil
+			case <-ctx.Done():
+				<-unblockLifecycle
+				return nil, ctx.Err()
+			}
+		},
+	})
+	defer close(unblockLifecycle)
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-session-link-slow-continue",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			SessionCreatedDelivery: &coreworkflow.LifecycleDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "sessionLink",
+				},
+				FailurePolicy: coreworkflow.LifecycleFailurePolicyContinue,
+				InputBindings: []coreworkflow.LifecycleBinding{
+					{InputField: "session_id", Value: coreworkflow.LifecycleValueSource{AgentSession: "id"}},
+				},
+			},
+		}},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "notification",
+			Operations: []string{"sessionLink"},
+		}}),
+	})
+
+	start := time.Now()
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("Invoke waited too long for continued lifecycle delivery")
+	}
+	select {
+	case <-lifecycleStarted:
+	default:
+		t.Fatal("lifecycle delivery did not start")
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !createdTurn {
+		t.Fatal("CreateTurn was not called after continued slow lifecycle delivery")
 	}
 }
 

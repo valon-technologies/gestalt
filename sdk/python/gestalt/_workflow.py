@@ -61,6 +61,24 @@ def WorkflowOutputValueSource(*args: Any, **kwargs: Any) -> Any:
     return pb.WorkflowOutputValueSource(*args, **kwargs)
 
 
+def WorkflowLifecycleDelivery(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow lifecycle delivery protocol value."""
+
+    return pb.WorkflowLifecycleDelivery(*args, **kwargs)
+
+
+def WorkflowLifecycleBinding(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow lifecycle binding protocol value."""
+
+    return pb.WorkflowLifecycleBinding(*args, **kwargs)
+
+
+def WorkflowLifecycleValueSource(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow lifecycle value source protocol value."""
+
+    return pb.WorkflowLifecycleValueSource(*args, **kwargs)
+
+
 def WorkflowActor(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow actor protocol value."""
 

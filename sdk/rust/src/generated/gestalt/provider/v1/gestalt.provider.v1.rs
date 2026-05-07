@@ -2827,6 +2827,8 @@ pub struct BoundWorkflowAgentTarget {
     pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
     #[prost(message, optional, tag = "12")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "13")]
+    pub session_created_delivery: ::core::option::Option<WorkflowLifecycleDelivery>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowOutputDelivery {
@@ -2860,6 +2862,48 @@ pub mod workflow_output_value_source {
         #[prost(string, tag = "3")]
         SignalMetadata(::prost::alloc::string::String),
         #[prost(message, tag = "4")]
+        Literal(::prost_types::Value),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowLifecycleDelivery {
+    #[prost(message, optional, tag = "1")]
+    pub target: ::core::option::Option<BoundWorkflowPluginTarget>,
+    #[prost(message, repeated, tag = "2")]
+    pub input_bindings: ::prost::alloc::vec::Vec<WorkflowLifecycleBinding>,
+    #[prost(string, tag = "3")]
+    pub credential_mode: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub failure_policy: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowLifecycleBinding {
+    #[prost(string, tag = "1")]
+    pub input_field: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub value: ::core::option::Option<WorkflowLifecycleValueSource>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowLifecycleValueSource {
+    #[prost(
+        oneof = "workflow_lifecycle_value_source::Kind",
+        tags = "1, 2, 3, 4, 5"
+    )]
+    pub kind: ::core::option::Option<workflow_lifecycle_value_source::Kind>,
+}
+/// Nested message and enum types in `WorkflowLifecycleValueSource`.
+pub mod workflow_lifecycle_value_source {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(string, tag = "1")]
+        AgentSession(::prost::alloc::string::String),
+        #[prost(string, tag = "2")]
+        SignalPayload(::prost::alloc::string::String),
+        #[prost(string, tag = "3")]
+        SignalMetadata(::prost::alloc::string::String),
+        #[prost(string, tag = "4")]
+        WorkflowContext(::prost::alloc::string::String),
+        #[prost(message, tag = "5")]
         Literal(::prost_types::Value),
     }
 }

@@ -36,6 +36,8 @@ type workflowRuntime struct {
 	agentManager        agentmanager.Service
 }
 
+var workflowLifecycleContinueTimeout = 10 * time.Second
+
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
 		providers:    map[string]coreworkflow.Provider{},
@@ -386,6 +388,13 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	if err != nil {
 		return nil, err
 	}
+	if agentTarget.SessionCreatedDelivery != nil {
+		if err := r.deliverAgentLifecycle(runCtx, req, invoker, principalValue, agentTarget.SessionCreatedDelivery, session); err != nil {
+			if !workflowLifecycleDeliveryContinueOnFailure(agentTarget.SessionCreatedDelivery) {
+				return nil, err
+			}
+		}
+	}
 	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
 	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
 		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
@@ -430,6 +439,84 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	default:
 		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
 	}
+}
+
+func (r *workflowRuntime) deliverAgentLifecycle(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, delivery *coreworkflow.LifecycleDelivery, session *coreagent.Session) error {
+	if invoker == nil {
+		return fmt.Errorf("%w: workflow agent lifecycle delivery requires an invoker", invocation.ErrInternal)
+	}
+	if delivery == nil {
+		return nil
+	}
+	if workflowLifecycleDeliveryContinueOnFailure(delivery) {
+		return r.deliverAgentLifecycleWithContinuePolicy(ctx, req, invoker, p, delivery, session)
+	}
+	return r.deliverAgentLifecycleSync(ctx, req, invoker, p, delivery, session)
+}
+
+func (r *workflowRuntime) deliverAgentLifecycleWithContinuePolicy(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, delivery *coreworkflow.LifecycleDelivery, session *coreagent.Session) error {
+	deliveryCtx, cancel := context.WithTimeout(ctx, workflowLifecycleContinueTimeout)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- r.deliverAgentLifecycleSync(deliveryCtx, req, invoker, p, delivery, session)
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-deliveryCtx.Done():
+		return deliveryCtx.Err()
+	}
+}
+
+func (r *workflowRuntime) deliverAgentLifecycleSync(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, delivery *coreworkflow.LifecycleDelivery, session *coreagent.Session) error {
+	target := delivery.Target
+	pluginName := strings.TrimSpace(target.PluginName)
+	operation := strings.TrimSpace(target.Operation)
+	if pluginName == "" || operation == "" {
+		return fmt.Errorf("%w: workflow agent lifecycle delivery target is incomplete", invocation.ErrInvalidInvocation)
+	}
+	params := maps.Clone(target.Input)
+	if params == nil {
+		params = map[string]any{}
+	}
+	signal := workflowOutputDeliverySignal(req.Signals)
+	workflowContext := workflowInvocationContext(req)
+	for i := range delivery.InputBindings {
+		binding := delivery.InputBindings[i]
+		inputField := strings.TrimSpace(binding.InputField)
+		if inputField == "" {
+			return fmt.Errorf("%w: workflow agent lifecycle delivery input binding field is required", invocation.ErrInvalidInvocation)
+		}
+		value, ok, err := workflowLifecycleBindingValue(session, signal, workflowContext, binding.Value)
+		if err != nil {
+			return fmt.Errorf("workflow agent lifecycle delivery.%s: %w", inputField, err)
+		}
+		if !ok {
+			return fmt.Errorf("%w: workflow agent lifecycle delivery.%s source did not resolve", invocation.ErrInvalidInvocation, inputField)
+		}
+		params[inputField] = value
+	}
+	if len(workflowContext) > 0 {
+		ctx = invocation.WithWorkflowContext(ctx, workflowContext)
+	}
+	if connection := strings.TrimSpace(target.Connection); connection != "" {
+		ctx = invocation.WithConnection(ctx, connection)
+	}
+	if strings.TrimSpace(string(delivery.CredentialMode)) != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, core.NormalizeConnectionMode(delivery.CredentialMode))
+	}
+	if idempotencyKey := workflowAgentLifecycleDeliveryIdempotencyKey(req, "session-created"); idempotencyKey != "" {
+		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
+	}
+	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(target.Instance), operation, params)
+	if err != nil {
+		return err
+	}
+	if result != nil && result.Status >= http.StatusBadRequest {
+		return fmt.Errorf("workflow agent lifecycle delivery returned status %d", result.Status)
+	}
+	return nil
 }
 
 func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, turn *coreagent.Turn) error {
@@ -516,6 +603,59 @@ func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signa
 	}
 }
 
+func workflowLifecycleBindingValue(session *coreagent.Session, signal *coreworkflow.Signal, workflowContext map[string]any, source coreworkflow.LifecycleValueSource) (any, bool, error) {
+	switch {
+	case strings.TrimSpace(source.AgentSession) != "":
+		return workflowAgentSessionValue(session, source.AgentSession)
+	case strings.TrimSpace(source.SignalPayload) != "":
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Payload, source.SignalPayload)
+	case strings.TrimSpace(source.SignalMetadata) != "":
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Metadata, source.SignalMetadata)
+	case strings.TrimSpace(source.WorkflowContext) != "":
+		return workflowMapPathValue(workflowContext, source.WorkflowContext)
+	case source.Literal != nil:
+		return source.Literal, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func workflowAgentSessionValue(session *coreagent.Session, path string) (any, bool, error) {
+	path = strings.TrimSpace(path)
+	if session == nil {
+		return nil, false, nil
+	}
+	switch path {
+	case "id", "session_id", "sessionId":
+		return session.ID, true, nil
+	case "provider", "provider_name", "providerName":
+		return session.ProviderName, true, nil
+	case "model":
+		return session.Model, true, nil
+	case "client_ref", "clientRef":
+		return session.ClientRef, true, nil
+	case "state":
+		return string(session.State), true, nil
+	case "metadata":
+		if session.Metadata == nil {
+			return nil, false, nil
+		}
+		return maps.Clone(session.Metadata), true, nil
+	}
+	for _, prefix := range []string{"metadata."} {
+		if strings.HasPrefix(path, prefix) {
+			return workflowMapPathValue(session.Metadata, strings.TrimPrefix(path, prefix))
+		}
+	}
+	return nil, false, fmt.Errorf("%w: unsupported agent session source %q", invocation.ErrInvalidInvocation, path)
+}
+
 func workflowAgentOutputValue(turn *coreagent.Turn, path string) (any, bool, error) {
 	path = strings.TrimSpace(path)
 	if turn == nil {
@@ -536,6 +676,13 @@ func workflowAgentOutputValue(turn *coreagent.Turn, path string) (any, bool, err
 		}
 	}
 	return nil, false, fmt.Errorf("%w: unsupported agent output source %q", invocation.ErrInvalidInvocation, path)
+}
+
+func workflowLifecycleDeliveryContinueOnFailure(delivery *coreworkflow.LifecycleDelivery) bool {
+	if delivery == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(delivery.FailurePolicy), coreworkflow.LifecycleFailurePolicyContinue)
 }
 
 func workflowMapPathValue(values map[string]any, path string) (any, bool, error) {
@@ -599,6 +746,10 @@ func workflowAgentOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationR
 		return workflowAgentIdempotencyKey(req, "output")
 	}
 	return workflowAgentIdempotencyKey(req, "output:"+batchID)
+}
+
+func workflowAgentLifecycleDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest, event string) string {
+	return workflowAgentIdempotencyKey(req, "lifecycle:"+strings.TrimSpace(event))
 }
 
 func workflowSignalBatchID(signals []coreworkflow.Signal) string {

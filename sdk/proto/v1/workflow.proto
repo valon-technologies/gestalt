@@ -40,6 +40,7 @@ message BoundWorkflowAgentTarget {
   int32 timeout_seconds = 10;
   WorkflowOutputDelivery output_delivery = 11;
   google.protobuf.Struct model_options = 12;
+  WorkflowLifecycleDelivery session_created_delivery = 13;
 }
 
 message WorkflowOutputDelivery {
@@ -59,6 +60,28 @@ message WorkflowOutputValueSource {
     string signal_payload = 2;
     string signal_metadata = 3;
     google.protobuf.Value literal = 4;
+  }
+}
+
+message WorkflowLifecycleDelivery {
+  BoundWorkflowPluginTarget target = 1;
+  repeated WorkflowLifecycleBinding input_bindings = 2;
+  string credential_mode = 3;
+  string failure_policy = 4;
+}
+
+message WorkflowLifecycleBinding {
+  string input_field = 1;
+  WorkflowLifecycleValueSource value = 2;
+}
+
+message WorkflowLifecycleValueSource {
+  oneof kind {
+    string agent_session = 1;
+    string signal_payload = 2;
+    string signal_metadata = 3;
+    string workflow_context = 4;
+    google.protobuf.Value literal = 5;
   }
 }
 

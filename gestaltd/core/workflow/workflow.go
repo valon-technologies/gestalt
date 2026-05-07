@@ -46,16 +46,17 @@ type PluginTarget struct {
 }
 
 type AgentTarget struct {
-	ProviderName   string
-	Model          string
-	Prompt         string
-	Messages       []coreagent.Message
-	ToolRefs       []coreagent.ToolRef
-	ResponseSchema map[string]any
-	ModelOptions   map[string]any
-	Metadata       map[string]any
-	TimeoutSeconds int
-	OutputDelivery *OutputDelivery
+	ProviderName           string
+	Model                  string
+	Prompt                 string
+	Messages               []coreagent.Message
+	ToolRefs               []coreagent.ToolRef
+	ResponseSchema         map[string]any
+	ModelOptions           map[string]any
+	Metadata               map[string]any
+	TimeoutSeconds         int
+	OutputDelivery         *OutputDelivery
+	SessionCreatedDelivery *LifecycleDelivery
 }
 
 type OutputDelivery struct {
@@ -74,6 +75,31 @@ type OutputValueSource struct {
 	SignalPayload  string
 	SignalMetadata string
 	Literal        any
+}
+
+const (
+	LifecycleFailurePolicyFail     = "fail"
+	LifecycleFailurePolicyContinue = "continue"
+)
+
+type LifecycleDelivery struct {
+	Target         PluginTarget
+	InputBindings  []LifecycleBinding
+	CredentialMode core.ConnectionMode
+	FailurePolicy  string
+}
+
+type LifecycleBinding struct {
+	InputField string
+	Value      LifecycleValueSource
+}
+
+type LifecycleValueSource struct {
+	AgentSession    string
+	SignalPayload   string
+	SignalMetadata  string
+	WorkflowContext string
+	Literal         any
 }
 
 type ExecutionReference struct {
@@ -382,6 +408,16 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 				outputDelivery.InputBindings = nil
 			}
 			agentTarget.OutputDelivery = &outputDelivery
+		}
+		if agentTarget.SessionCreatedDelivery != nil {
+			delivery := *agentTarget.SessionCreatedDelivery
+			if len(delivery.Target.Input) == 0 {
+				delivery.Target.Input = nil
+			}
+			if len(delivery.InputBindings) == 0 {
+				delivery.InputBindings = nil
+			}
+			agentTarget.SessionCreatedDelivery = &delivery
 		}
 		out.Agent = &agentTarget
 		return out

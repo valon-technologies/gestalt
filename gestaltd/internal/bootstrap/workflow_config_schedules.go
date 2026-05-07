@@ -317,16 +317,17 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		})
 	}
 	return &coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(agent.Provider),
-		Model:          strings.TrimSpace(agent.Model),
-		Prompt:         strings.TrimSpace(agent.Prompt),
-		Messages:       messages,
-		ToolRefs:       tools,
-		OutputDelivery: workflowConfigOutputDelivery(agent.OutputDelivery),
-		ResponseSchema: maps.Clone(agent.ResponseSchema),
-		Metadata:       maps.Clone(agent.Metadata),
-		ModelOptions:   maps.Clone(agent.ModelOptions),
-		TimeoutSeconds: timeoutSeconds,
+		ProviderName:           strings.TrimSpace(agent.Provider),
+		Model:                  strings.TrimSpace(agent.Model),
+		Prompt:                 strings.TrimSpace(agent.Prompt),
+		Messages:               messages,
+		ToolRefs:               tools,
+		OutputDelivery:         workflowConfigOutputDelivery(agent.OutputDelivery),
+		SessionCreatedDelivery: workflowConfigLifecycleDelivery(agent.SessionCreatedDelivery),
+		ResponseSchema:         maps.Clone(agent.ResponseSchema),
+		Metadata:               maps.Clone(agent.Metadata),
+		ModelOptions:           maps.Clone(agent.ModelOptions),
+		TimeoutSeconds:         timeoutSeconds,
 	}
 }
 
@@ -353,6 +354,37 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
 				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
 				Literal:        binding.Value.Literal,
+			},
+		})
+	}
+	return out
+}
+
+func workflowConfigLifecycleDelivery(delivery *config.WorkflowLifecycleDeliveryConfig) *coreworkflow.LifecycleDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := &coreworkflow.LifecycleDelivery{
+		Target: coreworkflow.PluginTarget{
+			PluginName: strings.TrimSpace(delivery.Target.Name),
+			Operation:  strings.TrimSpace(delivery.Target.Operation),
+			Connection: strings.TrimSpace(delivery.Target.Connection),
+			Instance:   strings.TrimSpace(delivery.Target.Instance),
+			Input:      maps.Clone(delivery.Target.Input),
+		},
+		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode)))),
+		FailurePolicy:  strings.TrimSpace(delivery.FailurePolicy),
+		InputBindings:  make([]coreworkflow.LifecycleBinding, 0, len(delivery.InputBindings)),
+	}
+	for _, binding := range delivery.InputBindings {
+		out.InputBindings = append(out.InputBindings, coreworkflow.LifecycleBinding{
+			InputField: strings.TrimSpace(binding.InputField),
+			Value: coreworkflow.LifecycleValueSource{
+				AgentSession:    strings.TrimSpace(binding.Value.AgentSession),
+				SignalPayload:   strings.TrimSpace(binding.Value.SignalPayload),
+				SignalMetadata:  strings.TrimSpace(binding.Value.SignalMetadata),
+				WorkflowContext: strings.TrimSpace(binding.Value.WorkflowContext),
+				Literal:         binding.Value.Literal,
 			},
 		})
 	}

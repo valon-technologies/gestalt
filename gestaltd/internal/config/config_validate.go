@@ -2056,6 +2056,23 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 			return fmt.Errorf("config validation: %s.outputDelivery.credentialMode %q is not supported", path, agent.OutputDelivery.CredentialMode)
 		}
 	}
+	if agent.SessionCreatedDelivery != nil {
+		if err := normalizeWorkflowPluginTargetConfig(path+".sessionCreatedDelivery.target", &agent.SessionCreatedDelivery.Target, false); err != nil {
+			return err
+		}
+		agent.SessionCreatedDelivery.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(agent.SessionCreatedDelivery.CredentialMode))))
+		switch agent.SessionCreatedDelivery.CredentialMode {
+		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+		default:
+			return fmt.Errorf("config validation: %s.sessionCreatedDelivery.credentialMode %q is not supported", path, agent.SessionCreatedDelivery.CredentialMode)
+		}
+		agent.SessionCreatedDelivery.FailurePolicy = strings.ToLower(strings.TrimSpace(agent.SessionCreatedDelivery.FailurePolicy))
+		switch agent.SessionCreatedDelivery.FailurePolicy {
+		case "", "fail", "continue":
+		default:
+			return fmt.Errorf("config validation: %s.sessionCreatedDelivery.failurePolicy %q is not supported", path, agent.SessionCreatedDelivery.FailurePolicy)
+		}
+	}
 	return nil
 }
 
