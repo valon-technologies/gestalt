@@ -1445,8 +1445,12 @@ func (r *staticCapabilityPluginRuntime) Close() error {
 type stubWorkflowManager struct {
 	mu                     sync.Mutex
 	subjects               []string
+	nextDefinitionID       int
+	nextRunID              int
 	nextScheduleID         int
 	nextTriggerID          int
+	definitions            map[string]*workflowmanager.ManagedDefinition
+	runs                   map[string]*workflowmanager.ManagedRun
 	schedules              map[string]*workflowmanager.ManagedSchedule
 	triggers               map[string]*workflowmanager.ManagedEventTrigger
 	publishedEvents        []coreworkflow.Event
@@ -1457,9 +1461,68 @@ type stubWorkflowManager struct {
 
 func newStubWorkflowManager() *stubWorkflowManager {
 	return &stubWorkflowManager{
-		schedules: make(map[string]*workflowmanager.ManagedSchedule),
-		triggers:  make(map[string]*workflowmanager.ManagedEventTrigger),
+		definitions: make(map[string]*workflowmanager.ManagedDefinition),
+		runs:        make(map[string]*workflowmanager.ManagedRun),
+		schedules:   make(map[string]*workflowmanager.ManagedSchedule),
+		triggers:    make(map[string]*workflowmanager.ManagedEventTrigger),
 	}
+}
+
+func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextDefinitionID++
+	id := fmt.Sprintf("def-%d", m.nextDefinitionID)
+	now := time.Now().UTC().Truncate(time.Second)
+	value := &workflowmanager.ManagedDefinition{
+		ProviderName: defaultWorkflowProviderName(req.ProviderName),
+		Definition: &coreworkflow.ExecutionReference{
+			ID:           id,
+			ProviderName: defaultWorkflowProviderName(req.ProviderName),
+			Target:       cloneWorkflowTarget(req.Target),
+			SubjectID:    subjectIDOf(p),
+			CreatedAt:    &now,
+		},
+	}
+	m.definitions[id] = value
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	return cloneManagedDefinition(value), nil
+}
+
+func (m *stubWorkflowManager) GetDefinition(_ context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.definitions[definitionID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneManagedDefinition(value), nil
+}
+
+func (m *stubWorkflowManager) UpdateDefinition(_ context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.definitions[definitionID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
+	value.Definition.ProviderName = defaultWorkflowProviderName(req.ProviderName)
+	value.Definition.Target = cloneWorkflowTarget(req.Target)
+	return cloneManagedDefinition(value), nil
+}
+
+func (m *stubWorkflowManager) DeleteDefinition(_ context.Context, p *principal.Principal, definitionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	if _, ok := m.definitions[definitionID]; !ok {
+		return core.ErrNotFound
+	}
+	delete(m.definitions, definitionID)
+	return nil
 }
 
 func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
@@ -1665,11 +1728,34 @@ func (m *stubWorkflowManager) ResumeEventTrigger(_ context.Context, p *principal
 }
 
 func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*workflowmanager.ManagedRun, 0, len(m.runs))
+	for _, item := range m.runs {
+		out = append(out, cloneManagedRun(item))
+	}
+	return out, nil
 }
 
-func (m *stubWorkflowManager) StartRun(context.Context, *principal.Principal, workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
-	return nil, core.ErrNotFound
+func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal, req workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextRunID++
+	id := fmt.Sprintf("run-%d", m.nextRunID)
+	now := time.Now().UTC().Truncate(time.Second)
+	value := &workflowmanager.ManagedRun{
+		ProviderName: defaultWorkflowProviderName(req.ProviderName),
+		Run: &coreworkflow.Run{
+			ID:          id,
+			Target:      cloneWorkflowTarget(req.Target),
+			WorkflowKey: req.WorkflowKey,
+			CreatedAt:   &now,
+			CreatedBy:   coreworkflow.Actor{SubjectID: subjectIDOf(p)},
+		},
+	}
+	m.runs[id] = value
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	return cloneManagedRun(value), nil
 }
 
 func (m *stubWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
@@ -2045,6 +2131,37 @@ func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workf
 		trigger.Match = cloneWorkflowEventMatch(value.Trigger.Match)
 		trigger.Target = cloneWorkflowTarget(value.Trigger.Target)
 		out.Trigger = &trigger
+	}
+	if value.ExecutionRef != nil {
+		executionRef := *value.ExecutionRef
+		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
+		out.ExecutionRef = &executionRef
+	}
+	return &out
+}
+
+func cloneManagedDefinition(value *workflowmanager.ManagedDefinition) *workflowmanager.ManagedDefinition {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	if value.Definition != nil {
+		definition := *value.Definition
+		definition.Target = cloneWorkflowTarget(value.Definition.Target)
+		out.Definition = &definition
+	}
+	return &out
+}
+
+func cloneManagedRun(value *workflowmanager.ManagedRun) *workflowmanager.ManagedRun {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	if value.Run != nil {
+		run := *value.Run
+		run.Target = cloneWorkflowTarget(value.Run.Target)
+		out.Run = &run
 	}
 	if value.ExecutionRef != nil {
 		executionRef := *value.ExecutionRef

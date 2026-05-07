@@ -104,6 +104,62 @@ func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, req *proto
 	return c.client.SignalOrStartRun(ctx, value)
 }
 
+// CreateDefinition creates a reusable workflow definition.
+func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, req *proto.WorkflowManagerCreateDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerCreateDefinitionRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerCreateDefinitionRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	if value.IdempotencyKey == "" {
+		value.IdempotencyKey = c.idempotencyKey
+	}
+	return c.client.CreateDefinition(ctx, value)
+}
+
+// GetDefinition fetches one workflow definition.
+func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, req *proto.WorkflowManagerGetDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerGetDefinitionRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerGetDefinitionRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.GetDefinition(ctx, value)
+}
+
+// UpdateDefinition updates a workflow definition.
+func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, req *proto.WorkflowManagerUpdateDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerUpdateDefinitionRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerUpdateDefinitionRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.UpdateDefinition(ctx, value)
+}
+
+// DeleteDefinition deletes a workflow definition.
+func (c *WorkflowManagerClient) DeleteDefinition(ctx context.Context, req *proto.WorkflowManagerDeleteDefinitionRequest) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerDeleteDefinitionRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerDeleteDefinitionRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	_, err := c.client.DeleteDefinition(ctx, value)
+	return err
+}
+
 // CreateSchedule creates a workflow schedule.
 func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, req *proto.WorkflowManagerCreateScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
 	if c == nil || c.client == nil {

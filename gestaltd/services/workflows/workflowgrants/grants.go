@@ -26,6 +26,11 @@ const (
 	OperationEventTriggersResume = "eventTriggers.resume"
 
 	OperationEventsPublish = "events.publish"
+
+	OperationDefinitionsCreate = "definitions.create"
+	OperationDefinitionsGet    = "definitions.get"
+	OperationDefinitionsUpdate = "definitions.update"
+	OperationDefinitionsDelete = "definitions.delete"
 )
 
 type Grants map[string]struct{}
@@ -50,6 +55,11 @@ var supportedOperations = map[string]struct{}{
 	OperationEventTriggersResume: {},
 
 	OperationEventsPublish: {},
+
+	OperationDefinitionsCreate: {},
+	OperationDefinitionsGet:    {},
+	OperationDefinitionsUpdate: {},
+	OperationDefinitionsDelete: {},
 }
 
 func IsSupportedOperation(operation string) bool {

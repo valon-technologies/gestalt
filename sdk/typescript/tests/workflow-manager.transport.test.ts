@@ -11,9 +11,11 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
+  BoundWorkflowDefinitionSchema,
   BoundWorkflowEventTriggerSchema,
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
+  ManagedWorkflowDefinitionSchema,
   ManagedWorkflowEventTriggerSchema,
   ManagedWorkflowRunSchema,
   ManagedWorkflowRunSignalSchema,
@@ -60,6 +62,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     eventType?: string;
     providerName?: string;
     runId?: string;
+    definitionId?: string;
     signalName?: string | undefined;
     workflowKey?: string;
   }> = [];
@@ -118,6 +121,57 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             startedRun: true,
             workflowKey: input.workflowKey,
           });
+        },
+        async createDefinition(input) {
+          calls.push({
+            method: "create-definition",
+            invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
+            providerName: input.providerName,
+          });
+          return create(ManagedWorkflowDefinitionSchema, {
+            providerName: input.providerName || "basic",
+            definition: create(BoundWorkflowDefinitionSchema, {
+              id: "def-1",
+              ...(input.target ? { target: input.target } : {}),
+            }),
+          });
+        },
+        async getDefinition(input) {
+          calls.push({
+            method: "get-definition",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+          });
+          return create(ManagedWorkflowDefinitionSchema, {
+            providerName: "basic",
+            definition: create(BoundWorkflowDefinitionSchema, {
+              id: input.definitionId,
+            }),
+          });
+        },
+        async updateDefinition(input) {
+          calls.push({
+            method: "update-definition",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+            providerName: input.providerName,
+          });
+          return create(ManagedWorkflowDefinitionSchema, {
+            providerName: input.providerName || "basic",
+            definition: create(BoundWorkflowDefinitionSchema, {
+              id: input.definitionId,
+              ...(input.target ? { target: input.target } : {}),
+            }),
+          });
+        },
+        async deleteDefinition(input) {
+          calls.push({
+            method: "delete-definition",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+          });
+          return create(EmptySchema, {});
         },
         async createSchedule(input) {
           calls.push({
@@ -357,6 +411,19 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         name: "roadmap.item.updated",
       },
     });
+    const createdDefinition = await fromRequest.createDefinition({
+      providerName: "basic",
+      target: workflowPluginTarget("roadmap", "sync"),
+    });
+    const fetchedDefinition = await fromRequest.getDefinition({
+      definitionId: "def-1",
+    });
+    const updatedDefinition = await fromRequest.updateDefinition({
+      definitionId: "def-1",
+      providerName: "secondary",
+      target: workflowPluginTarget("roadmap", "status"),
+    });
+    await fromRequest.deleteDefinition({ definitionId: "def-1" });
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
     const updated = await fromRequest.updateSchedule({
       scheduleId: "sched-1",
@@ -406,6 +473,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     expect(startedRun.run?.id).toBe("run-1");
     expect(signaledRun.signal?.name).toBe("roadmap.item.updated");
     expect(signaledOrStartedRun.startedRun).toBe(true);
+    expect(createdDefinition.definition?.id).toBe("def-1");
+    expect(fetchedDefinition.definition?.id).toBe("def-1");
+    expect(updatedDefinition.providerName).toBe("secondary");
     expect(fetched.schedule?.id).toBe("sched-1");
     expect(updated.providerName).toBe("secondary");
     expect(updated.schedule?.paused).toBe(true);
@@ -445,6 +515,28 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         providerName: "basic",
         signalName: "roadmap.item.updated",
         workflowKey: "roadmap-summary:item-1",
+      },
+      {
+        method: "create-definition",
+        invocationToken: "invocation-token-456",
+        idempotencyKey: "workflow-request-key-ts",
+        providerName: "basic",
+      },
+      {
+        method: "get-definition",
+        invocationToken: "invocation-token-456",
+        definitionId: "def-1",
+      },
+      {
+        method: "update-definition",
+        invocationToken: "invocation-token-456",
+        definitionId: "def-1",
+        providerName: "secondary",
+      },
+      {
+        method: "delete-definition",
+        invocationToken: "invocation-token-456",
+        definitionId: "def-1",
       },
       {
         method: "get",

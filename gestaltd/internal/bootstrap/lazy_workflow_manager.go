@@ -25,6 +25,38 @@ func (l *lazyWorkflowManager) SetTarget(target workflowmanager.Service) {
 	l.target = target
 }
 
+func (l *lazyWorkflowManager) CreateDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CreateDefinition(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetDefinition(ctx, p, definitionID)
+}
+
+func (l *lazyWorkflowManager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.UpdateDefinition(ctx, p, definitionID, req)
+}
+
+func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
+	target, err := l.current()
+	if err != nil {
+		return err
+	}
+	return target.DeleteDefinition(ctx, p, definitionID)
+}
+
 func (l *lazyWorkflowManager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
 	target, err := l.current()
 	if err != nil {

@@ -130,6 +130,7 @@ _AUTHORIZATION_PROTOCOL_EXPORTS = (
 )
 
 _WORKFLOW_PROTOCOL_EXPORTS = (
+    "BoundWorkflowDefinition",
     "BoundWorkflowAgentTarget",
     "BoundWorkflowEventTrigger",
     "BoundWorkflowPluginTarget",
@@ -148,10 +149,13 @@ _WORKFLOW_PROTOCOL_EXPORTS = (
     "WORKFLOW_RUN_STATUS_UNSPECIFIED",
     "WorkflowActor",
     "WorkflowEvent",
+    "WorkflowManagerCreateDefinitionRequest",
     "WorkflowManagerCreateEventTriggerRequest",
     "WorkflowManagerCreateScheduleRequest",
+    "WorkflowManagerDeleteDefinitionRequest",
     "WorkflowManagerDeleteEventTriggerRequest",
     "WorkflowManagerDeleteScheduleRequest",
+    "WorkflowManagerGetDefinitionRequest",
     "WorkflowManagerGetEventTriggerRequest",
     "WorkflowManagerGetScheduleRequest",
     "WorkflowManagerPauseEventTriggerRequest",
@@ -162,6 +166,7 @@ _WORKFLOW_PROTOCOL_EXPORTS = (
     "WorkflowManagerSignalOrStartRunRequest",
     "WorkflowManagerSignalRunRequest",
     "WorkflowManagerStartRunRequest",
+    "WorkflowManagerUpdateDefinitionRequest",
     "WorkflowManagerUpdateEventTriggerRequest",
     "WorkflowManagerUpdateScheduleRequest",
     "WorkflowOutputBinding",

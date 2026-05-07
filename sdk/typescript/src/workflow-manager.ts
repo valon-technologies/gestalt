@@ -7,10 +7,13 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
+  WorkflowManagerCreateDefinitionRequestSchema,
   WorkflowManagerCreateScheduleRequestSchema,
   WorkflowManagerCreateEventTriggerRequestSchema,
+  WorkflowManagerDeleteDefinitionRequestSchema,
   WorkflowManagerDeleteScheduleRequestSchema,
   WorkflowManagerDeleteEventTriggerRequestSchema,
+  WorkflowManagerGetDefinitionRequestSchema,
   WorkflowManagerGetScheduleRequestSchema,
   WorkflowManagerGetEventTriggerRequestSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
@@ -22,8 +25,10 @@ import {
   WorkflowManagerSignalOrStartRunRequestSchema,
   WorkflowManagerSignalRunRequestSchema,
   WorkflowManagerStartRunRequestSchema,
+  WorkflowManagerUpdateDefinitionRequestSchema,
   WorkflowManagerUpdateScheduleRequestSchema,
   WorkflowManagerUpdateEventTriggerRequestSchema,
+  type ManagedWorkflowDefinition,
   type ManagedWorkflowRun,
   type ManagedWorkflowRunSignal,
   type ManagedWorkflowSchedule,
@@ -44,6 +49,8 @@ const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
 export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
 /** Managed workflow event-trigger message returned by the host manager. */
 export type ManagedWorkflowEventTriggerMessage = ManagedWorkflowEventTrigger;
+/** Managed workflow definition message returned by the host manager. */
+export type ManagedWorkflowDefinitionMessage = ManagedWorkflowDefinition;
 /** Managed workflow run message returned by the host manager. */
 export type ManagedWorkflowRunMessage = ManagedWorkflowRun;
 /** Managed workflow run signal message returned by the host manager. */
@@ -61,6 +68,22 @@ export type WorkflowManagerSignalRunInput = MessageInitShape<
 /** Shape accepted when signaling a run or starting it if missing. */
 export type WorkflowManagerSignalOrStartRunInput = MessageInitShape<
   typeof WorkflowManagerSignalOrStartRunRequestSchema
+>;
+/** Shape accepted when creating a workflow definition. */
+export type WorkflowManagerCreateDefinitionInput = MessageInitShape<
+  typeof WorkflowManagerCreateDefinitionRequestSchema
+>;
+/** Shape accepted when fetching a workflow definition. */
+export type WorkflowManagerGetDefinitionInput = MessageInitShape<
+  typeof WorkflowManagerGetDefinitionRequestSchema
+>;
+/** Shape accepted when updating a workflow definition. */
+export type WorkflowManagerUpdateDefinitionInput = MessageInitShape<
+  typeof WorkflowManagerUpdateDefinitionRequestSchema
+>;
+/** Shape accepted when deleting a workflow definition. */
+export type WorkflowManagerDeleteDefinitionInput = MessageInitShape<
+  typeof WorkflowManagerDeleteDefinitionRequestSchema
 >;
 /** Shape accepted when creating a workflow schedule. */
 export type WorkflowManagerCreateScheduleInput = MessageInitShape<
@@ -180,6 +203,47 @@ export class WorkflowManager {
     return await this.client.signalOrStartRun({
       ...request,
       idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Creates a reusable workflow definition. */
+  async createDefinition(
+    request: WorkflowManagerCreateDefinitionInput,
+  ): Promise<ManagedWorkflowDefinitionMessage> {
+    return await this.client.createDefinition({
+      ...request,
+      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Fetches one workflow definition. */
+  async getDefinition(
+    request: WorkflowManagerGetDefinitionInput,
+  ): Promise<ManagedWorkflowDefinitionMessage> {
+    return await this.client.getDefinition({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Updates a workflow definition. */
+  async updateDefinition(
+    request: WorkflowManagerUpdateDefinitionInput,
+  ): Promise<ManagedWorkflowDefinitionMessage> {
+    return await this.client.updateDefinition({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  /** Deletes a workflow definition. */
+  async deleteDefinition(
+    request: WorkflowManagerDeleteDefinitionInput,
+  ): Promise<void> {
+    await this.client.deleteDefinition({
+      ...request,
       invocationToken: this.invocationToken,
     });
   }

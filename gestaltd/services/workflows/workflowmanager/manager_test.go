@@ -3,6 +3,7 @@ package workflowmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -37,6 +38,481 @@ func (i *recordingWorkflowManagerInvoker) ResolveToken(ctx context.Context, _ *p
 		return ctx, "", invocation.ErrNoCredential
 	}
 	return ctx, "token", nil
+}
+
+func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		IdempotencyKey:   "triage-definition",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+			Input:      map[string]any{"mode": "full"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+	if definition == nil || definition.Definition == nil || !strings.HasPrefix(definition.Definition.ID, workflowDefinitionExecutionRefBasePrefix) {
+		t.Fatalf("definition = %#v, want workflow definition execution ref", definition)
+	}
+
+	run, err := manager.StartRun(context.Background(), caller, RunStart{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		WorkflowKey:      "github:issues:triage",
+	})
+	if err != nil {
+		t.Fatalf("StartRun by definition: %v", err)
+	}
+	if run == nil || run.Run == nil || run.Run.Target.Plugin == nil {
+		t.Fatalf("run = %#v, want plugin target", run)
+	}
+	if got := run.Run.Target.Plugin.Operation; got != "issues.triage" {
+		t.Fatalf("run target operation = %q, want issues.triage", got)
+	}
+	if got := run.Run.Target.Plugin.Input["mode"]; got != "full" {
+		t.Fatalf("run target input mode = %v, want full", got)
+	}
+	if run.ExecutionRef == nil || !strings.HasPrefix(run.ExecutionRef.ID, workflowRunExecutionRefBasePrefix) {
+		t.Fatalf("run execution ref = %#v, want run snapshot ref", run.ExecutionRef)
+	}
+	if run.ExecutionRef.ID == definition.Definition.ID {
+		t.Fatalf("run execution ref reused definition id %q, want snapshot ref", run.ExecutionRef.ID)
+	}
+	if run.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("run source definition id = %q, want %q", run.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
+	}
+}
+
+func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+			Input:      map[string]any{"mode": "full"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	schedule, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		Cron:             "*/5 * * * *",
+		Timezone:         "UTC",
+	})
+	if err != nil {
+		t.Fatalf("CreateSchedule by definition: %v", err)
+	}
+	if schedule == nil || schedule.Schedule == nil || schedule.Schedule.Target.Plugin == nil {
+		t.Fatalf("schedule = %#v, want plugin target", schedule)
+	}
+	if got := schedule.Schedule.Target.Plugin.Operation; got != "issues.triage" {
+		t.Fatalf("schedule target operation = %q, want issues.triage", got)
+	}
+	if schedule.ExecutionRef == nil || !strings.HasPrefix(schedule.ExecutionRef.ID, workflowScheduleExecutionRefBasePrefix) {
+		t.Fatalf("schedule execution ref = %#v, want schedule snapshot ref", schedule.ExecutionRef)
+	}
+	if schedule.ExecutionRef.ID == definition.Definition.ID {
+		t.Fatalf("schedule execution ref reused definition id %q, want snapshot ref", schedule.ExecutionRef.ID)
+	}
+	if schedule.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("schedule source definition id = %q, want %q", schedule.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
+	}
+
+	trigger, err := manager.CreateEventTrigger(context.Background(), caller, EventTriggerUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		Match:            coreworkflow.EventMatch{Type: "github.issue.opened"},
+	})
+	if err != nil {
+		t.Fatalf("CreateEventTrigger by definition: %v", err)
+	}
+	if trigger == nil || trigger.Trigger == nil || trigger.Trigger.Target.Plugin == nil {
+		t.Fatalf("trigger = %#v, want plugin target", trigger)
+	}
+	if got := trigger.Trigger.Target.Plugin.Operation; got != "issues.triage" {
+		t.Fatalf("trigger target operation = %q, want issues.triage", got)
+	}
+	if trigger.ExecutionRef == nil || !strings.HasPrefix(trigger.ExecutionRef.ID, workflowEventTriggerExecutionRefBasePrefix) {
+		t.Fatalf("trigger execution ref = %#v, want trigger snapshot ref", trigger.ExecutionRef)
+	}
+	if trigger.ExecutionRef.ID == definition.Definition.ID {
+		t.Fatalf("trigger execution ref reused definition id %q, want snapshot ref", trigger.ExecutionRef.ID)
+	}
+	if trigger.ExecutionRef.SourceDefinitionID != definition.Definition.ID {
+		t.Fatalf("trigger source definition id = %q, want %q", trigger.ExecutionRef.SourceDefinitionID, definition.Definition.ID)
+	}
+}
+
+func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+					{ID: "issues.updated", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage", "issues.updated"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+			Input:      map[string]any{"mode": "initial"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	scheduleReq := ScheduleUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		IdempotencyKey:   "triage-schedule",
+		Cron:             "*/5 * * * *",
+		Timezone:         "UTC",
+	}
+	schedule, err := manager.CreateSchedule(context.Background(), caller, scheduleReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule: %v", err)
+	}
+
+	if _, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.updated",
+			Input:      map[string]any{"mode": "updated"},
+		}},
+	}); err != nil {
+		t.Fatalf("UpdateDefinition: %v", err)
+	}
+
+	replayedSchedule, err := manager.CreateSchedule(context.Background(), caller, scheduleReq)
+	if err != nil {
+		t.Fatalf("CreateSchedule replay after definition update: %v", err)
+	}
+	if replayedSchedule.Schedule.ID != schedule.Schedule.ID {
+		t.Fatalf("replayed schedule ID = %q, want %q", replayedSchedule.Schedule.ID, schedule.Schedule.ID)
+	}
+	if got := replayedSchedule.Schedule.Target.Plugin.Operation; got != "issues.triage" {
+		t.Fatalf("replayed schedule target operation = %q, want original snapshot", got)
+	}
+	if len(provider.upsertedSchedules) != 1 {
+		t.Fatalf("provider upserted schedules = %d, want 1", len(provider.upsertedSchedules))
+	}
+
+	otherDefinition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.updated",
+			Input:      map[string]any{"mode": "other"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition(other): %v", err)
+	}
+	otherScheduleReq := scheduleReq
+	otherScheduleReq.DefinitionID = otherDefinition.Definition.ID
+	_, err = manager.CreateSchedule(context.Background(), caller, otherScheduleReq)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("CreateSchedule replay with different definition error = %v, want invalid invocation", err)
+	}
+
+	triggerReq := EventTriggerUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		IdempotencyKey:   "triage-trigger",
+		Match:            coreworkflow.EventMatch{Type: "github.issue.opened"},
+	}
+	trigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
+	if err != nil {
+		t.Fatalf("CreateEventTrigger: %v", err)
+	}
+	otherTriggerReq := triggerReq
+	otherTriggerReq.DefinitionID = otherDefinition.Definition.ID
+	_, err = manager.CreateEventTrigger(context.Background(), caller, otherTriggerReq)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("CreateEventTrigger replay with different definition error = %v, want invalid invocation", err)
+	}
+
+	if err := manager.DeleteDefinition(context.Background(), caller, definition.Definition.ID); err != nil {
+		t.Fatalf("DeleteDefinition: %v", err)
+	}
+	replayedTrigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
+	if err != nil {
+		t.Fatalf("CreateEventTrigger replay after definition delete: %v", err)
+	}
+	if replayedTrigger.Trigger.ID != trigger.Trigger.ID {
+		t.Fatalf("replayed trigger ID = %q, want %q", replayedTrigger.Trigger.ID, trigger.Trigger.ID)
+	}
+	if got := replayedTrigger.Trigger.Target.Plugin.Operation; got != "issues.updated" {
+		t.Fatalf("replayed trigger target operation = %q, want stored snapshot", got)
+	}
+	if len(provider.upsertedEventTriggers) != 1 {
+		t.Fatalf("provider upserted event triggers = %d, want 1", len(provider.upsertedEventTriggers))
+	}
+}
+
+func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
+	t.Parallel()
+
+	localProvider := newTestWorkflowProvider()
+	remoteProvider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: namedTestWorkflowControl{
+			defaultName: "local",
+			names:       []string{"local", "remote"},
+			providers: map[string]coreworkflow.Provider{
+				"local":  localProvider,
+				"remote": remoteProvider,
+			},
+		},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "remote",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	run, err := manager.StartRun(context.Background(), caller, RunStart{
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		WorkflowKey:      "github:issues:triage",
+	})
+	if err != nil {
+		t.Fatalf("StartRun by definition: %v", err)
+	}
+	if run.ProviderName != "remote" {
+		t.Fatalf("run provider = %q, want remote", run.ProviderName)
+	}
+	if len(remoteProvider.runs) != 1 {
+		t.Fatalf("remote provider runs = %d, want 1", len(remoteProvider.runs))
+	}
+	if len(localProvider.runs) != 0 {
+		t.Fatalf("local provider runs = %d, want 0", len(localProvider.runs))
+	}
+
+	_, err = manager.StartRun(context.Background(), caller, RunStart{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		DefinitionID:     definition.Definition.ID,
+		WorkflowKey:      "github:issues:triage:local",
+	})
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("StartRun with mismatched provider error = %v, want invalid invocation", err)
+	}
+}
+
+func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testing.T) {
+	t.Parallel()
+
+	localProvider := newTestWorkflowProvider()
+	remoteProvider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: namedTestWorkflowControl{
+			defaultName: "local",
+			names:       []string{"local", "remote"},
+			providers: map[string]coreworkflow.Provider{
+				"local":  localProvider,
+				"remote": remoteProvider,
+			},
+		},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+
+	var hookErr error
+	remoteProvider.putExecutionReferenceHook = func(ref *coreworkflow.ExecutionReference) {
+		if strings.TrimSpace(ref.ID) != definition.Definition.ID || ref.RevokedAt != nil {
+			return
+		}
+		managed, err := manager.GetDefinition(context.Background(), caller, definition.Definition.ID)
+		if err != nil {
+			hookErr = err
+			return
+		}
+		if managed.ProviderName != "remote" {
+			hookErr = fmt.Errorf("definition provider during update = %q, want remote", managed.ProviderName)
+		}
+	}
+
+	updated, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
+		ProviderName:     "remote",
+		CallerPluginName: "github",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdateDefinition: %v", err)
+	}
+	if hookErr != nil {
+		t.Fatalf("GetDefinition during provider change: %v", hookErr)
+	}
+	if updated.ProviderName != "remote" {
+		t.Fatalf("updated provider = %q, want remote", updated.ProviderName)
+	}
+	localRef := localProvider.refs[definition.Definition.ID]
+	if localRef == nil || localRef.RevokedAt == nil {
+		t.Fatalf("local definition ref = %#v, want revoked", localRef)
+	}
+	remoteRef := remoteProvider.refs[definition.Definition.ID]
+	if remoteRef == nil || remoteRef.RevokedAt != nil {
+		t.Fatalf("remote definition ref = %#v, want active", remoteRef)
+	}
 }
 
 func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing.T) {
@@ -905,6 +1381,36 @@ func (c testWorkflowControl) ProviderNames() []string {
 	return []string{"local"}
 }
 
+type namedTestWorkflowControl struct {
+	defaultName string
+	names       []string
+	providers   map[string]coreworkflow.Provider
+}
+
+func (c namedTestWorkflowControl) ResolveProvider(name string) (coreworkflow.Provider, error) {
+	provider := c.providers[strings.TrimSpace(name)]
+	if provider == nil {
+		return nil, core.ErrNotFound
+	}
+	return provider, nil
+}
+
+func (c namedTestWorkflowControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = c.defaultName
+	}
+	provider, err := c.ResolveProvider(name)
+	if err != nil {
+		return "", nil, err
+	}
+	return name, provider, nil
+}
+
+func (c namedTestWorkflowControl) ProviderNames() []string {
+	return append([]string(nil), c.names...)
+}
+
 type testAgentControl struct{}
 
 func (testAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
@@ -924,19 +1430,37 @@ type testWorkflowProvider struct {
 	refs                            map[string]*coreworkflow.ExecutionReference
 	runs                            map[string]*coreworkflow.Run
 	schedules                       map[string]*coreworkflow.Schedule
+	eventTriggers                   map[string]*coreworkflow.EventTrigger
 	upsertedSchedules               []coreworkflow.UpsertScheduleRequest
+	upsertedEventTriggers           []coreworkflow.UpsertEventTriggerRequest
 	signalOrStartErr                error
 	signalOrStartCalls              int
 	getMissingExecutionReferenceErr error
+	putExecutionReferenceHook       func(*coreworkflow.ExecutionReference)
 	putExecutionReferenceCalls      int
 }
 
 func newTestWorkflowProvider() *testWorkflowProvider {
 	return &testWorkflowProvider{
-		refs:      map[string]*coreworkflow.ExecutionReference{},
-		runs:      map[string]*coreworkflow.Run{},
-		schedules: map[string]*coreworkflow.Schedule{},
+		refs:          map[string]*coreworkflow.ExecutionReference{},
+		runs:          map[string]*coreworkflow.Run{},
+		schedules:     map[string]*coreworkflow.Schedule{},
+		eventTriggers: map[string]*coreworkflow.EventTrigger{},
 	}
+}
+
+func (p *testWorkflowProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	run := &coreworkflow.Run{
+		ID:           "run-started",
+		Status:       coreworkflow.RunStatusRunning,
+		WorkflowKey:  req.WorkflowKey,
+		Target:       req.Target,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.runs[run.ID] = run
+	copied := *run
+	return &copied, nil
 }
 
 func (p *testWorkflowProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
@@ -1016,10 +1540,37 @@ func (p *testWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.G
 	return &copied, nil
 }
 
+func (p *testWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
+	trigger := &coreworkflow.EventTrigger{
+		ID:           strings.TrimSpace(req.TriggerID),
+		Match:        req.Match,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
+		CreatedBy:    req.RequestedBy,
+	}
+	p.eventTriggers[trigger.ID] = trigger
+	copied := *trigger
+	return &copied, nil
+}
+
+func (p *testWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	trigger := p.eventTriggers[strings.TrimSpace(req.TriggerID)]
+	if trigger == nil {
+		return nil, core.ErrNotFound
+	}
+	copied := *trigger
+	return &copied, nil
+}
+
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	p.putExecutionReferenceCalls++
 	copied := *ref
 	p.refs[copied.ID] = &copied
+	if p.putExecutionReferenceHook != nil {
+		p.putExecutionReferenceHook(&copied)
+	}
 	return &copied, nil
 }
 

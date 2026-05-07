@@ -8,16 +8,19 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule,
-    BoundWorkflowTarget, ManagedWorkflowEventTrigger, ManagedWorkflowRun, ManagedWorkflowRunSignal,
+    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowPluginTarget,
+    BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget, ManagedWorkflowDefinition,
+    ManagedWorkflowEventTrigger, ManagedWorkflowRun, ManagedWorkflowRunSignal,
     ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
-    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
+    WorkflowManagerCreateDefinitionRequest, WorkflowManagerCreateEventTriggerRequest,
+    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteDefinitionRequest,
     WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
-    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
-    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
-    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
-    WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
-    WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
+    WorkflowManagerGetDefinitionRequest, WorkflowManagerGetEventTriggerRequest,
+    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseEventTriggerRequest,
+    WorkflowManagerPauseScheduleRequest, WorkflowManagerPublishEventRequest,
+    WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
+    WorkflowManagerSignalOrStartRunRequest, WorkflowManagerSignalRunRequest,
+    WorkflowManagerStartRunRequest, WorkflowManagerUpdateDefinitionRequest,
     WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, WorkflowSignal,
     bound_workflow_target,
 };
@@ -147,6 +150,98 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             started_run: true,
             workflow_key: request.workflow_key,
         }))
+    }
+
+    async fn create_definition(
+        &self,
+        request: GrpcRequest<WorkflowManagerCreateDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        let request = request.into_inner();
+        self.idempotency_keys
+            .lock()
+            .expect("lock idempotency keys")
+            .push(request.idempotency_key.clone());
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "create-definition".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            definition: Some(BoundWorkflowDefinition {
+                id: "definition-1".to_string(),
+                target: request.target,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn get_definition(
+        &self,
+        request: GrpcRequest<WorkflowManagerGetDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "get-definition".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: request.definition_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+            provider_name: "basic".to_string(),
+            definition: Some(BoundWorkflowDefinition {
+                id: request.definition_id,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn update_definition(
+        &self,
+        request: GrpcRequest<WorkflowManagerUpdateDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "update-definition".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: request.definition_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            definition: Some(BoundWorkflowDefinition {
+                id: request.definition_id,
+                target: request.target,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn delete_definition(
+        &self,
+        request: GrpcRequest<WorkflowManagerDeleteDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "delete-definition".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: request.definition_id,
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(()))
     }
 
     async fn create_schedule(
@@ -563,6 +658,37 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         })
         .await
         .expect("signal or start run");
+    let created_definition = manager
+        .create_definition(WorkflowManagerCreateDefinitionRequest {
+            provider_name: "basic".to_string(),
+            target: Some(plugin_target("roadmap", "sync")),
+            ..Default::default()
+        })
+        .await
+        .expect("create definition");
+    let fetched_definition = manager
+        .get_definition(WorkflowManagerGetDefinitionRequest {
+            definition_id: "definition-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("get definition");
+    let updated_definition = manager
+        .update_definition(WorkflowManagerUpdateDefinitionRequest {
+            definition_id: "definition-1".to_string(),
+            provider_name: "secondary".to_string(),
+            target: Some(plugin_target("roadmap", "status")),
+            ..Default::default()
+        })
+        .await
+        .expect("update definition");
+    manager
+        .delete_definition(WorkflowManagerDeleteDefinitionRequest {
+            definition_id: "definition-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("delete definition");
     let created = manager
         .create_schedule(WorkflowManagerCreateScheduleRequest {
             provider_name: "basic".to_string(),
@@ -689,6 +815,21 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert_eq!(signaled.name, "slack.event");
     assert!(signaled_or_started_run.started_run);
     assert_eq!(signaled_or_started_run.workflow_key, "workflow-key-1");
+    assert_eq!(
+        created_definition
+            .definition
+            .expect("created definition")
+            .id,
+        "definition-1"
+    );
+    assert_eq!(
+        fetched_definition
+            .definition
+            .expect("fetched definition")
+            .id,
+        "definition-1"
+    );
+    assert_eq!(updated_definition.provider_name, "secondary");
     assert_eq!(created.provider_name, "basic");
     assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
     assert_eq!(fetched.schedule.expect("fetched schedule").id, "sched-1");
@@ -722,6 +863,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         vec![
             "workflow-request-key-rust".to_string(),
             "workflow-request-key-rust".to_string(),
+            "workflow-request-key-rust".to_string(),
         ]
     );
     assert_eq!(
@@ -747,6 +889,34 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 schedule_id: String::new(),
                 trigger_id: String::new(),
                 event_type: "slack.event".to_string(),
+            },
+            SeenRequest {
+                method: "create-definition".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "get-definition".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: "definition-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "update-definition".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: "definition-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "delete-definition".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: "definition-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "create".to_string(),

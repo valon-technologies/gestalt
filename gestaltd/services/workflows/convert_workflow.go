@@ -330,6 +330,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		ProviderName:        ref.ProviderName,
 		Target:              target,
 		CallerPluginName:    ref.CallerPluginName,
+		SourceDefinitionId:  ref.SourceDefinitionID,
 		SubjectId:           ref.SubjectID,
 		SubjectKind:         ref.SubjectKind,
 		DisplayName:         ref.DisplayName,
@@ -352,6 +353,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
 		CallerPluginName:    strings.TrimSpace(ref.GetCallerPluginName()),
+		SourceDefinitionID:  strings.TrimSpace(ref.GetSourceDefinitionId()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
 		DisplayName:         strings.TrimSpace(ref.GetDisplayName()),
@@ -685,6 +687,27 @@ func workflowEventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.Bou
 	}, nil
 }
 
+func workflowDefinitionToProto(ref *coreworkflow.ExecutionReference) (*proto.BoundWorkflowDefinition, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(ref.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowDefinition{
+		Id:     ref.ID,
+		Target: target,
+		CreatedBy: workflowActorToProto(coreworkflow.Actor{
+			SubjectID:   ref.SubjectID,
+			SubjectKind: ref.SubjectKind,
+			DisplayName: ref.DisplayName,
+			AuthSource:  ref.AuthSource,
+		}),
+		CreatedAt: timeToProto(ref.CreatedAt),
+	}, nil
+}
+
 func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (coreworkflow.InvokeOperationRequest, error) {
 	if req == nil {
 		return coreworkflow.InvokeOperationRequest{}, nil
@@ -805,6 +828,20 @@ func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTri
 	return &proto.ManagedWorkflowEventTrigger{
 		ProviderName: managed.ProviderName,
 		Trigger:      trigger,
+	}, nil
+}
+
+func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.ManagedWorkflowDefinition, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	definition, err := workflowDefinitionToProto(managed.Definition)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowDefinition{
+		ProviderName: managed.ProviderName,
+		Definition:   definition,
 	}, nil
 }
 
