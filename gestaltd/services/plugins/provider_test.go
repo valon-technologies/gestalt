@@ -379,8 +379,40 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
 		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
 	}
+	if got := reqCtx.GetSubject().GetEmail(); got != "" {
+		t.Fatalf("subject email = %q, want empty", got)
+	}
 	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
 		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
+	}
+}
+
+func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		UserID:    "user-123",
+		SubjectID: principal.UserSubjectID("user-123"),
+		Kind:      principal.KindUser,
+		Identity: &core.UserIdentity{
+			Email:       "ada@example.com",
+			DisplayName: "Ada Lovelace",
+		},
+		Source: principal.SourceAPIToken,
+	})
+
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetSubject() == nil {
+		t.Fatal("expected request subject context")
+	}
+	if got := reqCtx.GetSubject().GetEmail(); got != "ada@example.com" {
+		t.Fatalf("subject email = %q, want ada@example.com", got)
+	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Ada Lovelace" {
+		t.Fatalf("subject display name = %q, want Ada Lovelace", got)
 	}
 }
 
@@ -413,6 +445,9 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	}
 	if got := reqCtx.GetAgentSubject().GetDisplayName(); got != "Ada Lovelace" {
 		t.Fatalf("agent subject display name = %q, want Ada Lovelace", got)
+	}
+	if got := reqCtx.GetAgentSubject().GetEmail(); got != "" {
+		t.Fatalf("agent subject email = %q, want empty", got)
 	}
 }
 
@@ -501,6 +536,28 @@ func TestApplyRequestContext_IncludesDelegatedExternalIdentities(t *testing.T) {
 	}
 }
 
+func TestApplyRequestContext_PreservesUserEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
+		Subject: &proto.SubjectContext{
+			Id:          "user:user-123",
+			Kind:        "user",
+			DisplayName: "Ada Lovelace",
+			AuthSource:  "api_token",
+			Email:       "ada@example.com",
+		},
+	})
+
+	p := principal.FromContext(ctx)
+	if p == nil || p.Identity == nil {
+		t.Fatalf("expected identity principal, got %#v", p)
+	}
+	if got := p.Identity.Email; got != "ada@example.com" {
+		t.Fatalf("identity email = %q, want ada@example.com", got)
+	}
+}
+
 func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 	t.Parallel()
 
@@ -551,6 +608,7 @@ func TestPrincipalFromProto_NonUserDisplayNameDoesNotCreateIdentity(t *testing.T
 		Kind:        "service_account",
 		DisplayName: "Triage Bot",
 		AuthSource:  principal.SourceAPIToken.String(),
+		Email:       "spoofed@example.com",
 	})
 	if p == nil {
 		t.Fatal("expected principal")
@@ -563,6 +621,40 @@ func TestPrincipalFromProto_NonUserDisplayNameDoesNotCreateIdentity(t *testing.T
 	}
 	if p.Identity != nil {
 		t.Fatalf("expected non-user identity to remain nil, got %#v", p.Identity)
+	}
+}
+
+type httpSubjectEmailClient struct {
+	proto.IntegrationProviderClient
+}
+
+func (*httpSubjectEmailClient) ResolveHTTPSubject(context.Context, *proto.ResolveHTTPSubjectRequest, ...grpc.CallOption) (*proto.ResolveHTTPSubjectResponse, error) {
+	return &proto.ResolveHTTPSubjectResponse{
+		Subject: &proto.SubjectContext{
+			Id:          "user:user-456",
+			Kind:        "user",
+			DisplayName: "Plugin User",
+			AuthSource:  "plugin_http",
+			Email:       "spoofed@example.com",
+		},
+	}, nil
+}
+
+func TestRemoteProviderResolveHTTPSubjectIgnoresProviderReturnedEmail(t *testing.T) {
+	t.Parallel()
+
+	prov := &remoteProviderBase{client: &httpSubjectEmailClient{}}
+	resolved, err := prov.ResolveHTTPSubject(context.Background(), &core.HTTPSubjectResolveRequest{
+		VerifiedSubject: "host:user-456",
+	})
+	if err != nil {
+		t.Fatalf("ResolveHTTPSubject: %v", err)
+	}
+	if resolved == nil {
+		t.Fatal("expected resolved subject")
+	}
+	if resolved.ID != "user:user-456" || resolved.Kind != "user" || resolved.DisplayName != "Plugin User" || resolved.AuthSource != "plugin_http" {
+		t.Fatalf("unexpected resolved subject: %#v", resolved)
 	}
 }
 

@@ -359,6 +359,7 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 			Kind:        subjectKindForPrincipal(p),
 			DisplayName: subjectDisplayName(p),
 			AuthSource:  p.AuthSource(),
+			Email:       subjectEmail(p),
 		}
 	}
 
@@ -483,6 +484,13 @@ func subjectDisplayName(p *principal.Principal) string {
 		return ""
 	}
 	return p.Identity.DisplayName
+}
+
+func subjectEmail(p *principal.Principal) string {
+	if p == nil || p.Identity == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.Identity.Email)
 }
 
 func runAsSubjectContextProto(subject *core.RunAsSubject) *proto.SubjectContext {

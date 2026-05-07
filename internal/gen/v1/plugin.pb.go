@@ -1232,6 +1232,7 @@ type SubjectContext struct {
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	AuthSource    string                 `protobuf:"bytes,4,opt,name=auth_source,json=authSource,proto3" json:"auth_source,omitempty"`
+	Email         string                 `protobuf:"bytes,5,opt,name=email,proto3" json:"email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1290,6 +1291,13 @@ func (x *SubjectContext) GetDisplayName() string {
 func (x *SubjectContext) GetAuthSource() string {
 	if x != nil {
 		return x.AuthSource
+	}
+	return ""
+}
+
+func (x *SubjectContext) GetEmail() string {
+	if x != nil {
+		return x.Email
 	}
 	return ""
 }
@@ -2452,13 +2460,14 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1e\n" +
 	"\n" +
 	"connection\x18\x0e \x01(\tR\n" +
-	"connection\"x\n" +
+	"connection\"\x8e\x01\n" +
 	"\x0eSubjectContext\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x1f\n" +
 	"\vauth_source\x18\x04 \x01(\tR\n" +
-	"authSource\"=\n" +
+	"authSource\x12\x14\n" +
+	"\x05email\x18\x05 \x01(\tR\x05email\"=\n" +
 	"\x17ExternalIdentityContext\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\"$\n" +

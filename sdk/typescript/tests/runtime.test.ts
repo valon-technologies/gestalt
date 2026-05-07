@@ -566,6 +566,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
           id: "user:user-123",
           kind: "user",
           authSource: "api_token",
+          email: "ada@example.com",
         }),
         credential: create(CredentialContextSchema, {
           mode: "user",
@@ -586,6 +587,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     region: "iad",
     configuredRegion: "use1",
     subjectId: "user:user-123",
+    subjectEmail: "ada@example.com",
     credentialMode: "user",
     accessPolicy: "sample_policy",
     accessRole: "admin",
@@ -795,6 +797,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
       kind: "system",
       displayName: "",
       authSource: "http_binding",
+      email: "",
     },
     credential: {
       mode: "none",

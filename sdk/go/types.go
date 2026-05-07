@@ -121,6 +121,7 @@ type Subject struct {
 	Kind        string
 	DisplayName string
 	AuthSource  string
+	Email       string
 }
 
 // ExternalIdentity identifies the caller in a provider-owned identity namespace.

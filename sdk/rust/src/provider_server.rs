@@ -226,6 +226,7 @@ fn request_subject_field(
         kind: subject.kind.clone(),
         display_name: subject.display_name.clone(),
         auth_source: subject.auth_source.clone(),
+        email: subject.email.clone(),
     }
 }
 

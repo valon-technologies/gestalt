@@ -45,9 +45,10 @@ impl Provider for TestProvider {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: format!(
-                "{}|{}|{}|{}|{}|{}",
+                "{}|{}|{}|{}|{}|{}|{}",
                 request.connection_param("tenant").unwrap_or_default(),
                 request.subject.id,
+                request.subject.email,
                 request.credential.mode,
                 request.access.role,
                 request.host.public_base_url,
@@ -90,6 +91,7 @@ struct Input {
 struct Output {
     message: String,
     subject_id: String,
+    subject_email: String,
     credential_mode: String,
     access_role: String,
     host_base_url: String,
@@ -114,6 +116,7 @@ async fn serves_provider_requests_over_unix_socket() {
             |provider: Arc<TestProvider>, input: Input, request: Request| async move {
                 let greeting = provider.greeting.lock().expect("lock greeting").clone();
                 let subject_id = request.subject.id.clone();
+                let subject_email = request.subject.email.clone();
                 let credential_mode = request.credential.mode.clone();
                 let access_role = request.access.role.clone();
                 let host_base_url = request.host.public_base_url.clone();
@@ -121,6 +124,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
                     subject_id,
+                    subject_email,
                     credential_mode,
                     access_role,
                     host_base_url,
@@ -257,6 +261,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
                     kind: "user".to_string(),
+                    email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
@@ -300,7 +305,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client
@@ -314,6 +319,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
                     kind: "user".to_string(),
+                    email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
                 credential: Some(CredentialContext {
@@ -341,7 +347,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(catalog.name, "session-example");
     assert_eq!(
         catalog.display_name,
-        "acme|user:user-123|user|viewer|https://gestalt.example.test|schedule"
+        "acme|user:user-123|ada@example.com|user|viewer|https://gestalt.example.test|schedule"
     );
 
     let err = client

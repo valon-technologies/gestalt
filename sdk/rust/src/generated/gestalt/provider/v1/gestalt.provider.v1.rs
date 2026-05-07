@@ -239,6 +239,8 @@ pub struct SubjectContext {
     pub display_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub email: ::prost::alloc::string::String,
 }
 /// ExternalIdentityContext identifies the caller in a provider-owned external
 /// identity namespace, as discovered from that caller's stored connection.

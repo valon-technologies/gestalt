@@ -17,6 +17,8 @@ pub struct Subject {
     pub display_name: String,
     /// Authentication source that produced the subject.
     pub auth_source: String,
+    /// Email address resolved by the Gestalt host for user subjects.
+    pub email: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

@@ -341,6 +341,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         region: "iad",
         configuredRegion: "use1",
         subjectId: "user:user-123",
+        subjectEmail: "",
         credentialMode: "user",
         accessPolicy: "sample_policy",
         accessRole: "admin",

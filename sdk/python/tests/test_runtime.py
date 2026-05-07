@@ -367,7 +367,9 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.connection_param("region"), "us-east-1")
         self.assertIsNone(request.connection_param("missing"))
         self.assertEqual(request.subject.id, "")
+        self.assertEqual(request.subject.email, "")
         self.assertEqual(request.agent_subject.id, "")
+        self.assertEqual(request.agent_subject.email, "")
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.workflow, {})
@@ -416,7 +418,9 @@ class MainEntrypointTests(unittest.TestCase):
                 "token": request.token,
                 "subject_id": request.subject.id,
                 "subject_kind": request.subject.kind,
+                "subject_email": request.subject.email,
                 "agent_subject_id": request.agent_subject.id,
+                "agent_subject_email": request.agent_subject.email,
                 "external_type": request.external_identity.type,
                 "external_id": request.external_identity.id,
                 "agent_external_type": request.agent_external_identity.type,
@@ -529,6 +533,7 @@ class MainEntrypointTests(unittest.TestCase):
                         id="user:user-123",
                         kind="user",
                         auth_source="api_token",
+                        email="ada@example.com",
                     ),
                     agent_subject=plugin_pb2.SubjectContext(
                         id="user:user-456",
@@ -628,7 +633,9 @@ class MainEntrypointTests(unittest.TestCase):
                 "token": "secret-token",
                 "subject_id": "user:user-123",
                 "subject_kind": "user",
+                "subject_email": "ada@example.com",
                 "agent_subject_id": "user:user-456",
+                "agent_subject_email": "",
                 "external_type": "github_app_installation",
                 "external_id": "repo:acme/widgets",
                 "agent_external_type": "github_identity",

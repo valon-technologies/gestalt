@@ -44,6 +44,7 @@ class Subject:
     kind: str = ""
     display_name: str = ""
     auth_source: str = ""
+    email: str = ""
 
 
 @dataclasses.dataclass(slots=True)
