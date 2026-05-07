@@ -6,7 +6,7 @@ export interface Subject {
   kind: string;
   displayName: string;
   authSource: string;
-  email?: string;
+  email: string;
 }
 
 /**

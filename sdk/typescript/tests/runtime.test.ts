@@ -698,6 +698,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
         kind: "user",
         displayName: "Slack User",
         authSource: "slack",
+        email: "",
       };
     },
     operations: [
