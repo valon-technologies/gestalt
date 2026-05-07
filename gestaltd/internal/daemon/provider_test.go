@@ -4035,6 +4035,14 @@ func extractReleasedArchive(t *testing.T, outputDir, archiveName string) string 
 		t.Fatalf("expected archive %s to exist: %v", archiveName, err)
 	}
 	extractDir := filepath.Join(outputDir, strings.TrimSuffix(archiveName, ".tar.gz"))
+	if info, err := os.Stat(extractDir); err == nil {
+		if !info.IsDir() {
+			t.Fatalf("extract path %s exists and is not a directory", extractDir)
+		}
+		return extractDir
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat extract dir %s: %v", extractDir, err)
+	}
 	if err := providerpkg.ExtractPackage(archivePath, extractDir); err != nil {
 		t.Fatalf("extract archive: %v", err)
 	}

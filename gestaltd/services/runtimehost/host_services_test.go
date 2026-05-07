@@ -98,12 +98,12 @@ func TestStartHostServicesRecordsRPCServerDurationWithTelemetryAttrs(t *testing.
 		t.Fatal("Cache.Get found = false, want true")
 	}
 
-	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	attrs := map[string]string{
 		"gestaltd.rpc.role":          "host_service_server",
 		"gestaltd.provider.name":     providerName,
 		"gestaltd.host_service.name": "cache",
 	}
+	rm := metrictest.CollectMetricsUntilFloat64Histogram(t, metrics.Reader, "rpc.server.call.duration", attrs)
 	metrictest.RequireFloat64Histogram(t, rm, "rpc.server.call.duration", attrs)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", attrs, "gestalt.rpc.role")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.server.call.duration", attrs, "gestalt.provider")
