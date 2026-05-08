@@ -5,12 +5,14 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type workflowManagerTransportHarness struct {
@@ -147,6 +149,16 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	defer func() { _ = client.Close() }()
 
+	signalPayload, err := gestalt.StructFromAny(map[string]any{"ok": true})
+	if err != nil {
+		t.Fatalf("StructFromAny: %v", err)
+	}
+	signalExtensions, err := gestalt.ValuesFromMap(map[string]any{"attempt": 1})
+	if err != nil {
+		t.Fatalf("ValuesFromMap: %v", err)
+	}
+	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
+	createdAt := gestalt.TimestampFromTimePtr(&createdAtValue)
 	resp, err := client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
@@ -163,6 +175,8 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 		Signal: &proto.WorkflowSignal{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
+			Payload:        signalPayload,
+			CreatedAt:      createdAt,
 		},
 	})
 	if err != nil {
@@ -186,5 +200,49 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	if got.GetWorkflowKey() != "slack:T123:C123:1700000000.000001" || got.GetSignal().GetName() != "slack.message" {
 		t.Fatalf("signal request = %+v", got)
+	}
+	if payload := gestalt.MapFromStruct(got.GetSignal().GetPayload()); payload["ok"] != true {
+		t.Fatalf("signal payload = %#v", payload)
+	}
+	event := &proto.WorkflowEvent{Extensions: signalExtensions}
+	if extensions := gestalt.MapFromValues(event.GetExtensions()); extensions["attempt"] != float64(1) {
+		t.Fatalf("signal extensions = %#v", extensions)
+	}
+	roundTripCreatedAt, err := gestalt.TimePtrFromTimestamp(got.GetSignal().GetCreatedAt())
+	if err != nil {
+		t.Fatalf("TimePtrFromTimestamp: %v", err)
+	}
+	if roundTripCreatedAt == nil || !roundTripCreatedAt.Equal(createdAtValue) {
+		t.Fatalf("created_at = %v, want %v", roundTripCreatedAt, createdAtValue)
+	}
+	if gestalt.CloneStruct(got.GetSignal().GetPayload()) == got.GetSignal().GetPayload() {
+		t.Fatal("CloneStruct returned the original pointer")
+	}
+	if gestalt.CloneTimestamp(got.GetSignal().GetCreatedAt()) == got.GetSignal().GetCreatedAt() {
+		t.Fatal("CloneTimestamp returned the original pointer")
+	}
+	if value, err := gestalt.StructFromAny(nil); err != nil || value != nil {
+		t.Fatalf("StructFromAny(nil) = %#v, %v; want nil, nil", value, err)
+	}
+	if value, err := gestalt.StructFromAny(map[string]any{}); err != nil || value == nil || len(value.GetFields()) != 0 {
+		t.Fatalf("StructFromAny(empty map) = %#v, %v; want empty struct, nil", value, err)
+	}
+	if value, err := gestalt.StructFromAny([]string{"bad"}); err == nil || value != nil {
+		t.Fatalf("StructFromAny(non-map) = %#v, %v; want nil error", value, err)
+	}
+	if value, err := gestalt.ValuesFromMap(nil); err != nil || value != nil {
+		t.Fatalf("ValuesFromMap(nil) = %#v, %v; want nil, nil", value, err)
+	}
+	if value := gestalt.MapFromValues(nil); value != nil {
+		t.Fatalf("MapFromValues(nil) = %#v, want nil", value)
+	}
+	if value := gestalt.TimestampFromTimePtr(nil); value != nil {
+		t.Fatalf("TimestampFromTimePtr(nil) = %#v, want nil", value)
+	}
+	if value, err := gestalt.TimePtrFromTimestamp(nil); err != nil || value != nil {
+		t.Fatalf("TimePtrFromTimestamp(nil) = %#v, %v; want nil, nil", value, err)
+	}
+	if value, err := gestalt.TimePtrFromTimestamp(&timestamppb.Timestamp{Nanos: -1}); err == nil || value != nil {
+		t.Fatalf("TimePtrFromTimestamp(invalid) = %#v, %v; want nil error", value, err)
 	}
 }

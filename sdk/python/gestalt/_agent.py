@@ -9,7 +9,13 @@ import grpc
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
-from ._protocol import has_field, struct_from_dict, struct_to_dict
+from ._protocol import (
+    has_field,
+    message_from_dict,
+    message_to_dict,
+    struct_from_dict,
+    struct_to_dict,
+)
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
@@ -544,6 +550,33 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
     """Create agent protocol messages from dictionaries."""
 
     return [agent_message_from_dict(message) for message in messages]
+
+
+def agent_message_to_proto_dict(message: Any) -> dict[str, Any]:
+    """Convert an ``AgentMessage`` to protobuf JSON dictionary form."""
+
+    value = message_to_dict(message, preserving_proto_field_name=True)
+    if not isinstance(value, dict):
+        raise TypeError("AgentMessage protobuf JSON projection must be an object")
+    return value
+
+
+def agent_message_from_proto_dict(value: Mapping[str, Any]) -> Any:
+    """Create an ``AgentMessage`` from protobuf JSON dictionary form."""
+
+    return message_from_dict(dict(value), pb.AgentMessage())
+
+
+def agent_messages_to_proto_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
+    """Convert agent protocol messages to protobuf JSON dictionaries."""
+
+    return [agent_message_to_proto_dict(message) for message in messages]
+
+
+def agent_messages_from_proto_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any]:
+    """Create agent protocol messages from protobuf JSON dictionaries."""
+
+    return [agent_message_from_proto_dict(message) for message in messages]
 
 
 class AgentHost:

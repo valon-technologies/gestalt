@@ -86,6 +86,14 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
+  dateFromTimestamp,
+  jsonFromValue,
+  jsonObjectFromStruct,
+  structFromJsonObject,
+  timestampFromDate,
+  valueFromJson,
+} from "./protocol.ts";
+export {
   ENV_PLUGIN_INVOKER_SOCKET,
   ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
   PluginInvoker,
