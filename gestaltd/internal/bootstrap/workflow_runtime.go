@@ -382,7 +382,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		ProviderName:   agentTarget.ProviderName,
 		Model:          agentTarget.Model,
 		Metadata:       metadata,
-		IdempotencyKey: workflowAgentIdempotencyKey(req, "session"),
+		IdempotencyKey: workflowAgentSessionIdempotencyKey(req),
 	})
 	if err != nil {
 		return nil, err
@@ -617,6 +617,33 @@ func workflowAgentIdempotencyKey(req coreworkflow.InvokeOperationRequest, suffix
 		strings.TrimSpace(req.RunID),
 		strings.TrimSpace(suffix),
 	}, ":")
+}
+
+func workflowAgentSessionIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
+	if workflowKey := workflowInvocationWorkflowKey(req.Metadata); workflowKey != "" {
+		return strings.Join([]string{
+			"workflow",
+			strings.TrimSpace(req.ProviderName),
+			"workflow-key",
+			workflowKey,
+			"session",
+		}, ":")
+	}
+	return workflowAgentIdempotencyKey(req, "session")
+}
+
+func workflowInvocationWorkflowKey(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	for _, key := range []string{"workflow_key", "workflowKey"} {
+		if value, ok := metadata[key].(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {

@@ -680,6 +680,54 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 }
 
+func TestWorkflowRuntimeInvokeAgentTargetUsesWorkflowKeyForSessionIdempotency(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-thread-reply-2",
+		Metadata: map[string]any{
+			"workflow_key": "slack:T123:C123:1778255568.567059",
+		},
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Model:        "deep",
+			Prompt:       "Continue the Slack thread",
+		}},
+		Signals: []coreworkflow.Signal{{
+			ID:             "signal-agent-2",
+			Name:           "slack.event",
+			IdempotencyKey: "evt-2",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentManager.createSessionRequests) != 1 {
+		t.Fatalf("session requests = %d, want 1", len(agentManager.createSessionRequests))
+	}
+	if got, want := agentManager.createSessionRequests[0].IdempotencyKey, "workflow:temporal:workflow-key:slack:T123:C123:1778255568.567059:session"; got != want {
+		t.Fatalf("session idempotency key = %q, want %q", got, want)
+	}
+	if len(agentManager.createTurnRequests) != 1 {
+		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
+	}
+	if got := agentManager.createTurnRequests[0].IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-thread-reply-2:turn:signal-batch-") {
+		t.Fatalf("turn idempotency key = %q, want run-scoped signal batch key", got)
+	}
+}
+
 func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(t *testing.T) {
 	t.Parallel()
 
