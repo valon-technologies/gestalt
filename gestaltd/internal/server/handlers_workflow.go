@@ -35,16 +35,17 @@ type workflowPluginTargetRequest struct {
 }
 
 type workflowAgentTargetRequest struct {
-	ProviderName   string                         `json:"provider,omitempty"`
-	Model          string                         `json:"model,omitempty"`
-	Prompt         string                         `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest          `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest          `json:"toolRefs,omitempty"`
-	OutputDelivery *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                 `json:"responseSchema,omitempty"`
-	Metadata       map[string]any                 `json:"metadata,omitempty"`
-	ModelOptions   map[string]any                 `json:"modelOptions,omitempty"`
-	TimeoutSeconds int                            `json:"timeoutSeconds,omitempty"`
+	ProviderName         string                         `json:"provider,omitempty"`
+	Model                string                         `json:"model,omitempty"`
+	Prompt               string                         `json:"prompt,omitempty"`
+	Messages             []agentMessageRequest          `json:"messages,omitempty"`
+	ToolRefs             []agentToolRefRequest          `json:"toolRefs,omitempty"`
+	OutputDelivery       *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
+	SessionReadyDelivery *workflowOutputDeliveryRequest `json:"sessionReadyDelivery,omitempty"`
+	ResponseSchema       map[string]any                 `json:"responseSchema,omitempty"`
+	Metadata             map[string]any                 `json:"metadata,omitempty"`
+	ModelOptions         map[string]any                 `json:"modelOptions,omitempty"`
+	TimeoutSeconds       int                            `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryRequest struct {
@@ -62,6 +63,7 @@ type workflowOutputValueSourceRequest struct {
 	AgentOutput    string `json:"agentOutput,omitempty"`
 	SignalPayload  string `json:"signalPayload,omitempty"`
 	SignalMetadata string `json:"signalMetadata,omitempty"`
+	AgentSession   string `json:"agentSession,omitempty"`
 	Literal        any    `json:"literal,omitempty"`
 }
 
@@ -88,16 +90,17 @@ type workflowPluginTargetInfo struct {
 }
 
 type workflowAgentTargetInfo struct {
-	ProviderName   string                      `json:"provider,omitempty"`
-	Model          string                      `json:"model,omitempty"`
-	Prompt         string                      `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest       `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest       `json:"toolRefs,omitempty"`
-	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any              `json:"responseSchema,omitempty"`
-	Metadata       map[string]any              `json:"metadata,omitempty"`
-	ModelOptions   map[string]any              `json:"modelOptions,omitempty"`
-	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
+	ProviderName         string                      `json:"provider,omitempty"`
+	Model                string                      `json:"model,omitempty"`
+	Prompt               string                      `json:"prompt,omitempty"`
+	Messages             []agentMessageRequest       `json:"messages,omitempty"`
+	ToolRefs             []agentToolRefRequest       `json:"toolRefs,omitempty"`
+	OutputDelivery       *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
+	SessionReadyDelivery *workflowOutputDeliveryInfo `json:"sessionReadyDelivery,omitempty"`
+	ResponseSchema       map[string]any              `json:"responseSchema,omitempty"`
+	Metadata             map[string]any              `json:"metadata,omitempty"`
+	ModelOptions         map[string]any              `json:"modelOptions,omitempty"`
+	TimeoutSeconds       int                         `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowOutputDeliveryInfo struct {
@@ -115,6 +118,7 @@ type workflowOutputValueSourceInfo struct {
 	AgentOutput    string `json:"agentOutput,omitempty"`
 	SignalPayload  string `json:"signalPayload,omitempty"`
 	SignalMetadata string `json:"signalMetadata,omitempty"`
+	AgentSession   string `json:"agentSession,omitempty"`
 	Literal        any    `json:"literal,omitempty"`
 }
 
@@ -329,8 +333,13 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 		}
 		return nil
 	}
-	if target.Agent != nil && target.Agent.OutputDelivery != nil && strings.TrimSpace(target.Agent.OutputDelivery.Target.CredentialMode) != "" {
-		return fmt.Errorf("workflow target agent.outputDelivery.target.credentialMode is not supported")
+	if target.Agent != nil {
+		if target.Agent.OutputDelivery != nil && strings.TrimSpace(target.Agent.OutputDelivery.Target.CredentialMode) != "" {
+			return fmt.Errorf("workflow target agent.outputDelivery.target.credentialMode is not supported")
+		}
+		if target.Agent.SessionReadyDelivery != nil && strings.TrimSpace(target.Agent.SessionReadyDelivery.Target.CredentialMode) != "" {
+			return fmt.Errorf("workflow target agent.sessionReadyDelivery.target.credentialMode is not supported")
+		}
 	}
 	return nil
 }
@@ -340,16 +349,17 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		return coreworkflow.AgentTarget{}
 	}
 	return coreworkflow.AgentTarget{
-		ProviderName:   strings.TrimSpace(target.ProviderName),
-		Model:          strings.TrimSpace(target.Model),
-		Prompt:         strings.TrimSpace(target.Prompt),
-		Messages:       agentMessagesFromRequest(target.Messages),
-		ToolRefs:       agentToolRefsFromRequest(target.ToolRefs),
-		OutputDelivery: workflowOutputDeliveryFromRequest(target.OutputDelivery),
-		ResponseSchema: maps.Clone(target.ResponseSchema),
-		Metadata:       maps.Clone(target.Metadata),
-		ModelOptions:   maps.Clone(target.ModelOptions),
-		TimeoutSeconds: target.TimeoutSeconds,
+		ProviderName:         strings.TrimSpace(target.ProviderName),
+		Model:                strings.TrimSpace(target.Model),
+		Prompt:               strings.TrimSpace(target.Prompt),
+		Messages:             agentMessagesFromRequest(target.Messages),
+		ToolRefs:             agentToolRefsFromRequest(target.ToolRefs),
+		OutputDelivery:       workflowOutputDeliveryFromRequest(target.OutputDelivery),
+		SessionReadyDelivery: workflowOutputDeliveryFromRequest(target.SessionReadyDelivery),
+		ResponseSchema:       maps.Clone(target.ResponseSchema),
+		Metadata:             maps.Clone(target.Metadata),
+		ModelOptions:         maps.Clone(target.ModelOptions),
+		TimeoutSeconds:       target.TimeoutSeconds,
 	}
 }
 
@@ -383,6 +393,7 @@ func workflowOutputBindingsFromRequest(bindings []workflowOutputBindingRequest) 
 				AgentOutput:    strings.TrimSpace(binding.Value.AgentOutput),
 				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
 				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
+				AgentSession:   strings.TrimSpace(binding.Value.AgentSession),
 				Literal:        binding.Value.Literal,
 			},
 		})
@@ -440,16 +451,17 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 		agentTarget := *target.Agent
 		return workflowScheduleTargetInfo{
 			Agent: &workflowAgentTargetInfo{
-				ProviderName:   agentTarget.ProviderName,
-				Model:          agentTarget.Model,
-				Prompt:         agentTarget.Prompt,
-				Messages:       agentMessageInfoFromCore(agentTarget.Messages),
-				ToolRefs:       agentToolRefsToRequest(agentTarget.ToolRefs),
-				OutputDelivery: workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
-				ResponseSchema: maps.Clone(agentTarget.ResponseSchema),
-				Metadata:       maps.Clone(agentTarget.Metadata),
-				ModelOptions:   maps.Clone(agentTarget.ModelOptions),
-				TimeoutSeconds: agentTarget.TimeoutSeconds,
+				ProviderName:         agentTarget.ProviderName,
+				Model:                agentTarget.Model,
+				Prompt:               agentTarget.Prompt,
+				Messages:             agentMessageInfoFromCore(agentTarget.Messages),
+				ToolRefs:             agentToolRefsToRequest(agentTarget.ToolRefs),
+				OutputDelivery:       workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
+				SessionReadyDelivery: workflowOutputDeliveryInfoFromCore(agentTarget.SessionReadyDelivery),
+				ResponseSchema:       maps.Clone(agentTarget.ResponseSchema),
+				Metadata:             maps.Clone(agentTarget.Metadata),
+				ModelOptions:         maps.Clone(agentTarget.ModelOptions),
+				TimeoutSeconds:       agentTarget.TimeoutSeconds,
 			},
 		}
 	}
@@ -498,6 +510,7 @@ func workflowOutputBindingInfoFromCore(bindings []coreworkflow.OutputBinding) []
 				AgentOutput:    binding.Value.AgentOutput,
 				SignalPayload:  binding.Value.SignalPayload,
 				SignalMetadata: binding.Value.SignalMetadata,
+				AgentSession:   binding.Value.AgentSession,
 				Literal:        binding.Value.Literal,
 			},
 		})

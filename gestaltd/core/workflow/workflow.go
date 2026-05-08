@@ -46,16 +46,17 @@ type PluginTarget struct {
 }
 
 type AgentTarget struct {
-	ProviderName   string
-	Model          string
-	Prompt         string
-	Messages       []coreagent.Message
-	ToolRefs       []coreagent.ToolRef
-	ResponseSchema map[string]any
-	ModelOptions   map[string]any
-	Metadata       map[string]any
-	TimeoutSeconds int
-	OutputDelivery *OutputDelivery
+	ProviderName         string
+	Model                string
+	Prompt               string
+	Messages             []coreagent.Message
+	ToolRefs             []coreagent.ToolRef
+	ResponseSchema       map[string]any
+	ModelOptions         map[string]any
+	Metadata             map[string]any
+	TimeoutSeconds       int
+	OutputDelivery       *OutputDelivery
+	SessionReadyDelivery *OutputDelivery
 }
 
 type OutputDelivery struct {
@@ -73,6 +74,7 @@ type OutputValueSource struct {
 	AgentOutput    string
 	SignalPayload  string
 	SignalMetadata string
+	AgentSession   string
 	Literal        any
 }
 
@@ -374,16 +376,8 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		if len(agentTarget.Metadata) == 0 {
 			agentTarget.Metadata = nil
 		}
-		if agentTarget.OutputDelivery != nil {
-			outputDelivery := *agentTarget.OutputDelivery
-			if len(outputDelivery.Target.Input) == 0 {
-				outputDelivery.Target.Input = nil
-			}
-			if len(outputDelivery.InputBindings) == 0 {
-				outputDelivery.InputBindings = nil
-			}
-			agentTarget.OutputDelivery = &outputDelivery
-		}
+		agentTarget.OutputDelivery = normalizedOutputDelivery(agentTarget.OutputDelivery)
+		agentTarget.SessionReadyDelivery = normalizedOutputDelivery(agentTarget.SessionReadyDelivery)
 		out.Agent = &agentTarget
 		return out
 	}
@@ -395,4 +389,18 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		out.Plugin = &pluginTarget
 	}
 	return out
+}
+
+func normalizedOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := *delivery
+	if len(out.Target.Input) == 0 {
+		out.Target.Input = nil
+	}
+	if len(out.InputBindings) == 0 {
+		out.InputBindings = nil
+	}
+	return &out
 }

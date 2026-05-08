@@ -2827,6 +2827,8 @@ pub struct BoundWorkflowAgentTarget {
     pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
     #[prost(message, optional, tag = "12")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "13")]
+    pub session_ready_delivery: ::core::option::Option<WorkflowOutputDelivery>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowOutputDelivery {
@@ -2846,7 +2848,7 @@ pub struct WorkflowOutputBinding {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowOutputValueSource {
-    #[prost(oneof = "workflow_output_value_source::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "workflow_output_value_source::Kind", tags = "1, 2, 3, 4, 5")]
     pub kind: ::core::option::Option<workflow_output_value_source::Kind>,
 }
 /// Nested message and enum types in `WorkflowOutputValueSource`.
@@ -2861,6 +2863,8 @@ pub mod workflow_output_value_source {
         SignalMetadata(::prost::alloc::string::String),
         #[prost(message, tag = "4")]
         Literal(::prost_types::Value),
+        #[prost(string, tag = "5")]
+        AgentSession(::prost::alloc::string::String),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

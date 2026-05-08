@@ -148,6 +148,12 @@ func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 			delivery.InputBindings = slices.Clone(delivery.InputBindings)
 			agent.OutputDelivery = &delivery
 		}
+		if agent.SessionReadyDelivery != nil {
+			delivery := *agent.SessionReadyDelivery
+			delivery.Target.Input = cloneMapAny(delivery.Target.Input)
+			delivery.InputBindings = slices.Clone(delivery.InputBindings)
+			agent.SessionReadyDelivery = &delivery
+		}
 		clone.Agent = &agent
 	}
 	return clone
@@ -183,6 +189,7 @@ func workflowSignalsFromTestContext(value any) []map[string]any {
 
 type workflowRuntimeAgentManagerStub struct {
 	agentmanager.Service
+	events                          []string
 	createSessionRequests           []coreagent.ManagerCreateSessionRequest
 	createSessionDeadlines          []time.Duration
 	createTurnRequests              []coreagent.ManagerCreateTurnRequest
@@ -196,6 +203,7 @@ type workflowRuntimeAgentManagerStub struct {
 }
 
 func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+	m.events = append(m.events, "create-session")
 	m.createSessionRequests = append(m.createSessionRequests, req)
 	if deadline, ok := ctx.Deadline(); ok {
 		m.createSessionDeadlines = append(m.createSessionDeadlines, time.Until(deadline))
@@ -211,6 +219,7 @@ func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *
 }
 
 func (m *workflowRuntimeAgentManagerStub) CreateTurn(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+	m.events = append(m.events, "create-turn")
 	m.createTurnRequests = append(m.createTurnRequests, req)
 	m.createTurnDeadlines = append(m.createTurnDeadlines, remainingDeadline(ctx))
 	callCtx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
@@ -825,6 +834,218 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	}
 	if gotCredentialMode != "" {
 		t.Fatalf("delivery credential mode without override = %q, want empty", gotCredentialMode)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+
+	var gotSessionReadyParams map[string]any
+	var gotSessionReadyIdempotencyKey string
+	var gotSessionReadyCredentialMode core.ConnectionMode
+	var gotOutputParams map[string]any
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			if providerName != "notification" {
+				t.Fatalf("delivery provider = %q, want notification", providerName)
+			}
+			switch operation {
+			case "started":
+				agentManager.events = append(agentManager.events, "session-ready-delivery")
+				gotSessionReadyParams = maps.Clone(params)
+				gotSessionReadyIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
+				gotSessionReadyCredentialMode = invocation.CredentialModeOverrideFromContext(ctx)
+			case "reply":
+				agentManager.events = append(agentManager.events, "output-delivery")
+				gotOutputParams = maps.Clone(params)
+			default:
+				t.Fatalf("delivery operation = %q", operation)
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-session-ready-123",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Model:        "deep",
+			Prompt:       "Summarize the request",
+			SessionReadyDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "started",
+					Input:      map[string]any{"format": "plain"},
+				},
+				CredentialMode: core.ConnectionModeNone,
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
+					{InputField: "provider_name", Value: coreworkflow.OutputValueSource{AgentSession: "provider_name"}},
+					{InputField: "model", Value: coreworkflow.OutputValueSource{AgentSession: "model"}},
+					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
+				},
+			},
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "reply",
+				},
+				CredentialMode: core.ConnectionModeNone,
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
+				},
+			},
+		}},
+		Signals: []coreworkflow.Signal{
+			{
+				ID:             "signal-1",
+				IdempotencyKey: "evt-1",
+				Payload:        map[string]any{"reply_ref": "older-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "message"}},
+			},
+			{
+				ID:             "signal-2",
+				IdempotencyKey: "evt-2",
+				Payload:        map[string]any{"reply_ref": "newer-ref"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "app_mention"}},
+			},
+		},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "notification",
+			Operations: []string{"started", "reply"},
+		}}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !slices.Equal(agentManager.events, []string{"create-session", "session-ready-delivery", "create-turn", "output-delivery"}) {
+		t.Fatalf("events = %#v", agentManager.events)
+	}
+	if gotSessionReadyParams["format"] != "plain" ||
+		gotSessionReadyParams["reply_ref"] != "newer-ref" ||
+		gotSessionReadyParams["session_id"] != "session-1" ||
+		gotSessionReadyParams["provider_name"] != "managed" ||
+		gotSessionReadyParams["model"] != "deep" ||
+		gotSessionReadyParams["event_type"] != "app_mention" {
+		t.Fatalf("session ready params = %#v", gotSessionReadyParams)
+	}
+	if !strings.HasPrefix(gotSessionReadyIdempotencyKey, "workflow:temporal:run-agent-session-ready-123:session-ready:signal-batch-") {
+		t.Fatalf("session ready idempotency key = %q", gotSessionReadyIdempotencyKey)
+	}
+	if gotSessionReadyCredentialMode != core.ConnectionModeNone {
+		t.Fatalf("session ready credential mode = %q, want %q", gotSessionReadyCredentialMode, core.ConnectionModeNone)
+	}
+	if gotOutputParams["text"] != "turn completed" || gotOutputParams["session_id"] != "session-1" {
+		t.Fatalf("output delivery params = %#v", gotOutputParams)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetSessionReadyDeliveryFailureIsBestEffort(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(_ context.Context, _ *principal.Principal, _, _, operation string, _ map[string]any) (*core.OperationResult, error) {
+			switch operation {
+			case "started":
+				agentManager.events = append(agentManager.events, "session-ready-delivery")
+				return &core.OperationResult{Status: http.StatusPreconditionFailed, Body: `{"error":"missing base url"}`}, nil
+			case "reply":
+				agentManager.events = append(agentManager.events, "output-delivery")
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
+			default:
+				t.Fatalf("delivery operation = %q", operation)
+				return nil, nil
+			}
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-session-ready-failure",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			SessionReadyDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "started"},
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
+				},
+			},
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				},
+			},
+		}},
+	}
+	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if !slices.Equal(agentManager.events, []string{"create-session", "session-ready-delivery", "create-turn", "output-delivery"}) {
+		t.Fatalf("events = %#v", agentManager.events)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetFinalOutputDeliveryFailureFailsRun(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(_ context.Context, _ *principal.Principal, _, _, operation string, _ map[string]any) (*core.OperationResult, error) {
+			if operation != "reply" {
+				t.Fatalf("delivery operation = %q", operation)
+			}
+			return &core.OperationResult{Status: http.StatusBadGateway, Body: `{"error":"downstream"}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-output-failure",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Summarize the request",
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				},
+			},
+		}},
+	}
+	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
+
+	_, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err == nil || !strings.Contains(err.Error(), "workflow agent output_delivery returned status 502") {
+		t.Fatalf("Invoke error = %v, want output delivery failure", err)
 	}
 }
 

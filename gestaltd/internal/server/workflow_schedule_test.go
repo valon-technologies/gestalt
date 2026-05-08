@@ -583,23 +583,28 @@ type workflowAgentTargetResponse struct {
 		Plugin    string `json:"plugin"`
 		Operation string `json:"operation"`
 	} `json:"toolRefs"`
-	OutputDelivery *struct {
-		Target struct {
-			Name       string         `json:"name"`
-			Operation  string         `json:"operation"`
-			Connection string         `json:"connection"`
-			Instance   string         `json:"instance"`
-			Input      map[string]any `json:"input"`
-		} `json:"target"`
-		CredentialMode string `json:"credentialMode"`
-		InputBindings  []struct {
-			InputField string `json:"inputField"`
-			Value      struct {
-				AgentOutput   string `json:"agentOutput"`
-				SignalPayload string `json:"signalPayload"`
-			} `json:"value"`
-		} `json:"inputBindings"`
-	} `json:"outputDelivery"`
+	OutputDelivery       *workflowOutputDeliveryResponse `json:"outputDelivery"`
+	SessionReadyDelivery *workflowOutputDeliveryResponse `json:"sessionReadyDelivery"`
+}
+
+type workflowOutputDeliveryResponse struct {
+	Target struct {
+		Name       string         `json:"name"`
+		Operation  string         `json:"operation"`
+		Connection string         `json:"connection"`
+		Instance   string         `json:"instance"`
+		Input      map[string]any `json:"input"`
+	} `json:"target"`
+	CredentialMode string `json:"credentialMode"`
+	InputBindings  []struct {
+		InputField string `json:"inputField"`
+		Value      struct {
+			AgentOutput    string `json:"agentOutput"`
+			SignalPayload  string `json:"signalPayload"`
+			SignalMetadata string `json:"signalMetadata"`
+			AgentSession   string `json:"agentSession"`
+		} `json:"value"`
+	} `json:"inputBindings"`
 }
 
 func requireWorkflowPluginTarget(t *testing.T, target workflowTargetResponse) *workflowPluginTargetResponse {
@@ -866,7 +871,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]}}}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"sessionReadyDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"session_id","value":{"agentSession":"id"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]},"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"plain"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"ref","value":{"signalPayload":"reply_ref"}}]}}}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -892,6 +897,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if created.Target.Agent.OutputDelivery == nil || created.Target.Agent.OutputDelivery.Target.Name != "roadmap" || created.Target.Agent.OutputDelivery.Target.Operation != "sync" {
 		t.Fatalf("created agent output delivery = %#v", created.Target.Agent.OutputDelivery)
 	}
+	if created.Target.Agent.SessionReadyDelivery == nil || created.Target.Agent.SessionReadyDelivery.Target.Name != "roadmap" || created.Target.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession != "id" {
+		t.Fatalf("created agent session ready delivery = %#v", created.Target.Agent.SessionReadyDelivery)
+	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
@@ -901,6 +909,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if storedTarget.Agent.OutputDelivery == nil || storedTarget.Agent.OutputDelivery.Target.PluginName != "roadmap" || len(storedTarget.Agent.OutputDelivery.InputBindings) != 2 {
 		t.Fatalf("stored agent output delivery = %#v", storedTarget.Agent.OutputDelivery)
+	}
+	if storedTarget.Agent.SessionReadyDelivery == nil || storedTarget.Agent.SessionReadyDelivery.Target.PluginName != "roadmap" || len(storedTarget.Agent.SessionReadyDelivery.InputBindings) != 2 {
+		t.Fatalf("stored agent session ready delivery = %#v", storedTarget.Agent.SessionReadyDelivery)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {
 		t.Fatal("expected execution ref")
@@ -935,6 +946,9 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if listed[0].Target.Agent.OutputDelivery == nil || listed[0].Target.Agent.OutputDelivery.Target.Operation != "sync" {
 		t.Fatalf("listed agent output delivery = %#v", listed[0].Target.Agent.OutputDelivery)
+	}
+	if listed[0].Target.Agent.SessionReadyDelivery == nil || listed[0].Target.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession != "id" {
+		t.Fatalf("listed agent session ready delivery = %#v", listed[0].Target.Agent.SessionReadyDelivery)
 	}
 }
 
@@ -1306,6 +1320,10 @@ func TestCreateWorkflowScheduleRejectsPublicTargetCredentialMode(t *testing.T) {
 		name: "output delivery target",
 		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"prompt":"summarize","outputDelivery":{"target":{"name":"roadmap","operation":"sync","credentialMode":"none"}}}}}`,
 		want: "workflow target agent.outputDelivery.target.credentialMode is not supported",
+	}, {
+		name: "session ready delivery target",
+		body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"prompt":"summarize","sessionReadyDelivery":{"target":{"name":"roadmap","operation":"sync","credentialMode":"none"}}}}}`,
+		want: "workflow target agent.sessionReadyDelivery.target.credentialMode is not supported",
 	}}
 	for _, tc := range cases {
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", bytes.NewBufferString(tc.body))
@@ -2473,6 +2491,117 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 	if finalRef.RevokedAt == nil || finalRef.RevokedAt.IsZero() {
 		t.Fatalf("expected final execution ref to be revoked, got %#v", finalRef)
+	}
+}
+
+func TestWorkflowEventTriggerAgentTargetSessionReadyDeliveryCreateAndList(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedUser(t, services, "ada-event-agent@example.test")
+	provider := newMemoryWorkflowProvider()
+	agentProvider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Providers: cfg.Providers,
+			Agent:     cfg.Agent,
+			Invoker:   cfg.Invoker,
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/event-triggers/",
+		bytes.NewBufferString(`{"provider":"basic","match":{"type":"slack.message.created","source":"slack","subject":"thread"},"target":{"agent":{"provider":"managed","model":"deep","prompt":"Reply to the Slack thread","sessionReadyDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"session-link"}},"inputBindings":[{"inputField":"session_id","value":{"agentSession":"id"}},{"inputField":"thread_ts","value":{"signalMetadata":"slack_thread_ts"}}]},"outputDelivery":{"target":{"name":"roadmap","operation":"sync","input":{"format":"final"}},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}},{"inputField":"session_id","value":{"agentSession":"id"}}]}}}}`),
+	)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var created workflowEventTriggerResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Target.Agent == nil || created.Target.Agent.ProviderName != "managed" || created.Target.Agent.Model != "deep" {
+		t.Fatalf("created agent target = %#v", created.Target.Agent)
+	}
+	if created.Target.Agent.SessionReadyDelivery == nil || created.Target.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession != "id" {
+		t.Fatalf("created session ready delivery = %#v", created.Target.Agent.SessionReadyDelivery)
+	}
+	if created.Target.Agent.SessionReadyDelivery.InputBindings[1].Value.SignalMetadata != "slack_thread_ts" {
+		t.Fatalf("created session ready metadata binding = %#v", created.Target.Agent.SessionReadyDelivery.InputBindings[1])
+	}
+	if created.Target.Agent.OutputDelivery == nil || created.Target.Agent.OutputDelivery.InputBindings[1].Value.AgentSession != "id" {
+		t.Fatalf("created output delivery = %#v", created.Target.Agent.OutputDelivery)
+	}
+	if len(provider.upsertTriggerReqs) != 1 {
+		t.Fatalf("upsert trigger requests = %d, want 1", len(provider.upsertTriggerReqs))
+	}
+	storedTarget := provider.upsertTriggerReqs[0].Target
+	if storedTarget.Agent == nil || storedTarget.Agent.SessionReadyDelivery == nil || len(storedTarget.Agent.SessionReadyDelivery.InputBindings) != 2 {
+		t.Fatalf("stored agent target = %#v", storedTarget.Agent)
+	}
+	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertTriggerReqs[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if !coreworkflow.TargetsEqual(ref.Target, storedTarget) {
+		t.Fatalf("execution ref target = %#v, want %#v", ref.Target, storedTarget)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+	var listed []workflowEventTriggerResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Target.Agent == nil || listed[0].Target.Agent.SessionReadyDelivery == nil {
+		t.Fatalf("listed triggers = %#v", listed)
+	}
+	if listed[0].Target.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession != "id" {
+		t.Fatalf("listed session ready delivery = %#v", listed[0].Target.Agent.SessionReadyDelivery)
 	}
 }
 

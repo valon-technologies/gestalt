@@ -3004,6 +3004,79 @@ server:
 				want: `workflows.schedules.nightly.target.agent.outputDelivery.target.credentialMode is not supported`,
 			},
 			{
+				name: "agent session ready delivery rejects nested target credential mode",
+				yaml: `
+plugins:
+  slack:
+    source:
+      path: ./providers/slack/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          prompt: "reply"
+          sessionReadyDelivery:
+            target:
+              name: slack
+              operation: events.replySessionStarted
+              credentialMode: none
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.target.credentialMode is not supported`,
+			},
+			{
+				name: "agent session ready delivery rejects agent output source",
+				yaml: `
+plugins:
+  slack:
+    source:
+      path: ./providers/slack/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          prompt: "reply"
+          sessionReadyDelivery:
+            target:
+              name: slack
+              operation: events.replySessionStarted
+            inputBindings:
+              - inputField: text
+                value:
+                  agentOutput: text
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.inputBindings[0].value.agentOutput is not available before the agent turn starts`,
+			},
+			{
 				name: "event trigger agent missing provider",
 				yaml: `
 workflows:

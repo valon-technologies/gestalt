@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,18 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 				{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
 			},
 		},
+		SessionReadyDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "started",
+				Input:      map[string]any{"format": "plain"},
+			},
+			CredentialMode: core.ConnectionModeNone,
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
+				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+			},
+		},
 	}})
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
@@ -119,6 +132,12 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if target.GetAgent().GetOutputDelivery().GetCredentialMode() != string(core.ConnectionModeNone) {
 		t.Fatalf("output delivery credential mode = %q", target.GetAgent().GetOutputDelivery().GetCredentialMode())
+	}
+	if target.GetAgent().GetSessionReadyDelivery().GetTarget().GetPluginName() != "notification" {
+		t.Fatalf("session ready delivery = %#v", target.GetAgent().GetSessionReadyDelivery())
+	}
+	if target.GetAgent().GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession() != "id" {
+		t.Fatalf("session ready delivery agent session source = %#v", target.GetAgent().GetSessionReadyDelivery().GetInputBindings())
 	}
 	if got := target.GetAgent().GetOutputDelivery().GetTarget().GetCredentialMode(); got != "" {
 		t.Fatalf("output delivery nested target credential mode = %q, want empty", got)
@@ -141,6 +160,36 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if got := roundTrip.Agent.OutputDelivery.InputBindings[2].Value.Literal; got != "workflow" {
 		t.Fatalf("round trip literal = %#v", got)
+	}
+	if roundTrip.Agent.SessionReadyDelivery == nil {
+		t.Fatalf("round trip session ready delivery is nil")
+	}
+	if got := roundTrip.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession; got != "id" {
+		t.Fatalf("round trip agent session source = %q, want id", got)
+	}
+}
+
+func TestWorkflowAgentTargetSessionReadyDeliveryProtoErrorsUseFieldName(t *testing.T) {
+	t.Parallel()
+
+	_, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		ProviderName: "managed",
+		Prompt:       "reply",
+		SessionReadyDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "started",
+			},
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "session_id", Value: coreworkflow.OutputValueSource{}},
+			},
+		},
+	}})
+	if err == nil {
+		t.Fatal("workflowTargetToProto error is nil")
+	}
+	if !strings.Contains(err.Error(), "workflow agent session_ready_delivery.input_bindings[0].value") {
+		t.Fatalf("workflowTargetToProto error = %v, want session_ready_delivery field name", err)
 	}
 }
 

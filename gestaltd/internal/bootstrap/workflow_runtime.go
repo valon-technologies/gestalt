@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"sort"
@@ -386,6 +387,14 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	if err != nil {
 		return nil, err
 	}
+	if agentTarget.SessionReadyDelivery != nil {
+		if err := r.deliverAgentSessionReady(ctx, req, invoker, principalValue, agentTarget, session); err != nil {
+			slog.WarnContext(ctx, "workflow agent session-ready delivery failed",
+				"provider", req.ProviderName,
+				"run_id", req.RunID,
+				"error", err)
+		}
+	}
 	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
 	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
 		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
@@ -417,7 +426,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	switch turn.Status {
 	case coreagent.ExecutionStatusSucceeded:
 		if agentTarget.OutputDelivery != nil {
-			if err := r.deliverAgentOutput(ctx, req, invoker, principalValue, agentTarget, turn); err != nil {
+			if err := r.deliverAgentOutput(ctx, req, invoker, principalValue, agentTarget, session, turn); err != nil {
 				return nil, err
 			}
 		}
@@ -432,11 +441,18 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 }
 
-func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, turn *coreagent.Turn) error {
+func (r *workflowRuntime) deliverAgentSessionReady(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, session *coreagent.Session) error {
+	return r.deliverWorkflowAgentDelivery(ctx, req, invoker, p, agentTarget.SessionReadyDelivery, session, nil, "session_ready_delivery", workflowAgentSessionReadyDeliveryIdempotencyKey(req))
+}
+
+func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, turn *coreagent.Turn) error {
+	return r.deliverWorkflowAgentDelivery(ctx, req, invoker, p, agentTarget.OutputDelivery, session, turn, "output_delivery", workflowAgentOutputDeliveryIdempotencyKey(req))
+}
+
+func (r *workflowRuntime) deliverWorkflowAgentDelivery(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, delivery *coreworkflow.OutputDelivery, session *coreagent.Session, turn *coreagent.Turn, fieldName, idempotencyKey string) error {
 	if invoker == nil {
-		return fmt.Errorf("%w: workflow agent output delivery requires an invoker", invocation.ErrInternal)
+		return fmt.Errorf("%w: workflow agent %s requires an invoker", invocation.ErrInternal, fieldName)
 	}
-	delivery := agentTarget.OutputDelivery
 	if delivery == nil {
 		return nil
 	}
@@ -444,7 +460,7 @@ func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkfl
 	pluginName := strings.TrimSpace(target.PluginName)
 	operation := strings.TrimSpace(target.Operation)
 	if pluginName == "" || operation == "" {
-		return fmt.Errorf("%w: workflow agent output_delivery target is incomplete", invocation.ErrInvalidInvocation)
+		return fmt.Errorf("%w: workflow agent %s target is incomplete", invocation.ErrInvalidInvocation, fieldName)
 	}
 	params := maps.Clone(target.Input)
 	if params == nil {
@@ -455,14 +471,14 @@ func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkfl
 		binding := delivery.InputBindings[i]
 		inputField := strings.TrimSpace(binding.InputField)
 		if inputField == "" {
-			return fmt.Errorf("%w: workflow agent output_delivery input binding field is required", invocation.ErrInvalidInvocation)
+			return fmt.Errorf("%w: workflow agent %s input binding field is required", invocation.ErrInvalidInvocation, fieldName)
 		}
-		value, ok, err := workflowOutputBindingValue(turn, signal, binding.Value)
+		value, ok, err := workflowOutputBindingValue(turn, signal, session, binding.Value)
 		if err != nil {
-			return fmt.Errorf("workflow agent output_delivery.%s: %w", inputField, err)
+			return fmt.Errorf("workflow agent %s.%s: %w", fieldName, inputField, err)
 		}
 		if !ok {
-			return fmt.Errorf("%w: workflow agent output_delivery.%s source did not resolve", invocation.ErrInvalidInvocation, inputField)
+			return fmt.Errorf("%w: workflow agent %s.%s source did not resolve", invocation.ErrInvalidInvocation, fieldName, inputField)
 		}
 		params[inputField] = value
 	}
@@ -475,7 +491,7 @@ func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkfl
 	if strings.TrimSpace(string(delivery.CredentialMode)) != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, core.NormalizeConnectionMode(delivery.CredentialMode))
 	}
-	if idempotencyKey := workflowAgentOutputDeliveryIdempotencyKey(req); idempotencyKey != "" {
+	if idempotencyKey != "" {
 		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
 	}
 	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(target.Instance), operation, params)
@@ -483,7 +499,7 @@ func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkfl
 		return err
 	}
 	if result != nil && result.Status >= http.StatusBadRequest {
-		return fmt.Errorf("workflow agent output delivery returned status %d", result.Status)
+		return fmt.Errorf("workflow agent %s returned status %d", fieldName, result.Status)
 	}
 	return nil
 }
@@ -495,7 +511,7 @@ func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.S
 	return &signals[len(signals)-1]
 }
 
-func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signal, source coreworkflow.OutputValueSource) (any, bool, error) {
+func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signal, session *coreagent.Session, source coreworkflow.OutputValueSource) (any, bool, error) {
 	switch {
 	case strings.TrimSpace(source.AgentOutput) != "":
 		return workflowAgentOutputValue(turn, source.AgentOutput)
@@ -509,6 +525,8 @@ func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signa
 			return nil, false, nil
 		}
 		return workflowMapPathValue(signal.Metadata, source.SignalMetadata)
+	case strings.TrimSpace(source.AgentSession) != "":
+		return workflowAgentSessionValue(session, source.AgentSession)
 	case source.Literal != nil:
 		return source.Literal, true, nil
 	default:
@@ -536,6 +554,22 @@ func workflowAgentOutputValue(turn *coreagent.Turn, path string) (any, bool, err
 		}
 	}
 	return nil, false, fmt.Errorf("%w: unsupported agent output source %q", invocation.ErrInvalidInvocation, path)
+}
+
+func workflowAgentSessionValue(session *coreagent.Session, path string) (any, bool, error) {
+	path = strings.TrimSpace(path)
+	if session == nil {
+		return nil, false, nil
+	}
+	switch path {
+	case "id", "session_id", "sessionId":
+		return session.ID, true, nil
+	case "provider_name", "providerName":
+		return session.ProviderName, true, nil
+	case "model":
+		return session.Model, true, nil
+	}
+	return nil, false, fmt.Errorf("%w: unsupported agent session source %q", invocation.ErrInvalidInvocation, path)
 }
 
 func workflowMapPathValue(values map[string]any, path string) (any, bool, error) {
@@ -591,6 +625,14 @@ func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) st
 		return workflowAgentIdempotencyKey(req, "turn")
 	}
 	return workflowAgentIdempotencyKey(req, "turn:"+batchID)
+}
+
+func workflowAgentSessionReadyDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
+	batchID := workflowSignalBatchID(req.Signals)
+	if batchID == "" {
+		return workflowAgentIdempotencyKey(req, "session-ready")
+	}
+	return workflowAgentIdempotencyKey(req, "session-ready:"+batchID)
 }
 
 func workflowAgentOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
