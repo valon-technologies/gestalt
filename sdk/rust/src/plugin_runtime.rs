@@ -6,12 +6,11 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use crate::api::RuntimeMetadata;
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{self as pb};
+use crate::rpc_status::rpc_status;
 
 #[async_trait]
 /// Provider trait for serving hosted plugin-runtime sessions.
-pub trait PluginRuntimeProvider:
-    pb::plugin_runtime_provider_server::PluginRuntimeProvider + Send + Sync + 'static
-{
+pub trait PluginRuntimeProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -45,6 +44,83 @@ pub trait PluginRuntimeProvider:
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }
+
+    /// Returns the runtime capabilities supported by this provider.
+    async fn get_support(&self, _request: ()) -> ProviderResult<pb::PluginRuntimeSupport> {
+        Err(crate::Error::unimplemented(
+            "runtime get support is not implemented",
+        ))
+    }
+
+    /// Starts a hosted plugin-runtime session.
+    async fn start_session(
+        &self,
+        _request: pb::StartPluginRuntimeSessionRequest,
+    ) -> ProviderResult<pb::PluginRuntimeSession> {
+        Err(crate::Error::unimplemented(
+            "runtime start session is not implemented",
+        ))
+    }
+
+    /// Returns one hosted plugin-runtime session by ID.
+    async fn get_session(
+        &self,
+        _request: pb::GetPluginRuntimeSessionRequest,
+    ) -> ProviderResult<pb::PluginRuntimeSession> {
+        Err(crate::Error::unimplemented(
+            "runtime get session is not implemented",
+        ))
+    }
+
+    /// Lists hosted plugin-runtime sessions.
+    async fn list_sessions(
+        &self,
+        _request: pb::ListPluginRuntimeSessionsRequest,
+    ) -> ProviderResult<pb::ListPluginRuntimeSessionsResponse> {
+        Err(crate::Error::unimplemented(
+            "runtime list sessions is not implemented",
+        ))
+    }
+
+    /// Stops a hosted plugin-runtime session.
+    async fn stop_session(
+        &self,
+        _request: pb::StopPluginRuntimeSessionRequest,
+    ) -> ProviderResult<()> {
+        Err(crate::Error::unimplemented(
+            "runtime stop session is not implemented",
+        ))
+    }
+
+    /// Prepares an agent workspace for use by a hosted plugin.
+    async fn prepare_workspace(
+        &self,
+        _request: pb::PreparePluginRuntimeWorkspaceRequest,
+    ) -> ProviderResult<pb::PreparePluginRuntimeWorkspaceResponse> {
+        Err(crate::Error::unimplemented(
+            "runtime prepare workspace is not implemented",
+        ))
+    }
+
+    /// Removes a previously prepared agent workspace.
+    async fn remove_workspace(
+        &self,
+        _request: pb::RemovePluginRuntimeWorkspaceRequest,
+    ) -> ProviderResult<()> {
+        Err(crate::Error::unimplemented(
+            "runtime remove workspace is not implemented",
+        ))
+    }
+
+    /// Starts one hosted plugin process inside a runtime session.
+    async fn start_plugin(
+        &self,
+        _request: pb::StartHostedPluginRequest,
+    ) -> ProviderResult<pb::HostedPlugin> {
+        Err(crate::Error::unimplemented(
+            "runtime start plugin is not implemented",
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -67,55 +143,93 @@ where
         &self,
         request: GrpcRequest<()>,
     ) -> std::result::Result<GrpcResponse<pb::PluginRuntimeSupport>, Status> {
-        self.provider.get_support(request).await
+        let support = self
+            .provider
+            .get_support(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime get support", error))?;
+        Ok(GrpcResponse::new(support))
     }
 
     async fn start_session(
         &self,
         request: GrpcRequest<pb::StartPluginRuntimeSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::PluginRuntimeSession>, Status> {
-        self.provider.start_session(request).await
+        let session = self
+            .provider
+            .start_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime start session", error))?;
+        Ok(GrpcResponse::new(session))
     }
 
     async fn get_session(
         &self,
         request: GrpcRequest<pb::GetPluginRuntimeSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::PluginRuntimeSession>, Status> {
-        self.provider.get_session(request).await
+        let session = self
+            .provider
+            .get_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime get session", error))?;
+        Ok(GrpcResponse::new(session))
     }
 
     async fn list_sessions(
         &self,
         request: GrpcRequest<pb::ListPluginRuntimeSessionsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListPluginRuntimeSessionsResponse>, Status> {
-        self.provider.list_sessions(request).await
+        let response = self
+            .provider
+            .list_sessions(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime list sessions", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn stop_session(
         &self,
         request: GrpcRequest<pb::StopPluginRuntimeSessionRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
-        self.provider.stop_session(request).await
+        self.provider
+            .stop_session(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime stop session", error))?;
+        Ok(GrpcResponse::new(()))
     }
 
     async fn prepare_workspace(
         &self,
         request: GrpcRequest<pb::PreparePluginRuntimeWorkspaceRequest>,
     ) -> std::result::Result<GrpcResponse<pb::PreparePluginRuntimeWorkspaceResponse>, Status> {
-        self.provider.prepare_workspace(request).await
+        let response = self
+            .provider
+            .prepare_workspace(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime prepare workspace", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn remove_workspace(
         &self,
         request: GrpcRequest<pb::RemovePluginRuntimeWorkspaceRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
-        self.provider.remove_workspace(request).await
+        self.provider
+            .remove_workspace(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime remove workspace", error))?;
+        Ok(GrpcResponse::new(()))
     }
 
     async fn start_plugin(
         &self,
         request: GrpcRequest<pb::StartHostedPluginRequest>,
     ) -> std::result::Result<GrpcResponse<pb::HostedPlugin>, Status> {
-        self.provider.start_plugin(request).await
+        let plugin = self
+            .provider
+            .start_plugin(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("runtime start plugin", error))?;
+        Ok(GrpcResponse::new(plugin))
     }
 }

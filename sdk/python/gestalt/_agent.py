@@ -64,6 +64,24 @@ def AgentMessagePart(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentMessagePart(*args, **kwargs)
 
 
+def AgentMessagePartToolCall(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent tool-call message part payload."""
+
+    return pb.AgentMessagePartToolCall(*args, **kwargs)
+
+
+def AgentMessagePartToolResult(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent tool-result message part payload."""
+
+    return pb.AgentMessagePartToolResult(*args, **kwargs)
+
+
+def AgentMessagePartImageRef(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent image-reference message part payload."""
+
+    return pb.AgentMessagePartImageRef(*args, **kwargs)
+
+
 def AgentActor(*args: Any, **kwargs: Any) -> Any:
     """Create an agent actor protocol value."""
 
@@ -94,6 +112,24 @@ def AgentSession(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentSession(*args, **kwargs)
 
 
+def AgentSessionStartConfig(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent session start config."""
+
+    return pb.AgentSessionStartConfig(*args, **kwargs)
+
+
+def AgentSessionStartHook(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent session start hook."""
+
+    return pb.AgentSessionStartHook(*args, **kwargs)
+
+
+def AgentSessionStartHookOutput(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent session start hook output."""
+
+    return pb.AgentSessionStartHookOutput(*args, **kwargs)
+
+
 def AgentTurn(*args: Any, **kwargs: Any) -> Any:
     """Create an agent turn protocol value."""
 
@@ -104,6 +140,12 @@ def AgentTurnEvent(*args: Any, **kwargs: Any) -> Any:
     """Create an agent turn event protocol value."""
 
     return pb.AgentTurnEvent(*args, **kwargs)
+
+
+def AgentTurnDisplay(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent turn display payload."""
+
+    return pb.AgentTurnDisplay(*args, **kwargs)
 
 
 def AgentInteraction(*args: Any, **kwargs: Any) -> Any:
@@ -190,6 +232,18 @@ def ListAgentProviderInteractionsResponse(*args: Any, **kwargs: Any) -> Any:
     return pb.ListAgentProviderInteractionsResponse(*args, **kwargs)
 
 
+def GetAgentProviderInteractionRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider get-interaction request."""
+
+    return pb.GetAgentProviderInteractionRequest(*args, **kwargs)
+
+
+def ListAgentProviderInteractionsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent-provider list-interactions request."""
+
+    return pb.ListAgentProviderInteractionsRequest(*args, **kwargs)
+
+
 def ResolveAgentProviderInteractionRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an agent-provider resolve-interaction request."""
 
@@ -224,6 +278,18 @@ def ListAgentToolsResponse(*args: Any, **kwargs: Any) -> Any:
     """Create an agent host ListTools response."""
 
     return pb.ListAgentToolsResponse(*args, **kwargs)
+
+
+def ListedAgentTool(*args: Any, **kwargs: Any) -> Any:
+    """Create an agent host listed-tool value."""
+
+    return pb.ListedAgentTool(*args, **kwargs)
+
+
+def ResolvedAgentTool(*args: Any, **kwargs: Any) -> Any:
+    """Create a resolved agent tool value."""
+
+    return pb.ResolvedAgentTool(*args, **kwargs)
 
 
 def ResolveAgentConnectionRequest(*args: Any, **kwargs: Any) -> Any:

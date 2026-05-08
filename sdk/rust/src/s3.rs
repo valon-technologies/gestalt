@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
 use serde::de::DeserializeOwned;
 use tokio_stream::iter;
+use tokio_stream::{Stream, StreamExt};
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
+use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 use crate::api::RuntimeMetadata;
@@ -18,9 +21,34 @@ use crate::generated::v1::{
     self as pb, s3_client::S3Client as ProtoS3Client,
     s3_object_access_client::S3ObjectAccessClient as ProtoS3ObjectAccessClient,
 };
+use crate::rpc_status::rpc_status;
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
+/// Server-streamed object read chunks returned by [`S3Provider::read_object`].
+pub type S3ReadObjectStream =
+    Pin<Box<dyn Stream<Item = ProviderResult<pb::ReadObjectChunk>> + Send + 'static>>;
+type S3RpcReadObjectStream =
+    Pin<Box<dyn Stream<Item = std::result::Result<pb::ReadObjectChunk, Status>> + Send + 'static>>;
+
+/// Client-streamed object write chunks passed to [`S3Provider::write_object`].
+pub struct S3WriteObjectStream {
+    inner: tonic::Streaming<pb::WriteObjectRequest>,
+}
+
+impl S3WriteObjectStream {
+    pub(crate) fn new(inner: tonic::Streaming<pb::WriteObjectRequest>) -> Self {
+        Self { inner }
+    }
+
+    /// Reads the next write request frame from the upload stream.
+    pub async fn message(&mut self) -> ProviderResult<Option<pb::WriteObjectRequest>> {
+        self.inner
+            .message()
+            .await
+            .map_err(|error| crate::Error::new(error.to_string()))
+    }
+}
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
@@ -228,7 +256,7 @@ pub type ObjectAccessURL = PresignResult;
 
 #[async_trait]
 /// Lifecycle and RPC contract for S3-compatible providers.
-pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
+pub trait S3Provider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -262,62 +290,175 @@ pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }
+
+    /// Returns object metadata without reading the object body.
+    async fn head_object(
+        &self,
+        _request: pb::HeadObjectRequest,
+    ) -> ProviderResult<pb::HeadObjectResponse> {
+        Err(crate::Error::unimplemented(
+            "s3 head object is not implemented",
+        ))
+    }
+
+    /// Streams object metadata followed by object data chunks.
+    async fn read_object(
+        &self,
+        _request: pb::ReadObjectRequest,
+    ) -> ProviderResult<S3ReadObjectStream> {
+        Err(crate::Error::unimplemented(
+            "s3 read object is not implemented",
+        ))
+    }
+
+    /// Consumes a streamed upload and returns metadata for the written object.
+    async fn write_object(
+        &self,
+        _request: S3WriteObjectStream,
+    ) -> ProviderResult<pb::WriteObjectResponse> {
+        Err(crate::Error::unimplemented(
+            "s3 write object is not implemented",
+        ))
+    }
+
+    /// Deletes one object or object version.
+    async fn delete_object(&self, _request: pb::DeleteObjectRequest) -> ProviderResult<()> {
+        Err(crate::Error::unimplemented(
+            "s3 delete object is not implemented",
+        ))
+    }
+
+    /// Lists objects in a bucket using S3-style pagination and delimiters.
+    async fn list_objects(
+        &self,
+        _request: pb::ListObjectsRequest,
+    ) -> ProviderResult<pb::ListObjectsResponse> {
+        Err(crate::Error::unimplemented(
+            "s3 list objects is not implemented",
+        ))
+    }
+
+    /// Copies one object to another object reference.
+    async fn copy_object(
+        &self,
+        _request: pb::CopyObjectRequest,
+    ) -> ProviderResult<pb::CopyObjectResponse> {
+        Err(crate::Error::unimplemented(
+            "s3 copy object is not implemented",
+        ))
+    }
+
+    /// Creates a presigned URL for direct object access.
+    async fn presign_object(
+        &self,
+        _request: pb::PresignObjectRequest,
+    ) -> ProviderResult<pb::PresignObjectResponse> {
+        Err(crate::Error::unimplemented(
+            "s3 presign object is not implemented",
+        ))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct S3RpcServer<P> {
+    provider: Arc<P>,
+}
+
+impl<P> S3RpcServer<P> {
+    pub(crate) fn new(provider: Arc<P>) -> Self {
+        Self { provider }
+    }
 }
 
 #[async_trait]
-impl<T> pb::s3_server::S3 for Arc<T>
+impl<P> pb::s3_server::S3 for S3RpcServer<P>
 where
-    T: S3Provider,
+    P: S3Provider,
 {
-    type ReadObjectStream = <T as pb::s3_server::S3>::ReadObjectStream;
+    type ReadObjectStream = S3RpcReadObjectStream;
 
     async fn head_object(
         &self,
-        request: tonic::Request<pb::HeadObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::HeadObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::head_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::HeadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::HeadObjectResponse>, Status> {
+        let response = self
+            .provider
+            .head_object(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 head object", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn read_object(
         &self,
-        request: tonic::Request<pb::ReadObjectRequest>,
-    ) -> std::result::Result<tonic::Response<Self::ReadObjectStream>, tonic::Status> {
-        <T as pb::s3_server::S3>::read_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::ReadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<Self::ReadObjectStream>, Status> {
+        let stream = self
+            .provider
+            .read_object(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 read object", error))?
+            .map(|chunk| chunk.map_err(|error| rpc_status("s3 read object stream", error)));
+        Ok(GrpcResponse::new(Box::pin(stream)))
     }
 
     async fn write_object(
         &self,
-        request: tonic::Request<tonic::Streaming<pb::WriteObjectRequest>>,
-    ) -> std::result::Result<tonic::Response<pb::WriteObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::write_object(self.as_ref(), request).await
+        request: GrpcRequest<tonic::Streaming<pb::WriteObjectRequest>>,
+    ) -> std::result::Result<GrpcResponse<pb::WriteObjectResponse>, Status> {
+        let response = self
+            .provider
+            .write_object(S3WriteObjectStream::new(request.into_inner()))
+            .await
+            .map_err(|error| rpc_status("s3 write object", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn delete_object(
         &self,
-        request: tonic::Request<pb::DeleteObjectRequest>,
-    ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-        <T as pb::s3_server::S3>::delete_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::DeleteObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        self.provider
+            .delete_object(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 delete object", error))?;
+        Ok(GrpcResponse::new(()))
     }
 
     async fn list_objects(
         &self,
-        request: tonic::Request<pb::ListObjectsRequest>,
-    ) -> std::result::Result<tonic::Response<pb::ListObjectsResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::list_objects(self.as_ref(), request).await
+        request: GrpcRequest<pb::ListObjectsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListObjectsResponse>, Status> {
+        let response = self
+            .provider
+            .list_objects(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 list objects", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn copy_object(
         &self,
-        request: tonic::Request<pb::CopyObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::CopyObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::copy_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::CopyObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::CopyObjectResponse>, Status> {
+        let response = self
+            .provider
+            .copy_object(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 copy object", error))?;
+        Ok(GrpcResponse::new(response))
     }
 
     async fn presign_object(
         &self,
-        request: tonic::Request<pb::PresignObjectRequest>,
-    ) -> std::result::Result<tonic::Response<pb::PresignObjectResponse>, tonic::Status> {
-        <T as pb::s3_server::S3>::presign_object(self.as_ref(), request).await
+        request: GrpcRequest<pb::PresignObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::PresignObjectResponse>, Status> {
+        let response = self
+            .provider
+            .presign_object(request.into_inner())
+            .await
+            .map_err(|error| rpc_status("s3 presign object", error))?;
+        Ok(GrpcResponse::new(response))
     }
 }
 
@@ -1112,5 +1253,57 @@ fn object_access_url_from_proto(
         },
         expires_at: result.expires_at,
         headers: result.headers,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tonic::Code;
+
+    use super::*;
+
+    struct EmptyS3Provider;
+
+    #[async_trait]
+    impl S3Provider for EmptyS3Provider {}
+
+    struct HiddenErrorS3Provider;
+
+    #[async_trait]
+    impl S3Provider for HiddenErrorS3Provider {
+        async fn head_object(
+            &self,
+            _request: pb::HeadObjectRequest,
+        ) -> ProviderResult<pb::HeadObjectResponse> {
+            Err(crate::Error::hidden_internal("backend detail"))
+        }
+    }
+
+    #[tokio::test]
+    async fn default_provider_methods_map_to_unimplemented_status() {
+        let server = S3RpcServer::new(Arc::new(EmptyS3Provider));
+        let status = <S3RpcServer<EmptyS3Provider> as pb::s3_server::S3>::head_object(
+            &server,
+            GrpcRequest::new(pb::HeadObjectRequest::default()),
+        )
+        .await
+        .expect_err("default head_object should be unimplemented");
+
+        assert_eq!(status.code(), Code::Unimplemented);
+        assert_eq!(status.message(), "s3 head object is not implemented");
+    }
+
+    #[tokio::test]
+    async fn provider_errors_are_sanitized_at_rpc_boundary() {
+        let server = S3RpcServer::new(Arc::new(HiddenErrorS3Provider));
+        let status = <S3RpcServer<HiddenErrorS3Provider> as pb::s3_server::S3>::head_object(
+            &server,
+            GrpcRequest::new(pb::HeadObjectRequest::default()),
+        )
+        .await
+        .expect_err("hidden provider error should fail");
+
+        assert_eq!(status.code(), Code::Unknown);
+        assert_eq!(status.message(), "s3 head object: internal error");
     }
 }

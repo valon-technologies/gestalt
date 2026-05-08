@@ -9,7 +9,6 @@ use std::time::Duration;
 use gestalt::proto::v1::authentication_provider_client::AuthenticationProviderClient;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::s3_client::S3Client;
-use gestalt::proto::v1::s3_server::S3 as ProtoS3;
 use gestalt::proto::v1::{
     BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, CopyObjectRequest,
     CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest, HeadObjectResponse,
@@ -24,7 +23,6 @@ use tokio_stream::iter as stream_iter;
 use tonic::Code;
 use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
-use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 struct TestAuthProvider {
@@ -142,49 +140,38 @@ impl gestalt::S3Provider for TestS3Provider {
     fn warnings(&self) -> Vec<String> {
         vec!["set STORAGE_BUCKET".to_string()]
     }
-}
 
-#[tonic::async_trait]
-impl ProtoS3 for TestS3Provider {
-    type ReadObjectStream =
-        tokio_stream::Iter<std::vec::IntoIter<std::result::Result<ReadObjectChunk, Status>>>;
-
-    async fn head_object(
-        &self,
-        request: GrpcRequest<HeadObjectRequest>,
-    ) -> std::result::Result<GrpcResponse<HeadObjectResponse>, Status> {
+    async fn head_object(&self, request: HeadObjectRequest) -> gestalt::Result<HeadObjectResponse> {
         let reference = request
-            .into_inner()
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
-            .ok_or_else(|| Status::not_found("object not found"))?;
-        Ok(GrpcResponse::new(HeadObjectResponse {
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
+        Ok(HeadObjectResponse {
             meta: Some(object_meta(
                 reference,
                 body.len() as i64,
                 "application/octet-stream",
             )),
-        }))
+        })
     }
 
     async fn read_object(
         &self,
-        request: GrpcRequest<ReadObjectRequest>,
-    ) -> std::result::Result<GrpcResponse<Self::ReadObjectStream>, Status> {
+        request: ReadObjectRequest,
+    ) -> gestalt::Result<gestalt::S3ReadObjectStream> {
         let reference = request
-            .into_inner()
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&key)
             .cloned()
-            .ok_or_else(|| Status::not_found("object not found"))?;
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         drop(objects);
 
         let mut messages = vec![Ok(ReadObjectChunk {
@@ -198,14 +185,13 @@ impl ProtoS3 for TestS3Provider {
             }));
         }
 
-        Ok(GrpcResponse::new(stream_iter(messages)))
+        Ok(Box::pin(stream_iter(messages)))
     }
 
     async fn write_object(
         &self,
-        request: GrpcRequest<tonic::Streaming<WriteObjectRequest>>,
-    ) -> std::result::Result<GrpcResponse<WriteObjectResponse>, Status> {
-        let mut stream = request.into_inner();
+        mut stream: gestalt::S3WriteObjectStream,
+    ) -> gestalt::Result<WriteObjectResponse> {
         let mut reference = None;
         let mut content_type = String::new();
         let mut body = Vec::new();
@@ -223,37 +209,33 @@ impl ProtoS3 for TestS3Provider {
             }
         }
 
-        let reference = reference.ok_or_else(|| Status::invalid_argument("missing open frame"))?;
+        let reference =
+            reference.ok_or_else(|| gestalt::Error::bad_request("missing open frame"))?;
         self.objects
             .lock()
             .expect("lock objects")
             .insert(object_key(&reference.bucket, &reference.key), body.clone());
 
-        Ok(GrpcResponse::new(WriteObjectResponse {
+        Ok(WriteObjectResponse {
             meta: Some(object_meta(reference, body.len() as i64, &content_type)),
-        }))
+        })
     }
 
-    async fn delete_object(
-        &self,
-        request: GrpcRequest<DeleteObjectRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
+    async fn delete_object(&self, request: DeleteObjectRequest) -> gestalt::Result<()> {
         let reference = request
-            .into_inner()
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         self.objects
             .lock()
             .expect("lock objects")
             .remove(&object_key(&reference.bucket, &reference.key));
-        Ok(GrpcResponse::new(()))
+        Ok(())
     }
 
     async fn list_objects(
         &self,
-        request: GrpcRequest<ListObjectsRequest>,
-    ) -> std::result::Result<GrpcResponse<ListObjectsResponse>, Status> {
-        let request = request.into_inner();
+        request: ListObjectsRequest,
+    ) -> gestalt::Result<ListObjectsResponse> {
         let objects = self.objects.lock().expect("lock objects");
         let mut metas = Vec::new();
         for (key, body) in objects.iter() {
@@ -276,50 +258,45 @@ impl ProtoS3 for TestS3Provider {
                 "application/octet-stream",
             ));
         }
-        Ok(GrpcResponse::new(ListObjectsResponse {
+        Ok(ListObjectsResponse {
             objects: metas,
             ..ListObjectsResponse::default()
-        }))
+        })
     }
 
-    async fn copy_object(
-        &self,
-        request: GrpcRequest<CopyObjectRequest>,
-    ) -> std::result::Result<GrpcResponse<CopyObjectResponse>, Status> {
-        let request = request.into_inner();
+    async fn copy_object(&self, request: CopyObjectRequest) -> gestalt::Result<CopyObjectResponse> {
         let source = request
             .source
-            .ok_or_else(|| Status::invalid_argument("missing source"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing source"))?;
         let destination = request
             .destination
-            .ok_or_else(|| Status::invalid_argument("missing destination"))?;
+            .ok_or_else(|| gestalt::Error::bad_request("missing destination"))?;
         let mut objects = self.objects.lock().expect("lock objects");
         let body = objects
             .get(&object_key(&source.bucket, &source.key))
             .cloned()
-            .ok_or_else(|| Status::not_found("object not found"))?;
+            .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         objects.insert(
             object_key(&destination.bucket, &destination.key),
             body.clone(),
         );
-        Ok(GrpcResponse::new(CopyObjectResponse {
+        Ok(CopyObjectResponse {
             meta: Some(object_meta(
                 destination,
                 body.len() as i64,
                 "application/octet-stream",
             )),
-        }))
+        })
     }
 
     async fn presign_object(
         &self,
-        request: GrpcRequest<PresignObjectRequest>,
-    ) -> std::result::Result<GrpcResponse<PresignObjectResponse>, Status> {
-        let request = request.into_inner();
+        request: PresignObjectRequest,
+    ) -> gestalt::Result<PresignObjectResponse> {
         let reference = request
             .r#ref
-            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
-        Ok(GrpcResponse::new(PresignObjectResponse {
+            .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
+        Ok(PresignObjectResponse {
             url: format!(
                 "https://example.invalid/{}/{}",
                 reference.bucket, reference.key
@@ -327,7 +304,7 @@ impl ProtoS3 for TestS3Provider {
             method: request.method,
             expires_at: None,
             headers: request.headers,
-        }))
+        })
     }
 }
 

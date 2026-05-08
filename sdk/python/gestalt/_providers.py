@@ -258,7 +258,13 @@ class S3Provider(PluginProvider):
 
 
 class AgentProvider(PluginProvider):
-    """Base class for agent-provider runtimes."""
+    """Base class for agent-provider runtimes.
+
+    Subclasses implement snake_case handler methods such as
+    ``create_session(request)``, ``create_turn(request)``, and
+    ``get_capabilities(request)``. The runtime also accepts the older
+    PascalCase gRPC method names for compatibility.
+    """
 
     def serve(self) -> None:
         """Start the agent runtime."""
@@ -269,7 +275,12 @@ class AgentProvider(PluginProvider):
 
 
 class PluginRuntimeProvider(PluginProvider):
-    """Base class for hosted plugin-runtime providers."""
+    """Base class for hosted plugin-runtime providers.
+
+    Subclasses implement snake_case handler methods such as
+    ``get_support(request)``, ``start_session(request)``, and
+    ``start_plugin(request)``.
+    """
 
     def serve(self) -> None:
         """Start the plugin-runtime provider."""
@@ -280,7 +291,14 @@ class PluginRuntimeProvider(PluginProvider):
 
 
 class WorkflowProvider(PluginProvider):
-    """Base class for workflow-provider runtimes."""
+    """Base class for workflow-provider runtimes.
+
+    Subclasses implement snake_case handler methods such as
+    ``start_run(request)``, ``signal_run(request)``, and
+    ``publish_event(request)``. Execution-reference hooks are exposed as
+    ``put_execution_reference(request)``, ``get_execution_reference(request)``,
+    and ``list_execution_references(request)``.
+    """
 
     def serve(self) -> None:
         """Start the workflow runtime."""

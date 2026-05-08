@@ -8,7 +8,6 @@ use gestalt::proto::v1::agent_host_server::{
     AgentHost as AgentHostRpc, AgentHostServer as AgentHostGrpcServer,
 };
 use gestalt::proto::v1::agent_provider_client::AgentProviderClient;
-use gestalt::proto::v1::agent_provider_server::AgentProvider as AgentProviderGrpc;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::{
     self as pb, AgentExecutionStatus, AgentInteractionState, AgentInteractionType, AgentMessage,
@@ -92,16 +91,12 @@ impl AgentProvider for TestAgentProvider {
     fn warnings(&self) -> Vec<String> {
         vec!["set OPENAI_API_KEY".to_string()]
     }
-}
 
-#[tonic::async_trait]
-impl AgentProviderGrpc for TestAgentProvider {
     async fn create_session(
         &self,
-        request: GrpcRequest<pb::CreateAgentProviderSessionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentSession {
+        request: pb::CreateAgentProviderSessionRequest,
+    ) -> gestalt::Result<pb::AgentSession> {
+        Ok(pb::AgentSession {
             id: request.session_id,
             provider_name: configured_name(self),
             model: request.model,
@@ -112,15 +107,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             created_at: Some(helpers::timestamp_now()),
             updated_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn get_session(
         &self,
-        request: GrpcRequest<pb::GetAgentProviderSessionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentSession {
+        request: pb::GetAgentProviderSessionRequest,
+    ) -> gestalt::Result<pb::AgentSession> {
+        Ok(pb::AgentSession {
             id: request.session_id,
             provider_name: configured_name(self),
             model: "gpt-5.1".to_string(),
@@ -133,14 +127,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             updated_at: Some(helpers::timestamp_now()),
             last_turn_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn list_sessions(
         &self,
-        _request: GrpcRequest<pb::ListAgentProviderSessionsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderSessionsResponse>, Status> {
-        Ok(GrpcResponse::new(pb::ListAgentProviderSessionsResponse {
+        _request: pb::ListAgentProviderSessionsRequest,
+    ) -> gestalt::Result<pb::ListAgentProviderSessionsResponse> {
+        Ok(pb::ListAgentProviderSessionsResponse {
             sessions: vec![pb::AgentSession {
                 id: "session-1".to_string(),
                 provider_name: configured_name(self),
@@ -151,15 +145,14 @@ impl AgentProviderGrpc for TestAgentProvider {
                 updated_at: Some(helpers::timestamp_now()),
                 ..Default::default()
             }],
-        }))
+        })
     }
 
     async fn update_session(
         &self,
-        request: GrpcRequest<pb::UpdateAgentProviderSessionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentSession {
+        request: pb::UpdateAgentProviderSessionRequest,
+    ) -> gestalt::Result<pb::AgentSession> {
+        Ok(pb::AgentSession {
             id: request.session_id,
             provider_name: configured_name(self),
             model: "gpt-5.1".to_string(),
@@ -169,15 +162,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             created_at: Some(helpers::timestamp_now()),
             updated_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn create_turn(
         &self,
-        request: GrpcRequest<pb::CreateAgentProviderTurnRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentTurn {
+        request: pb::CreateAgentProviderTurnRequest,
+    ) -> gestalt::Result<pb::AgentTurn> {
+        Ok(pb::AgentTurn {
             id: request.turn_id,
             session_id: request.session_id,
             provider_name: configured_name(self),
@@ -191,15 +183,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             started_at: Some(helpers::timestamp_now()),
             execution_ref: request.execution_ref,
             ..Default::default()
-        }))
+        })
     }
 
     async fn get_turn(
         &self,
-        request: GrpcRequest<pb::GetAgentProviderTurnRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentTurn {
+        request: pb::GetAgentProviderTurnRequest,
+    ) -> gestalt::Result<pb::AgentTurn> {
+        Ok(pb::AgentTurn {
             id: request.turn_id,
             session_id: "session-1".to_string(),
             provider_name: configured_name(self),
@@ -210,15 +201,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             created_at: Some(helpers::timestamp_now()),
             started_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn list_turns(
         &self,
-        request: GrpcRequest<pb::ListAgentProviderTurnsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnsResponse>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::ListAgentProviderTurnsResponse {
+        request: pb::ListAgentProviderTurnsRequest,
+    ) -> gestalt::Result<pb::ListAgentProviderTurnsResponse> {
+        Ok(pb::ListAgentProviderTurnsResponse {
             turns: vec![pb::AgentTurn {
                 id: "turn-1".to_string(),
                 session_id: request.session_id,
@@ -231,15 +221,14 @@ impl AgentProviderGrpc for TestAgentProvider {
                 completed_at: Some(helpers::timestamp_now()),
                 ..Default::default()
             }],
-        }))
+        })
     }
 
     async fn cancel_turn(
         &self,
-        request: GrpcRequest<pb::CancelAgentProviderTurnRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentTurn {
+        request: pb::CancelAgentProviderTurnRequest,
+    ) -> gestalt::Result<pb::AgentTurn> {
+        Ok(pb::AgentTurn {
             id: request.turn_id,
             session_id: "session-1".to_string(),
             provider_name: configured_name(self),
@@ -250,16 +239,15 @@ impl AgentProviderGrpc for TestAgentProvider {
             started_at: Some(helpers::timestamp_now()),
             completed_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn list_turn_events(
         &self,
-        request: GrpcRequest<pb::ListAgentProviderTurnEventsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnEventsResponse>, Status> {
-        let request = request.into_inner();
+        request: pb::ListAgentProviderTurnEventsRequest,
+    ) -> gestalt::Result<pb::ListAgentProviderTurnEventsResponse> {
         let provider_name = configured_name(self);
-        Ok(GrpcResponse::new(pb::ListAgentProviderTurnEventsResponse {
+        Ok(pb::ListAgentProviderTurnEventsResponse {
             events: vec![
                 pb::AgentTurnEvent {
                     id: format!("{}-event-1", request.turn_id),
@@ -282,15 +270,14 @@ impl AgentProviderGrpc for TestAgentProvider {
                     ..Default::default()
                 },
             ],
-        }))
+        })
     }
 
     async fn get_interaction(
         &self,
-        request: GrpcRequest<pb::GetAgentProviderInteractionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentInteraction {
+        request: pb::GetAgentProviderInteractionRequest,
+    ) -> gestalt::Result<pb::AgentInteraction> {
+        Ok(pb::AgentInteraction {
             id: request.interaction_id,
             turn_id: "turn-1".to_string(),
             session_id: "session-1".to_string(),
@@ -300,37 +287,33 @@ impl AgentProviderGrpc for TestAgentProvider {
             prompt: "Run git status?".to_string(),
             created_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn list_interactions(
         &self,
-        request: GrpcRequest<pb::ListAgentProviderInteractionsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderInteractionsResponse>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(
-            pb::ListAgentProviderInteractionsResponse {
-                interactions: vec![pb::AgentInteraction {
-                    id: "interaction-1".to_string(),
-                    turn_id: request.turn_id,
-                    session_id: "session-1".to_string(),
-                    r#type: AgentInteractionType::Approval as i32,
-                    state: AgentInteractionState::Pending as i32,
-                    title: "Approve command".to_string(),
-                    prompt: "Run git status?".to_string(),
-                    created_at: Some(helpers::timestamp_now()),
-                    ..Default::default()
-                }],
-            },
-        ))
+        request: pb::ListAgentProviderInteractionsRequest,
+    ) -> gestalt::Result<pb::ListAgentProviderInteractionsResponse> {
+        Ok(pb::ListAgentProviderInteractionsResponse {
+            interactions: vec![pb::AgentInteraction {
+                id: "interaction-1".to_string(),
+                turn_id: request.turn_id,
+                session_id: "session-1".to_string(),
+                r#type: AgentInteractionType::Approval as i32,
+                state: AgentInteractionState::Pending as i32,
+                title: "Approve command".to_string(),
+                prompt: "Run git status?".to_string(),
+                created_at: Some(helpers::timestamp_now()),
+                ..Default::default()
+            }],
+        })
     }
 
     async fn resolve_interaction(
         &self,
-        request: GrpcRequest<pb::ResolveAgentProviderInteractionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(pb::AgentInteraction {
+        request: pb::ResolveAgentProviderInteractionRequest,
+    ) -> gestalt::Result<pb::AgentInteraction> {
+        Ok(pb::AgentInteraction {
             id: request.interaction_id,
             turn_id: "turn-1".to_string(),
             session_id: "session-1".to_string(),
@@ -342,14 +325,14 @@ impl AgentProviderGrpc for TestAgentProvider {
             created_at: Some(helpers::timestamp_now()),
             resolved_at: Some(helpers::timestamp_now()),
             ..Default::default()
-        }))
+        })
     }
 
     async fn get_capabilities(
         &self,
-        _request: GrpcRequest<pb::GetAgentProviderCapabilitiesRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentProviderCapabilities>, Status> {
-        Ok(GrpcResponse::new(pb::AgentProviderCapabilities {
+        _request: pb::GetAgentProviderCapabilitiesRequest,
+    ) -> gestalt::Result<pb::AgentProviderCapabilities> {
+        Ok(pb::AgentProviderCapabilities {
             streaming_text: true,
             tool_calls: true,
             parallel_tool_calls: false,
@@ -361,7 +344,7 @@ impl AgentProviderGrpc for TestAgentProvider {
             supports_prepared_workspace: false,
             bounded_list_hydration: true,
             supported_tool_sources: vec![pb::AgentToolSourceMode::McpCatalog as i32],
-        }))
+        })
     }
 }
 

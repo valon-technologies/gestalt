@@ -14,9 +14,11 @@ import {
   BoundWorkflowEventTriggerSchema,
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
+  ListWorkflowExecutionReferencesResponseSchema,
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
   ListWorkflowProviderSchedulesResponseSchema,
+  WorkflowExecutionReferenceSchema,
   WorkflowHost as WorkflowHostService,
   WorkflowProvider as WorkflowProviderService,
   type BoundWorkflowEventTrigger,
@@ -25,23 +27,31 @@ import {
   type CancelWorkflowProviderRunRequest,
   type DeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest,
+  type GetWorkflowExecutionReferenceRequest,
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
   type InvokeWorkflowOperationRequest,
   type InvokeWorkflowOperationResponse,
+  type ListWorkflowExecutionReferencesResponse,
+  type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest,
   type ListWorkflowProviderSchedulesRequest,
   type PauseWorkflowProviderEventTriggerRequest,
   type PauseWorkflowProviderScheduleRequest,
   type PublishWorkflowProviderEventRequest,
+  type PutWorkflowExecutionReferenceRequest,
   type ResumeWorkflowProviderEventTriggerRequest,
   type ResumeWorkflowProviderScheduleRequest,
   type StartWorkflowProviderRunRequest,
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
+  type WorkflowAccessPermission,
   type WorkflowEvent,
+  type WorkflowEventMatch,
+  type WorkflowExecutionReference,
+  type WorkflowRunTrigger,
   WorkflowRunStatus,
 } from "./internal/gen/v1/workflow_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
@@ -66,23 +76,31 @@ export type {
   CancelWorkflowProviderRunRequest,
   DeleteWorkflowProviderEventTriggerRequest,
   DeleteWorkflowProviderScheduleRequest,
+  GetWorkflowExecutionReferenceRequest,
   GetWorkflowProviderEventTriggerRequest,
   GetWorkflowProviderRunRequest,
   GetWorkflowProviderScheduleRequest,
   InvokeWorkflowOperationRequest,
   InvokeWorkflowOperationResponse,
+  ListWorkflowExecutionReferencesResponse,
+  ListWorkflowExecutionReferencesRequest,
   ListWorkflowProviderEventTriggersRequest,
   ListWorkflowProviderRunsRequest,
   ListWorkflowProviderSchedulesRequest,
   PauseWorkflowProviderEventTriggerRequest,
   PauseWorkflowProviderScheduleRequest,
   PublishWorkflowProviderEventRequest,
+  PutWorkflowExecutionReferenceRequest,
   ResumeWorkflowProviderEventTriggerRequest,
   ResumeWorkflowProviderScheduleRequest,
   StartWorkflowProviderRunRequest,
   UpsertWorkflowProviderEventTriggerRequest,
   UpsertWorkflowProviderScheduleRequest,
+  WorkflowAccessPermission,
   WorkflowEvent,
+  WorkflowEventMatch,
+  WorkflowExecutionReference,
+  WorkflowRunTrigger,
 };
 export { WorkflowRunStatus };
 
@@ -136,6 +154,18 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   resumeEventTrigger: (
     request: ResumeWorkflowProviderEventTriggerRequest,
   ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  /** Store or update an execution reference for a workflow target. */
+  putExecutionReference?: (
+    request: PutWorkflowExecutionReferenceRequest,
+  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  /** Load one execution reference by provider-owned lookup fields. */
+  getExecutionReference?: (
+    request: GetWorkflowExecutionReferenceRequest,
+  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  /** List execution references for the requested scope. */
+  listExecutionReferences?: (
+    request: ListWorkflowExecutionReferencesRequest,
+  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]>;
   publishEvent: (
     request: PublishWorkflowProviderEventRequest,
   ) => MaybePromise<void>;
@@ -161,6 +191,9 @@ export class WorkflowProvider extends ProviderBase {
   private readonly deleteEventTriggerHandler: WorkflowProviderOptions["deleteEventTrigger"];
   private readonly pauseEventTriggerHandler: WorkflowProviderOptions["pauseEventTrigger"];
   private readonly resumeEventTriggerHandler: WorkflowProviderOptions["resumeEventTrigger"];
+  private readonly putExecutionReferenceHandler: WorkflowProviderOptions["putExecutionReference"];
+  private readonly getExecutionReferenceHandler: WorkflowProviderOptions["getExecutionReference"];
+  private readonly listExecutionReferencesHandler: WorkflowProviderOptions["listExecutionReferences"];
   private readonly publishEventHandler: WorkflowProviderOptions["publishEvent"];
 
   constructor(options: WorkflowProviderOptions) {
@@ -181,6 +214,9 @@ export class WorkflowProvider extends ProviderBase {
     this.deleteEventTriggerHandler = options.deleteEventTrigger;
     this.pauseEventTriggerHandler = options.pauseEventTrigger;
     this.resumeEventTriggerHandler = options.resumeEventTrigger;
+    this.putExecutionReferenceHandler = options.putExecutionReference;
+    this.getExecutionReferenceHandler = options.getExecutionReference;
+    this.listExecutionReferencesHandler = options.listExecutionReferences;
     this.publishEventHandler = options.publishEvent;
   }
 
@@ -278,6 +314,39 @@ export class WorkflowProvider extends ProviderBase {
     request: ResumeWorkflowProviderEventTriggerRequest,
   ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
     return await this.resumeEventTriggerHandler(request);
+  }
+
+  /** Store or update an execution reference for a workflow target. */
+  async putExecutionReference(
+    request: PutWorkflowExecutionReferenceRequest,
+  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
+    return await requireWorkflowProviderHandler(
+      "put execution reference",
+      this.putExecutionReferenceHandler,
+      request,
+    );
+  }
+
+  /** Load one execution reference by provider-owned lookup fields. */
+  async getExecutionReference(
+    request: GetWorkflowExecutionReferenceRequest,
+  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
+    return await requireWorkflowProviderHandler(
+      "get execution reference",
+      this.getExecutionReferenceHandler,
+      request,
+    );
+  }
+
+  /** List execution references for the requested scope. */
+  async listExecutionReferences(
+    request: ListWorkflowExecutionReferencesRequest,
+  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]> {
+    return await requireWorkflowProviderHandler(
+      "list execution references",
+      this.listExecutionReferencesHandler,
+      request,
+    );
   }
 
   async publishEvent(
@@ -520,6 +589,29 @@ export function createWorkflowProviderService(
         ),
       );
     },
+    async putExecutionReference(request) {
+      return create(
+        WorkflowExecutionReferenceSchema,
+        await invokeWorkflowProvider("put execution reference", () =>
+          provider.putExecutionReference(request),
+        ),
+      );
+    },
+    async getExecutionReference(request) {
+      return create(
+        WorkflowExecutionReferenceSchema,
+        await invokeWorkflowProvider("get execution reference", () =>
+          provider.getExecutionReference(request),
+        ),
+      );
+    },
+    async listExecutionReferences(request) {
+      return create(ListWorkflowExecutionReferencesResponseSchema, {
+        references: await invokeWorkflowProvider("list execution references", () =>
+          provider.listExecutionReferences(request),
+        ),
+      });
+    },
     async publishEvent(request) {
       await invokeWorkflowProvider("publish event", () =>
         provider.publishEvent(request),
@@ -544,4 +636,18 @@ async function invokeWorkflowProvider<T>(
       Code.Unknown,
     );
   }
+}
+
+async function requireWorkflowProviderHandler<Request, Response>(
+  action: string,
+  fn: ((request: Request) => MaybePromise<Response>) | undefined,
+  request: Request,
+): Promise<Response> {
+  if (!fn) {
+    throw new ConnectError(
+      `workflow provider ${action} is not implemented`,
+      Code.Unimplemented,
+    );
+  }
+  return await fn(request);
 }

@@ -79,6 +79,18 @@ def WorkflowEvent(*args: Any, **kwargs: Any) -> Any:
     return pb.WorkflowEvent(*args, **kwargs)
 
 
+def WorkflowEventMatch(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow event-match protocol value."""
+
+    return pb.WorkflowEventMatch(*args, **kwargs)
+
+
+def WorkflowRunTrigger(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow run-trigger protocol value."""
+
+    return pb.WorkflowRunTrigger(*args, **kwargs)
+
+
 def BoundWorkflowRun(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-provider run protocol value."""
 
@@ -103,10 +115,82 @@ def BoundWorkflowDefinition(*args: Any, **kwargs: Any) -> Any:
     return pb.BoundWorkflowDefinition(*args, **kwargs)
 
 
+def WorkflowAccessPermission(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow execution-reference access permission."""
+
+    return pb.WorkflowAccessPermission(*args, **kwargs)
+
+
+def WorkflowExecutionReference(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow execution reference."""
+
+    return pb.WorkflowExecutionReference(*args, **kwargs)
+
+
+def StartWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider start-run request."""
+
+    return pb.StartWorkflowProviderRunRequest(*args, **kwargs)
+
+
+def GetWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider get-run request."""
+
+    return pb.GetWorkflowProviderRunRequest(*args, **kwargs)
+
+
+def ListWorkflowProviderRunsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-runs request."""
+
+    return pb.ListWorkflowProviderRunsRequest(*args, **kwargs)
+
+
 def ListWorkflowProviderRunsResponse(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-provider list-runs response."""
 
     return pb.ListWorkflowProviderRunsResponse(*args, **kwargs)
+
+
+def CancelWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider cancel-run request."""
+
+    return pb.CancelWorkflowProviderRunRequest(*args, **kwargs)
+
+
+def SignalWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider signal-run request."""
+
+    return pb.SignalWorkflowProviderRunRequest(*args, **kwargs)
+
+
+def SignalOrStartWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider signal-or-start-run request."""
+
+    return pb.SignalOrStartWorkflowProviderRunRequest(*args, **kwargs)
+
+
+def SignalWorkflowRunResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider signal-run response."""
+
+    return pb.SignalWorkflowRunResponse(*args, **kwargs)
+
+
+def UpsertWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider upsert-schedule request."""
+
+    return pb.UpsertWorkflowProviderScheduleRequest(*args, **kwargs)
+
+
+def GetWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider get-schedule request."""
+
+    return pb.GetWorkflowProviderScheduleRequest(*args, **kwargs)
+
+
+def ListWorkflowProviderSchedulesRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-schedules request."""
+
+    return pb.ListWorkflowProviderSchedulesRequest(*args, **kwargs)
 
 
 def ListWorkflowProviderSchedulesResponse(*args: Any, **kwargs: Any) -> Any:
@@ -115,10 +199,94 @@ def ListWorkflowProviderSchedulesResponse(*args: Any, **kwargs: Any) -> Any:
     return pb.ListWorkflowProviderSchedulesResponse(*args, **kwargs)
 
 
+def DeleteWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider delete-schedule request."""
+
+    return pb.DeleteWorkflowProviderScheduleRequest(*args, **kwargs)
+
+
+def PauseWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider pause-schedule request."""
+
+    return pb.PauseWorkflowProviderScheduleRequest(*args, **kwargs)
+
+
+def ResumeWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider resume-schedule request."""
+
+    return pb.ResumeWorkflowProviderScheduleRequest(*args, **kwargs)
+
+
+def UpsertWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider upsert-event-trigger request."""
+
+    return pb.UpsertWorkflowProviderEventTriggerRequest(*args, **kwargs)
+
+
+def GetWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider get-event-trigger request."""
+
+    return pb.GetWorkflowProviderEventTriggerRequest(*args, **kwargs)
+
+
+def ListWorkflowProviderEventTriggersRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-event-triggers request."""
+
+    return pb.ListWorkflowProviderEventTriggersRequest(*args, **kwargs)
+
+
 def ListWorkflowProviderEventTriggersResponse(*args: Any, **kwargs: Any) -> Any:
     """Create a workflow-provider list-event-triggers response."""
 
     return pb.ListWorkflowProviderEventTriggersResponse(*args, **kwargs)
+
+
+def DeleteWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider delete-event-trigger request."""
+
+    return pb.DeleteWorkflowProviderEventTriggerRequest(*args, **kwargs)
+
+
+def PauseWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider pause-event-trigger request."""
+
+    return pb.PauseWorkflowProviderEventTriggerRequest(*args, **kwargs)
+
+
+def ResumeWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider resume-event-trigger request."""
+
+    return pb.ResumeWorkflowProviderEventTriggerRequest(*args, **kwargs)
+
+
+def PutWorkflowExecutionReferenceRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider put-execution-reference request."""
+
+    return pb.PutWorkflowExecutionReferenceRequest(*args, **kwargs)
+
+
+def GetWorkflowExecutionReferenceRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider get-execution-reference request."""
+
+    return pb.GetWorkflowExecutionReferenceRequest(*args, **kwargs)
+
+
+def ListWorkflowExecutionReferencesRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-execution-references request."""
+
+    return pb.ListWorkflowExecutionReferencesRequest(*args, **kwargs)
+
+
+def ListWorkflowExecutionReferencesResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider list-execution-references response."""
+
+    return pb.ListWorkflowExecutionReferencesResponse(*args, **kwargs)
+
+
+def PublishWorkflowProviderEventRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create a workflow-provider publish-event request."""
+
+    return pb.PublishWorkflowProviderEventRequest(*args, **kwargs)
 
 
 def WorkflowManagerStartRunRequest(*args: Any, **kwargs: Any) -> Any:
