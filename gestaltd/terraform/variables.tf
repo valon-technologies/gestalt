@@ -20,7 +20,6 @@ variable "gestaltd_chart_reader_service_accounts" {
   type        = set(string)
   default = [
     "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
-    "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
   ]
 }
 

@@ -27,8 +27,10 @@ GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER
 variables instead of creating their own per-environment chart repository.
 The `gestaltd_chart_reader_service_accounts` variable controls which
 environment Terraform service accounts can read the chart repository. By
-default this grants read access to the dev and stage `valon-tools` Terraform
-service accounts.
+default this grants read access to the dev `valon-tools` Terraform service
+account. Add stage and prod service account emails only after their bootstrap
+stacks have created those service accounts, because Artifact Registry rejects
+IAM bindings for service accounts that do not exist yet.
 
 ## Continuous Deployment
 
