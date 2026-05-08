@@ -2,7 +2,6 @@ import {
   create,
   fromJson,
   isMessage,
-  type JsonObject,
   type JsonValue,
   type MessageInitShape,
 } from "@bufbuild/protobuf";
@@ -76,6 +75,7 @@ import {
   type UpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
+import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the agent-host service target. */
@@ -175,7 +175,7 @@ export interface AgentHostExecuteToolInput {
   turnId: string;
   toolCallId: string;
   toolId: string;
-  arguments?: JsonObject | undefined;
+  arguments?: JsonObjectInput | undefined;
   runGrant?: string | undefined;
   idempotencyKey?: string | undefined;
 }
@@ -503,7 +503,7 @@ export class AgentHost {
         turnId: input.turnId,
         toolCallId: input.toolCallId,
         toolId: input.toolId,
-        arguments: input.arguments,
+        arguments: input.arguments === undefined ? undefined : structFromObject(input.arguments),
         runGrant: input.runGrant ?? "",
         idempotencyKey: input.idempotencyKey ?? "",
       }),

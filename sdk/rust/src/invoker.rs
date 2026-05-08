@@ -14,6 +14,7 @@ use crate::OperationResult;
 use crate::generated::v1::{
     self as pb, plugin_invoker_client::PluginInvokerClient as ProtoPluginInvokerClient,
 };
+use crate::protocol;
 
 type PluginInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
@@ -138,7 +139,7 @@ impl PluginInvoker {
             .invoke(pb::PluginInvokeRequest {
                 plugin: plugin.to_string(),
                 operation: operation.to_string(),
-                params: Some(json_to_struct(serde_json::to_value(params)?)?),
+                params: Some(serializable_to_struct(params, "params")?),
                 connection: options
                     .as_ref()
                     .map(|opts| opts.connection.clone())
@@ -193,9 +194,7 @@ impl PluginInvoker {
                 plugin: plugin.to_string(),
                 document: document.to_string(),
                 variables: variables
-                    .map(serde_json::to_value)
-                    .transpose()?
-                    .map(|value| json_to_optional_struct(value, "variables"))
+                    .map(|value| serializable_to_optional_struct(value, "variables"))
                     .transpose()?
                     .flatten(),
                 connection: options
@@ -378,51 +377,36 @@ impl Interceptor for RelayTokenInterceptor {
     }
 }
 
-fn json_to_struct(
-    value: serde_json::Value,
+fn serializable_to_struct<T: Serialize>(
+    value: T,
+    field_name: &str,
 ) -> std::result::Result<prost_types::Struct, PluginInvokerError> {
-    Ok(json_to_optional_struct(value, "params")?.unwrap_or_default())
+    let value = protocol::json_value_from_serializable(value)?;
+    Ok(json_to_optional_struct(value, field_name)?.unwrap_or_default())
 }
 
 fn json_to_optional_struct(
     value: serde_json::Value,
     field_name: &str,
 ) -> std::result::Result<Option<prost_types::Struct>, PluginInvokerError> {
-    let serde_json::Value::Object(fields) = value else {
-        if value.is_null() {
-            return Ok(None);
-        }
+    if value.is_null() {
+        return Ok(None);
+    }
+    let serde_json::Value::Object(_) = &value else {
         return Err(PluginInvokerError::Protocol(format!(
             "plugin invoker: {field_name} must serialize to a JSON object"
         )));
     };
 
-    Ok(Some(prost_types::Struct {
-        fields: fields
-            .into_iter()
-            .map(|(key, value)| (key, json_value_to_prost(value)))
-            .collect(),
-    }))
+    protocol::struct_from_json(value)
+        .map(Some)
+        .map_err(|err| PluginInvokerError::Protocol(err.to_string()))
 }
 
-fn json_value_to_prost(value: serde_json::Value) -> prost_types::Value {
-    use prost_types::value::Kind;
-
-    let kind = match value {
-        serde_json::Value::Null => Kind::NullValue(0),
-        serde_json::Value::Bool(boolean) => Kind::BoolValue(boolean),
-        serde_json::Value::Number(number) => Kind::NumberValue(number.as_f64().unwrap_or_default()),
-        serde_json::Value::String(string) => Kind::StringValue(string),
-        serde_json::Value::Array(items) => Kind::ListValue(prost_types::ListValue {
-            values: items.into_iter().map(json_value_to_prost).collect(),
-        }),
-        serde_json::Value::Object(fields) => Kind::StructValue(prost_types::Struct {
-            fields: fields
-                .into_iter()
-                .map(|(key, value)| (key, json_value_to_prost(value)))
-                .collect(),
-        }),
-    };
-
-    prost_types::Value { kind: Some(kind) }
+fn serializable_to_optional_struct<T: Serialize>(
+    value: T,
+    field_name: &str,
+) -> std::result::Result<Option<prost_types::Struct>, PluginInvokerError> {
+    let value = protocol::json_value_from_serializable(value)?;
+    json_to_optional_struct(value, field_name)
 }

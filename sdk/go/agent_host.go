@@ -40,7 +40,7 @@ type AgentHostExecuteToolInput struct {
 	TurnID         string
 	ToolCallID     string
 	ToolID         string
-	Arguments      map[string]any
+	Arguments      any
 	RunGrant       string
 	IdempotencyKey string
 }
@@ -92,7 +92,7 @@ func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHos
 	var arguments *structpb.Struct
 	if input.Arguments != nil {
 		var err error
-		arguments, err = StructFromMap(input.Arguments)
+		arguments, err = StructFromAny(input.Arguments)
 		if err != nil {
 			return nil, err
 		}

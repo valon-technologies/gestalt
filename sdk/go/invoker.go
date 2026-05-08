@@ -230,16 +230,19 @@ func (c *InvokerClient) Close() error {
 }
 
 // Invoke calls one operation on another plugin.
-func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, params map[string]any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
 	}
 	if params == nil {
 		params = map[string]any{}
 	}
-	msg, err := structpb.NewStruct(params)
+	msg, err := StructFromAny(params)
 	if err != nil {
 		return nil, fmt.Errorf("plugin invoker: encode params: %w", err)
+	}
+	if msg == nil {
+		msg = &structpb.Struct{}
 	}
 
 	req := &proto.PluginInvokeRequest{
@@ -265,7 +268,7 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document string, variables map[string]any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
 	}
@@ -276,10 +279,13 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document stri
 
 	var msg *structpb.Struct
 	var err error
-	if len(variables) > 0 {
-		msg, err = structpb.NewStruct(variables)
+	if variables != nil {
+		msg, err = StructFromAny(variables)
 		if err != nil {
 			return nil, fmt.Errorf("plugin invoker: encode variables: %w", err)
+		}
+		if msg != nil && len(msg.GetFields()) == 0 {
+			msg = nil
 		}
 	}
 

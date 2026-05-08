@@ -22,6 +22,10 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
+interface IssueLookupParams {
+  issue_number: number;
+}
+
 test("PluginInvoker forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-invoker-"));
   const socketPath = join(tempDir, "plugin-invoker.sock");
@@ -163,12 +167,13 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     });
     expect(childToken).toBe("invocation-token-123:child");
 
+    const issueLookupParams: IssueLookupParams = {
+      issue_number: 42,
+    };
     const first = await fromHandle.invoke(
       "github",
       "get_issue",
-      {
-        issue_number: 42,
-      },
+      issueLookupParams,
       {
         connection: "work",
         instance: "secondary",
@@ -195,6 +200,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     const second = await fromRequest.invoke("slack", "post_message", {
       channel: "eng",
       text: "hello",
+      nested: Object.freeze({ urgent: true }),
     });
 
     expect(second.status).toBe(207);
@@ -205,11 +211,16 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       params: {
         channel: "eng",
         text: "hello",
+        nested: { urgent: true },
       },
       connection: "",
       instance: "",
       idempotencyKey: "",
     });
+
+    await expect(
+      fromRequest.invoke("slack", "bad", { when: new Date() } as any),
+    ).rejects.toThrow(TypeError);
 
     const graphql = await fromRequest.invokeGraphQL(
       "linear",
@@ -280,6 +291,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         params: {
           channel: "eng",
           text: "hello",
+          nested: { urgent: true },
         },
         connection: "",
         instance: "",

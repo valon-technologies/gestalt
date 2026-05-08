@@ -6,8 +6,6 @@ from typing import Any, Protocol, cast
 from urllib import parse as _urlparse
 
 import grpc
-from google.protobuf import json_format
-from google.protobuf import struct_pb2 as _struct_pb2
 
 from ._api import Response
 from ._gen.v1 import plugin_pb2 as _pb
@@ -17,10 +15,14 @@ from ._grpc_transport import (
     internal_channel_target,
     secure_internal_channel,
 )
+from ._protocol import (
+    JsonObjectInput,
+    _struct_from_normalized_object,
+    json_from_native,
+)
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
-struct_pb2: Any = _struct_pb2
 
 # Matches the host-side socket name exposed by gestaltd.
 ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET"
@@ -44,7 +46,9 @@ class PluginInvoker:
 
         socket_path = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET, "")
         if not socket_path:
-            raise RuntimeError(f"plugin invoker: {ENV_PLUGIN_INVOKER_SOCKET} is not set")
+            raise RuntimeError(
+                f"plugin invoker: {ENV_PLUGIN_INVOKER_SOCKET} is not set"
+            )
         relay_token = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, "")
 
         self._channel = _plugin_invoker_channel(socket_path, token=relay_token)
@@ -60,7 +64,7 @@ class PluginInvoker:
         self,
         plugin: str,
         operation: str,
-        params: dict[str, Any] | None = None,
+        params: JsonObjectInput | None = None,
         *,
         connection: str = "",
         instance: str = "",
@@ -92,7 +96,7 @@ class PluginInvoker:
         self,
         plugin: str,
         document: str,
-        variables: dict[str, Any] | None = None,
+        variables: JsonObjectInput | None = None,
         *,
         connection: str = "",
         instance: str = "",
@@ -112,7 +116,9 @@ class PluginInvoker:
             instance=instance,
             idempotency_key=idempotency_key.strip(),
         )
-        message = _struct_from_dict_optional(variables, preserve_empty=False)
+        message = _struct_from_dict_optional(
+            variables, preserve_empty=False, path="plugin invoker variables"
+        )
         if message is not None:
             request.variables.CopyFrom(message)
 
@@ -147,26 +153,30 @@ class PluginInvoker:
         self.close()
 
 
-def _struct_from_dict(values: dict[str, Any] | None) -> Any:
+def _struct_from_dict(values: JsonObjectInput | None) -> Any:
     if values is None:
         return None
 
-    return _struct_from_dict_optional(values, preserve_empty=True)
+    return _struct_from_dict_optional(
+        values, preserve_empty=True, path="plugin invoker params"
+    )
 
 
 def _struct_from_dict_optional(
-    values: dict[str, Any] | None,
+    values: JsonObjectInput | None,
     *,
     preserve_empty: bool,
+    path: str,
 ) -> Any:
     if values is None:
         return None
-    if not preserve_empty and not values:
+    normalized = json_from_native(values, path=path)
+    if not isinstance(normalized, dict):
+        raise TypeError(f"{path} must be a JSON object, got {type(values).__name__}")
+    if not preserve_empty and not normalized:
         return None
 
-    message = struct_pb2.Struct()
-    json_format.ParseDict(values, message)
-    return message
+    return _struct_from_normalized_object(normalized)
 
 
 def _grants_from_values(values: Sequence[Any] | None) -> list[Any]:
@@ -194,7 +204,9 @@ def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
         raw_plugin = value.get("plugin", "")
         raw_operations = value.get("operations", ())
         raw_surfaces = value.get("surfaces", ())
-        raw_all_operations = value.get("all_operations", value.get("allOperations", False))
+        raw_all_operations = value.get(
+            "all_operations", value.get("allOperations", False)
+        )
     else:
         raw_plugin = getattr(value, "plugin", "")
         raw_operations = getattr(value, "operations", ())
@@ -266,9 +278,7 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
     )
 
 
-def _with_plugin_invoker_relay_token(
-    channel: grpc.Channel, token: str
-) -> grpc.Channel:
+def _with_plugin_invoker_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     token = token.strip()
     if not token:
         return channel

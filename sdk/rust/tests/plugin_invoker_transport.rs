@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 mod helpers;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -17,11 +18,23 @@ use gestalt::{
     PluginInvoker, Request,
 };
 use prost_types::Struct;
+use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+#[derive(Serialize)]
+struct IssueParams {
+    issue: i32,
+    labels: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct BadNumberParams {
+    score: f64,
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -183,7 +196,10 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
         .invoke(
             "github",
             "get_issue",
-            serde_json::json!({ "issue": 42, "labels": ["bug"] }),
+            IssueParams {
+                issue: 42,
+                labels: vec!["bug".to_string()],
+            },
             Some(InvokeOptions {
                 connection: "work".to_string(),
                 instance: "secondary".to_string(),
@@ -205,6 +221,35 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
             "instance": "secondary",
             "idempotency_key": "issue-42-create",
         })
+    );
+    let err = invoker
+        .invoke("github", "bad", "not-object", None)
+        .await
+        .expect_err("non-object params should fail");
+    assert!(
+        err.to_string().contains("must serialize to a JSON object"),
+        "unexpected error: {err}"
+    );
+    let err = invoker
+        .invoke("github", "bad", BadNumberParams { score: f64::NAN }, None)
+        .await
+        .expect_err("non-finite params should fail");
+    assert!(
+        err.to_string().contains("finite"),
+        "unexpected error: {err}"
+    );
+    let err = invoker
+        .invoke(
+            "github",
+            "bad",
+            BTreeMap::from([(1_i32, "not-a-string-key".to_string())]),
+            None,
+        )
+        .await
+        .expect_err("non-string map keys should fail");
+    assert!(
+        err.to_string().contains("map keys must be strings"),
+        "unexpected error: {err}"
     );
 
     let seen = server

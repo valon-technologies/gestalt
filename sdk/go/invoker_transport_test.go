@@ -2,9 +2,11 @@ package gestalt_test
 
 import (
 	"context"
+	"math"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -13,6 +15,32 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+type invokeIssueParams struct {
+	IssueNumber int `json:"issue_number"`
+}
+
+type invokeOmitEmptyParams struct {
+	IssueNumber int               `json:"issue_number"`
+	Tags        []string          `json:"tags,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+type pointerMarshaler struct {
+	Hidden string
+}
+
+func (*pointerMarshaler) MarshalJSON() ([]byte, error) {
+	return []byte(`{"redacted":true}`), nil
+}
+
+type EmbeddedIssueParams struct {
+	IssueNumber int `json:"issue_number"`
+}
+
+type embeddedIssueParams struct {
+	EmbeddedIssueParams
+}
 
 type pluginInvokerTransportHarness struct {
 	proto.UnimplementedPluginInvokerServer
@@ -101,8 +129,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	result, err := client.Invoke(context.Background(), "github", "get_issue", map[string]any{
-		"issue_number": 42,
+	result, err := client.Invoke(context.Background(), "github", "get_issue", invokeIssueParams{
+		IssueNumber: 42,
 	}, &gestalt.InvokeOptions{
 		IdempotencyKey: " issue-42-create ",
 	})
@@ -111,6 +139,17 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	}
 	if result.Status != 207 || result.Body != "relay-ok" {
 		t.Fatalf("Invoke result = %+v, want status=207 body=relay-ok", result)
+	}
+	result, err = client.Invoke(context.Background(), "github", "get_issue", invokeOmitEmptyParams{
+		IssueNumber: 43,
+		Tags:        []string{},
+		Metadata:    map[string]string{},
+	}, nil)
+	if err != nil {
+		t.Fatalf("Invoke omitempty params: %v", err)
+	}
+	if result.Status != 207 || result.Body != "relay-ok" {
+		t.Fatalf("Invoke omitempty result = %+v, want status=207 body=relay-ok", result)
 	}
 	graphQLResult, err := client.InvokeGraphQL(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
 		"team": "eng",
@@ -123,14 +162,35 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	if graphQLResult.Status != 208 || graphQLResult.Body != "graphql-ok" {
 		t.Fatalf("InvokeGraphQL result = %+v, want status=208 body=graphql-ok", graphQLResult)
 	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", time.Now(), nil); err == nil {
+		t.Fatal("Invoke(time.Time) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", map[int]any{1: "bad"}, nil); err == nil {
+		t.Fatal("Invoke(non-string map key) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", map[string]any{"score": math.NaN()}, nil); err == nil {
+		t.Fatal("Invoke(NaN) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", pointerMarshaler{Hidden: "secret"}, nil); err == nil {
+		t.Fatal("Invoke(pointer json.Marshaler) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", map[string]any{"bad": pointerMarshaler{Hidden: "secret"}}, nil); err == nil {
+		t.Fatal("Invoke(map pointer json.Marshaler) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", embeddedIssueParams{EmbeddedIssueParams: EmbeddedIssueParams{IssueNumber: 42}}, nil); err == nil {
+		t.Fatal("Invoke(anonymous embedded field) error = nil, want error")
+	}
+	if _, err := client.Invoke(context.Background(), "github", "bad", "not-object", nil); err == nil {
+		t.Fatal("Invoke(non-object) error = nil, want error")
+	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
-	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
-		t.Fatalf("relay tokens = %#v, want two relay-token-go entries", harness.tokens)
+	if len(harness.tokens) != 3 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" || harness.tokens[2] != "relay-token-go" {
+		t.Fatalf("relay tokens = %#v, want three relay-token-go entries", harness.tokens)
 	}
-	if len(harness.requests) != 1 {
-		t.Fatalf("invoke requests len = %d, want 1", len(harness.requests))
+	if len(harness.requests) != 2 {
+		t.Fatalf("invoke requests len = %d, want 2", len(harness.requests))
 	}
 	if harness.requests[0].GetInvocationToken() != "parent-token" {
 		t.Fatalf("invocation token = %q, want %q", harness.requests[0].GetInvocationToken(), "parent-token")
@@ -140,6 +200,12 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	}
 	if harness.requests[0].GetIdempotencyKey() != "issue-42-create" {
 		t.Fatalf("idempotency key = %q, want issue-42-create", harness.requests[0].GetIdempotencyKey())
+	}
+	if got := gestalt.MapFromStruct(harness.requests[0].GetParams()); got["issue_number"] != float64(42) {
+		t.Fatalf("invoke params = %#v, want issue_number=42", got)
+	}
+	if got := gestalt.MapFromStruct(harness.requests[1].GetParams()); len(got) != 1 || got["issue_number"] != float64(43) {
+		t.Fatalf("omitempty invoke params = %#v, want only issue_number=43", got)
 	}
 	if len(harness.graphQL) != 1 {
 		t.Fatalf("graphql requests len = %d, want 1", len(harness.graphQL))

@@ -87,11 +87,16 @@ export {
 } from "./build.ts";
 export {
   dateFromTimestamp,
+  jsonFromInput,
   jsonFromValue,
   jsonObjectFromStruct,
+  structFromObject,
   structFromJsonObject,
   timestampFromDate,
   valueFromJson,
+  type JsonInput,
+  type JsonObjectInput,
+  type JsonPrimitiveInput,
 } from "./protocol.ts";
 export {
   ENV_PLUGIN_INVOKER_SOCKET,

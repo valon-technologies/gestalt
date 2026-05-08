@@ -1,9 +1,9 @@
-import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
 import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import { PluginInvoker as PluginInvokerService } from "./internal/gen/v1/plugin_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
+import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 
 /** Environment variable containing the plugin-invoker host-service target. */
 export const ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET";
@@ -37,7 +37,7 @@ export interface PluginInvocationGrant {
 /** Options for invoking a plugin GraphQL surface. */
 export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
-  variables?: Record<string, unknown>;
+  variables?: JsonObjectInput;
 }
 
 /**
@@ -72,14 +72,14 @@ export class PluginInvoker {
   async invoke(
     plugin: string,
     operation: string,
-    params: Record<string, unknown> = {},
+    params: JsonObjectInput = {},
     options?: PluginInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
       invocationToken: this.invocationToken,
       plugin,
       operation,
-      params: toJsonObject(params),
+      params: structFromObject(params),
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
@@ -105,8 +105,8 @@ export class PluginInvoker {
       invocationToken: this.invocationToken,
       plugin,
       document: trimmedDocument,
-      ...(options?.variables
-        ? { variables: toJsonObject(options.variables) }
+      ...(options?.variables !== undefined
+        ? { variables: structFromObject(options.variables) }
         : {}),
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
@@ -198,33 +198,4 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
     throw new Error("plugin invoker: invocation token is not available");
   }
   return trimmed;
-}
-
-function toJsonObject(params: Record<string, unknown>): JsonObject {
-  const output: JsonObject = {};
-  for (const [key, value] of Object.entries(params ?? {})) {
-    if (value === undefined) {
-      continue;
-    }
-    output[key] = toJsonValue(value);
-  }
-  return output;
-}
-
-function toJsonValue(value: unknown): JsonValue {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value as JsonValue;
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry) => toJsonValue(entry));
-  }
-  if (typeof value === "object") {
-    return toJsonObject(value as Record<string, unknown>);
-  }
-  throw new Error("plugin invoker: params must be JSON-serializable");
 }

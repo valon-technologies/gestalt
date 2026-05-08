@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from concurrent import futures
+from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
@@ -65,6 +66,11 @@ _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
+
+
+@dataclass
+class ToolArguments:
+    query: str
 
 
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
@@ -765,7 +771,9 @@ class AgentTransportTests(unittest.TestCase):
             },
         )
 
-    def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(self) -> None:
+    def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(
+        self,
+    ) -> None:
         message = AgentMessage(role="assistant")
         message.metadata.CopyFrom(struct_from_dict({"tenant": "acme"}))
         part = message.parts.add()
@@ -945,7 +953,7 @@ class AgentTransportTests(unittest.TestCase):
                 "turn-1",
                 tool_call_id="call-7",
                 tool_id="lookup",
-                arguments={"query": "Ada Lovelace"},
+                arguments=ToolArguments(query="Ada Lovelace"),
                 run_grant="grant-token",
                 idempotency_key="tool-call-key-7",
             )
