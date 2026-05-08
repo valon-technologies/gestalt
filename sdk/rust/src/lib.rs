@@ -6,6 +6,7 @@ mod agent_manager;
 mod api;
 mod auth;
 mod auth_server;
+mod authorization;
 mod cache;
 mod cache_server;
 mod catalog;
@@ -54,6 +55,14 @@ pub use api::{
 pub use auth::{
     AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
     CompleteLoginRequest,
+};
+pub use authorization::{
+    AccessDecision, AccessEvaluationRequest, ActionSearchRequest, ActionSearchResponse,
+    Authorization, AuthorizationAction, AuthorizationError, AuthorizationMetadata,
+    AuthorizationResource, AuthorizationSubject, ENV_AUTHORIZATION_SOCKET,
+    ENV_AUTHORIZATION_SOCKET_TOKEN, ReadRelationshipsRequest, ReadRelationshipsResponse,
+    Relationship, RelationshipKey, ResourceSearchRequest, ResourceSearchResponse,
+    SubjectSearchRequest, SubjectSearchResponse, WriteRelationshipsRequest,
 };
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,

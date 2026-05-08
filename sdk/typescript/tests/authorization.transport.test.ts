@@ -10,10 +10,8 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  ActionSchema,
   AuthorizationMetadataSchema,
   AuthorizationProvider as AuthorizationProviderService,
-  ResourceSchema,
   SubjectSchema,
   SubjectSearchResponseSchema,
 } from "../src/internal/gen/v1/authorization_pb.ts";
@@ -22,6 +20,10 @@ import {
   AuthorizationClient,
   ENV_AUTHORIZATION_SOCKET,
   ENV_AUTHORIZATION_SOCKET_TOKEN,
+  authorizationAction,
+  authorizationRelationship,
+  authorizationResource,
+  authorizationSubject,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
@@ -41,7 +43,7 @@ test("Authorization() and AuthorizationClient fail fast when the host socket is 
   }
 });
 
-test("Authorization() forwards read-only authorization requests to the host socket", async () => {
+test("Authorization() forwards authorization requests to the host socket", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-authorization-"));
   const socketPath = join(tempDir, "authorization.sock");
   const previousSocket = process.env[ENV_AUTHORIZATION_SOCKET];
@@ -51,6 +53,13 @@ test("Authorization() forwards read-only authorization requests to the host sock
     actionName: string;
     subjectType: string;
     pageSize: number;
+  }> = [];
+  const writeCalls: Array<{
+    subjectType: string;
+    subjectId: string;
+    relation: string;
+    resourceType: string;
+    resourceId: string;
   }> = [];
   let sessionCount = 0;
 
@@ -89,6 +98,18 @@ test("Authorization() forwards read-only authorization requests to the host sock
               activeModelId: "authz-model-1",
             });
           },
+          async writeRelationships(input) {
+            for (const write of input.writes) {
+              writeCalls.push({
+                subjectType: write.subject?.type ?? "",
+                subjectId: write.subject?.id ?? "",
+                relation: write.relation,
+                resourceType: write.resource?.type ?? "",
+                resourceId: write.resource?.id ?? "",
+              });
+            }
+            return {};
+          },
         } satisfies Partial<ServiceImpl<typeof AuthorizationProviderService>>,
       );
     },
@@ -117,13 +138,11 @@ test("Authorization() forwards read-only authorization requests to the host sock
     expect(metadata.activeModelId).toBe("authz-model-1");
 
     const response = await Authorization().searchSubjects({
-      resource: create(ResourceSchema, {
-        type: "slack_identity",
-        id: "team:T123:user:U456",
-      }),
-      action: create(ActionSchema, {
-        name: "assume",
-      }),
+      resource: authorizationResource(
+        "slack_identity",
+        "team:T123:user:U456",
+      ),
+      action: authorizationAction("assume"),
       subjectType: "user",
       pageSize: 1,
     });
@@ -140,6 +159,24 @@ test("Authorization() forwards read-only authorization requests to the host sock
         actionName: "assume",
         subjectType: "user",
         pageSize: 1,
+      },
+    ]);
+    await Authorization().writeRelationships({
+      writes: [
+        authorizationRelationship(
+          authorizationSubject("subject", "user:user-123"),
+          "editor",
+          authorizationResource("agent_session", "session-123"),
+        ),
+      ],
+    });
+    expect(writeCalls).toEqual([
+      {
+        subjectType: "subject",
+        subjectId: "user:user-123",
+        relation: "editor",
+        resourceType: "agent_session",
+        resourceId: "session-123",
       },
     ]);
     expect(sessionCount).toBe(1);
@@ -227,11 +264,11 @@ test("Authorization honors tcp target env and relay token env", async () => {
     process.env[ENV_AUTHORIZATION_SOCKET_TOKEN] = "relay-token-typescript";
 
     const response = await Authorization().searchSubjects({
-      resource: create(ResourceSchema, {
-        type: "slack_identity",
-        id: "team:T123:user:U456",
-      }),
-      action: create(ActionSchema, { name: "assume" }),
+      resource: authorizationResource(
+        "slack_identity",
+        "team:T123:user:U456",
+      ),
+      action: authorizationAction("assume"),
       subjectType: "user",
       pageSize: 1,
     });

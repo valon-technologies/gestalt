@@ -1,6 +1,6 @@
 import { connect } from "node:net";
 
-import type { MessageInitShape } from "@bufbuild/protobuf";
+import type { JsonObject, MessageInitShape } from "@bufbuild/protobuf";
 import {
   createClient,
   type Client,
@@ -14,18 +14,26 @@ import {
   type AuthorizationMetadata,
   AuthorizationProvider as AuthorizationProviderService,
   type ReadRelationshipsResponse,
+  type Relationship,
+  type RelationshipKey,
   type ResourceSearchResponse,
   type SubjectSearchResponse,
   AccessEvaluationRequestSchema,
   ActionSearchRequestSchema,
+  ActionSchema,
   ReadRelationshipsRequestSchema,
+  RelationshipKeySchema,
+  RelationshipSchema,
+  ResourceSchema,
   ResourceSearchRequestSchema,
+  SubjectSchema,
   SubjectSearchRequestSchema,
+  WriteRelationshipsRequestSchema,
 } from "./internal/gen/v1/authorization_pb.ts";
 
 /**
  * Environment variable containing the Unix socket path or relay target for the
- * read-only host authorization client exposed to plugins.
+ * host authorization client exposed to plugins.
  */
 export const ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET";
 export const ENV_AUTHORIZATION_SOCKET_TOKEN =
@@ -48,6 +56,18 @@ export type AuthorizationSearchActionsInput = MessageInitShape<
 export type AuthorizationReadRelationshipsInput = MessageInitShape<
   typeof ReadRelationshipsRequestSchema
 >;
+export type AuthorizationWriteRelationshipsInput = MessageInitShape<
+  typeof WriteRelationshipsRequestSchema
+>;
+export type AuthorizationSubject = MessageInitShape<typeof SubjectSchema>;
+export type AuthorizationResource = MessageInitShape<typeof ResourceSchema>;
+export type AuthorizationAction = MessageInitShape<typeof ActionSchema>;
+export type AuthorizationRelationship = MessageInitShape<
+  typeof RelationshipSchema
+>;
+export type AuthorizationRelationshipKey = MessageInitShape<
+  typeof RelationshipKeySchema
+>;
 
 export type AuthorizationDecisionMessage = AccessDecision;
 export type AuthorizationMetadataMessage = AuthorizationMetadata;
@@ -55,6 +75,8 @@ export type AuthorizationResourceSearchMessage = ResourceSearchResponse;
 export type AuthorizationSubjectSearchMessage = SubjectSearchResponse;
 export type AuthorizationActionSearchMessage = ActionSearchResponse;
 export type AuthorizationReadRelationshipsMessage = ReadRelationshipsResponse;
+export type AuthorizationRelationshipMessage = Relationship;
+export type AuthorizationRelationshipKeyMessage = RelationshipKey;
 
 const sharedAuthorizationTransport: {
   target: string;
@@ -67,12 +89,19 @@ const sharedAuthorizationTransport: {
 };
 
 /**
- * Read-only client for the host-configured authorization provider.
+ * Client for the host-configured authorization provider.
+ *
+ * The client accepts plain SDK request objects and performs protobuf message
+ * construction inside the transport layer, so callers do not need to import
+ * generated protocol modules.
  */
 export class AuthorizationClient {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
-  constructor(socketTarget?: string, relayToken = process.env[ENV_AUTHORIZATION_SOCKET_TOKEN]?.trim() ?? "") {
+  constructor(
+    socketTarget?: string,
+    relayToken = process.env[ENV_AUTHORIZATION_SOCKET_TOKEN]?.trim() ?? "",
+  ) {
     const resolvedTarget = resolveAuthorizationSocketTarget(socketTarget);
     const transportOptions = authorizationTransportOptions(resolvedTarget);
     const transport = createGrpcTransport({
@@ -122,14 +151,20 @@ export class AuthorizationClient {
     return await this.client.readRelationships(request);
   }
 
+  /** Writes and deletes authorization relationships. */
+  async writeRelationships(
+    request: AuthorizationWriteRelationshipsInput,
+  ): Promise<void> {
+    await this.client.writeRelationships(request);
+  }
+
   async getMetadata(): Promise<AuthorizationMetadataMessage> {
     return await this.client.getMetadata({});
   }
 }
 
 /**
- * Mirrors the Go SDK helper for obtaining the read-only host authorization
- * client inside authored providers.
+ * Returns a shared host authorization client for authored providers.
  */
 export function Authorization(): AuthorizationClient {
   const target = resolveAuthorizationSocketTarget();
@@ -149,7 +184,56 @@ export function Authorization(): AuthorizationClient {
   return client;
 }
 
-function resolveAuthorizationSocketTarget(socketPath = process.env[ENV_AUTHORIZATION_SOCKET]): string {
+/** Creates an authorization subject reference. */
+export function authorizationSubject(
+  type: string,
+  id: string,
+  properties?: JsonObject,
+): AuthorizationSubject {
+  return properties === undefined ? { type, id } : { type, id, properties };
+}
+
+/** Creates an authorization resource reference. */
+export function authorizationResource(
+  type: string,
+  id: string,
+  properties?: JsonObject,
+): AuthorizationResource {
+  return properties === undefined ? { type, id } : { type, id, properties };
+}
+
+/** Creates an authorization action reference. */
+export function authorizationAction(
+  name: string,
+  properties?: JsonObject,
+): AuthorizationAction {
+  return properties === undefined ? { name } : { name, properties };
+}
+
+/** Creates a relationship tuple for authorization writes. */
+export function authorizationRelationship(
+  subject: AuthorizationSubject,
+  relation: string,
+  resource: AuthorizationResource,
+  properties?: JsonObject,
+): AuthorizationRelationship {
+  return properties === undefined
+    ? { subject, relation, resource }
+    : { subject, relation, resource, properties };
+}
+
+/** Creates a relationship key for authorization deletes. */
+export function authorizationRelationshipKey(
+  subject: AuthorizationSubject,
+  relation: string,
+  resource: AuthorizationResource,
+): AuthorizationRelationshipKey {
+  return { subject, relation, resource };
+}
+
+function resolveAuthorizationSocketTarget(
+  socketPath = process.env[ENV_AUTHORIZATION_SOCKET],
+): string {
   const trimmed = socketPath?.trim() ?? "";
   if (!trimmed) {
     throw new Error(`authorization: ${ENV_AUTHORIZATION_SOCKET} is not set`);
