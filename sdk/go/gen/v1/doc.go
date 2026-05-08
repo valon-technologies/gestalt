@@ -4,5 +4,7 @@
 // New provider code should prefer the authored gestalt SDK APIs where they are
 // available. These names alias the SDK's internal transport types only for
 // existing providers and test fixtures that still need a low-level protocol
-// surface during migration.
+// surface during migration. The agent-host service, agent message, and
+// IndexedDB aliases are intentionally included so transport contract tests can
+// avoid importing internal packages.
 package proto

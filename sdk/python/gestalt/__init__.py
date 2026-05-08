@@ -109,6 +109,45 @@ _AGENT_PROTOCOL_EXPORTS = (
     "UpdateAgentProviderSessionRequest",
 )
 
+_AGENT_HELPER_EXPORTS = (
+    "agent_actor_from_dict",
+    "agent_actor_to_dict",
+    "agent_message_from_dict",
+    "agent_message_part_from_dict",
+    "agent_message_part_to_dict",
+    "agent_message_to_dict",
+    "agent_messages_from_dicts",
+    "agent_messages_to_dicts",
+    "agent_subject_context_from_dict",
+    "agent_subject_context_to_dict",
+    "agent_tool_ref_from_dict",
+    "agent_tool_ref_to_dict",
+    "prepared_workspace_from_dict",
+    "prepared_workspace_to_dict",
+)
+
+_PROTOBUF_HELPER_EXPORTS = (
+    "datetime_from_timestamp",
+    "has_field",
+    "struct_from_dict",
+    "struct_to_dict",
+    "timestamp_from_datetime",
+    "value_from_json",
+    "value_to_json",
+    "which_oneof",
+)
+
+_INDEXEDDB_PROTOCOL_EXPORTS = (
+    "indexeddb_cursor_key_to_proto",
+    "indexeddb_key_range_to_proto",
+    "indexeddb_key_value_from_python",
+    "indexeddb_key_value_to_python",
+    "indexeddb_record_from_proto",
+    "indexeddb_record_to_proto",
+    "indexeddb_typed_value_from_python",
+    "indexeddb_typed_value_to_python",
+)
+
 _AUTHENTICATION_PROTOCOL_EXPORTS = (
     "AuthenticatedUser",
     "AuthSessionSettings",
@@ -303,6 +342,11 @@ _LAZY_EXPORTS = {
 }
 
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
+_LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS})
+_LAZY_EXPORTS.update({name: ("._protocol", name) for name in _PROTOBUF_HELPER_EXPORTS})
+_LAZY_EXPORTS.update(
+    {name: ("._indexeddb", name) for name in _INDEXEDDB_PROTOCOL_EXPORTS}
+)
 _LAZY_EXPORTS.update(
     {name: ("._authentication", name) for name in _AUTHENTICATION_PROTOCOL_EXPORTS}
 )
@@ -336,8 +380,11 @@ def __getattr__(name: str):
 
 __all__ = [
     *_AGENT_PROTOCOL_EXPORTS,
+    *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_PROTOCOL_EXPORTS,
     *_AUTHORIZATION_PROTOCOL_EXPORTS,
+    *_INDEXEDDB_PROTOCOL_EXPORTS,
+    *_PROTOBUF_HELPER_EXPORTS,
     *_WORKFLOW_PROTOCOL_EXPORTS,
     "AgentHost",
     "AgentManager",

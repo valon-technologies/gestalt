@@ -2,6 +2,7 @@ import {
   create,
   fromJson,
   isMessage,
+  type JsonObject,
   type JsonValue,
   type MessageInitShape,
 } from "@bufbuild/protobuf";
@@ -31,11 +32,14 @@ import {
   AgentTurnDisplaySchema,
   AgentTurnEventSchema,
   AgentTurnSchema,
+  ExecuteAgentToolRequestSchema,
   GetAgentProviderCapabilitiesRequestSchema,
+  ListAgentToolsRequestSchema,
   ListAgentProviderInteractionsResponseSchema,
   ListAgentProviderSessionsResponseSchema,
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsResponseSchema,
+  ResolveAgentConnectionRequestSchema,
   type AgentActor,
   type AgentInteraction,
   type AgentMessage,
@@ -154,6 +158,36 @@ export type AgentTurnEventInit = Omit<
 > & {
   display?: AgentTurnDisplayInit | undefined;
 };
+
+/** Plain-object input for listing tools available to one agent turn. */
+export interface AgentHostListToolsInput {
+  sessionId: string;
+  turnId: string;
+  runGrant?: string | undefined;
+  pageSize?: number | undefined;
+  pageToken?: string | undefined;
+  query?: string | undefined;
+}
+
+/** Plain-object input for executing a tool during one agent turn. */
+export interface AgentHostExecuteToolInput {
+  sessionId: string;
+  turnId: string;
+  toolCallId: string;
+  toolId: string;
+  arguments?: JsonObject | undefined;
+  runGrant?: string | undefined;
+  idempotencyKey?: string | undefined;
+}
+
+/** Plain-object input for resolving a configured connection during one turn. */
+export interface AgentHostResolveConnectionInput {
+  sessionId: string;
+  turnId: string;
+  connection: string;
+  instance?: string | undefined;
+  runGrant?: string | undefined;
+}
 
 /** Handlers and runtime metadata for an agent provider. */
 export interface AgentProviderOptions extends ProviderBaseOptions {
@@ -459,6 +493,23 @@ export class AgentHost {
     return await this.client.executeTool(request);
   }
 
+  /** Executes a host tool using plain TypeScript request fields. */
+  async executeToolForTurn(
+    input: AgentHostExecuteToolInput,
+  ): Promise<ExecuteAgentToolResponse> {
+    return await this.executeTool(
+      create(ExecuteAgentToolRequestSchema, {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        toolCallId: input.toolCallId,
+        toolId: input.toolId,
+        arguments: input.arguments,
+        runGrant: input.runGrant ?? "",
+        idempotencyKey: input.idempotencyKey ?? "",
+      }),
+    );
+  }
+
   /** Lists host tools visible to the current agent request. */
   async listTools(
     request: ListAgentToolsRequest,
@@ -466,11 +517,42 @@ export class AgentHost {
     return await this.client.listTools(request);
   }
 
+  /** Lists host tools using plain TypeScript request fields. */
+  async listToolsForTurn(
+    input: AgentHostListToolsInput,
+  ): Promise<ListAgentToolsResponse> {
+    return await this.listTools(
+      create(ListAgentToolsRequestSchema, {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        runGrant: input.runGrant ?? "",
+        pageSize: input.pageSize ?? 0,
+        pageToken: input.pageToken ?? "",
+        query: input.query ?? "",
+      }),
+    );
+  }
+
   /** Resolves a configured agent connection for the current turn. */
   async resolveConnection(
     request: ResolveAgentConnectionRequest,
   ): Promise<ResolvedAgentConnection> {
     return await this.client.resolveConnection(request);
+  }
+
+  /** Resolves an agent connection using plain TypeScript request fields. */
+  async resolveConnectionForTurn(
+    input: AgentHostResolveConnectionInput,
+  ): Promise<ResolvedAgentConnection> {
+    return await this.resolveConnection(
+      create(ResolveAgentConnectionRequestSchema, {
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        connection: input.connection,
+        instance: input.instance ?? "",
+        runGrant: input.runGrant ?? "",
+      }),
+    );
   }
 }
 

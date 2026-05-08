@@ -78,6 +78,12 @@ The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
 `PluginInvoker`.
 
+`AgentHost` includes plain-input helpers for listing tools, executing tools, and
+resolving connections during one turn. Use `gestalt::protocol` for protobuf
+well-known type conversions and `gestalt::proto::v1` when transport fixtures
+need generated messages or service traits. The IndexedDB module also exposes
+JSON-named conversion helpers for asserting datastore wire shapes.
+
 ## Codegen strategy
 
 Bindings are checked into
@@ -116,6 +122,8 @@ The crate keeps generated bindings behind a higher-level authoring API:
   socket exposed by `gestaltd`.
 - `proto::v1` exposes generated protocol bindings for low-level integration
   work.
+- `protocol` converts JSON values, `Struct`, `Value`, `SystemTime`, and
+  `Timestamp` without depending on private generated modules.
 
 ## Package layout
 

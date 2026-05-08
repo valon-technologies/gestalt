@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -99,11 +99,13 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	resp, err := client.ExecuteTool(context.Background(), &proto.ExecuteAgentToolRequest{
-		SessionId:      "session-1",
-		TurnId:         "turn-1",
-		ToolCallId:     "call-1",
-		ToolId:         "tool-1",
+	resp, err := client.ExecuteToolForTurn(context.Background(), gestalt.AgentHostExecuteToolInput{
+		SessionID:      "session-1",
+		TurnID:         "turn-1",
+		ToolCallID:     "call-1",
+		ToolID:         "tool-1",
+		Arguments:      map[string]any{"query": "Ada Lovelace"},
+		RunGrant:       "run-grant-1",
 		IdempotencyKey: "tool-call-key-1",
 	})
 	if err != nil {
@@ -112,11 +114,13 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if resp.GetStatus() != 207 || resp.GetBody() != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	listResp, err := client.ListTools(context.Background(), &proto.ListAgentToolsRequest{
-		SessionId: "session-1",
-		TurnId:    "turn-1",
+	listResp, err := client.ListToolsForTurn(context.Background(), gestalt.AgentHostListToolsInput{
+		SessionID: "session-1",
+		TurnID:    "turn-1",
 		PageSize:  25,
 		PageToken: "page-1",
+		Query:     "slack",
+		RunGrant:  "run-grant-1",
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -124,9 +128,9 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(listResp.GetTools()) != 1 || listResp.GetTools()[0].GetId() != "tool-2" || listResp.GetTools()[0].GetMcpName() != "slack__send_message" || listResp.GetNextPageToken() != "next-page" {
 		t.Fatalf("list response = %#v", listResp)
 	}
-	connResp, err := client.ResolveConnection(context.Background(), &proto.ResolveAgentConnectionRequest{
-		SessionId:  "session-1",
-		TurnId:     "turn-1",
+	connResp, err := client.ResolveConnectionForTurn(context.Background(), gestalt.AgentHostResolveConnectionInput{
+		SessionID:  "session-1",
+		TurnID:     "turn-1",
 		Connection: "model",
 		Instance:   "default",
 		RunGrant:   "run-grant-1",
@@ -143,13 +147,16 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.toolRequests) != 1 {
 		t.Fatalf("toolRequests len = %d, want 1", len(harness.toolRequests))
 	}
-	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
+	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetRunGrant() != "run-grant-1" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
 		t.Fatalf("tool request = %#v", harness.toolRequests[0])
+	}
+	if got := gestalt.MapFromStruct(harness.toolRequests[0].GetArguments()); got["query"] != "Ada Lovelace" {
+		t.Fatalf("tool request arguments = %#v", got)
 	}
 	if len(harness.listRequests) != 1 {
 		t.Fatalf("listRequests len = %d, want 1", len(harness.listRequests))
 	}
-	if harness.listRequests[0].GetSessionId() != "session-1" || harness.listRequests[0].GetTurnId() != "turn-1" || harness.listRequests[0].GetPageSize() != 25 || harness.listRequests[0].GetPageToken() != "page-1" {
+	if harness.listRequests[0].GetSessionId() != "session-1" || harness.listRequests[0].GetTurnId() != "turn-1" || harness.listRequests[0].GetPageSize() != 25 || harness.listRequests[0].GetPageToken() != "page-1" || harness.listRequests[0].GetQuery() != "slack" || harness.listRequests[0].GetRunGrant() != "run-grant-1" {
 		t.Fatalf("list request = %#v", harness.listRequests[0])
 	}
 	if len(harness.connRequests) != 1 {

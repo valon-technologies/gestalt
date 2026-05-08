@@ -64,6 +64,13 @@
 // S3Client, WorkflowHostClient, WorkflowManagerClient, AgentHostClient,
 // AgentManagerClient, AuthorizationClient, and InvokerClient.
 //
+// AgentHostClient includes plain Go helper methods such as ExecuteToolForTurn,
+// ListToolsForTurn, and ResolveConnectionForTurn. For lower-level fixtures and
+// interoperability tests, package gen/v1 re-exports selected generated
+// protobuf bindings. StructFromMap, ValueFromAny, TimestampFromTime, and the
+// IndexedDB codec helpers convert between native Go values and protobuf
+// well-known or IndexedDB wire types without importing internal packages.
+//
 // See https://gestaltd.ai/reference/go-sdk for the Go SDK guide.
 // See https://gestaltd.ai/custom-providers/plugins for the full typed plugin
 // authoring flow.

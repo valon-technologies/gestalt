@@ -46,10 +46,16 @@ else:
 
 struct_pb2: Any = cast(Any, _struct_pb2)
 
-Catalog: Any = plugin_pb2.Catalog if plugin_pb2 is not None else dict[str, Any]  # ty: ignore[unresolved-attribute]
-CatalogOperation: Any = plugin_pb2.CatalogOperation if plugin_pb2 is not None else dict[str, Any]  # ty: ignore[unresolved-attribute]
-CatalogParameter: Any = plugin_pb2.CatalogParameter if plugin_pb2 is not None else dict[str, Any]  # ty: ignore[unresolved-attribute]
-OperationAnnotations: Any = plugin_pb2.OperationAnnotations if plugin_pb2 is not None else dict[str, Any]  # ty: ignore[unresolved-attribute]
+Catalog: Any = plugin_pb2.Catalog if plugin_pb2 is not None else dict[str, Any]
+CatalogOperation: Any = (
+    plugin_pb2.CatalogOperation if plugin_pb2 is not None else dict[str, Any]
+)
+CatalogParameter: Any = (
+    plugin_pb2.CatalogParameter if plugin_pb2 is not None else dict[str, Any]
+)
+OperationAnnotations: Any = (
+    plugin_pb2.OperationAnnotations if plugin_pb2 is not None else dict[str, Any]
+)
 
 
 @runtime_checkable

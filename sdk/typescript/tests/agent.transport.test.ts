@@ -14,12 +14,10 @@ import {
   AgentHost as AgentHostService,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
-  ListAgentToolsRequestSchema,
   ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
-  ResolveAgentConnectionRequestSchema,
   ResolvedAgentConnectionSchema,
-} from "../src/internal/gen/v1/agent_pb.ts";
+} from "@valon-technologies/gestalt/protocol/v1";
 import {
   AgentHost,
   createAgentProviderService,
@@ -196,11 +194,19 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-host-"));
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
-  const calls: Array<{ turnId: string; toolCallId: string; toolId: string; idempotencyKey: string }> = [];
+  const calls: Array<{
+    turnId: string;
+    toolCallId: string;
+    toolId: string;
+    arguments: unknown;
+    runGrant: string;
+    idempotencyKey: string;
+  }> = [];
   const lists: Array<{
     turnId: string;
     pageSize: number;
     pageToken: string;
+    query: string;
     runGrant: string;
   }> = [];
   const connections: Array<{
@@ -221,6 +227,8 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             toolCallId: input.toolCallId,
             toolId: input.toolId,
+            arguments: input.arguments,
+            runGrant: input.runGrant,
             idempotencyKey: input.idempotencyKey,
           });
           return create(ExecuteAgentToolResponseSchema, {
@@ -236,6 +244,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             pageSize: input.pageSize,
             pageToken: input.pageToken,
+            query: input.query,
             runGrant: input.runGrant,
           });
           return create(ListAgentToolsResponseSchema, {
@@ -292,18 +301,17 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     process.env[ENV_AGENT_HOST_SOCKET] = socketPath;
 
     const host = new AgentHost();
-    const response = await host.executeTool(
-      create(ExecuteAgentToolRequestSchema, {
-        sessionId: "session-123",
-        turnId: "turn-123",
-        toolCallId: "call-123",
-        toolId: "lookup-status",
-        arguments: {
-          deployment: "blue",
-        },
-        idempotencyKey: "tool-call-key-123",
-      }),
-    );
+    const response = await host.executeToolForTurn({
+      sessionId: "session-123",
+      turnId: "turn-123",
+      toolCallId: "call-123",
+      toolId: "lookup-status",
+      arguments: {
+        deployment: "blue",
+      },
+      runGrant: "grant-token",
+      idempotencyKey: "tool-call-key-123",
+    });
 
     expect(response.status).toBe(207);
     expect(JSON.parse(response.body)).toEqual({
@@ -318,19 +326,22 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         toolCallId: "call-123",
         toolId: "lookup-status",
+        arguments: {
+          deployment: "blue",
+        },
+        runGrant: "grant-token",
         idempotencyKey: "tool-call-key-123",
       },
     ]);
 
-    const listResponse = await host.listTools(
-      create(ListAgentToolsRequestSchema, {
-        sessionId: "session-123",
-        turnId: "turn-123",
-        pageSize: 10,
-        pageToken: "page-0",
-        runGrant: "grant-token",
-      }),
-    );
+    const listResponse = await host.listToolsForTurn({
+      sessionId: "session-123",
+      turnId: "turn-123",
+      pageSize: 10,
+      pageToken: "page-0",
+      query: "slack",
+      runGrant: "grant-token",
+    });
 
     expect(listResponse.tools).toHaveLength(1);
     expect(listResponse.tools[0]?.mcpName).toBe("slack__chat_post_message");
@@ -340,19 +351,18 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         pageSize: 10,
         pageToken: "page-0",
+        query: "slack",
         runGrant: "grant-token",
       },
     ]);
 
-    const resolvedConnection = await host.resolveConnection(
-      create(ResolveAgentConnectionRequestSchema, {
-        sessionId: "session-123",
-        turnId: "turn-123",
-        connection: "model",
-        instance: "default",
-        runGrant: "grant-token",
-      }),
-    );
+    const resolvedConnection = await host.resolveConnectionForTurn({
+      sessionId: "session-123",
+      turnId: "turn-123",
+      connection: "model",
+      instance: "default",
+      runGrant: "grant-token",
+    });
 
     expect(resolvedConnection.connectionId).toBe("vertex-ai");
     expect(resolvedConnection.headers.authorization).toBe("Bearer token");

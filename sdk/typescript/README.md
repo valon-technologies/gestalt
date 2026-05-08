@@ -80,6 +80,13 @@ The root package exports provider definition helpers:
 - Host-service clients for cache, IndexedDB, S3, workflows, agents,
   invocations, and telemetry.
 
+`AgentHost` includes plain-object helpers named `listToolsForTurn`,
+`executeToolForTurn`, and `resolveConnectionForTurn`. Advanced transport tests
+can import generated schemas, services, and message types from
+`@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
+paths. Public IndexedDB conversion helpers are exported for lower-level
+datastore fixtures.
+
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.
 

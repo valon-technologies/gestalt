@@ -15,7 +15,10 @@ use gestalt::proto::v1::{
     AgentMessagePart, AgentMessagePartType, AgentSessionState, ConfigureProviderRequest,
     ProviderKind,
 };
-use gestalt::{AgentHost, AgentProvider, ENV_AGENT_HOST_SOCKET_TOKEN, RuntimeMetadata};
+use gestalt::{
+    AgentHost, AgentHostExecuteToolInput, AgentHostListToolsInput, AgentHostResolveConnectionInput,
+    AgentProvider, ENV_AGENT_HOST_SOCKET_TOKEN, RuntimeMetadata,
+};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -31,6 +34,39 @@ struct TestAgentProvider {
 #[derive(Default, Clone)]
 struct TestAgentHostService {
     relay_tokens: Arc<Mutex<Vec<String>>>,
+    list_requests: Arc<Mutex<Vec<HostListRequest>>>,
+    execute_requests: Arc<Mutex<Vec<HostExecuteRequest>>>,
+    connection_requests: Arc<Mutex<Vec<HostConnectionRequest>>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct HostListRequest {
+    session_id: String,
+    turn_id: String,
+    page_size: i32,
+    page_token: String,
+    query: String,
+    run_grant: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct HostExecuteRequest {
+    session_id: String,
+    turn_id: String,
+    tool_call_id: String,
+    tool_id: String,
+    arguments: Option<serde_json::Value>,
+    run_grant: String,
+    idempotency_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct HostConnectionRequest {
+    session_id: String,
+    turn_id: String,
+    connection: String,
+    instance: String,
+    run_grant: String,
 }
 
 #[gestalt::async_trait]
@@ -336,6 +372,17 @@ impl AgentHostRpc for TestAgentHostService {
         request: GrpcRequest<pb::ListAgentToolsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentToolsResponse>, Status> {
         let request = request.into_inner();
+        self.list_requests
+            .lock()
+            .expect("lock list requests")
+            .push(HostListRequest {
+                session_id: request.session_id.clone(),
+                turn_id: request.turn_id.clone(),
+                page_size: request.page_size,
+                page_token: request.page_token.clone(),
+                query: request.query.clone(),
+                run_grant: request.run_grant.clone(),
+            });
         Ok(GrpcResponse::new(pb::ListAgentToolsResponse {
             tools: vec![pb::ListedAgentTool {
                 id: format!("{}:{}:lookup", request.session_id, request.turn_id),
@@ -365,6 +412,21 @@ impl AgentHostRpc for TestAgentHostService {
                 .push(token.to_str().expect("relay token ascii").to_string());
         }
         let request = request.into_inner();
+        self.execute_requests
+            .lock()
+            .expect("lock execute requests")
+            .push(HostExecuteRequest {
+                session_id: request.session_id.clone(),
+                turn_id: request.turn_id.clone(),
+                tool_call_id: request.tool_call_id.clone(),
+                tool_id: request.tool_id.clone(),
+                arguments: request
+                    .arguments
+                    .as_ref()
+                    .map(gestalt::protocol::json_from_struct),
+                run_grant: request.run_grant.clone(),
+                idempotency_key: request.idempotency_key.clone(),
+            });
         Ok(GrpcResponse::new(pb::ExecuteAgentToolResponse {
             status: 207,
             body: format!(
@@ -379,6 +441,16 @@ impl AgentHostRpc for TestAgentHostService {
         request: GrpcRequest<pb::ResolveAgentConnectionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ResolvedAgentConnection>, Status> {
         let request = request.into_inner();
+        self.connection_requests
+            .lock()
+            .expect("lock connection requests")
+            .push(HostConnectionRequest {
+                session_id: request.session_id.clone(),
+                turn_id: request.turn_id.clone(),
+                connection: request.connection.clone(),
+                instance: request.instance.clone(),
+                run_grant: request.run_grant.clone(),
+            });
         Ok(GrpcResponse::new(pb::ResolvedAgentConnection {
             connection_id: "vertex-ai".to_string(),
             connection: request.connection,
@@ -653,10 +725,11 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let host_service = TestAgentHostService::default();
 
     let host_socket_for_task = host_socket.clone();
+    let served_service = host_service.clone();
     let host_task = tokio::spawn(async move {
         let listener = UnixListener::bind(&host_socket_for_task).expect("bind agent host socket");
         Server::builder()
-            .add_service(AgentHostGrpcServer::new(host_service))
+            .add_service(AgentHostGrpcServer::new(served_service))
             .serve_with_incoming(UnixListenerStream::new(listener))
             .await
             .expect("serve agent host");
@@ -666,7 +739,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
 
     let mut host = AgentHost::connect().await.expect("connect agent host");
     let listed = host
-        .list_tools(pb::ListAgentToolsRequest {
+        .list_tools_for_turn(AgentHostListToolsInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
             page_size: 10,
@@ -681,15 +754,16 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     assert_eq!(listed.next_page_token, "next-1");
 
     let invoked = host
-        .execute_tool(pb::ExecuteAgentToolRequest {
+        .execute_tool_for_turn(AgentHostExecuteToolInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
             tool_call_id: "call-7".to_string(),
             tool_id: "lookup".to_string(),
+            run_grant: "grant-token".to_string(),
             idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
-            arguments: Some(helpers::struct_from_json(serde_json::json!({
+            arguments: Some(serde_json::json!({
                 "query": "Ada Lovelace"
-            }))),
+            })),
             ..Default::default()
         })
         .await
@@ -698,7 +772,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
 
     let resolved_connection = host
-        .resolve_connection(pb::ResolveAgentConnectionRequest {
+        .resolve_connection_for_turn(AgentHostResolveConnectionInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
             connection: "model".to_string(),
@@ -715,6 +789,51 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     assert_eq!(
         resolved_connection.params.get("endpoint"),
         Some(&"vertex-endpoint".to_string())
+    );
+
+    assert_eq!(
+        *host_service
+            .list_requests
+            .lock()
+            .expect("lock list requests"),
+        vec![HostListRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            page_size: 10,
+            page_token: "page-0".to_string(),
+            query: "lookup".to_string(),
+            run_grant: "grant-token".to_string(),
+        }]
+    );
+    assert_eq!(
+        *host_service
+            .execute_requests
+            .lock()
+            .expect("lock execute requests"),
+        vec![HostExecuteRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            tool_call_id: "call-7".to_string(),
+            tool_id: "lookup".to_string(),
+            arguments: Some(serde_json::json!({
+                "query": "Ada Lovelace"
+            })),
+            run_grant: "grant-token".to_string(),
+            idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
+        }]
+    );
+    assert_eq!(
+        *host_service
+            .connection_requests
+            .lock()
+            .expect("lock connection requests"),
+        vec![HostConnectionRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            connection: "model".to_string(),
+            instance: "default".to_string(),
+            run_grant: "grant-token".to_string(),
+        }]
     );
 
     host_task.abort();

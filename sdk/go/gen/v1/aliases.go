@@ -7,14 +7,30 @@ import internal "github.com/valon-technologies/gestalt/internal/gen/v1"
 
 const (
 	AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED          = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED
+	AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED            = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED
+	AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING           = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING
 	AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING           = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING
 	AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED         = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
+	AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED       = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
 	AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT = internal.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
+	AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED        = internal.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED
 	AgentInteractionState_AGENT_INTERACTION_STATE_PENDING         = internal.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING
 	AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED        = internal.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED
+	AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED     = internal.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED
 	AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL          = internal.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL
+	AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION     = internal.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION
+	AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT             = internal.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT
+	AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED       = internal.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF        = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON             = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT             = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL        = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT      = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED      = internal.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
 	AgentSessionState_AGENT_SESSION_STATE_ACTIVE                  = internal.AgentSessionState_AGENT_SESSION_STATE_ACTIVE
 	AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED             = internal.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
+	AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG        = internal.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+	AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED        = internal.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 	CurrentProtocolVersion                                        = internal.CurrentProtocolVersion
 	CursorDirection_CURSOR_NEXT                                   = internal.CursorDirection_CURSOR_NEXT
 	CursorDirection_CURSOR_NEXT_UNIQUE                            = internal.CursorDirection_CURSOR_NEXT_UNIQUE
@@ -39,7 +55,12 @@ type (
 	Action                                    = internal.Action
 	ActionSearchRequest                       = internal.ActionSearchRequest
 	AgentActor                                = internal.AgentActor
+	AgentExecutionStatus                      = internal.AgentExecutionStatus
+	AgentHostClient                           = internal.AgentHostClient
+	AgentHostServer                           = internal.AgentHostServer
 	AgentInteraction                          = internal.AgentInteraction
+	AgentInteractionState                     = internal.AgentInteractionState
+	AgentInteractionType                      = internal.AgentInteractionType
 	AgentManagerCancelTurnRequest             = internal.AgentManagerCancelTurnRequest
 	AgentManagerCreateSessionRequest          = internal.AgentManagerCreateSessionRequest
 	AgentManagerCreateTurnRequest             = internal.AgentManagerCreateTurnRequest
@@ -56,12 +77,20 @@ type (
 	AgentManagerResolveInteractionRequest     = internal.AgentManagerResolveInteractionRequest
 	AgentManagerUpdateSessionRequest          = internal.AgentManagerUpdateSessionRequest
 	AgentMessage                              = internal.AgentMessage
+	AgentMessagePart                          = internal.AgentMessagePart
+	AgentMessagePartImageRef                  = internal.AgentMessagePartImageRef
+	AgentMessagePartToolCall                  = internal.AgentMessagePartToolCall
+	AgentMessagePartToolResult                = internal.AgentMessagePartToolResult
+	AgentMessagePartType                      = internal.AgentMessagePartType
 	AgentProviderCapabilities                 = internal.AgentProviderCapabilities
 	AgentSession                              = internal.AgentSession
+	AgentSessionState                         = internal.AgentSessionState
 	AgentSessionStartConfig                   = internal.AgentSessionStartConfig
 	AgentSessionStartHook                     = internal.AgentSessionStartHook
 	AgentSessionStartHookOutput               = internal.AgentSessionStartHookOutput
+	AgentSubjectContext                       = internal.AgentSubjectContext
 	AgentToolRef                              = internal.AgentToolRef
+	AgentToolSourceMode                       = internal.AgentToolSourceMode
 	AgentTurn                                 = internal.AgentTurn
 	AgentTurnDisplay                          = internal.AgentTurnDisplay
 	AgentTurnEvent                            = internal.AgentTurnEvent
@@ -110,6 +139,7 @@ type (
 	DeleteWorkflowProviderEventTriggerRequest = internal.DeleteWorkflowProviderEventTriggerRequest
 	DeleteWorkflowProviderScheduleRequest     = internal.DeleteWorkflowProviderScheduleRequest
 	ExecuteAgentToolRequest                   = internal.ExecuteAgentToolRequest
+	ExecuteAgentToolResponse                  = internal.ExecuteAgentToolResponse
 	ExternalCredential                        = internal.ExternalCredential
 	ExternalCredentialAuthConfig              = internal.ExternalCredentialAuthConfig
 	ExternalCredentialLookup                  = internal.ExternalCredentialLookup
@@ -138,6 +168,9 @@ type (
 	KeyRange                                  = internal.KeyRange
 	KeyResponse                               = internal.KeyResponse
 	KeyValue                                  = internal.KeyValue
+	KeyValueArray                             = internal.KeyValueArray
+	KeyValue_Array                            = internal.KeyValue_Array
+	KeyValue_Scalar                           = internal.KeyValue_Scalar
 	KeysResponse                              = internal.KeysResponse
 	ListAgentProviderInteractionsRequest      = internal.ListAgentProviderInteractionsRequest
 	ListAgentProviderInteractionsResponse     = internal.ListAgentProviderInteractionsResponse
@@ -147,6 +180,9 @@ type (
 	ListAgentProviderTurnEventsResponse       = internal.ListAgentProviderTurnEventsResponse
 	ListAgentProviderTurnsRequest             = internal.ListAgentProviderTurnsRequest
 	ListAgentProviderTurnsResponse            = internal.ListAgentProviderTurnsResponse
+	ListAgentToolsRequest                     = internal.ListAgentToolsRequest
+	ListAgentToolsResponse                    = internal.ListAgentToolsResponse
+	ListedAgentTool                           = internal.ListedAgentTool
 	ListExternalCredentialsRequest            = internal.ListExternalCredentialsRequest
 	ListModelsRequest                         = internal.ListModelsRequest
 	ListWorkflowExecutionReferencesRequest    = internal.ListWorkflowExecutionReferencesRequest
@@ -167,6 +203,7 @@ type (
 	ObjectStoreRequest                        = internal.ObjectStoreRequest
 	ObjectStoreSchema                         = internal.ObjectStoreSchema
 	OpenCursorRequest                         = internal.OpenCursorRequest
+	OperationAnnotations                      = internal.OperationAnnotations
 	PauseWorkflowProviderEventTriggerRequest  = internal.PauseWorkflowProviderEventTriggerRequest
 	PauseWorkflowProviderScheduleRequest      = internal.PauseWorkflowProviderScheduleRequest
 	PreparedAgentWorkspace                    = internal.PreparedAgentWorkspace
@@ -184,8 +221,10 @@ type (
 	RelationshipKey                           = internal.RelationshipKey
 	RemovePluginRuntimeWorkspaceRequest       = internal.RemovePluginRuntimeWorkspaceRequest
 	ResolveAgentProviderInteractionRequest    = internal.ResolveAgentProviderInteractionRequest
+	ResolveAgentConnectionRequest             = internal.ResolveAgentConnectionRequest
 	ResolveExternalCredentialRequest          = internal.ResolveExternalCredentialRequest
 	ResolveExternalCredentialResponse         = internal.ResolveExternalCredentialResponse
+	ResolvedAgentConnection                   = internal.ResolvedAgentConnection
 	ResolvedAgentTool                         = internal.ResolvedAgentTool
 	Resource                                  = internal.Resource
 	ResourceSearchRequest                     = internal.ResourceSearchRequest
@@ -239,7 +278,15 @@ type (
 	TransactionServerMessage_Commit           = internal.TransactionServerMessage_Commit
 	TransactionServerMessage_Operation        = internal.TransactionServerMessage_Operation
 	TypedValue                                = internal.TypedValue
+	TypedValue_BoolValue                      = internal.TypedValue_BoolValue
+	TypedValue_BytesValue                     = internal.TypedValue_BytesValue
+	TypedValue_FloatValue                     = internal.TypedValue_FloatValue
+	TypedValue_IntValue                       = internal.TypedValue_IntValue
+	TypedValue_JsonValue                      = internal.TypedValue_JsonValue
+	TypedValue_NullValue                      = internal.TypedValue_NullValue
 	TypedValue_StringValue                    = internal.TypedValue_StringValue
+	TypedValue_TimeValue                      = internal.TypedValue_TimeValue
+	UnimplementedAgentHostServer              = internal.UnimplementedAgentHostServer
 	UnimplementedAgentProviderServer          = internal.UnimplementedAgentProviderServer
 	UnimplementedIndexedDBServer              = internal.UnimplementedIndexedDBServer
 	UnimplementedWorkflowHostServer           = internal.UnimplementedWorkflowHostServer
@@ -298,9 +345,11 @@ type (
 )
 
 var (
+	NewAgentHostClient             = internal.NewAgentHostClient
 	NewAuthorizationProviderClient = internal.NewAuthorizationProviderClient
 	NewIndexedDBClient             = internal.NewIndexedDBClient
 	NewProviderLifecycleClient     = internal.NewProviderLifecycleClient
+	RegisterAgentHostServer        = internal.RegisterAgentHostServer
 	RegisterIndexedDBServer        = internal.RegisterIndexedDBServer
 	RegisterWorkflowHostServer     = internal.RegisterWorkflowHostServer
 )

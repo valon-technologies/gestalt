@@ -7,6 +7,7 @@ from pathlib import Path
 PROTO_MODULES = (
     "agent",
     "authentication",
+    "authorization",
     "cache",
     "datastore",
     "plugin",
@@ -18,6 +19,21 @@ PROTO_MODULES = (
 )
 GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
 GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
+TOP_LEVEL_V1_IMPORT_MARKERS = ("from v1 import ", "import v1.")
+
+
+def rewrite_vendored_imports(source: str) -> str:
+    return source.replace(
+        GRPC_RUNTIME_IMPORT_PREFIX,
+        GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX,
+    )
+
+
+def assert_no_top_level_v1_imports(*, module_name: str, path: Path, source: str) -> None:
+    if any(marker in source for marker in TOP_LEVEL_V1_IMPORT_MARKERS):
+        raise RuntimeError(
+            f"generated {module_name} stub {path.name} still imports top-level v1"
+        )
 
 
 def grpc_pb2_import_module(module_name: str) -> str:
@@ -87,6 +103,7 @@ def main() -> int:
         target_dir.mkdir(parents=True, exist_ok=True)
         for module_name in PROTO_MODULES:
             pb2_path = generated_dir / f"{module_name}_pb2.py"
+            pyi_path = generated_dir / f"{module_name}_pb2.pyi"
             pb2_grpc_path = generated_dir / f"{module_name}_pb2_grpc.py"
 
             pb2_source = pb2_path.read_text(encoding="utf-8")
@@ -94,16 +111,16 @@ def main() -> int:
                 raise RuntimeError(
                     f"buf generated {module_name}_pb2.py without the expected protobuf 6.33.1 runtime floor"
                 )
-            pb2_source = pb2_source.replace(
-                GRPC_RUNTIME_IMPORT_PREFIX,
-                GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX,
+            pb2_source = rewrite_vendored_imports(pb2_source)
+            assert_no_top_level_v1_imports(
+                module_name=module_name,
+                path=pb2_path,
+                source=pb2_source,
             )
 
             pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
             pb2_import_module = grpc_pb2_import_module(module_name)
-            expected_import = (
-                f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n"
-            )
+            expected_import = f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n"
             if expected_import not in pb2_grpc_source:
                 raise RuntimeError(
                     f"unexpected grpc Python import layout in generated {module_name} stub"
@@ -130,7 +147,23 @@ def main() -> int:
                 1,
             )
 
-            (target_dir / f"{module_name}_pb2.py").write_text(pb2_source, encoding="utf-8")
+            (target_dir / f"{module_name}_pb2.py").write_text(
+                pb2_source, encoding="utf-8"
+            )
+            if not pyi_path.exists():
+                raise RuntimeError(f"buf did not generate {module_name}_pb2.pyi")
+            pyi_source = rewrite_vendored_imports(
+                pyi_path.read_text(encoding="utf-8")
+            )
+            assert_no_top_level_v1_imports(
+                module_name=module_name,
+                path=pyi_path,
+                source=pyi_source,
+            )
+            (target_dir / f"{module_name}_pb2.pyi").write_text(
+                pyi_source,
+                encoding="utf-8",
+            )
             (target_dir / f"{module_name}_pb2_grpc.py").write_text(
                 pb2_grpc_source,
                 encoding="utf-8",

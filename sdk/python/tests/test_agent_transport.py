@@ -1,10 +1,12 @@
 """Transport-backed Agent SDK tests over real sockets."""
+
 from __future__ import annotations
 
 import os
 import tempfile
 import unittest
 from concurrent import futures
+from importlib import resources
 from typing import Any
 
 import grpc
@@ -26,11 +28,15 @@ from gestalt import (
     Request,
     WarningsProvider,
     _runtime,
+    agent_message_from_dict,
+    agent_message_to_dict,
+    protocol,
 )
-from gestalt._gen.v1 import agent_pb2 as _agent_pb2
-from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
-from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
-from gestalt._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+from gestalt.protocol import v1 as protocol_v1
+from gestalt.testing import agent_pb2 as _agent_pb2
+from gestalt.testing import agent_pb2_grpc as _agent_pb2_grpc
+from gestalt.testing import runtime_pb2 as _runtime_pb2
+from gestalt.testing import runtime_pb2_grpc as _runtime_pb2_grpc
 
 agent_pb2: Any = _agent_pb2
 agent_pb2_grpc: Any = _agent_pb2_grpc
@@ -49,6 +55,8 @@ _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
 _host_relay_tokens: list[str] = []
 _host_list_requests: list[dict[str, Any]] = []
+_host_execute_requests: list[dict[str, Any]] = []
+_host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -245,10 +253,11 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
         _host_list_requests.append(
             {
                 "session_id": request.session_id,
-                    "turn_id": request.turn_id,
-                    "page_size": request.page_size,
-                    "page_token": request.page_token,
-                    "run_grant": request.run_grant,
+                "turn_id": request.turn_id,
+                "page_size": request.page_size,
+                "page_token": request.page_token,
+                "run_grant": request.run_grant,
+                "query": request.query,
             }
         )
         if request.page_token == "large":
@@ -282,6 +291,22 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
 
     def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_host_relay_tokens(context)
+        _host_execute_requests.append(
+            {
+                "session_id": request.session_id,
+                "turn_id": request.turn_id,
+                "tool_call_id": request.tool_call_id,
+                "tool_id": request.tool_id,
+                "arguments": json_format.MessageToDict(
+                    request.arguments,
+                    preserving_proto_field_name=True,
+                )
+                if request.HasField("arguments")
+                else {},
+                "idempotency_key": request.idempotency_key,
+                "run_grant": request.run_grant,
+            }
+        )
         return agent_pb2.ExecuteAgentToolResponse(
             status=207,
             body=f"{request.session_id}:{request.turn_id}:{request.tool_call_id}:{request.tool_id}:{request.idempotency_key}",
@@ -289,6 +314,15 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
 
     def ResolveConnection(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_host_relay_tokens(context)
+        _host_connection_requests.append(
+            {
+                "session_id": request.session_id,
+                "turn_id": request.turn_id,
+                "connection": request.connection,
+                "instance": request.instance,
+                "run_grant": request.run_grant,
+            }
+        )
         return agent_pb2.ResolvedAgentConnection(
             connection_id="vertex-ai",
             connection=request.connection,
@@ -642,8 +676,88 @@ class AgentTransportTests(unittest.TestCase):
         _provider.configured.clear()
         _host_relay_tokens.clear()
         _host_list_requests.clear()
+        _host_execute_requests.clear()
+        _host_connection_requests.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
+
+    def test_protocol_package_reexports_generated_modules(self) -> None:
+        from gestalt._gen.v1 import agent_pb2 as private_agent_pb2
+
+        self.assertIs(protocol.v1.agent_pb2, private_agent_pb2)
+        self.assertIs(protocol_v1.agent_pb2, private_agent_pb2)
+        self.assertTrue(resources.files("gestalt").joinpath("py.typed").is_file())
+        self.assertTrue(
+            resources.files("gestalt").joinpath("_gen/v1/agent_pb2.pyi").is_file()
+        )
+
+    def test_agent_message_dict_helpers_preserve_presence(self) -> None:
+        message = agent_message_from_dict(
+            {
+                "role": "assistant",
+                "parts": [
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_CALL,
+                        "tool_call": {
+                            "id": "call-1",
+                            "tool_id": "tool-1",
+                            "arguments": {},
+                        },
+                    },
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT,
+                        "tool_result": {
+                            "tool_call_id": "call-1",
+                            "status": 0,
+                            "output": {"ok": True},
+                        },
+                    },
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_IMAGE_REF,
+                        "image_ref": {
+                            "uri": "s3://bucket/image.png",
+                            "mime_type": "image/png",
+                        },
+                    },
+                ],
+                "metadata": {},
+            }
+        )
+
+        self.assertTrue(message.HasField("metadata"))
+        self.assertTrue(message.parts[0].tool_call.HasField("arguments"))
+        self.assertEqual(
+            agent_message_to_dict(message),
+            {
+                "role": "assistant",
+                "parts": [
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_CALL,
+                        "tool_call": {
+                            "id": "call-1",
+                            "tool_id": "tool-1",
+                            "arguments": {},
+                        },
+                    },
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT,
+                        "tool_result": {
+                            "tool_call_id": "call-1",
+                            "status": 0,
+                            "output": {"ok": True},
+                        },
+                    },
+                    {
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_IMAGE_REF,
+                        "image_ref": {
+                            "uri": "s3://bucket/image.png",
+                            "mime_type": "image/png",
+                        },
+                    },
+                ],
+                "metadata": {},
+            },
+        )
 
     def test_agent_runtime_and_server_roundtrip(self) -> None:
         channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
@@ -722,9 +836,7 @@ class AgentTransportTests(unittest.TestCase):
             agent_pb2.ListAgentProviderInteractionsRequest(turn_id="turn-1")
         )
         fetched_interaction = provider_client.GetInteraction(
-            agent_pb2.GetAgentProviderInteractionRequest(
-                interaction_id="interaction-1"
-            )
+            agent_pb2.GetAgentProviderInteractionRequest(interaction_id="interaction-1")
         )
         resolve_interaction_request = agent_pb2.ResolveAgentProviderInteractionRequest(
             interaction_id="interaction-1"
@@ -746,7 +858,9 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(_provider.configured, [("agent-runtime", {"tenant": "acme"})])
         self.assertEqual(created_session.id, "session-1")
         self.assertEqual(created_session.state, agent_pb2.AGENT_SESSION_STATE_ACTIVE)
-        self.assertEqual([session.id for session in listed_sessions.sessions], ["session-1"])
+        self.assertEqual(
+            [session.id for session in listed_sessions.sessions], ["session-1"]
+        )
         self.assertEqual(fetched_session.state, agent_pb2.AGENT_SESSION_STATE_ARCHIVED)
         self.assertEqual(updated_session.client_ref, "cli-session-2")
         self.assertEqual(created_turn.id, "turn-1")
@@ -779,44 +893,39 @@ class AgentTransportTests(unittest.TestCase):
         self.assertTrue(capabilities.resumable_turns)
 
     def test_agent_host_roundtrip(self) -> None:
-        arguments = struct_pb2.Struct()
-        arguments.update({"query": "Ada Lovelace"})
-
         with AgentHost() as host:
-            list_response = host.list_tools(
-                agent_pb2.ListAgentToolsRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    page_size=10,
-                    page_token="page-0",
-                    run_grant="grant-token",
-                )
+            list_response = host.list_tools_for_turn(
+                "session-1",
+                "turn-1",
+                page_size=10,
+                page_token="page-0",
+                run_grant="grant-token",
+                query="person",
             )
-            response = host.execute_tool(
-                agent_pb2.ExecuteAgentToolRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    tool_call_id="call-7",
-                    tool_id="lookup",
-                    arguments=arguments,
-                    idempotency_key="tool-call-key-7",
-                )
+            response = host.execute_tool_for_turn(
+                "session-1",
+                "turn-1",
+                tool_call_id="call-7",
+                tool_id="lookup",
+                arguments={"query": "Ada Lovelace"},
+                run_grant="grant-token",
+                idempotency_key="tool-call-key-7",
             )
-            connection = host.resolve_connection(
-                agent_pb2.ResolveAgentConnectionRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    connection="model",
-                    instance="default",
-                    run_grant="grant-token",
-                )
+            connection = host.resolve_connection_for_turn(
+                "session-1",
+                "turn-1",
+                connection="model",
+                instance="default",
+                run_grant="grant-token",
             )
 
         self.assertEqual(len(list_response.tools), 1)
         self.assertEqual(list_response.tools[0].mcp_name, "slack__chat_post_message")
         self.assertEqual(list_response.next_page_token, "next-1")
         self.assertEqual(response.status, 207)
-        self.assertEqual(response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7")
+        self.assertEqual(
+            response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7"
+        )
         self.assertEqual(connection.connection_id, "vertex-ai")
         self.assertEqual(connection.headers["authorization"], "Bearer token")
         self.assertEqual(connection.params["endpoint"], "vertex-endpoint")
@@ -831,6 +940,33 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "turn-1",
                     "page_size": 10,
                     "page_token": "page-0",
+                    "run_grant": "grant-token",
+                    "query": "person",
+                }
+            ],
+        )
+        self.assertEqual(
+            _host_execute_requests,
+            [
+                {
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                    "tool_call_id": "call-7",
+                    "tool_id": "lookup",
+                    "arguments": {"query": "Ada Lovelace"},
+                    "idempotency_key": "tool-call-key-7",
+                    "run_grant": "grant-token",
+                }
+            ],
+        )
+        self.assertEqual(
+            _host_connection_requests,
+            [
+                {
+                    "session_id": "session-1",
+                    "turn_id": "turn-1",
+                    "connection": "model",
+                    "instance": "default",
                     "run_grant": "grant-token",
                 }
             ],

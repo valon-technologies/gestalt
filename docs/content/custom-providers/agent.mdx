@@ -149,9 +149,8 @@ When a turn uses `tool_source: mcp_catalog`, Gestalt passes the provider:
 
 - `tool_refs`: the requested catalog scope, such as one operation, one plugin,
   or a broad catalog grant.
-- `run_grant`: the scoped authority the provider must pass back to
-  `AgentHost.ListTools`, `AgentHost.ExecuteTool`, and
-  `AgentHost.ResolveConnection`.
+- `run_grant`: the scoped authority the provider must pass back when it calls
+  the `AgentHost` list-tools, execute-tool, or resolve-connection helpers.
 
 `mcp_catalog` means the provider can accept catalog grants. It does not require
 a single discovery strategy. Providers should choose the strategy that matches
@@ -160,7 +159,7 @@ their runtime:
 - Native deferred MCP search: mount the Gestalt MCP surface and let the runtime
   search/load tool schemas on demand.
 - Provider catalog proxy: expose a small provider-owned search/schema/call tool
-  surface, then call `AgentHost.ListTools` and `AgentHost.ExecuteTool` behind it.
+  surface, then call the `AgentHost` list and execute helpers behind it.
 - Eager exact-list hydration: list and expose the granted tools directly when
   the grant is known to be small.
 
@@ -184,7 +183,6 @@ provider-owned inference.
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
       proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-      "google.golang.org/protobuf/types/known/structpb"
     )
 
     func executeGrantedTool(ctx context.Context, turn *proto.CreateAgentProviderTurnRequest) (string, error) {
@@ -194,9 +192,9 @@ provider-owned inference.
       }
       defer host.Close()
 
-      listed, err := host.ListTools(ctx, &proto.ListAgentToolsRequest{
-        SessionId: turn.GetSessionId(),
-        TurnId:    turn.GetTurnId(),
+      listed, err := host.ListToolsForTurn(ctx, gestalt.AgentHostListToolsInput{
+        SessionID: turn.GetSessionId(),
+        TurnID:    turn.GetTurnId(),
         RunGrant:  turn.GetRunGrant(),
         PageSize:  25,
         Query:     "issue",
@@ -208,27 +206,22 @@ provider-owned inference.
         return "", fmt.Errorf("no granted tools matched the query")
       }
 
-      args, err := structpb.NewStruct(map[string]any{"query": "AIT-231"})
-      if err != nil {
-        return "", err
-      }
-
-      result, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-        SessionId:      turn.GetSessionId(),
-        TurnId:         turn.GetTurnId(),
-        ToolCallId:     "call-1",
-        ToolId:         listed.GetTools()[0].GetId(),
+      result, err := host.ExecuteToolForTurn(ctx, gestalt.AgentHostExecuteToolInput{
+        SessionID:      turn.GetSessionId(),
+        TurnID:         turn.GetTurnId(),
+        ToolCallID:     "call-1",
+        ToolID:         listed.GetTools()[0].GetId(),
         RunGrant:       turn.GetRunGrant(),
         IdempotencyKey: turn.GetIdempotencyKey() + ":call-1",
-        Arguments:      args,
+        Arguments:      map[string]any{"query": "AIT-231"},
       })
       if err != nil {
         return "", err
       }
 
-      connection, err := host.ResolveConnection(ctx, &proto.ResolveAgentConnectionRequest{
-        SessionId:  turn.GetSessionId(),
-        TurnId:     turn.GetTurnId(),
+      connection, err := host.ResolveConnectionForTurn(ctx, gestalt.AgentHostResolveConnectionInput{
+        SessionID:  turn.GetSessionId(),
+        TurnID:     turn.GetTurnId(),
         Connection: "model",
         Instance:   "default",
         RunGrant:   turn.GetRunGrant(),
@@ -244,47 +237,37 @@ provider-owned inference.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from google.protobuf import struct_pb2
     import gestalt
 
 
     def execute_granted_tool(turn) -> str | None:
-        arguments = struct_pb2.Struct()
-        arguments.update({"query": "AIT-231"})
-
         with gestalt.AgentHost() as host:
-            listed = host.list_tools(
-                gestalt.ListAgentToolsRequest(
-                    session_id=turn.session_id,
-                    turn_id=turn.turn_id,
-                    run_grant=turn.run_grant,
-                    page_size=25,
-                    query="issue",
-                )
+            listed = host.list_tools_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                run_grant=turn.run_grant,
+                page_size=25,
+                query="issue",
             )
             if not listed.tools:
                 return None
 
-            result = host.execute_tool(
-                gestalt.ExecuteAgentToolRequest(
-                    session_id=turn.session_id,
-                    turn_id=turn.turn_id,
-                    tool_call_id="call-1",
-                    tool_id=listed.tools[0].id,
-                    run_grant=turn.run_grant,
-                    idempotency_key=f"{turn.idempotency_key}:call-1",
-                    arguments=arguments,
-                )
+            result = host.execute_tool_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                tool_call_id="call-1",
+                tool_id=listed.tools[0].id,
+                run_grant=turn.run_grant,
+                idempotency_key=f"{turn.idempotency_key}:call-1",
+                arguments={"query": "AIT-231"},
             )
 
-            connection = host.resolve_connection(
-                gestalt.ResolveAgentConnectionRequest(
-                    session_id=turn.session_id,
-                    turn_id=turn.turn_id,
-                    connection="model",
-                    instance="default",
-                    run_grant=turn.run_grant,
-                )
+            connection = host.resolve_connection_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                connection="model",
+                instance="default",
+                run_grant=turn.run_grant,
             )
 
         _ = connection.headers
@@ -294,7 +277,6 @@ provider-owned inference.
   <Tabs.Tab>
     ```rust
     use gestalt::proto::v1 as proto;
-    use prost_types::{value::Kind, Struct, Value};
 
     async fn execute_granted_tool(
         turn: &proto::CreateAgentProviderTurnRequest,
@@ -302,7 +284,7 @@ provider-owned inference.
         let mut host = gestalt::AgentHost::connect().await?;
 
         let listed = host
-            .list_tools(proto::ListAgentToolsRequest {
+            .list_tools_for_turn(gestalt::AgentHostListToolsInput {
                 session_id: turn.session_id.clone(),
                 turn_id: turn.turn_id.clone(),
                 run_grant: turn.run_grant.clone(),
@@ -317,27 +299,19 @@ provider-owned inference.
         };
 
         let result = host
-            .execute_tool(proto::ExecuteAgentToolRequest {
+            .execute_tool_for_turn(gestalt::AgentHostExecuteToolInput {
                 session_id: turn.session_id.clone(),
                 turn_id: turn.turn_id.clone(),
                 tool_call_id: "call-1".to_string(),
                 tool_id: tool.id.clone(),
                 run_grant: turn.run_grant.clone(),
                 idempotency_key: format!("{}:call-1", turn.idempotency_key),
-                arguments: Some(Struct {
-                    fields: [(
-                        "query".to_string(),
-                        Value {
-                            kind: Some(Kind::StringValue("AIT-231".to_string())),
-                        },
-                    )]
-                    .into(),
-                }),
+                arguments: Some(serde_json::json!({"query": "AIT-231"})),
             })
             .await?;
 
         let connection = host
-            .resolve_connection(proto::ResolveAgentConnectionRequest {
+            .resolve_connection_for_turn(gestalt::AgentHostResolveConnectionInput {
                 session_id: turn.session_id.clone(),
                 turn_id: turn.turn_id.clone(),
                 connection: "model".to_string(),
@@ -363,7 +337,7 @@ provider-owned inference.
     ): Promise<string | null> {
       const host = new AgentHost();
 
-      const listed = await host.listTools({
+      const listed = await host.listToolsForTurn({
         sessionId: turn.sessionId,
         turnId: turn.turnId,
         runGrant: turn.runGrant,
@@ -376,7 +350,7 @@ provider-owned inference.
         return null;
       }
 
-      const result = await host.executeTool({
+      const result = await host.executeToolForTurn({
         sessionId: turn.sessionId,
         turnId: turn.turnId,
         toolCallId: "call-1",
@@ -386,7 +360,7 @@ provider-owned inference.
         arguments: { query: "AIT-231" },
       });
 
-      const connection = await host.resolveConnection({
+      const connection = await host.resolveConnectionForTurn({
         sessionId: turn.sessionId,
         turnId: turn.turnId,
         connection: "model",
@@ -411,8 +385,8 @@ agent facade records `gestaltd.agent.operation.*`, and tool resolution records
 
 When OTLP tracing is enabled, the `context.Context` passed into provider
 methods carries the active trace. Preserve that context when calling back into
-`AgentHost.ExecuteTool` or starting provider-owned work that should remain part
-of the same trace tree.
+`AgentHost` tool execution helpers or starting provider-owned work that should
+remain part of the same trace tree.
 
 ## Canonical objects
 
@@ -452,9 +426,9 @@ render (`arguments`, `input`, `request`, `output`, `result`, and `body`) plus
 explicit preview aliases. `display` is not a privacy boundary: clients must
 still honor the event's `visibility`. Gestalt may synthesize display for known
 private events to preserve existing CLI behavior, but unknown private events are
-not normalized. `AgentHost.ExecuteTool` does not emit turn lifecycle events by
-itself; providers should still persist tool events or set `display` on their own
-events.
+not normalized. Host tool execution does not emit turn lifecycle events by
+itself; providers should still persist tool events or set `display` on their
+own events.
 
 ## SDK examples
 
@@ -984,7 +958,7 @@ events.
 
         let outputText = "";
         if (request.tools.length > 0) {
-          const response = await host.executeTool({
+          const response = await host.executeToolForTurn({
             sessionId: request.sessionId,
             turnId: request.turnId,
             toolCallId: "call-1",
