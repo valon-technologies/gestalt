@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	workflowSystemToolSchedulesCreate = "schedules.create"
-	workflowSystemToolSchedulesList   = "schedules.list"
-	workflowSystemToolSchedulesGet    = "schedules.get"
-	workflowSystemToolSchedulesPause  = "schedules.pause"
-	workflowSystemToolSchedulesResume = "schedules.resume"
-	workflowSystemToolRunsList        = "runs.list"
-	workflowSystemToolRunsGet         = "runs.get"
+	workflowSystemToolDefinitionsCreate = "definitions.create"
+	workflowSystemToolSchedulesCreate   = "schedules.create"
+	workflowSystemToolSchedulesList     = "schedules.list"
+	workflowSystemToolSchedulesGet      = "schedules.get"
+	workflowSystemToolSchedulesPause    = "schedules.pause"
+	workflowSystemToolSchedulesResume   = "schedules.resume"
+	workflowSystemToolRunsList          = "runs.list"
+	workflowSystemToolRunsGet           = "runs.get"
 )
 
 type workflowSystemToolAvailability interface {
@@ -51,10 +52,16 @@ func newWorkflowSystemTools(manager workflowmanager.Service, availability workfl
 }
 
 var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
+	workflowSystemToolDefinitionsCreate: {
+		Operation:        workflowSystemToolDefinitionsCreate,
+		Name:             "workflow_definitions_create",
+		Description:      "Create a reusable workflow definition for a delegated target.",
+		ParametersSchema: workflowSystemToolCreateDefinitionSchema(),
+	},
 	workflowSystemToolSchedulesCreate: {
 		Operation:        workflowSystemToolSchedulesCreate,
 		Name:             "workflow_schedules_create",
-		Description:      "Create a recurring workflow schedule for a delegated target.",
+		Description:      "Create a recurring workflow schedule for a delegated target or workflow definition.",
 		ParametersSchema: workflowSystemToolCreateScheduleSchema(),
 	},
 	workflowSystemToolSchedulesList: {
@@ -148,6 +155,8 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		return nil, fmt.Errorf("%w: unsupported agent system tool %q", invocation.ErrInvalidInvocation, req.Tool.Target.System)
 	}
 	switch strings.TrimSpace(req.Tool.Target.Operation) {
+	case workflowSystemToolDefinitionsCreate:
+		return t.executeCreateDefinition(ctx, req)
 	case workflowSystemToolSchedulesCreate:
 		return t.executeCreateSchedule(ctx, req)
 	case workflowSystemToolSchedulesList:
@@ -233,14 +242,10 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 	}
 }
 
-func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
 	args := req.Arguments
-	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.create", "provider", "cron", "timezone", "paused", "target"); err != nil {
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.definitions.create", "provider", "target"); err != nil {
 		return nil, err
-	}
-	cron := workflowSystemToolStringArg(args, "cron")
-	if cron == "" {
-		return nil, fmt.Errorf("%w: cron is required", invocation.ErrInvalidInvocation)
 	}
 	targetValue, ok := args["target"]
 	if !ok {
@@ -253,16 +258,89 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 	if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 		return nil, err
 	}
-	permissions := workflowSystemToolPermissionsForTarget(target)
-	scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions)
+	permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+	scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
 	if err != nil {
 		return nil, err
+	}
+	definition, err := t.manager.CreateDefinition(ctx, scopedPrincipal, workflowmanager.DefinitionUpsert{
+		ProviderName:     workflowSystemToolStringArg(args, "provider"),
+		Target:           target,
+		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
+		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
+}
+
+func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.create", "provider", "cron", "timezone", "paused", "target", "definitionId"); err != nil {
+		return nil, err
+	}
+	cron := workflowSystemToolStringArg(args, "cron")
+	if cron == "" {
+		return nil, fmt.Errorf("%w: cron is required", invocation.ErrInvalidInvocation)
+	}
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	targetValue, hasTarget := args["target"]
+	if definitionID == "" && !hasTarget {
+		return nil, fmt.Errorf("%w: target or definitionId is required", invocation.ErrInvalidInvocation)
+	}
+	if definitionID != "" && hasTarget {
+		return nil, fmt.Errorf("%w: target and definitionId cannot both be set", invocation.ErrInvalidInvocation)
+	}
+
+	var target coreworkflow.Target
+	var scopedPrincipal *principal.Principal
+	if definitionID != "" {
+		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
+		definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil || definition.Definition == nil {
+			return nil, core.ErrNotFound
+		}
+		target = definition.Definition.Target
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions := definition.Definition.Permissions
+		if permissions == nil {
+			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		}
+		scopedPrincipal, err = workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		target, err = workflowSystemToolTargetFromValue(targetValue)
+		if err != nil {
+			return nil, err
+		}
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		scopedPrincipal, err = workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
+		}
+	}
+	upsertTarget := target
+	if definitionID != "" {
+		upsertTarget = coreworkflow.Target{}
 	}
 	schedule, err := t.manager.CreateSchedule(ctx, scopedPrincipal, workflowmanager.ScheduleUpsert{
 		ProviderName:     workflowSystemToolStringArg(args, "provider"),
 		Cron:             cron,
 		Timezone:         workflowSystemToolStringArg(args, "timezone"),
-		Target:           target,
+		Target:           upsertTarget,
+		DefinitionID:     definitionID,
 		Paused:           workflowSystemToolBoolArg(args, "paused"),
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
@@ -312,7 +390,25 @@ func workflowSystemToolFromRef(ref coreagent.ToolRef) (coreagent.Tool, error) {
 }
 
 func workflowSystemToolCreateScheduleSchema() map[string]any {
-	targetSchema := workflowSystemToolObjectSchema([]string{}, map[string]any{
+	return workflowSystemToolObjectSchema([]string{"cron"}, map[string]any{
+		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
+		"cron":         workflowSystemToolStringSchema("Cron expression."),
+		"timezone":     workflowSystemToolStringSchema("IANA timezone."),
+		"paused":       map[string]any{"type": "boolean"},
+		"target":       workflowSystemToolTargetSchema(),
+		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to schedule."),
+	})
+}
+
+func workflowSystemToolCreateDefinitionSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"target"}, map[string]any{
+		"provider": workflowSystemToolStringSchema("Workflow provider name."),
+		"target":   workflowSystemToolTargetSchema(),
+	})
+}
+
+func workflowSystemToolTargetSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{}, map[string]any{
 		"plugin": workflowSystemToolObjectSchema([]string{"name", "operation"}, map[string]any{
 			"name":       workflowSystemToolStringSchema("Plugin name."),
 			"operation":  workflowSystemToolStringSchema("Plugin operation."),
@@ -331,13 +427,6 @@ func workflowSystemToolCreateScheduleSchema() map[string]any {
 			"modelOptions":   map[string]any{"type": "object"},
 			"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
 		}),
-	})
-	return workflowSystemToolObjectSchema([]string{"cron", "target"}, map[string]any{
-		"provider": workflowSystemToolStringSchema("Workflow provider name."),
-		"cron":     workflowSystemToolStringSchema("Cron expression."),
-		"timezone": workflowSystemToolStringSchema("IANA timezone."),
-		"paused":   map[string]any{"type": "boolean"},
-		"target":   targetSchema,
 	})
 }
 
@@ -631,12 +720,15 @@ func workflowSystemToolResolvedBindingMatchesTarget(scopeConnection, scopeInstan
 	return true
 }
 
-func workflowSystemToolPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
+func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultAgentProvider string) []core.AccessPermission {
 	operationsByPlugin := map[string]map[string]struct{}{}
-	add := func(pluginName, operation string) {
+	addOperation := func(pluginName, operation string) {
 		pluginName = strings.TrimSpace(pluginName)
 		operation = strings.TrimSpace(operation)
 		if pluginName == "" || operation == "" {
+			return
+		}
+		if ops, ok := operationsByPlugin[pluginName]; ok && ops == nil {
 			return
 		}
 		if operationsByPlugin[pluginName] == nil {
@@ -644,19 +736,33 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target) []core.A
 		}
 		operationsByPlugin[pluginName][operation] = struct{}{}
 	}
+	addProvider := func(providerName string) {
+		providerName = strings.TrimSpace(providerName)
+		if providerName == "" {
+			return
+		}
+		if _, ok := operationsByPlugin[providerName]; !ok {
+			operationsByPlugin[providerName] = nil
+		}
+	}
 	if target.Plugin != nil {
-		add(target.Plugin.PluginName, target.Plugin.Operation)
+		addOperation(target.Plugin.PluginName, target.Plugin.Operation)
 	}
 	if target.Agent != nil {
+		agentProvider := strings.TrimSpace(target.Agent.ProviderName)
+		if agentProvider == "" {
+			agentProvider = strings.TrimSpace(defaultAgentProvider)
+		}
+		addProvider(agentProvider)
 		for i := range target.Agent.ToolRefs {
 			ref := target.Agent.ToolRefs[i]
 			if strings.TrimSpace(ref.System) == "" {
-				add(ref.Plugin, ref.Operation)
+				addOperation(ref.Plugin, ref.Operation)
 			}
 		}
 	}
 	if len(operationsByPlugin) == 0 {
-		return nil
+		return []core.AccessPermission{}
 	}
 	plugins := slices.Sorted(maps.Keys(operationsByPlugin))
 	out := make([]core.AccessPermission, 0, len(plugins))
@@ -667,28 +773,88 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target) []core.A
 	return out
 }
 
-func workflowSystemToolScopedPrincipal(p *principal.Principal, permissions []core.AccessPermission) (*principal.Principal, error) {
+func workflowSystemToolTrustedAgentProvider(req agentSystemToolExecutionRequest, target coreworkflow.Target) string {
+	if target.Agent == nil {
+		return ""
+	}
+	currentProvider := strings.TrimSpace(req.ProviderName)
+	if currentProvider == "" {
+		return ""
+	}
+	targetProvider := strings.TrimSpace(target.Agent.ProviderName)
+	if targetProvider == "" || targetProvider == currentProvider {
+		return currentProvider
+	}
+	return ""
+}
+
+func workflowSystemToolPrincipalWithTrustedProvider(p *principal.Principal, trustedProvider string) *principal.Principal {
+	p = principal.Canonicalized(p)
+	trustedProvider = strings.TrimSpace(trustedProvider)
+	if p == nil || trustedProvider == "" || p.TokenPermissions == nil {
+		return p
+	}
+	next := *p
+	next.TokenPermissions = principal.ClonePermissionSet(p.TokenPermissions)
+	next.TokenPermissions[trustedProvider] = nil
+	next.Scopes = principal.PermissionPlugins(next.TokenPermissions)
+	return principal.Canonicalize(&next)
+}
+
+func workflowSystemToolScopedPrincipal(p *principal.Principal, permissions []core.AccessPermission, trustedProvider string) (*principal.Principal, error) {
+	return workflowSystemToolScopedPrincipalWithPermissions(p, permissions, trustedProvider, true)
+}
+
+func workflowSystemToolExactPermissionsPrincipal(p *principal.Principal, permissions []core.AccessPermission, trustedProvider string) (*principal.Principal, error) {
+	return workflowSystemToolScopedPrincipalWithPermissions(p, permissions, trustedProvider, false)
+}
+
+func workflowSystemToolScopedPrincipalWithPermissions(p *principal.Principal, permissions []core.AccessPermission, trustedProvider string, requireWithinCaller bool) (*principal.Principal, error) {
 	p = principal.Canonicalized(p)
 	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrAuthorizationDenied)
 	}
-	if len(permissions) == 0 {
+	if permissions == nil {
 		return p, nil
 	}
 	requested := principal.CompilePermissions(permissions)
 	if requested == nil {
-		return p, nil
+		requested = principal.PermissionSet{}
 	}
 	if p.TokenPermissions != nil {
 		requested = principal.IntersectPermissions(requested, p.TokenPermissions)
-		if len(requested) == 0 {
+		if trustedProvider != "" {
+			if requested == nil {
+				requested = principal.PermissionSet{}
+			}
+			requested[trustedProvider] = nil
+		}
+		if requireWithinCaller && len(permissions) > 0 && len(requested) == 0 {
 			return nil, fmt.Errorf("%w: workflow target is outside the caller permission scope", invocation.ErrScopeDenied)
 		}
 	}
 	next := *p
 	next.TokenPermissions = requested
+	next.ActionPermissions = nil
 	next.Scopes = principal.PermissionPlugins(requested)
 	return principal.Canonicalize(&next), nil
+}
+
+func workflowSystemToolDefinitionInfo(definition *workflowmanager.ManagedDefinition) map[string]any {
+	value := map[string]any{}
+	if definition == nil {
+		return value
+	}
+	if providerName := strings.TrimSpace(definition.ProviderName); providerName != "" {
+		value["provider"] = providerName
+	}
+	if definition.Definition != nil {
+		coreDefinition := definition.Definition
+		value["id"] = coreDefinition.ID
+		value["target"] = workflowSystemToolTargetInfo(coreDefinition.Target)
+		workflowSystemToolPutTime(value, "createdAt", coreDefinition.CreatedAt)
+	}
+	return value
 }
 
 func workflowSystemToolScheduleInfo(schedule *workflowmanager.ManagedSchedule) map[string]any {
@@ -709,6 +875,11 @@ func workflowSystemToolScheduleInfo(schedule *workflowmanager.ManagedSchedule) m
 		workflowSystemToolPutTime(value, "createdAt", coreSchedule.CreatedAt)
 		workflowSystemToolPutTime(value, "updatedAt", coreSchedule.UpdatedAt)
 		workflowSystemToolPutTime(value, "nextRunAt", coreSchedule.NextRunAt)
+	}
+	if schedule.ExecutionRef != nil {
+		if sourceDefinitionID := strings.TrimSpace(schedule.ExecutionRef.SourceDefinitionID); sourceDefinitionID != "" {
+			value["sourceDefinitionId"] = sourceDefinitionID
+		}
 	}
 	return value
 }
