@@ -2442,7 +2442,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	}
 }
 
-func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
+func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedTool(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
@@ -2510,7 +2510,7 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{Plugin: "slack", Operation: "events.reply"},
-			{Plugin: "github", Operation: "bot.createPullRequest", RunAs: runAs, RunAsExternalIdentity: externalIdentity},
+			{Plugin: "github", Operation: "bot.createPullRequest", CredentialMode: core.ConnectionModeNone, RunAs: runAs, RunAsExternalIdentity: externalIdentity},
 		},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
@@ -2539,6 +2539,7 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
 			Plugin:                "github",
 			Operation:             "bot.createPullRequest",
+			CredentialMode:        core.ConnectionModeNone,
 			RunAs:                 runAs,
 			RunAsExternalIdentity: externalIdentity,
 		}),
@@ -2555,8 +2556,14 @@ func TestAgentRuntimeExecuteToolAppliesRunAsOnlyForDelegatedTool(t *testing.T) {
 	if calls[0].providerName != "slack" || calls[0].subjectID != "user:user-123" || calls[0].runAsSubjectID != "" {
 		t.Fatalf("slack call = %#v, want original user subject without runAs", calls[0])
 	}
+	if calls[0].credentialModeOverride != "" {
+		t.Fatalf("slack credential mode override = %q, want none", calls[0].credentialModeOverride)
+	}
 	if calls[1].providerName != "github" || calls[1].subjectID != runAs.SubjectID {
 		t.Fatalf("github call = %#v, want delegated subject %q", calls[1], runAs.SubjectID)
+	}
+	if calls[1].credentialModeOverride != core.ConnectionModeNone {
+		t.Fatalf("github credential mode override = %q, want %q", calls[1].credentialModeOverride, core.ConnectionModeNone)
 	}
 	if calls[1].agentSubjectID != "user:user-123" || calls[1].runAsSubjectID != runAs.SubjectID {
 		t.Fatalf("github audit context = %#v, want original and delegated subjects", calls[1])
