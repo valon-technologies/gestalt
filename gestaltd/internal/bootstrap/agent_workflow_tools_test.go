@@ -6,6 +6,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -129,6 +130,249 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	}
 	if ref.CallerPluginName != "agent:managed" {
 		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerPluginName)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinition(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
+	scheduleTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{
+			{Plugin: "roadmap", Operations: []string{"sync"}},
+			{Plugin: "linear", Operations: []string{"viewer"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{definitionTool, scheduleTool},
+	})
+
+	definitionResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-call",
+		ToolID:       definitionTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap and open the needed code changes.",
+					"toolRefs": []any{
+						map[string]any{"plugin": "roadmap", "operation": "sync"},
+						map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool definition: %v", err)
+	}
+	if definitionResp == nil || definitionResp.Status != http.StatusCreated {
+		t.Fatalf("definition response = %#v, want 201", definitionResp)
+	}
+	var definitionBody struct {
+		Definition struct {
+			ID       string `json:"id"`
+			Provider string `json:"provider"`
+			Target   struct {
+				Agent struct {
+					Provider string `json:"provider"`
+					Prompt   string `json:"prompt"`
+				} `json:"agent"`
+			} `json:"target"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(definitionResp.Body), &definitionBody); err != nil {
+		t.Fatalf("decode definition response body: %v", err)
+	}
+	definitionID := definitionBody.Definition.ID
+	if definitionID == "" || definitionBody.Definition.Provider != "temporal" || definitionBody.Definition.Target.Agent.Provider != "managed" {
+		t.Fatalf("definition response = %#v", definitionBody.Definition)
+	}
+	definitionRef, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(definition): %v", err)
+	}
+	assertWorkflowSystemPermissions(t, definitionRef.Permissions, []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	})
+
+	scheduleResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-call",
+		ToolID:       scheduleTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"cron":         "0 9 * * 1-5",
+			"timezone":     "America/New_York",
+			"definitionId": definitionID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool schedule: %v", err)
+	}
+	if scheduleResp == nil || scheduleResp.Status != http.StatusCreated {
+		t.Fatalf("schedule response = %#v, want 201", scheduleResp)
+	}
+	var scheduleBody struct {
+		Schedule struct {
+			ID                 string `json:"id"`
+			SourceDefinitionID string `json:"sourceDefinitionId"`
+			Target             struct {
+				Agent struct {
+					Provider string `json:"provider"`
+				} `json:"agent"`
+			} `json:"target"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(scheduleResp.Body), &scheduleBody); err != nil {
+		t.Fatalf("decode schedule response body: %v", err)
+	}
+	if scheduleBody.Schedule.ID == "" || scheduleBody.Schedule.SourceDefinitionID != definitionID || scheduleBody.Schedule.Target.Agent.Provider != "managed" {
+		t.Fatalf("schedule response = %#v", scheduleBody.Schedule)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	upsert := workflowProvider.upsertedSchedules[0]
+	scheduleRef, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(schedule): %v", err)
+	}
+	if scheduleRef.SourceDefinitionID != definitionID {
+		t.Fatalf("schedule ref source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionID)
+	}
+	assertWorkflowSystemPermissions(t, scheduleRef.Permissions, []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	})
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
+	t.Parallel()
+
+	runtime, _ := newWorkflowSystemToolRuntime(t)
+	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{
+			{Plugin: "roadmap", Operations: []string{"sync"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+		},
+		Tools: []coreagent.Tool{definitionTool},
+	})
+
+	cases := []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{
+			name: "plugin target",
+			arguments: map[string]any{
+				"target": map[string]any{
+					"plugin": map[string]any{
+						"name":      "roadmap",
+						"operation": "sync",
+					},
+				},
+			},
+		},
+		{
+			name: "future system ref",
+			arguments: map[string]any{
+				"target": map[string]any{
+					"agent": map[string]any{
+						"provider": "managed",
+						"prompt":   "Create another cron.",
+						"toolRefs": []any{
+							map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range cases {
+		_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+			ProviderName: "managed",
+			SessionID:    "session-1",
+			TurnID:       "turn-1",
+			ToolID:       definitionTool.ID,
+			RunGrant:     runGrant,
+			Arguments:    tc.arguments,
+		})
+		if err == nil {
+			t.Fatalf("%s: ExecuteTool succeeded, want scope denial", tc.name)
+		}
+		if !errors.Is(err, invocation.ErrScopeDenied) {
+			t.Fatalf("%s: ExecuteTool error = %v, want scope denied", tc.name, err)
+		}
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsInvalidScheduleDefinitionArguments(t *testing.T) {
+	t.Parallel()
+
+	runtime, _ := newWorkflowSystemToolRuntime(t)
+	scheduleTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+		},
+		Tools: []coreagent.Tool{scheduleTool},
+	})
+
+	cases := []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{
+			name: "missing target and definition",
+			arguments: map[string]any{
+				"cron": "*/5 * * * *",
+			},
+		},
+		{
+			name: "target and definition",
+			arguments: map[string]any{
+				"cron":         "*/5 * * * *",
+				"definitionId": "workflow_definition:def-1",
+				"target": map[string]any{
+					"plugin": map[string]any{
+						"name":      "roadmap",
+						"operation": "sync",
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range cases {
+		_, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+			ProviderName: "managed",
+			SessionID:    "session-1",
+			TurnID:       "turn-1",
+			ToolID:       scheduleTool.ID,
+			RunGrant:     runGrant,
+			Arguments:    tc.arguments,
+		})
+		if err == nil {
+			t.Fatalf("%s: ExecuteTool succeeded, want invalid invocation", tc.name)
+		}
+		if !errors.Is(err, invocation.ErrInvalidInvocation) {
+			t.Fatalf("%s: ExecuteTool error = %v, want invalid invocation", tc.name, err)
+		}
 	}
 }
 
@@ -526,4 +770,12 @@ func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation strin
 	}
 	tool.ID = mustMintAgentToolID(t, workflowSystemRunGrants(t, runtime), tool.Target)
 	return tool
+}
+
+func assertWorkflowSystemPermissions(t *testing.T, got, want []core.AccessPermission) {
+	t.Helper()
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("permissions = %#v, want %#v", got, want)
+	}
 }
