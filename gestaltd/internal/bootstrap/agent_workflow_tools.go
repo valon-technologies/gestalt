@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"slices"
@@ -318,6 +319,7 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 	if err != nil {
 		return nil, err
 	}
+	slog.InfoContext(ctx, "agent workflow system tool created definition", workflowSystemToolDefinitionLogAttrs(req, definition)...)
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
 }
 
@@ -371,6 +373,7 @@ func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req a
 	if err != nil {
 		return nil, err
 	}
+	slog.InfoContext(ctx, "agent workflow system tool updated definition", workflowSystemToolDefinitionLogAttrs(req, definition)...)
 	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
 }
 
@@ -386,6 +389,9 @@ func (t *workflowSystemTools) executeDeleteDefinition(ctx context.Context, req a
 	if err := t.manager.DeleteDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID); err != nil {
 		return nil, err
 	}
+	attrs := workflowSystemToolBaseLogAttrs(req)
+	attrs = append(attrs, "workflow_definition_id", definitionID)
+	slog.InfoContext(ctx, "agent workflow system tool deleted definition", attrs...)
 	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"definitionId": definitionID, "deleted": true})
 }
 
@@ -463,6 +469,7 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 	if err != nil {
 		return nil, err
 	}
+	slog.InfoContext(ctx, "agent workflow system tool created schedule", workflowSystemToolScheduleLogAttrs(req, schedule)...)
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 }
 
@@ -591,6 +598,7 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 	if err != nil {
 		return nil, err
 	}
+	slog.InfoContext(ctx, "agent workflow system tool updated schedule", workflowSystemToolScheduleLogAttrs(req, schedule)...)
 	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 }
 
@@ -606,7 +614,77 @@ func (t *workflowSystemTools) executeDeleteSchedule(ctx context.Context, req age
 	if err := t.manager.DeleteSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID); err != nil {
 		return nil, err
 	}
+	attrs := workflowSystemToolBaseLogAttrs(req)
+	attrs = append(attrs, "workflow_schedule_id", scheduleID)
+	slog.InfoContext(ctx, "agent workflow system tool deleted schedule", attrs...)
 	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"scheduleId": scheduleID, "deleted": true})
+}
+
+func workflowSystemToolBaseLogAttrs(req agentSystemToolExecutionRequest) []any {
+	attrs := []any{
+		"agent_provider", strings.TrimSpace(req.ProviderName),
+		"agent_caller_plugin", strings.TrimSpace(req.CallerPluginName),
+		"agent_session_id", strings.TrimSpace(req.SessionID),
+		"agent_turn_id", strings.TrimSpace(req.TurnID),
+		"agent_tool_call_id", strings.TrimSpace(req.ToolCallID),
+		"agent_tool_id", strings.TrimSpace(req.ToolID),
+		"agent_tool_operation", strings.TrimSpace(req.Tool.Target.Operation),
+		"agent_tool_idempotency_key", strings.TrimSpace(req.IdempotencyKey),
+	}
+	if p := principal.Canonicalized(req.Principal); p != nil {
+		attrs = append(attrs,
+			"subject_id", strings.TrimSpace(p.SubjectID),
+			"subject_kind", strings.TrimSpace(string(p.Kind)),
+			"credential_subject_id", strings.TrimSpace(p.CredentialSubjectID),
+			"auth_source", strings.TrimSpace(p.AuthSource()),
+		)
+	}
+	return attrs
+}
+
+func workflowSystemToolDefinitionLogAttrs(req agentSystemToolExecutionRequest, definition *workflowmanager.ManagedDefinition) []any {
+	attrs := workflowSystemToolBaseLogAttrs(req)
+	if definition == nil {
+		return attrs
+	}
+	attrs = append(attrs, "workflow_provider", strings.TrimSpace(definition.ProviderName))
+	if definition.Definition != nil {
+		attrs = append(attrs,
+			"workflow_definition_id", strings.TrimSpace(definition.Definition.ID),
+			"workflow_target", workflowTargetContext(definition.Definition.Target),
+			"workflow_caller_plugin", strings.TrimSpace(definition.Definition.CallerPluginName),
+		)
+	}
+	return attrs
+}
+
+func workflowSystemToolScheduleLogAttrs(req agentSystemToolExecutionRequest, schedule *workflowmanager.ManagedSchedule) []any {
+	attrs := workflowSystemToolBaseLogAttrs(req)
+	if schedule == nil {
+		return attrs
+	}
+	attrs = append(attrs, "workflow_provider", strings.TrimSpace(schedule.ProviderName))
+	if schedule.Schedule != nil {
+		attrs = append(attrs,
+			"workflow_schedule_id", strings.TrimSpace(schedule.Schedule.ID),
+			"workflow_schedule_cron", strings.TrimSpace(schedule.Schedule.Cron),
+			"workflow_schedule_timezone", strings.TrimSpace(schedule.Schedule.Timezone),
+			"workflow_schedule_paused", schedule.Schedule.Paused,
+			"workflow_schedule_execution_ref", strings.TrimSpace(schedule.Schedule.ExecutionRef),
+			"workflow_target", workflowTargetContext(schedule.Schedule.Target),
+		)
+		if schedule.Schedule.NextRunAt != nil {
+			attrs = append(attrs, "workflow_schedule_next_run_at", schedule.Schedule.NextRunAt.UTC().Format(time.RFC3339Nano))
+		}
+	}
+	if schedule.ExecutionRef != nil {
+		attrs = append(attrs,
+			"workflow_execution_ref", strings.TrimSpace(schedule.ExecutionRef.ID),
+			"workflow_source_definition_id", strings.TrimSpace(schedule.ExecutionRef.SourceDefinitionID),
+			"workflow_caller_plugin", strings.TrimSpace(schedule.ExecutionRef.CallerPluginName),
+		)
+	}
+	return attrs
 }
 
 func workflowSystemToolCallerScope(req agentSystemToolExecutionRequest) string {

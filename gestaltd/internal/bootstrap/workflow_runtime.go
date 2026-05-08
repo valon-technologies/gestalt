@@ -369,6 +369,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	agentTarget := *target.Agent
 	timeout := workflowAgentTimeout(agentTarget.TimeoutSeconds)
+	slog.InfoContext(ctx, "workflow agent target starting", workflowAgentLogAttrs(req, principalValue, &agentTarget, nil, nil)...)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	runCtx = runtimehost.WithWorkflowAgentProviderDeadline(runCtx)
@@ -385,14 +386,17 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		IdempotencyKey: workflowAgentSessionIdempotencyKey(req),
 	})
 	if err != nil {
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, nil, nil)
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "workflow agent session create failed", attrs...)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "workflow agent session created", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)...)
 	if agentTarget.SessionReadyDelivery != nil {
 		if err := r.deliverAgentSessionReady(ctx, req, invoker, principalValue, agentTarget, session); err != nil {
-			slog.WarnContext(ctx, "workflow agent session-ready delivery failed",
-				"provider", req.ProviderName,
-				"run_id", req.RunID,
-				"error", err)
+			attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)
+			attrs = append(attrs, "error", err)
+			slog.WarnContext(ctx, "workflow agent session-ready delivery failed", attrs...)
 		}
 	}
 	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
@@ -414,17 +418,27 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		IdempotencyKey:   workflowAgentTurnIdempotencyKey(req),
 	})
 	if err != nil {
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "workflow agent turn create failed", attrs...)
 		return nil, err
 	}
+	slog.InfoContext(ctx, "workflow agent turn created", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)...)
 	turn, err = waitForWorkflowAgentTurn(runCtx, agentManager, principalValue, turn)
 	if err != nil {
 		if turn != nil && strings.TrimSpace(turn.ID) != "" {
 			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
 		}
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "workflow agent turn wait failed", attrs...)
 		return nil, err
 	}
 	switch turn.Status {
 	case coreagent.ExecutionStatusSucceeded:
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
+		attrs = append(attrs, workflowAgentBodyLogAttrs("result", turn.OutputText)...)
+		slog.InfoContext(ctx, "workflow agent turn succeeded", attrs...)
 		if agentTarget.OutputDelivery != nil {
 			if err := r.deliverAgentOutput(ctx, req, invoker, principalValue, agentTarget, session, turn); err != nil {
 				return nil, err
@@ -432,11 +446,18 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		}
 		return &coreworkflow.InvokeOperationResponse{Status: 200, Body: turn.OutputText}, nil
 	case coreagent.ExecutionStatusCanceled:
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
+		attrs = append(attrs, "status_message", strings.TrimSpace(turn.StatusMessage))
+		slog.WarnContext(ctx, "workflow agent turn canceled", attrs...)
 		return nil, fmt.Errorf("workflow agent turn %q was canceled: %s", turn.ID, strings.TrimSpace(turn.StatusMessage))
 	case coreagent.ExecutionStatusWaitingForInput:
 		_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, "workflow agent turn cannot wait for input")
+		slog.WarnContext(ctx, "workflow agent turn waiting for input", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)...)
 		return nil, fmt.Errorf("workflow agent turn %q is waiting for input", turn.ID)
 	default:
+		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
+		attrs = append(attrs, "status_message", strings.TrimSpace(turn.StatusMessage))
+		slog.WarnContext(ctx, "workflow agent turn failed", attrs...)
 		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
 	}
 }
@@ -494,13 +515,20 @@ func (r *workflowRuntime) deliverWorkflowAgentDelivery(ctx context.Context, req 
 	if idempotencyKey != "" {
 		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
 	}
+	attrs := workflowAgentDeliveryLogAttrs(req, p, delivery, session, turn, fieldName, idempotencyKey, params)
+	slog.InfoContext(ctx, "workflow agent delivery attempting", attrs...)
 	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(target.Instance), operation, params)
 	if err != nil {
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "workflow agent delivery failed", attrs...)
 		return err
 	}
+	attrs = append(attrs, workflowAgentOperationResultLogAttrs("delivery_result", result)...)
 	if result != nil && result.Status >= http.StatusBadRequest {
+		slog.WarnContext(ctx, "workflow agent delivery failed", attrs...)
 		return fmt.Errorf("workflow agent %s returned status %d", fieldName, result.Status)
 	}
+	slog.InfoContext(ctx, "workflow agent delivery completed", attrs...)
 	return nil
 }
 
@@ -701,6 +729,7 @@ const (
 	workflowSignalContextMaxItems       = 20
 	workflowSignalContextMaxDepth       = 4
 	workflowSignalContextMaxStringBytes = 4096
+	workflowRuntimeLogBodyMaxBytes      = 4096
 	workflowSignalMessageMaxBytes       = 64 * 1024
 	workflowSignalMessagePrefix         = "Workflow signal batch:\n"
 )
@@ -804,6 +833,197 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 		ctxValue["executionRef"] = executionRef
 	}
 	return ctxValue
+}
+
+func workflowAgentLogAttrs(req coreworkflow.InvokeOperationRequest, p *principal.Principal, agentTarget *coreworkflow.AgentTarget, session *coreagent.Session, turn *coreagent.Turn) []any {
+	attrs := []any{
+		"workflow_provider", strings.TrimSpace(req.ProviderName),
+		"workflow_run_id", strings.TrimSpace(req.RunID),
+		"workflow_execution_ref", strings.TrimSpace(req.ExecutionRef),
+		"workflow_signal_count", len(req.Signals),
+		"workflow_signal_batch_id", workflowSignalBatchID(req.Signals),
+	}
+	attrs = append(attrs, workflowTriggerLogAttrs(req.Trigger)...)
+	if createdBy := req.CreatedBy; strings.TrimSpace(createdBy.SubjectID) != "" {
+		attrs = append(attrs,
+			"workflow_created_by_subject_id", strings.TrimSpace(createdBy.SubjectID),
+			"workflow_created_by_subject_kind", strings.TrimSpace(createdBy.SubjectKind),
+			"workflow_created_by_auth_source", strings.TrimSpace(createdBy.AuthSource),
+		)
+	}
+	if len(req.Signals) > 0 {
+		signal := req.Signals[len(req.Signals)-1]
+		attrs = append(attrs,
+			"workflow_last_signal_id", strings.TrimSpace(signal.ID),
+			"workflow_last_signal_name", strings.TrimSpace(signal.Name),
+			"workflow_last_signal_idempotency_key", strings.TrimSpace(signal.IdempotencyKey),
+			"workflow_last_signal_sequence", signal.Sequence,
+		)
+	}
+	if p = principal.Canonicalized(p); p != nil {
+		attrs = append(attrs,
+			"subject_id", strings.TrimSpace(p.SubjectID),
+			"subject_kind", workflowSubjectKind(p.SubjectID, string(p.Kind)),
+			"credential_subject_id", strings.TrimSpace(p.CredentialSubjectID),
+			"auth_source", strings.TrimSpace(p.AuthSource()),
+		)
+	}
+	if agentTarget != nil {
+		attrs = append(attrs,
+			"agent_provider", strings.TrimSpace(agentTarget.ProviderName),
+			"agent_model", strings.TrimSpace(agentTarget.Model),
+			"agent_timeout_seconds", agentTarget.TimeoutSeconds,
+			"agent_tool_refs", agentToolRefsLogValue(agentTarget.ToolRefs),
+		)
+		if agentTarget.SessionReadyDelivery != nil {
+			attrs = append(attrs, "agent_session_ready_delivery", workflowAgentDeliveryTargetLogValue(agentTarget.SessionReadyDelivery))
+		}
+		if agentTarget.OutputDelivery != nil {
+			attrs = append(attrs, "agent_output_delivery", workflowAgentDeliveryTargetLogValue(agentTarget.OutputDelivery))
+		}
+	}
+	if session != nil {
+		attrs = append(attrs,
+			"agent_session_id", strings.TrimSpace(session.ID),
+			"agent_session_provider", strings.TrimSpace(session.ProviderName),
+			"agent_session_model", strings.TrimSpace(session.Model),
+		)
+	}
+	if turn != nil {
+		attrs = append(attrs,
+			"agent_turn_id", strings.TrimSpace(turn.ID),
+			"agent_turn_status", strings.TrimSpace(string(turn.Status)),
+			"agent_turn_provider", strings.TrimSpace(turn.ProviderName),
+			"agent_turn_model", strings.TrimSpace(turn.Model),
+		)
+	}
+	return attrs
+}
+
+func workflowTriggerLogAttrs(trigger coreworkflow.RunTrigger) []any {
+	switch {
+	case trigger.Schedule != nil:
+		attrs := []any{
+			"workflow_trigger_kind", "schedule",
+			"workflow_schedule_id", strings.TrimSpace(trigger.Schedule.ScheduleID),
+		}
+		if trigger.Schedule.ScheduledFor != nil {
+			attrs = append(attrs, "workflow_scheduled_for", trigger.Schedule.ScheduledFor.UTC().Format(time.RFC3339Nano))
+		}
+		return attrs
+	case trigger.Event != nil:
+		attrs := []any{
+			"workflow_trigger_kind", "event",
+			"workflow_event_trigger_id", strings.TrimSpace(trigger.Event.TriggerID),
+			"workflow_event_id", strings.TrimSpace(trigger.Event.Event.ID),
+			"workflow_event_type", strings.TrimSpace(trigger.Event.Event.Type),
+			"workflow_event_source", strings.TrimSpace(trigger.Event.Event.Source),
+			"workflow_event_subject", strings.TrimSpace(trigger.Event.Event.Subject),
+		}
+		return attrs
+	case trigger.Manual:
+		return []any{"workflow_trigger_kind", "manual"}
+	default:
+		return nil
+	}
+}
+
+func workflowSubjectKind(subjectID, fallback string) string {
+	if kind := strings.TrimSpace(fallback); kind != "" {
+		return kind
+	}
+	if kind, _, ok := core.ParseSubjectID(subjectID); ok {
+		return kind
+	}
+	return ""
+}
+
+func workflowAgentDeliveryTargetLogValue(delivery *coreworkflow.OutputDelivery) map[string]any {
+	if delivery == nil {
+		return nil
+	}
+	target := delivery.Target
+	out := map[string]any{}
+	if pluginName := strings.TrimSpace(target.PluginName); pluginName != "" {
+		out["plugin"] = pluginName
+	}
+	if operation := strings.TrimSpace(target.Operation); operation != "" {
+		out["operation"] = operation
+	}
+	if connection := strings.TrimSpace(target.Connection); connection != "" {
+		out["connection"] = connection
+	}
+	if instance := strings.TrimSpace(target.Instance); instance != "" {
+		out["instance"] = instance
+	}
+	if credentialMode := strings.TrimSpace(string(delivery.CredentialMode)); credentialMode != "" {
+		out["credential_mode"] = credentialMode
+	}
+	if len(delivery.InputBindings) > 0 {
+		fields := make([]string, 0, len(delivery.InputBindings))
+		for i := range delivery.InputBindings {
+			if field := strings.TrimSpace(delivery.InputBindings[i].InputField); field != "" {
+				fields = append(fields, field)
+			}
+		}
+		sort.Strings(fields)
+		out["input_fields"] = fields
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func workflowAgentDeliveryLogAttrs(req coreworkflow.InvokeOperationRequest, p *principal.Principal, delivery *coreworkflow.OutputDelivery, session *coreagent.Session, turn *coreagent.Turn, fieldName, idempotencyKey string, params map[string]any) []any {
+	attrs := workflowAgentLogAttrs(req, p, nil, session, turn)
+	target := delivery.Target
+	attrs = append(attrs,
+		"delivery_field", strings.TrimSpace(fieldName),
+		"delivery_plugin", strings.TrimSpace(target.PluginName),
+		"delivery_operation", strings.TrimSpace(target.Operation),
+		"delivery_connection", strings.TrimSpace(target.Connection),
+		"delivery_instance", strings.TrimSpace(target.Instance),
+		"delivery_credential_mode", strings.TrimSpace(string(delivery.CredentialMode)),
+		"delivery_idempotency_key", strings.TrimSpace(idempotencyKey),
+		"delivery_input_fields", workflowMapKeys(params),
+	)
+	return attrs
+}
+
+func workflowMapKeys(value map[string]any) []string {
+	if len(value) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(value))
+	for key := range value {
+		if key = strings.TrimSpace(key); key != "" {
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func workflowAgentOperationResultLogAttrs(prefix string, result *core.OperationResult) []any {
+	if result == nil {
+		return []any{prefix + "_nil", true}
+	}
+	attrs := []any{prefix + "_status", result.Status}
+	attrs = append(attrs, workflowAgentBodyLogAttrs(prefix, result.Body)...)
+	return attrs
+}
+
+func workflowAgentBodyLogAttrs(prefix, body string) []any {
+	attrs := []any{
+		prefix + "_body", truncateWorkflowString(body, workflowRuntimeLogBodyMaxBytes),
+		prefix + "_body_bytes", len([]byte(body)),
+		prefix + "_body_truncated", len([]byte(body)) > workflowRuntimeLogBodyMaxBytes,
+	}
+	if body != "" {
+		attrs = append(attrs, prefix+"_body_sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(body))))
+	}
+	return attrs
 }
 
 func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {

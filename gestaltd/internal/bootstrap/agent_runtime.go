@@ -39,6 +39,10 @@ type agentSystemToolExecutionRequest struct {
 	Principal        *principal.Principal
 	ProviderName     string
 	CallerPluginName string
+	SessionID        string
+	TurnID           string
+	ToolCallID       string
+	ToolID           string
 	Tool             coreagent.Tool
 	Arguments        map[string]any
 	IdempotencyKey   string
@@ -350,6 +354,10 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			Principal:        principalValue,
 			ProviderName:     strings.TrimSpace(grant.ProviderName),
 			CallerPluginName: strings.TrimSpace(grant.CallerPluginName),
+			SessionID:        strings.TrimSpace(req.SessionID),
+			TurnID:           strings.TrimSpace(req.TurnID),
+			ToolCallID:       strings.TrimSpace(req.ToolCallID),
+			ToolID:           strings.TrimSpace(req.ToolID),
 			Tool:             resolvedTool,
 			Arguments:        maps.Clone(req.Arguments),
 			IdempotencyKey:   idempotencyKey,
