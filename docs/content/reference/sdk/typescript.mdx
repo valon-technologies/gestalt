@@ -127,7 +127,10 @@ Gestalt-managed sibling host services:
 `executeToolForTurn`, and `resolveConnectionForTurn`. The package also exports
 `@valon-technologies/gestalt/protocol/v1` for generated schemas, services, and
 message types needed by transport fixtures, plus public IndexedDB conversion
-helpers for lower-level datastore tests.
+helpers for lower-level datastore tests. Use root exports such as
+`structFromJsonObject`, `jsonObjectFromStruct`, `valueFromJson`,
+`jsonFromValue`, `timestampFromDate`, and `dateFromTimestamp` for protobuf
+well-known type fields without importing from `@bufbuild/protobuf/wkt`.
 
 ## Runtime and build entrypoints
 

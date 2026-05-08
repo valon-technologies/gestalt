@@ -21,6 +21,7 @@ from gestalt import (
     ENV_AGENT_MANAGER_SOCKET_TOKEN,
     AgentHost,
     AgentManager,
+    AgentMessage,
     AgentProvider,
     MetadataProvider,
     ProviderKind,
@@ -29,8 +30,13 @@ from gestalt import (
     WarningsProvider,
     _runtime,
     agent_message_from_dict,
+    agent_message_from_proto_dict,
     agent_message_to_dict,
+    agent_message_to_proto_dict,
+    message_from_dict,
+    message_to_dict,
     protocol,
+    struct_from_dict,
 )
 from gestalt.protocol import v1 as protocol_v1
 from gestalt.testing import agent_pb2 as _agent_pb2
@@ -757,6 +763,38 @@ class AgentTransportTests(unittest.TestCase):
                 ],
                 "metadata": {},
             },
+        )
+
+    def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(self) -> None:
+        message = AgentMessage(role="assistant")
+        message.metadata.CopyFrom(struct_from_dict({"tenant": "acme"}))
+        part = message.parts.add()
+        part.type = agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT
+        part.text = "hello"
+
+        raw = agent_message_to_proto_dict(message)
+
+        self.assertEqual(
+            raw,
+            {
+                "role": "assistant",
+                "parts": [
+                    {
+                        "type": "AGENT_MESSAGE_PART_TYPE_TEXT",
+                        "text": "hello",
+                    },
+                ],
+                "metadata": {"tenant": "acme"},
+            },
+        )
+        self.assertEqual(message_to_dict(message), raw)
+        self.assertEqual(
+            message_to_dict(message_from_dict(raw, AgentMessage())),
+            raw,
+        )
+        self.assertEqual(
+            agent_message_to_proto_dict(agent_message_from_proto_dict(raw)),
+            raw,
         )
 
     def test_agent_runtime_and_server_roundtrip(self) -> None:

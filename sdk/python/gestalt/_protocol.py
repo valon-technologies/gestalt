@@ -52,6 +52,26 @@ def value_to_json(value: Any | None) -> Any:
     return _json_format.MessageToDict(value, preserving_proto_field_name=True)
 
 
+def message_to_dict(
+    message: Any,
+    *,
+    preserving_proto_field_name: bool = True,
+) -> Any:
+    """Convert a protobuf message into its protobuf JSON dictionary form."""
+
+    return _json_format.MessageToDict(
+        message,
+        preserving_proto_field_name=preserving_proto_field_name,
+    )
+
+
+def message_from_dict(value: Any, message: Any) -> Any:
+    """Parse protobuf JSON data into ``message`` and return the same message."""
+
+    _json_format.ParseDict(value, message)
+    return message
+
+
 def timestamp_from_datetime(
     value: _dt.datetime | None,
 ) -> Any | None:

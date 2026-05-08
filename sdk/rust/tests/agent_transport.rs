@@ -747,7 +747,6 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             arguments: Some(serde_json::json!({
                 "query": "Ada Lovelace"
             })),
-            ..Default::default()
         })
         .await
         .expect("execute tool");

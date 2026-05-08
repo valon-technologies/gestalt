@@ -85,7 +85,9 @@ The root package exports provider definition helpers:
 can import generated schemas, services, and message types from
 `@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
 paths. Public IndexedDB conversion helpers are exported for lower-level
-datastore fixtures.
+datastore fixtures. The root package also exports protocol conversion helpers
+such as `structFromJsonObject`, `valueFromJson`, and `timestampFromDate` for
+protobuf well-known type fields used by workflow and agent payloads.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.

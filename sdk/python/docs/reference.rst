@@ -135,6 +135,8 @@ without importing generated runtime internals.
    struct_to_dict
    value_from_json
    value_to_json
+   message_to_dict
+   message_from_dict
    timestamp_from_datetime
    datetime_from_timestamp
    has_field
@@ -147,6 +149,10 @@ without importing generated runtime internals.
 .. autofunction:: value_from_json
 
 .. autofunction:: value_to_json
+
+.. autofunction:: message_to_dict
+
+.. autofunction:: message_from_dict
 
 .. autofunction:: timestamp_from_datetime
 
@@ -180,6 +186,10 @@ optional structured payloads.
    agent_message_from_dict
    agent_messages_to_dicts
    agent_messages_from_dicts
+   agent_message_to_proto_dict
+   agent_message_from_proto_dict
+   agent_messages_to_proto_dicts
+   agent_messages_from_proto_dicts
 
 .. autofunction:: agent_actor_to_dict
 
@@ -208,6 +218,14 @@ optional structured payloads.
 .. autofunction:: agent_messages_to_dicts
 
 .. autofunction:: agent_messages_from_dicts
+
+.. autofunction:: agent_message_to_proto_dict
+
+.. autofunction:: agent_message_from_proto_dict
+
+.. autofunction:: agent_messages_to_proto_dicts
+
+.. autofunction:: agent_messages_from_proto_dicts
 
 Provider interfaces
 -------------------
