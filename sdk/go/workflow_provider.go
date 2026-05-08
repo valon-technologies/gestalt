@@ -173,6 +173,7 @@ type (
 	WorkflowOutputValueSourceSignalMetadata   = proto.WorkflowOutputValueSource_SignalMetadata
 	WorkflowOutputValueSourceLiteral          = proto.WorkflowOutputValueSource_Literal
 	WorkflowActor                             = proto.WorkflowActor
+	WorkflowRunAsSubject                      = proto.WorkflowRunAsSubject
 	WorkflowEvent                             = proto.WorkflowEvent
 	WorkflowEventMatch                        = proto.WorkflowEventMatch
 	WorkflowManualTrigger                     = proto.WorkflowManualTrigger

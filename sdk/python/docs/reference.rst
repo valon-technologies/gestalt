@@ -170,13 +170,18 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 Agent protocol helpers
 ----------------------
 
-These helpers convert common agent protocol messages to and from plain
-lower-snake-case dictionaries while preserving protobuf field presence for
-optional structured payloads.
+These helpers build common agent protocol messages from native Python values
+and convert them to and from plain lower-snake-case dictionaries while
+preserving protobuf field presence for optional structured payloads. Timestamp
+fields on ``AgentSession``, ``AgentTurn``, and ``AgentTurnEvent`` accept
+timezone-aware ``datetime`` values.
 
 .. autosummary::
    :nosignatures:
 
+   AgentSession
+   AgentTurn
+   AgentTurnEvent
    agent_actor_to_dict
    agent_actor_from_dict
    agent_subject_context_to_dict
@@ -195,6 +200,12 @@ optional structured payloads.
    agent_message_from_proto_dict
    agent_messages_to_proto_dicts
    agent_messages_from_proto_dicts
+
+.. autofunction:: AgentSession
+
+.. autofunction:: AgentTurn
+
+.. autofunction:: AgentTurnEvent
 
 .. autofunction:: agent_actor_to_dict
 

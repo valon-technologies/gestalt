@@ -67,15 +67,17 @@
 // AgentHostClient includes plain Go helper methods such as ExecuteToolForTurn,
 // ListToolsForTurn, and ResolveConnectionForTurn. For lower-level fixtures and
 // interoperability tests, package gen/v1 re-exports selected generated
-// protobuf bindings. StructFromMap, StructFromAny, ValueFromAny,
-// ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the IndexedDB
-// codec helpers convert between native Go values and protobuf well-known or
-// IndexedDB wire types without importing internal packages. StructFromAny also
-// accepts structs, string-keyed map aliases, and pointers to either form; it
-// rejects time.Time, json.Marshaler values, non-string map keys, cycles, and
-// non-finite numbers in generic Struct payloads. Embedded struct fields are
-// not flattened like encoding/json; anonymous embedded fields must have an
-// explicit json tag name.
+// protobuf bindings. SDK constructors such as NewBoundWorkflowRun,
+// NewWorkflowSignal, and NewAuthorizationModelRef accept native time.Time
+// values and JSON-compatible maps or structs, so provider code can keep
+// protobuf timestamp and Struct conversion at the SDK boundary. StructFromMap,
+// StructFromAny, ValueFromAny, ValuesFromMap, TimestampFromTime,
+// TimestampFromTimePtr, and the IndexedDB codec helpers remain available for
+// lower-level interop and tests. StructFromAny accepts structs, string-keyed
+// map aliases, and pointers to either form; it rejects time.Time,
+// json.Marshaler values, non-string map keys, cycles, and non-finite numbers in
+// generic Struct payloads. Embedded struct fields are not flattened like
+// encoding/json; anonymous embedded fields must have an explicit json tag name.
 //
 // See https://gestaltd.ai/reference/go-sdk for the Go SDK guide.
 // See https://gestaltd.ai/custom-providers/plugins for the full typed plugin
