@@ -450,6 +450,7 @@ type memoryAgentProvider struct {
 	interactions        map[string]*coreagent.Interaction
 	turnRequests        []coreagent.CreateTurnRequest
 	getSessionRequests  []coreagent.GetSessionRequest
+	getTurnRequests     []coreagent.GetTurnRequest
 	listSessionRequests []coreagent.ListSessionsRequest
 	listTurnRequests    []coreagent.ListTurnsRequest
 	createSessionHook   func()
@@ -646,6 +647,13 @@ func (p *memoryAgentProvider) capturedTurnRequests() []coreagent.CreateTurnReque
 	return out
 }
 
+func (p *memoryAgentProvider) capturedGetTurnRequests() []coreagent.GetTurnRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	return append([]coreagent.GetTurnRequest(nil), p.getTurnRequests...)
+}
+
 func (p *memoryAgentProvider) capturedListSessionRequests() []coreagent.ListSessionsRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -672,6 +680,7 @@ func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRe
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.getTurnRequests = append(p.getTurnRequests, req)
 	turn, ok := p.turns[req.TurnID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -1583,6 +1592,257 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		"gestalt.agent.provider":  "managed",
 		"gestalt.agent.operation": "create_turn",
 	})
+}
+
+func TestAgentSessionSharingAuthorizesExactSessionAccess(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	owner := seedUser(t, services, "agent-owner@example.test")
+	editor := seedUser(t, services, "agent-editor@example.test")
+	provider := newMemoryAgentProvider()
+	authzProvider := newMemoryAuthorizationProvider("memory-authorization")
+	if _, err := authzProvider.WriteModel(context.Background(), &core.WriteModelRequest{
+		Model: authorization.ProviderAuthorizationModelForRoles(nil, nil, nil, nil),
+	}); err != nil {
+		t.Fatalf("WriteModel: %v", err)
+	}
+	pluginDefs := map[string]*config.ProviderEntry{
+		"managed": {AuthorizationPolicy: "agent_policy"},
+	}
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
+		Policies: map[string]config.SubjectPolicyDef{
+			"agent_policy": {
+				Default: "deny",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.UserSubjectID(owner.ID),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, pluginDefs)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "owner-session":
+					return &core.UserIdentity{Email: owner.Email}, nil
+				case "editor-session":
+					return &core.UserIdentity{Email: editor.Email}, nil
+				default:
+					return nil, core.ErrNotFound
+				}
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.PluginDefs = pluginDefs
+		cfg.Authorizer = baseAuthz
+		cfg.AuthorizationProvider = authzProvider
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:                 agentControl,
+			Authorizer:            baseAuthz,
+			AuthorizationProvider: authzProvider,
+			RunGrants:             newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doJSON := func(method, path, token, body string) (int, []byte) {
+		t.Helper()
+		var reader io.Reader
+		if body != "" {
+			reader = bytes.NewBufferString(body)
+		}
+		req, _ := http.NewRequest(method, ts.URL+path, reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: token})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		payload, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s %s: %v", method, path, err)
+		}
+		return resp.StatusCode, payload
+	}
+	doBearerJSON := func(method, path, token, body string) (int, []byte) {
+		t.Helper()
+		var reader io.Reader
+		if body != "" {
+			reader = bytes.NewBufferString(body)
+		}
+		req, _ := http.NewRequest(method, ts.URL+path, reader)
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		payload, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s %s: %v", method, path, err)
+		}
+		return resp.StatusCode, payload
+	}
+
+	status, payload := doJSON(http.MethodPost, "/api/v1/agent/sessions", "owner-session", `{"provider":"managed","model":"gpt-5.4","clientRef":"owner"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create owner session status = %d body=%s", status, payload)
+	}
+	var session map[string]any
+	if err := json.Unmarshal(payload, &session); err != nil {
+		t.Fatalf("decode owner session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	editorSubjectID := principal.UserSubjectID(editor.ID)
+	restrictedToken, restrictedTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	restrictedTokenExpiresAt := time.Now().Add(24 * time.Hour)
+	if err := services.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+		ID:                  "api-tok-editor-restricted-agent-share",
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             editor.ID,
+		CredentialSubjectID: editorSubjectID,
+		Name:                "restricted-agent-share",
+		HashedToken:         restrictedTokenHash,
+		ExpiresAt:           &restrictedTokenExpiresAt,
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("StoreAPIToken: %v", err)
+	}
+	for _, sessionResourceID := range []string{"000-missing-agent-session", sessionID} {
+		if err := authzProvider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
+			Writes: []*core.Relationship{{
+				Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: editorSubjectID},
+				Relation: authorization.ProviderAgentSessionRelationEditor,
+				Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: sessionResourceID},
+			}},
+		}); err != nil {
+			t.Fatalf("WriteRelationships %s: %v", sessionResourceID, err)
+		}
+	}
+
+	status, payload = doJSON(http.MethodPost, "/api/v1/agent/sessions/"+sessionID+"/turns", "owner-session", `{"messages":[{"role":"user","text":"needs approval"}],"metadata":{"requireInteraction":true},"idempotencyKey":"owner-turn"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create owner turn status = %d body=%s", status, payload)
+	}
+	var ownerTurn map[string]any
+	if err := json.Unmarshal(payload, &ownerTurn); err != nil {
+		t.Fatalf("decode owner turn: %v", err)
+	}
+	ownerTurnID := ownerTurn["id"].(string)
+
+	status, payload = doBearerJSON(http.MethodGet, "/api/v1/agent/sessions/"+sessionID, restrictedToken, "")
+	if status != http.StatusForbidden {
+		t.Fatalf("get shared session with restricted token status = %d body=%s, want 403", status, payload)
+	}
+	status, payload = doBearerJSON(http.MethodGet, "/api/v1/agent/turns/"+ownerTurnID, restrictedToken, "")
+	if status != http.StatusForbidden {
+		t.Fatalf("get shared turn with restricted token status = %d body=%s, want 403", status, payload)
+	}
+	status, payload = doBearerJSON(http.MethodPost, "/api/v1/agent/sessions/"+sessionID+"/turns", restrictedToken, `{"messages":[{"role":"user","text":"blocked by token scope"}],"idempotencyKey":"restricted-token-turn"}`)
+	if status != http.StatusForbidden {
+		t.Fatalf("create shared turn with restricted token status = %d body=%s, want 403", status, payload)
+	}
+
+	status, payload = doJSON(http.MethodGet, "/api/v1/agent/sessions?view=summary&limit=1", "editor-session", "")
+	if status != http.StatusOK {
+		t.Fatalf("list shared sessions status = %d body=%s", status, payload)
+	}
+	var sessions []map[string]any
+	if err := json.Unmarshal(payload, &sessions); err != nil {
+		t.Fatalf("decode shared sessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0]["id"] != sessionID {
+		t.Fatalf("shared sessions = %#v, want %q", sessions, sessionID)
+	}
+	if got := provider.capturedListSessionRequests(); len(got) != 0 {
+		t.Fatalf("provider broad ListSessions requests = %#v, want none for shared-only user", got)
+	}
+
+	status, payload = doJSON(http.MethodGet, "/api/v1/agent/sessions/"+sessionID, "editor-session", "")
+	if status != http.StatusOK {
+		t.Fatalf("get shared session status = %d body=%s", status, payload)
+	}
+	status, payload = doJSON(http.MethodGet, "/api/v1/agent/turns/"+ownerTurnID, "editor-session", "")
+	if status != http.StatusOK {
+		t.Fatalf("get shared turn status = %d body=%s", status, payload)
+	}
+	status, payload = doJSON(http.MethodGet, "/api/v1/agent/sessions/"+sessionID+"/turns", "editor-session", "")
+	if status != http.StatusOK {
+		t.Fatalf("list shared turns status = %d body=%s", status, payload)
+	}
+	var listedTurns []map[string]any
+	if err := json.Unmarshal(payload, &listedTurns); err != nil {
+		t.Fatalf("decode shared turns: %v", err)
+	}
+	if len(listedTurns) != 1 || listedTurns[0]["id"] != ownerTurnID {
+		t.Fatalf("shared turns = %#v, want owner turn %q", listedTurns, ownerTurnID)
+	}
+
+	interactionID := "interaction-" + ownerTurnID
+	status, payload = doJSON(http.MethodPost, "/api/v1/agent/turns/"+ownerTurnID+"/interactions/"+interactionID+"/resolve", "editor-session", `{"resolution":{"approved":true}}`)
+	if status != http.StatusOK {
+		t.Fatalf("resolve shared interaction status = %d body=%s", status, payload)
+	}
+
+	status, payload = doJSON(http.MethodPost, "/api/v1/agent/sessions/"+sessionID+"/turns", "editor-session", `{"messages":[{"role":"user","text":"follow up"}],"idempotencyKey":"editor-turn"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create editor turn status = %d body=%s", status, payload)
+	}
+	var editorTurn map[string]any
+	if err := json.Unmarshal(payload, &editorTurn); err != nil {
+		t.Fatalf("decode editor turn: %v", err)
+	}
+	editorTurnID := editorTurn["id"].(string)
+
+	status, payload = doJSON(http.MethodPatch, "/api/v1/agent/sessions/"+sessionID, "editor-session", `{"metadata":{"shared":true}}`)
+	if status == http.StatusOK {
+		t.Fatalf("shared editor patched owner-only session: %s", payload)
+	}
+	status, payload = doJSON(http.MethodPost, "/api/v1/agent/turns/"+ownerTurnID+"/cancel", "editor-session", `{"reason":"not mine"}`)
+	if status != http.StatusNotFound {
+		t.Fatalf("cancel owner turn as shared editor status = %d body=%s, want 404", status, payload)
+	}
+	status, payload = doJSON(http.MethodPost, "/api/v1/agent/turns/"+editorTurnID+"/cancel", "editor-session", `{"reason":"mine"}`)
+	if status != http.StatusOK {
+		t.Fatalf("cancel editor turn status = %d body=%s", status, payload)
+	}
+
+	for _, req := range provider.capturedGetSessionRequests() {
+		if req.SessionID == sessionID && req.Subject.SubjectID != "" {
+			t.Fatalf("GetSession subject = %#v, want empty exact lookup subject", req.Subject)
+		}
+	}
+	for _, req := range provider.capturedGetTurnRequests() {
+		if req.Subject.SubjectID != "" {
+			t.Fatalf("GetTurn subject = %#v, want empty exact lookup subject", req.Subject)
+		}
+	}
+	for _, req := range provider.capturedListTurnRequests() {
+		if req.SessionID == sessionID && req.Subject.SubjectID != "" {
+			t.Fatalf("ListTurns subject = %#v, want empty manager-authorized session lookup subject", req.Subject)
+		}
+	}
 }
 
 func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {

@@ -1941,7 +1941,12 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	for _, item := range req.GetRequests() {
 		allowed := false
 		if item != nil && rels != nil {
-			_, allowed = rels[memoryAuthorizationRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
+			for _, rel := range rels {
+				if memoryAuthorizationRelationshipGrantsAction(p.modelDefs[p.activeModelID], rel, item.GetSubject(), item.GetAction().GetName(), item.GetResource()) {
+					allowed = true
+					break
+				}
+			}
 		}
 		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
 			Allowed: allowed,
@@ -1951,8 +1956,68 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	return resp, nil
 }
 
-func (p *memoryAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	return &core.ResourceSearchResponse{}, nil
+func (p *memoryAuthorizationProvider) SearchResources(_ context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	modelID := p.activeModelID
+	rels := p.relsByModel[modelID]
+	keys := make([]string, 0, len(rels))
+	resources := map[string]*core.ResourceRef{}
+	for _, rel := range rels {
+		if rel == nil || rel.GetResource() == nil {
+			continue
+		}
+		if resourceType := strings.TrimSpace(req.GetResourceType()); resourceType != "" && rel.GetResource().GetType() != resourceType {
+			continue
+		}
+		if !memoryAuthorizationRelationshipGrantsAction(p.modelDefs[modelID], rel, req.GetSubject(), req.GetAction().GetName(), rel.GetResource()) {
+			continue
+		}
+		resourceKey := rel.GetResource().GetType() + "\x00" + rel.GetResource().GetId()
+		if _, ok := resources[resourceKey]; ok {
+			continue
+		}
+		keys = append(keys, resourceKey)
+		resources[resourceKey] = &core.ResourceRef{
+			Type: rel.GetResource().GetType(),
+			Id:   rel.GetResource().GetId(),
+		}
+	}
+	slices.Sort(keys)
+
+	start := 0
+	if token := strings.TrimSpace(req.GetPageToken()); token != "" {
+		offset, err := strconv.Atoi(token)
+		if err != nil || offset < 0 {
+			offset = 0
+		}
+		start = offset
+	}
+	if start > len(keys) {
+		start = len(keys)
+	}
+	pageSize := int(req.GetPageSize())
+	if pageSize <= 0 {
+		pageSize = len(keys)
+	}
+	end := start + pageSize
+	if end > len(keys) {
+		end = len(keys)
+	}
+	out := make([]*core.ResourceRef, 0, end-start)
+	for _, key := range keys[start:end] {
+		out = append(out, resources[key])
+	}
+	nextPageToken := ""
+	if end < len(keys) {
+		nextPageToken = strconv.Itoa(end)
+	}
+	return &core.ResourceSearchResponse{
+		Resources:     out,
+		NextPageToken: nextPageToken,
+		ModelId:       modelID,
+	}, nil
 }
 
 func (p *memoryAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
@@ -2126,6 +2191,41 @@ func memoryAuthorizationModelAllowsRelationship(model *core.AuthorizationModel, 
 			if allowed.GetName() == relation {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func memoryAuthorizationRelationshipGrantsAction(model *core.AuthorizationModel, rel *core.Relationship, subject *core.SubjectRef, action string, resource *core.ResourceRef) bool {
+	if rel == nil || rel.GetSubject() == nil || rel.GetResource() == nil || resource == nil {
+		return false
+	}
+	if subject != nil && (rel.GetSubject().GetType() != subject.GetType() || rel.GetSubject().GetId() != subject.GetId()) {
+		return false
+	}
+	if rel.GetResource().GetType() != resource.GetType() || rel.GetResource().GetId() != resource.GetId() {
+		return false
+	}
+	action = strings.TrimSpace(action)
+	relation := strings.TrimSpace(rel.GetRelation())
+	if action == "" || relation == "" {
+		return false
+	}
+	if relation == action {
+		return true
+	}
+	if model == nil {
+		return false
+	}
+	for _, rt := range model.GetResourceTypes() {
+		if rt.GetName() != resource.GetType() {
+			continue
+		}
+		for _, allowedAction := range rt.GetActions() {
+			if allowedAction.GetName() != action {
+				continue
+			}
+			return slices.Contains(allowedAction.GetRelations(), relation)
 		}
 	}
 	return false
@@ -2454,6 +2554,45 @@ func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, 
 		t.Fatalf("ReloadAuthorizationState: %v", err)
 	}
 	return authz
+}
+
+func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
+		Policies: map[string]config.SubjectPolicyDef{
+			"sample_policy": {Default: "deny"},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
+	})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	grant := &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:shared"},
+		Relation: authorization.ProviderAgentSessionRelationEditor,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+	}
+	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{grant}}); err != nil {
+		t.Fatalf("WriteRelationships: %v", err)
+	}
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
+	}
+	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Subject:  grant.Subject,
+		Relation: grant.Relation,
+		Resource: grant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships: %v", err)
+	}
+	if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("agent session grants after reload = %+v, want preserved editor grant", resp.GetRelationships())
+	}
 }
 
 func testExternalIdentityResourceID(typ, id string) string {

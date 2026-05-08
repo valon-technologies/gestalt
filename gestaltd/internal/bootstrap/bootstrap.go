@@ -1195,6 +1195,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		RunGrants:                     prepared.Deps.AgentRunGrants,
 		Invoker:                       sharedInvoker,
 		Authorizer:                    authz,
+		AuthorizationProvider:         prepared.AuthorizationProvider,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
 		PluginInvokes:                 agentPluginInvokes(cfg),

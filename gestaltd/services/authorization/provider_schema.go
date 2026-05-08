@@ -15,8 +15,12 @@ const (
 	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
 	ProviderResourceTypeExternalIdentity               = "external_identity"
 	ProviderResourceTypeManagedSubject                 = "managed_subject"
+	ProviderResourceTypeAgentSession                   = "agent_session"
 	ProviderResourceIDAdminDynamicGlobal               = "global"
 	ProviderExternalIdentityRelationAssume             = "assume"
+	ProviderAgentSessionRelationEditor                 = "editor"
+	ProviderAgentSessionActionView                     = "view"
+	ProviderAgentSessionActionEdit                     = "edit"
 	ProviderManagedSubjectRelationViewer               = "viewer"
 	ProviderManagedSubjectRelationEditor               = "editor"
 	ProviderManagedSubjectRelationAdmin                = "admin"
@@ -39,8 +43,10 @@ const (
 	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
 	resourceTypeManagedSubject     = ProviderResourceTypeManagedSubject
+	resourceTypeAgentSession       = ProviderResourceTypeAgentSession
 	resourceIDAdminDynamicGlobal   = ProviderResourceIDAdminDynamicGlobal
 	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
+	relationAgentSessionEditor     = ProviderAgentSessionRelationEditor
 	relationManagedSubjectViewer   = ProviderManagedSubjectRelationViewer
 	relationManagedSubjectEditor   = ProviderManagedSubjectRelationEditor
 	relationManagedSubjectAdmin    = ProviderManagedSubjectRelationAdmin
@@ -60,7 +66,8 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 		ProviderResourceTypeAdminPolicyStatic,
 		ProviderResourceTypeAdminDynamic,
 		ProviderResourceTypeExternalIdentity,
-		ProviderResourceTypeManagedSubject:
+		ProviderResourceTypeManagedSubject,
+		ProviderResourceTypeAgentSession:
 		return true
 	default:
 		return false
@@ -153,6 +160,19 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 				{Name: ProviderManagedSubjectActionGrant, Relations: []string{relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionConnect, Relations: []string{relationManagedSubjectEditor, relationManagedSubjectAdmin}},
 				{Name: ProviderManagedSubjectActionManageExternalIdentity, Relations: []string{relationManagedSubjectAdmin}},
+			},
+		},
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		&core.AuthorizationModelResourceType{
+			Name: resourceTypeAgentSession,
+			Relations: []*core.AuthorizationModelRelation{{
+				Name:         relationAgentSessionEditor,
+				SubjectTypes: []string{subjectTypeSubject},
+			}},
+			Actions: []*core.AuthorizationModelAction{
+				{Name: ProviderAgentSessionActionView, Relations: []string{relationAgentSessionEditor}},
+				{Name: ProviderAgentSessionActionEdit, Relations: []string{relationAgentSessionEditor}},
 			},
 		},
 	)
