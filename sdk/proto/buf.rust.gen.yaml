@@ -5,6 +5,7 @@ inputs:
     paths:
       - v1/agent.proto
       - v1/authentication.proto
+      - v1/authorization.proto
       - v1/plugin.proto
       - v1/pluginruntime.proto
       - v1/runtime.proto

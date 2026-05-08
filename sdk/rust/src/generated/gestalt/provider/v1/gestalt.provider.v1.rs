@@ -1504,6 +1504,254 @@ pub struct AuthSessionSettings {
     #[prost(int64, tag = "1")]
     pub session_ttl_seconds: i64,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Subject {
+    #[prost(string, tag = "1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub properties: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Resource {
+    #[prost(string, tag = "1")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub properties: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Action {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub properties: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AccessEvaluationRequest {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(message, optional, tag = "2")]
+    pub action: ::core::option::Option<Action>,
+    #[prost(message, optional, tag = "3")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AccessDecision {
+    #[prost(bool, tag = "1")]
+    pub allowed: bool,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AccessEvaluationsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub requests: ::prost::alloc::vec::Vec<AccessEvaluationRequest>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AccessEvaluationsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub decisions: ::prost::alloc::vec::Vec<AccessDecision>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResourceSearchRequest {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(message, optional, tag = "2")]
+    pub action: ::core::option::Option<Action>,
+    #[prost(string, tag = "3")]
+    pub resource_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "5")]
+    pub page_size: i32,
+    #[prost(string, tag = "6")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResourceSearchResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub resources: ::prost::alloc::vec::Vec<Resource>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubjectSearchRequest {
+    #[prost(message, optional, tag = "1")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "2")]
+    pub action: ::core::option::Option<Action>,
+    #[prost(string, tag = "3")]
+    pub subject_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "5")]
+    pub page_size: i32,
+    #[prost(string, tag = "6")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubjectSearchResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub subjects: ::prost::alloc::vec::Vec<Subject>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ActionSearchRequest {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(message, optional, tag = "2")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "4")]
+    pub page_size: i32,
+    #[prost(string, tag = "5")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ActionSearchResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub actions: ::prost::alloc::vec::Vec<Action>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationMetadata {
+    #[prost(string, repeated, tag = "1")]
+    pub capabilities: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "2")]
+    pub active_model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Relationship {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "4")]
+    pub properties: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RelationshipKey {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub resource: ::core::option::Option<Resource>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadRelationshipsRequest {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<Subject>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(int32, tag = "4")]
+    pub page_size: i32,
+    #[prost(string, tag = "5")]
+    pub page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadRelationshipsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub relationships: ::prost::alloc::vec::Vec<Relationship>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteRelationshipsRequest {
+    #[prost(message, repeated, tag = "1")]
+    pub writes: ::prost::alloc::vec::Vec<Relationship>,
+    #[prost(message, repeated, tag = "2")]
+    pub deletes: ::prost::alloc::vec::Vec<RelationshipKey>,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizationModel {
+    #[prost(int32, tag = "1")]
+    pub version: i32,
+    #[prost(message, repeated, tag = "2")]
+    pub resource_types: ::prost::alloc::vec::Vec<AuthorizationModelResourceType>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizationModelResourceType {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub relations: ::prost::alloc::vec::Vec<AuthorizationModelRelation>,
+    #[prost(message, repeated, tag = "3")]
+    pub actions: ::prost::alloc::vec::Vec<AuthorizationModelAction>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelRelation {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub subject_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelAction {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub relations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelRef {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetActiveModelResponse {
+    #[prost(message, optional, tag = "1")]
+    pub model: ::core::option::Option<AuthorizationModelRef>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListModelsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListModelsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub models: ::prost::alloc::vec::Vec<AuthorizationModelRef>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteModelRequest {
+    #[prost(message, optional, tag = "1")]
+    pub model: ::core::option::Option<AuthorizationModel>,
+}
 /// CacheSetEntry is one key/value pair written by SetMany.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheSetEntry {
