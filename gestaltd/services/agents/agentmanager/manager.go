@@ -1427,19 +1427,20 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 	}
 	subject := agentSubjectFromPrincipal(p)
 	return m.runGrants.Mint(agentgrant.Grant{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		TurnID:              turnID,
-		SubjectID:           subject.SubjectID,
-		SubjectKind:         subject.SubjectKind,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-		Permissions:         agentRunPermissions(ctx, p, callerPluginName, toolRefs),
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		Tools:               append([]coreagent.Tool(nil), tools...),
-		ToolSource:          toolSource,
-		Connections:         m.agentConnectionBindings(providerName),
+		ProviderName:             providerName,
+		SessionID:                sessionID,
+		TurnID:                   turnID,
+		SubjectID:                subject.SubjectID,
+		SubjectKind:              subject.SubjectKind,
+		CredentialSubjectID:      subject.CredentialSubjectID,
+		DisplayName:              subject.DisplayName,
+		AuthSource:               subject.AuthSource,
+		Permissions:              agentRunPermissions(ctx, p, callerPluginName, toolRefs),
+		ToolRefs:                 append([]coreagent.ToolRef(nil), toolRefs...),
+		Tools:                    append([]coreagent.Tool(nil), tools...),
+		ToolSource:               toolSource,
+		Connections:              m.agentConnectionBindings(providerName),
+		InternalConnectionAccess: invocation.InternalConnectionAccessFromContext(ctx),
 	})
 }
 

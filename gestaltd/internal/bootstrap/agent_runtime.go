@@ -304,6 +304,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
 	}
+	ctx = agentRunGrantInvocationContext(ctx, grant)
 	toolTarget, err := grants.ResolveToolID(req.ToolID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent tool id is invalid", invocation.ErrAuthorizationDenied)
@@ -417,6 +418,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
 	}
+	ctx = agentRunGrantInvocationContext(ctx, grant)
 	principalValue := agentRunGrantPrincipal(grant)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
@@ -625,6 +627,13 @@ func agentRunGrantAllowsConnection(grant agentgrant.Grant, connection string) bo
 		}
 	}
 	return false
+}
+
+func agentRunGrantInvocationContext(ctx context.Context, grant agentgrant.Grant) context.Context {
+	if grant.InternalConnectionAccess {
+		return invocation.WithInternalConnectionAccess(ctx)
+	}
+	return ctx
 }
 
 func materializeAgentConnectionHeaders(token string, info invocation.ConnectionRuntimeInfo) (map[string]string, error) {

@@ -301,7 +301,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		overrideAllowed := transport == catalog.TransportPlugin || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
 		overrideDenied := !overrideAllowed
 		overrideTargetsInternal := b.connectionIsInternal(providerName, explicitConnection)
-		if operationConnection != "" && operationConnection != explicitConnection && (overrideDenied || overrideTargetsInternal) {
+		if operationConnection != "" && operationConnection != explicitConnection && (overrideDenied || (overrideTargetsInternal && !allowsInternalConnection(ctx))) {
 			return fail(fmt.Errorf(
 				"%w: operation %q on integration %q uses connection %q; omit the connection override or use that connection instead of %q",
 				ErrInvalidInvocation,

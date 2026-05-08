@@ -67,16 +67,18 @@ func testAgentRuntimeIndexedDBDefs() map[string]*config.ProviderEntry {
 }
 
 type agentRuntimeInvokerCall struct {
-	providerName           string
-	operation              string
-	params                 map[string]any
-	subjectID              string
-	credentialModeOverride core.ConnectionMode
-	idempotencyKey         string
-	agentSubjectID         string
-	runAsSubjectID         string
-	externalIdentityType   string
-	externalIdentityID     string
+	providerName             string
+	operation                string
+	params                   map[string]any
+	subjectID                string
+	connection               string
+	credentialModeOverride   core.ConnectionMode
+	internalConnectionAccess bool
+	idempotencyKey           string
+	agentSubjectID           string
+	runAsSubjectID           string
+	externalIdentityType     string
+	externalIdentityID       string
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -96,16 +98,18 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		runAsSubjectID = runAsAudit.RunAsSubject.SubjectID
 	}
 	i.calls = append(i.calls, agentRuntimeInvokerCall{
-		providerName:           providerName,
-		operation:              operation,
-		params:                 cloneAnyMap(params),
-		subjectID:              p.SubjectID,
-		credentialModeOverride: invocation.CredentialModeOverrideFromContext(ctx),
-		idempotencyKey:         invocation.IdempotencyKeyFromContext(ctx),
-		agentSubjectID:         agentSubjectID,
-		runAsSubjectID:         runAsSubjectID,
-		externalIdentityType:   invocation.ExternalIdentityContextFromContext(ctx).Type,
-		externalIdentityID:     invocation.ExternalIdentityContextFromContext(ctx).ID,
+		providerName:             providerName,
+		operation:                operation,
+		params:                   cloneAnyMap(params),
+		subjectID:                p.SubjectID,
+		connection:               invocation.ConnectionFromContext(ctx),
+		credentialModeOverride:   invocation.CredentialModeOverrideFromContext(ctx),
+		internalConnectionAccess: invocation.InternalConnectionAccessFromContext(ctx),
+		idempotencyKey:           invocation.IdempotencyKeyFromContext(ctx),
+		agentSubjectID:           agentSubjectID,
+		runAsSubjectID:           runAsSubjectID,
+		externalIdentityType:     invocation.ExternalIdentityContextFromContext(ctx).Type,
+		externalIdentityID:       invocation.ExternalIdentityContextFromContext(ctx).ID,
 	})
 	i.mu.Unlock()
 
@@ -134,6 +138,54 @@ func (i *reconnectingAgentRuntimeInvoker) ResolveToken(ctx context.Context, _ *p
 		return ctx, "", err
 	}
 	return ctx, "token", nil
+}
+
+type internalAccessRecordingToolResolver struct {
+	mu              sync.Mutex
+	listInternal    bool
+	resolveInternal bool
+}
+
+func (r *internalAccessRecordingToolResolver) ListTools(ctx context.Context, _ *principal.Principal, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+	r.mu.Lock()
+	r.listInternal = invocation.InternalConnectionAccessFromContext(ctx)
+	r.mu.Unlock()
+	if len(req.ToolRefs) != 1 {
+		return nil, fmt.Errorf("tool refs = %d, want 1", len(req.ToolRefs))
+	}
+	ref := req.ToolRefs[0]
+	return &coreagent.ListToolsResponse{Tools: []coreagent.ListedTool{{
+		ToolID:  "slack-post-message",
+		MCPName: "slack_chat_postMessage",
+		Ref:     ref,
+		Target: coreagent.ToolTarget{
+			Plugin:     ref.Plugin,
+			Operation:  ref.Operation,
+			Connection: ref.Connection,
+			Instance:   ref.Instance,
+		},
+	}}}, nil
+}
+
+func (r *internalAccessRecordingToolResolver) ResolveTool(ctx context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	r.mu.Lock()
+	r.resolveInternal = invocation.InternalConnectionAccessFromContext(ctx)
+	r.mu.Unlock()
+	return coreagent.Tool{
+		Name: "Slack post message",
+		Target: coreagent.ToolTarget{
+			Plugin:     ref.Plugin,
+			Operation:  ref.Operation,
+			Connection: ref.Connection,
+			Instance:   ref.Instance,
+		},
+	}, nil
+}
+
+func (r *internalAccessRecordingToolResolver) Flags() (bool, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.listInternal, r.resolveInternal
 }
 
 type failingSessionCatalogIntegration struct {
@@ -264,6 +316,92 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	}
 	if got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("ExpiresAt = %v, want %v", got.ExpiresAt, expiresAt)
+	}
+}
+
+func TestAgentRuntimeToolCallsPropagateGrantInternalConnectionAccess(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := newAgentRuntime(&config.Config{})
+	if err != nil {
+		t.Fatalf("newAgentRuntime() error = %v", err)
+	}
+	runGrants := newTestAgentRunGrants(t)
+	resolver := &internalAccessRecordingToolResolver{}
+	invoker := &recordingAgentRuntimeInvoker{}
+	runtime.SetRunGrants(runGrants)
+	runtime.SetToolSearcher(resolver)
+	runtime.SetInvoker(invoker)
+	runtime.PublishProvider("claude", &turnLookupAgentProvider{turn: &coreagent.Turn{
+		ID:        "turn-1",
+		SessionID: "session-1",
+		Status:    coreagent.ExecutionStatusRunning,
+	}})
+
+	toolRef := coreagent.ToolRef{
+		Plugin:     "slack",
+		Operation:  "chat.postMessage",
+		Connection: "bot",
+	}
+	runGrant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"chat.postMessage"},
+		}},
+		ToolRefs:                 []coreagent.ToolRef{toolRef},
+		ToolSource:               coreagent.ToolSourceModeMCPCatalog,
+		InternalConnectionAccess: true,
+	})
+	if err != nil {
+		t.Fatalf("Mint run grant: %v", err)
+	}
+
+	if _, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		RunGrant:     runGrant,
+	}); err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	listInternal, _ := resolver.Flags()
+	if !listInternal {
+		t.Fatal("ListTools did not receive internal connection access from run grant")
+	}
+
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "claude",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
+			Plugin:     "slack",
+			Operation:  "chat.postMessage",
+			Connection: "bot",
+		}),
+		RunGrant:  runGrant,
+		Arguments: map[string]any{"channel": "C123", "text": "hello"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	_, resolveInternal := resolver.Flags()
+	if !resolveInternal {
+		t.Fatal("ResolveTool did not receive internal connection access from run grant")
+	}
+	calls := invoker.Calls()
+	if len(calls) != 1 {
+		t.Fatalf("invoker calls = %#v, want one call", calls)
+	}
+	if calls[0].connection != "bot" {
+		t.Fatalf("invoker connection = %q, want bot", calls[0].connection)
+	}
+	if !calls[0].internalConnectionAccess {
+		t.Fatal("invoker did not receive internal connection access from run grant")
 	}
 }
 

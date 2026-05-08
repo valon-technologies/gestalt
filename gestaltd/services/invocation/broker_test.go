@@ -534,6 +534,91 @@ func TestBrokerInvokeRejectsExplicitInternalConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestBrokerInvokeAllowsExplicitInternalConnectionOverrideWithInternalAccess(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	cat := &catalog.Catalog{
+		Name: "slack",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "chat.postMessage",
+			Method:    "POST",
+			Transport: catalog.TransportPlugin,
+		}},
+	}
+	executed := false
+	provider := &brokerOperationConnectionProvider{
+		StubIntegration: &coretesting.StubIntegration{
+			N:          "slack",
+			ConnMode:   core.ConnectionModeUser,
+			CatalogVal: cat,
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, token string) (*core.OperationResult, error) {
+				executed = true
+				if operation != "chat.postMessage" {
+					t.Fatalf("operation = %q, want chat.postMessage", operation)
+				}
+				if token != "bot-token" {
+					t.Fatalf("token = %q, want bot-token", token)
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: "ok"}, nil
+			},
+		},
+		operationConnections: map[string]string{"chat.postMessage": "default"},
+	}
+	broker := NewBroker(
+		testutil.NewProviderRegistry(t, provider),
+		svc.Users,
+		svc.ExternalCredentials,
+		WithConnectionRuntime(ConnectionRuntimeMap{
+			"slack": {
+				"default": {Mode: core.ConnectionModeUser},
+				"bot": {
+					Mode:     core.ConnectionModePlatform,
+					Exposure: core.ConnectionExposureInternal,
+					Token:    "bot-token",
+				},
+			},
+		}.Resolve),
+	)
+	subject := &principal.Principal{SubjectID: "service_account:slack-agent", Kind: principal.Kind("service_account")}
+
+	_, err := broker.Invoke(
+		WithConnection(context.Background(), "bot"),
+		subject,
+		"slack",
+		"",
+		"chat.postMessage",
+		map[string]any{"channel": "C123", "text": "hello"},
+	)
+	if err == nil {
+		t.Fatal("Invoke without internal access succeeded, want internal connection rejection")
+	}
+	if !errors.Is(err, ErrInvalidInvocation) {
+		t.Fatalf("Invoke error = %v, want ErrInvalidInvocation", err)
+	}
+	if executed {
+		t.Fatal("Execute was called after rejected internal connection override")
+	}
+
+	result, err := broker.Invoke(
+		WithInternalConnectionAccess(WithConnection(context.Background(), "bot")),
+		subject,
+		"slack",
+		"",
+		"chat.postMessage",
+		map[string]any{"channel": "C123", "text": "hello"},
+	)
+	if err != nil {
+		t.Fatalf("Invoke with internal access: %v", err)
+	}
+	if result.Body != "ok" {
+		t.Fatalf("result body = %q, want ok", result.Body)
+	}
+	if !executed {
+		t.Fatal("Execute was not called")
+	}
+}
+
 func TestBrokerAgentExternalIdentitySkipsIncompleteConnectionMatchForFallback(t *testing.T) {
 	t.Parallel()
 

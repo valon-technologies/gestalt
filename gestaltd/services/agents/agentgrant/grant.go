@@ -34,33 +34,35 @@ type Manager struct {
 }
 
 type Grant struct {
-	ID                  string
-	ProviderName        string
-	SessionID           string
-	TurnID              string
-	SubjectID           string
-	SubjectKind         string
-	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
-	Permissions         []core.AccessPermission
-	ToolRefs            []coreagent.ToolRef
-	Tools               []coreagent.Tool
-	ToolSource          coreagent.ToolSourceMode
-	Connections         []ConnectionBinding
+	ID                       string
+	ProviderName             string
+	SessionID                string
+	TurnID                   string
+	SubjectID                string
+	SubjectKind              string
+	CredentialSubjectID      string
+	DisplayName              string
+	AuthSource               string
+	Permissions              []core.AccessPermission
+	ToolRefs                 []coreagent.ToolRef
+	Tools                    []coreagent.Tool
+	ToolSource               coreagent.ToolSourceMode
+	Connections              []ConnectionBinding
+	InternalConnectionAccess bool
 }
 
 type claims struct {
 	jwt.RegisteredClaims
-	ProviderName        string                  `json:"provider_name,omitempty"`
-	SessionID           string                  `json:"session_id,omitempty"`
-	TurnID              string                  `json:"turn_id,omitempty"`
-	SubjectKind         string                  `json:"subject_kind,omitempty"`
-	CredentialSubjectID string                  `json:"credential_subject_id,omitempty"`
-	DisplayName         string                  `json:"display_name,omitempty"`
-	AuthSource          string                  `json:"auth_source,omitempty"`
-	Permissions         []core.AccessPermission `json:"permissions,omitempty"`
-	ToolScope           string                  `json:"tool_scope,omitempty"`
+	ProviderName             string                  `json:"provider_name,omitempty"`
+	SessionID                string                  `json:"session_id,omitempty"`
+	TurnID                   string                  `json:"turn_id,omitempty"`
+	SubjectKind              string                  `json:"subject_kind,omitempty"`
+	CredentialSubjectID      string                  `json:"credential_subject_id,omitempty"`
+	DisplayName              string                  `json:"display_name,omitempty"`
+	AuthSource               string                  `json:"auth_source,omitempty"`
+	Permissions              []core.AccessPermission `json:"permissions,omitempty"`
+	ToolScope                string                  `json:"tool_scope,omitempty"`
+	InternalConnectionAccess bool                    `json:"internal_connection_access,omitempty"`
 }
 
 type toolScope struct {
@@ -103,14 +105,15 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(runGrantTTL)),
 		},
-		ProviderName:        strings.TrimSpace(grant.ProviderName),
-		SessionID:           strings.TrimSpace(grant.SessionID),
-		TurnID:              strings.TrimSpace(grant.TurnID),
-		SubjectKind:         strings.TrimSpace(grant.SubjectKind),
-		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(grant.DisplayName),
-		AuthSource:          strings.TrimSpace(grant.AuthSource),
-		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
+		ProviderName:             strings.TrimSpace(grant.ProviderName),
+		SessionID:                strings.TrimSpace(grant.SessionID),
+		TurnID:                   strings.TrimSpace(grant.TurnID),
+		SubjectKind:              strings.TrimSpace(grant.SubjectKind),
+		CredentialSubjectID:      strings.TrimSpace(grant.CredentialSubjectID),
+		DisplayName:              strings.TrimSpace(grant.DisplayName),
+		AuthSource:               strings.TrimSpace(grant.AuthSource),
+		Permissions:              append([]core.AccessPermission(nil), grant.Permissions...),
+		InternalConnectionAccess: grant.InternalConnectionAccess,
 	}
 	scope, err := m.sealValue(sealPurposeToolScope, toolScope{
 		ToolRefs:    append([]coreagent.ToolRef(nil), grant.ToolRefs...),
@@ -152,20 +155,21 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	grant := Grant{
-		ID:                  strings.TrimSpace(decoded.ID),
-		ProviderName:        strings.TrimSpace(decoded.ProviderName),
-		SessionID:           strings.TrimSpace(decoded.SessionID),
-		TurnID:              strings.TrimSpace(decoded.TurnID),
-		SubjectID:           strings.TrimSpace(decoded.Subject),
-		SubjectKind:         strings.TrimSpace(decoded.SubjectKind),
-		CredentialSubjectID: strings.TrimSpace(decoded.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(decoded.DisplayName),
-		AuthSource:          strings.TrimSpace(decoded.AuthSource),
-		Permissions:         append([]core.AccessPermission(nil), decoded.Permissions...),
-		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
-		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
-		ToolSource:          scope.ToolSource,
-		Connections:         append([]ConnectionBinding(nil), scope.Connections...),
+		ID:                       strings.TrimSpace(decoded.ID),
+		ProviderName:             strings.TrimSpace(decoded.ProviderName),
+		SessionID:                strings.TrimSpace(decoded.SessionID),
+		TurnID:                   strings.TrimSpace(decoded.TurnID),
+		SubjectID:                strings.TrimSpace(decoded.Subject),
+		SubjectKind:              strings.TrimSpace(decoded.SubjectKind),
+		CredentialSubjectID:      strings.TrimSpace(decoded.CredentialSubjectID),
+		DisplayName:              strings.TrimSpace(decoded.DisplayName),
+		AuthSource:               strings.TrimSpace(decoded.AuthSource),
+		Permissions:              append([]core.AccessPermission(nil), decoded.Permissions...),
+		ToolRefs:                 append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		Tools:                    append([]coreagent.Tool(nil), scope.Tools...),
+		ToolSource:               scope.ToolSource,
+		Connections:              append([]ConnectionBinding(nil), scope.Connections...),
+		InternalConnectionAccess: decoded.InternalConnectionAccess,
 	}
 	if m.revokedTurn(grant) {
 		return Grant{}, fmt.Errorf("agent run grant is revoked")
