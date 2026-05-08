@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"sort"
@@ -393,7 +394,12 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}, nil
 }
 
-func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error) {
+func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
+	requestedTurnID := strings.TrimSpace(req.TurnID)
+	var grant agentgrant.Grant
+	defer func() {
+		logAgentRuntimeListTools(ctx, req, requestedTurnID, grant, resp, err)
+	}()
 	if r == nil {
 		return nil, fmt.Errorf("agent runtime is not configured")
 	}
@@ -404,8 +410,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if searcher == nil {
 		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
 	}
-	requestedTurnID := strings.TrimSpace(req.TurnID)
-	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	grant, err = resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +431,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if len(grant.ToolRefs) == 0 {
 		return &coreagent.ListToolsResponse{}, nil
 	}
-	resp, err := searcher.ListTools(ctx, principalValue, coreagent.ListToolsRequest{
+	listResp, err := searcher.ListTools(ctx, principalValue, coreagent.ListToolsRequest{
 		ProviderName: strings.TrimSpace(grant.ProviderName),
 		SessionID:    strings.TrimSpace(grant.SessionID),
 		TurnID:       requestedTurnID,
@@ -439,16 +444,126 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil {
+	if listResp == nil {
 		return &coreagent.ListToolsResponse{}, nil
 	}
-	if err := validateAgentListedTools(principalValue, grant.ToolRefs, toolSource, resp.Tools); err != nil {
+	if err := validateAgentListedTools(principalValue, grant.ToolRefs, toolSource, listResp.Tools); err != nil {
 		return nil, err
 	}
 	return &coreagent.ListToolsResponse{
-		Tools:         append([]coreagent.ListedTool(nil), resp.Tools...),
-		NextPageToken: strings.TrimSpace(resp.NextPageToken),
+		Tools:         append([]coreagent.ListedTool(nil), listResp.Tools...),
+		NextPageToken: strings.TrimSpace(listResp.NextPageToken),
 	}, nil
+}
+
+func logAgentRuntimeListTools(ctx context.Context, req coreagent.ListToolsRequest, requestedTurnID string, grant agentgrant.Grant, resp *coreagent.ListToolsResponse, err error) {
+	attrs := []any{
+		"provider", strings.TrimSpace(req.ProviderName),
+		"session_id", strings.TrimSpace(req.SessionID),
+		"turn_id", requestedTurnID,
+		"page_size", req.PageSize,
+		"page_token", strings.TrimSpace(req.PageToken),
+		"query_present", strings.TrimSpace(req.Query) != "",
+		"grant_provider", strings.TrimSpace(grant.ProviderName),
+		"grant_tool_source", strings.TrimSpace(string(grant.ToolSource)),
+		"grant_tool_refs", agentToolRefsLogValue(grant.ToolRefs),
+	}
+	if resp != nil {
+		attrs = append(attrs,
+			"tool_count", len(resp.Tools),
+			"github_mcp_names", githubListedToolMCPNames(resp.Tools),
+			"next_page_token", strings.TrimSpace(resp.NextPageToken),
+		)
+	}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+		slog.WarnContext(ctx, "agent runtime MCP catalog tool listing failed", attrs...)
+		return
+	}
+	slog.InfoContext(ctx, "agent runtime MCP catalog tools listed", attrs...)
+}
+
+func agentToolRefsLogValue(refs []coreagent.ToolRef) []map[string]string {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]map[string]string, 0, len(refs))
+	for i := range refs {
+		ref := refs[i]
+		value := map[string]string{}
+		if systemName := strings.TrimSpace(ref.System); systemName != "" {
+			value["system"] = systemName
+		}
+		if pluginName := strings.TrimSpace(ref.Plugin); pluginName != "" {
+			value["plugin"] = pluginName
+		}
+		if operation := strings.TrimSpace(ref.Operation); operation != "" {
+			value["operation"] = operation
+		}
+		if connection := strings.TrimSpace(ref.Connection); connection != "" {
+			value["connection"] = connection
+		}
+		if instance := strings.TrimSpace(ref.Instance); instance != "" {
+			value["instance"] = instance
+		}
+		if mode := strings.TrimSpace(string(ref.CredentialMode)); mode != "" {
+			value["credential_mode"] = mode
+		}
+		if runAs := core.NormalizeRunAsSubject(ref.RunAs); runAs != nil {
+			if subjectID := strings.TrimSpace(runAs.SubjectID); subjectID != "" {
+				value["run_as_subject_id"] = subjectID
+			}
+			if subjectKind := strings.TrimSpace(runAs.SubjectKind); subjectKind != "" {
+				value["run_as_subject_kind"] = subjectKind
+			}
+		}
+		if identity := core.NormalizeExternalIdentityRef(ref.RunAsExternalIdentity); identity != nil {
+			if identityType := strings.TrimSpace(identity.Type); identityType != "" {
+				value["external_identity_type"] = identityType
+			}
+			if identityID := strings.TrimSpace(identity.ID); identityID != "" {
+				value["external_identity_id"] = identityID
+			}
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func githubListedToolMCPNames(tools []coreagent.ListedTool) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+	names := make([]string, 0)
+	seen := map[string]struct{}{}
+	for i := range tools {
+		tool := tools[i]
+		if !listedToolIsGitHub(tool) {
+			continue
+		}
+		name := strings.TrimSpace(tool.MCPName)
+		if name == "" {
+			name = strings.TrimSpace(tool.Title)
+		}
+		if name == "" {
+			name = strings.TrimSpace(tool.Target.Operation)
+		}
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+func listedToolIsGitHub(tool coreagent.ListedTool) bool {
+	return strings.TrimSpace(tool.Ref.Plugin) == "github" ||
+		strings.TrimSpace(tool.Target.Plugin) == "github" ||
+		strings.HasPrefix(strings.TrimSpace(tool.MCPName), "github__")
 }
 
 func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.ResolveConnectionRequest) (*coreagent.ResolvedConnection, error) {
