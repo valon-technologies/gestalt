@@ -18,6 +18,11 @@ Cargo.lock
 .env.local
 .env.*.local
 
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+
 # Database
 *.db
 *.sqlite
