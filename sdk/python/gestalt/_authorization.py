@@ -1,4 +1,4 @@
-"""Read-only transport client for the host authorization provider."""
+"""Transport client for the host authorization provider."""
 
 from __future__ import annotations
 
@@ -83,8 +83,26 @@ def ReadRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.ReadRelationshipsRequest(*args, **kwargs)
 
 
+def Relationship(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship value."""
+
+    return authorization_pb2.Relationship(*args, **kwargs)
+
+
+def RelationshipKey(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship key value."""
+
+    return authorization_pb2.RelationshipKey(*args, **kwargs)
+
+
+def WriteRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-write request."""
+
+    return authorization_pb2.WriteRelationshipsRequest(*args, **kwargs)
+
+
 class AuthorizationClient:
-    """Read-only transport client for the host authorization provider."""
+    """Transport client for the host authorization provider."""
 
     def __init__(
         self,
@@ -167,6 +185,16 @@ class AuthorizationClient:
             )
         )
 
+    def write_relationships(self, request: Any) -> None:
+        """Write authorization relationships."""
+
+        self._stub.WriteRelationships(
+            _authorization_message(
+                request,
+                authorization_pb2.WriteRelationshipsRequest,
+            )
+        )
+
     def get_metadata(self) -> Any:
         """Return host authorization provider metadata."""
 
@@ -180,7 +208,7 @@ class AuthorizationClient:
 
 
 def Authorization() -> AuthorizationClient:
-    """Return a cached read-only client for the host authorization provider."""
+    """Return a cached client for the host authorization provider."""
 
     target = _resolve_authorization_socket_target()
     token = os.environ.get(ENV_AUTHORIZATION_SOCKET_TOKEN, "").strip()

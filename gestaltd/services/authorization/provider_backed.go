@@ -666,6 +666,14 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			addDesiredRelationship(desired, rel)
+		case resourceTypeAgentSession:
+			if strings.TrimSpace(rel.GetResource().GetId()) == "" || strings.TrimSpace(rel.GetRelation()) != relationAgentSessionEditor {
+				continue
+			}
+			if rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeSubject || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+				continue
+			}
+			addDesiredRelationship(desired, rel)
 		}
 	}
 

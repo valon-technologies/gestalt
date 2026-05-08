@@ -181,8 +181,11 @@ _AUTHORIZATION_PROTOCOL_EXPORTS = (
     "AuthorizationResource",
     "AuthorizationSubject",
     "ReadRelationshipsRequest",
+    "Relationship",
+    "RelationshipKey",
     "ResourceSearchRequest",
     "SubjectSearchRequest",
+    "WriteRelationshipsRequest",
 )
 
 _WORKFLOW_PROTOCOL_EXPORTS = (
