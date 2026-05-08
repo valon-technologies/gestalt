@@ -10,6 +10,8 @@ It creates:
 - GitHub Actions Workload Identity Pool and provider
 - chart publisher service account
 - Artifact Registry writer access for the publisher service account
+- Artifact Registry reader access for configured `valon-tools` Terraform
+  service accounts
 
 The release workflow consumes the `github_actions_variables` output. Copy those
 values into the `valon-technologies/gestalt` repository variables:
@@ -23,6 +25,10 @@ GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER
 
 `valon-tools` environments should consume the chart repository location as input
 variables instead of creating their own per-environment chart repository.
+The `gestaltd_chart_reader_service_accounts` variable controls which
+environment Terraform service accounts can read the chart repository. By
+default this grants read access to the dev and stage `valon-tools` Terraform
+service accounts.
 
 ## Continuous Deployment
 

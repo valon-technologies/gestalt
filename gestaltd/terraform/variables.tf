@@ -15,6 +15,15 @@ variable "artifact_registry_repository_id" {
   default     = "gestaltd-charts"
 }
 
+variable "gestaltd_chart_reader_service_accounts" {
+  description = "Service account emails allowed to read gestaltd Helm charts from Artifact Registry."
+  type        = set(string)
+  default = [
+    "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
+    "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
+  ]
+}
+
 variable "deployer_service_account_id" {
   description = "Service account ID used by GitHub Actions to apply this Terraform root."
   type        = string

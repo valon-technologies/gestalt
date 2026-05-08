@@ -133,3 +133,13 @@ resource "google_artifact_registry_repository_iam_member" "chart_publisher" {
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.chart_publisher.email}"
 }
+
+resource "google_artifact_registry_repository_iam_member" "chart_readers" {
+  for_each = var.gestaltd_chart_reader_service_accounts
+
+  project    = var.project_id
+  location   = google_artifact_registry_repository.gestaltd_charts.location
+  repository = google_artifact_registry_repository.gestaltd_charts.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${each.value}"
+}
