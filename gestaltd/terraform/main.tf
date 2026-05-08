@@ -36,6 +36,7 @@ locals {
 resource "google_project_iam_member" "deployer_permissions" {
   for_each = toset([
     "roles/artifactregistry.admin",
+    "roles/iam.serviceAccountAdmin",
     "roles/iam.workloadIdentityPoolAdmin",
     "roles/serviceusage.serviceUsageAdmin",
   ])
