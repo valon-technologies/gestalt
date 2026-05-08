@@ -22,9 +22,14 @@ import (
 
 const (
 	workflowSystemToolDefinitionsCreate = "definitions.create"
+	workflowSystemToolDefinitionsGet    = "definitions.get"
+	workflowSystemToolDefinitionsUpdate = "definitions.update"
+	workflowSystemToolDefinitionsDelete = "definitions.delete"
 	workflowSystemToolSchedulesCreate   = "schedules.create"
 	workflowSystemToolSchedulesList     = "schedules.list"
 	workflowSystemToolSchedulesGet      = "schedules.get"
+	workflowSystemToolSchedulesUpdate   = "schedules.update"
+	workflowSystemToolSchedulesDelete   = "schedules.delete"
 	workflowSystemToolSchedulesPause    = "schedules.pause"
 	workflowSystemToolSchedulesResume   = "schedules.resume"
 	workflowSystemToolRunsList          = "runs.list"
@@ -58,6 +63,24 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 		Description:      "Create a reusable workflow definition for a delegated target.",
 		ParametersSchema: workflowSystemToolCreateDefinitionSchema(),
 	},
+	workflowSystemToolDefinitionsGet: {
+		Operation:        workflowSystemToolDefinitionsGet,
+		Name:             "workflow_definitions_get",
+		Description:      "Get a workflow definition owned by the current caller.",
+		ParametersSchema: workflowSystemToolObjectSchema([]string{"definitionId"}, map[string]any{"definitionId": workflowSystemToolStringSchema("Workflow definition ID.")}),
+	},
+	workflowSystemToolDefinitionsUpdate: {
+		Operation:        workflowSystemToolDefinitionsUpdate,
+		Name:             "workflow_definitions_update",
+		Description:      "Update a workflow definition owned by the current caller.",
+		ParametersSchema: workflowSystemToolUpdateDefinitionSchema(),
+	},
+	workflowSystemToolDefinitionsDelete: {
+		Operation:        workflowSystemToolDefinitionsDelete,
+		Name:             "workflow_definitions_delete",
+		Description:      "Delete a workflow definition owned by the current caller.",
+		ParametersSchema: workflowSystemToolObjectSchema([]string{"definitionId"}, map[string]any{"definitionId": workflowSystemToolStringSchema("Workflow definition ID.")}),
+	},
 	workflowSystemToolSchedulesCreate: {
 		Operation:        workflowSystemToolSchedulesCreate,
 		Name:             "workflow_schedules_create",
@@ -74,6 +97,18 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 		Operation:        workflowSystemToolSchedulesGet,
 		Name:             "workflow_schedules_get",
 		Description:      "Get a workflow schedule owned by the current caller.",
+		ParametersSchema: workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{"scheduleId": workflowSystemToolStringSchema("Schedule ID.")}),
+	},
+	workflowSystemToolSchedulesUpdate: {
+		Operation:        workflowSystemToolSchedulesUpdate,
+		Name:             "workflow_schedules_update",
+		Description:      "Update a workflow schedule owned by the current caller. Omitted fields preserve the existing schedule values.",
+		ParametersSchema: workflowSystemToolUpdateScheduleSchema(),
+	},
+	workflowSystemToolSchedulesDelete: {
+		Operation:        workflowSystemToolSchedulesDelete,
+		Name:             "workflow_schedules_delete",
+		Description:      "Delete a workflow schedule owned by the current caller.",
 		ParametersSchema: workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{"scheduleId": workflowSystemToolStringSchema("Schedule ID.")}),
 	},
 	workflowSystemToolSchedulesPause: {
@@ -157,13 +192,19 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 	switch strings.TrimSpace(req.Tool.Target.Operation) {
 	case workflowSystemToolDefinitionsCreate:
 		return t.executeCreateDefinition(ctx, req)
+	case workflowSystemToolDefinitionsGet:
+		return t.executeGetDefinition(ctx, req)
+	case workflowSystemToolDefinitionsUpdate:
+		return t.executeUpdateDefinition(ctx, req)
+	case workflowSystemToolDefinitionsDelete:
+		return t.executeDeleteDefinition(ctx, req)
 	case workflowSystemToolSchedulesCreate:
 		return t.executeCreateSchedule(ctx, req)
 	case workflowSystemToolSchedulesList:
 		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.list"); err != nil {
 			return nil, err
 		}
-		schedules, err := t.manager.ListSchedules(ctx, req.Principal)
+		schedules, err := t.manager.ListSchedules(ctx, workflowSystemToolManagementPrincipal(req))
 		if err != nil {
 			return nil, err
 		}
@@ -180,11 +221,15 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
-		schedule, err := t.manager.GetSchedule(ctx, req.Principal, scheduleID)
+		schedule, err := t.manager.GetSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID)
 		if err != nil {
 			return nil, err
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
+	case workflowSystemToolSchedulesUpdate:
+		return t.executeUpdateSchedule(ctx, req)
+	case workflowSystemToolSchedulesDelete:
+		return t.executeDeleteSchedule(ctx, req)
 	case workflowSystemToolSchedulesPause:
 		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.schedules.pause", "scheduleId"); err != nil {
 			return nil, err
@@ -193,7 +238,7 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
-		schedule, err := t.manager.PauseSchedule(ctx, req.Principal, scheduleID)
+		schedule, err := t.manager.PauseSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +251,7 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		if scheduleID == "" {
 			return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
 		}
-		schedule, err := t.manager.ResumeSchedule(ctx, req.Principal, scheduleID)
+		schedule, err := t.manager.ResumeSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID)
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +260,7 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.list"); err != nil {
 			return nil, err
 		}
-		runs, err := t.manager.ListRuns(ctx, req.Principal)
+		runs, err := t.manager.ListRuns(ctx, workflowSystemToolManagementPrincipal(req))
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +277,7 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 		if runID == "" {
 			return nil, fmt.Errorf("%w: runId is required", invocation.ErrInvalidInvocation)
 		}
-		run, err := t.manager.GetRun(ctx, req.Principal, runID)
+		run, err := t.manager.GetRun(ctx, workflowSystemToolManagementPrincipal(req), runID)
 		if err != nil {
 			return nil, err
 		}
@@ -274,6 +319,74 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 		return nil, err
 	}
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
+}
+
+func (t *workflowSystemTools) executeGetDefinition(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.definitions.get", "definitionId"); err != nil {
+		return nil, err
+	}
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	if definitionID == "" {
+		return nil, fmt.Errorf("%w: definitionId is required", invocation.ErrInvalidInvocation)
+	}
+	definition, err := t.manager.GetDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID)
+	if err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
+}
+
+func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.definitions.update", "definitionId", "provider", "target"); err != nil {
+		return nil, err
+	}
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	if definitionID == "" {
+		return nil, fmt.Errorf("%w: definitionId is required", invocation.ErrInvalidInvocation)
+	}
+	targetValue, ok := args["target"]
+	if !ok {
+		return nil, fmt.Errorf("%w: target is required", invocation.ErrInvalidInvocation)
+	}
+	target, err := workflowSystemToolTargetFromValue(targetValue)
+	if err != nil {
+		return nil, err
+	}
+	workflowSystemToolInheritAgentToolRefs(req, &target)
+	if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+		return nil, err
+	}
+	permissions, err := workflowSystemToolScopedPermissions(req, target)
+	if err != nil {
+		return nil, err
+	}
+	definition, err := t.manager.UpdateDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID, workflowmanager.DefinitionUpsert{
+		ProviderName:     workflowSystemToolStringArg(args, "provider"),
+		Target:           target,
+		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
+		Permissions:      permissions,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"definition": workflowSystemToolDefinitionInfo(definition)})
+}
+
+func (t *workflowSystemTools) executeDeleteDefinition(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.definitions.delete", "definitionId"); err != nil {
+		return nil, err
+	}
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	if definitionID == "" {
+		return nil, fmt.Errorf("%w: definitionId is required", invocation.ErrInvalidInvocation)
+	}
+	if err := t.manager.DeleteDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID); err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"definitionId": definitionID, "deleted": true})
 }
 
 func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
@@ -353,12 +466,159 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 }
 
+func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.update", "scheduleId", "provider", "cron", "timezone", "paused", "target", "definitionId"); err != nil {
+		return nil, err
+	}
+	scheduleID := workflowSystemToolStringArg(args, "scheduleId")
+	if scheduleID == "" {
+		return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
+	}
+	existing, err := t.manager.GetSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil || existing.Schedule == nil {
+		return nil, core.ErrNotFound
+	}
+
+	providerName := workflowSystemToolStringArg(args, "provider")
+	cron := workflowSystemToolStringArg(args, "cron")
+	if cron == "" {
+		cron = strings.TrimSpace(existing.Schedule.Cron)
+	}
+	if cron == "" {
+		return nil, fmt.Errorf("%w: cron is required", invocation.ErrInvalidInvocation)
+	}
+	timezone := workflowSystemToolStringArg(args, "timezone")
+	if timezone == "" {
+		timezone = strings.TrimSpace(existing.Schedule.Timezone)
+	}
+	paused := existing.Schedule.Paused
+	if value, ok, err := workflowSystemToolBoolArgPresent(args, "paused", "workflow.schedules.update"); err != nil {
+		return nil, err
+	} else if ok {
+		paused = value
+	}
+
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	targetValue, hasTarget := args["target"]
+	if definitionID != "" && hasTarget {
+		return nil, fmt.Errorf("%w: target and definitionId cannot both be set", invocation.ErrInvalidInvocation)
+	}
+	if providerName == "" && definitionID == "" {
+		providerName = strings.TrimSpace(existing.ProviderName)
+	}
+
+	var target coreworkflow.Target
+	var upsertTarget coreworkflow.Target
+	var permissions []core.AccessPermission
+	sourceDefinitionID := ""
+	switch {
+	case definitionID != "":
+		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
+		definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil || definition.Definition == nil {
+			return nil, core.ErrNotFound
+		}
+		target = definition.Definition.Target
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions = definition.Definition.Permissions
+		if permissions == nil {
+			permissions, err = workflowSystemToolScopedPermissions(req, target)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			scopedPrincipal, err := workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+			if err != nil {
+				return nil, err
+			}
+			permissions = workflowSystemToolPermissionsFromPrincipal(scopedPrincipal)
+		}
+	case hasTarget:
+		target, err = workflowSystemToolTargetFromValue(targetValue)
+		if err != nil {
+			return nil, err
+		}
+		workflowSystemToolInheritAgentToolRefs(req, &target)
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions, err = workflowSystemToolScopedPermissions(req, target)
+		if err != nil {
+			return nil, err
+		}
+		upsertTarget = target
+	default:
+		target = workflowSystemToolExistingScheduleTarget(existing)
+		if existing.ExecutionRef != nil {
+			sourceDefinitionID = strings.TrimSpace(existing.ExecutionRef.SourceDefinitionID)
+		}
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		if existing.ExecutionRef != nil && existing.ExecutionRef.Permissions != nil {
+			permissions = workflowSystemToolClonePermissions(existing.ExecutionRef.Permissions)
+		} else {
+			permissions, err = workflowSystemToolScopedPermissions(req, target)
+			if err != nil {
+				return nil, err
+			}
+		}
+		upsertTarget = target
+	}
+	if definitionID != "" {
+		upsertTarget = coreworkflow.Target{}
+	}
+	schedule, err := t.manager.UpdateSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID, workflowmanager.ScheduleUpsert{
+		ProviderName:       providerName,
+		Cron:               cron,
+		Timezone:           timezone,
+		Target:             upsertTarget,
+		DefinitionID:       definitionID,
+		SourceDefinitionID: sourceDefinitionID,
+		Paused:             paused,
+		CallerPluginName:   workflowSystemToolCallerScope(req.ProviderName),
+		Permissions:        permissions,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
+}
+
+func (t *workflowSystemTools) executeDeleteSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.delete", "scheduleId"); err != nil {
+		return nil, err
+	}
+	scheduleID := workflowSystemToolStringArg(args, "scheduleId")
+	if scheduleID == "" {
+		return nil, fmt.Errorf("%w: scheduleId is required", invocation.ErrInvalidInvocation)
+	}
+	if err := t.manager.DeleteSchedule(ctx, workflowSystemToolManagementPrincipal(req), scheduleID); err != nil {
+		return nil, err
+	}
+	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"scheduleId": scheduleID, "deleted": true})
+}
+
 func workflowSystemToolCallerScope(providerName string) string {
 	providerName = strings.TrimSpace(providerName)
 	if providerName == "" {
 		return "agent"
 	}
 	return "agent:" + providerName
+}
+
+func workflowSystemToolManagementPrincipal(req agentSystemToolExecutionRequest) *principal.Principal {
+	return workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
 }
 
 func workflowSystemToolFromRef(ref coreagent.ToolRef) (coreagent.Tool, error) {
@@ -402,10 +662,30 @@ func workflowSystemToolCreateScheduleSchema() map[string]any {
 	})
 }
 
+func workflowSystemToolUpdateScheduleSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{
+		"scheduleId":   workflowSystemToolStringSchema("Schedule ID."),
+		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
+		"cron":         workflowSystemToolStringSchema("Cron expression. If omitted, the existing cron is preserved."),
+		"timezone":     workflowSystemToolStringSchema("IANA timezone. If omitted, the existing timezone is preserved."),
+		"paused":       map[string]any{"type": "boolean", "description": "Paused state. If omitted, the existing paused state is preserved."},
+		"target":       workflowSystemToolTargetSchema(),
+		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to schedule. If omitted with no target, the existing resolved target is preserved."),
+	})
+}
+
 func workflowSystemToolCreateDefinitionSchema() map[string]any {
 	return workflowSystemToolObjectSchema([]string{"target"}, map[string]any{
 		"provider": workflowSystemToolStringSchema("Workflow provider name."),
 		"target":   workflowSystemToolTargetSchema(),
+	})
+}
+
+func workflowSystemToolUpdateDefinitionSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"definitionId", "target"}, map[string]any{
+		"definitionId": workflowSystemToolStringSchema("Workflow definition ID."),
+		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
+		"target":       workflowSystemToolTargetSchema(),
 	})
 }
 
@@ -842,6 +1122,48 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultA
 	return out
 }
 
+func workflowSystemToolScopedPermissions(req agentSystemToolExecutionRequest, target coreworkflow.Target) ([]core.AccessPermission, error) {
+	permissions := workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+	scopedPrincipal, err := workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+	if err != nil {
+		return nil, err
+	}
+	return workflowSystemToolPermissionsFromPrincipal(scopedPrincipal), nil
+}
+
+func workflowSystemToolPermissionsFromPrincipal(p *principal.Principal) []core.AccessPermission {
+	p = principal.Canonicalized(p)
+	if p == nil || p.TokenPermissions == nil {
+		return nil
+	}
+	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
+}
+
+func workflowSystemToolExistingScheduleTarget(schedule *workflowmanager.ManagedSchedule) coreworkflow.Target {
+	if schedule == nil {
+		return coreworkflow.Target{}
+	}
+	if schedule.ExecutionRef != nil && (schedule.ExecutionRef.Target.Plugin != nil || schedule.ExecutionRef.Target.Agent != nil) {
+		return schedule.ExecutionRef.Target
+	}
+	if schedule.Schedule != nil {
+		return schedule.Schedule.Target
+	}
+	return coreworkflow.Target{}
+}
+
+func workflowSystemToolClonePermissions(src []core.AccessPermission) []core.AccessPermission {
+	if src == nil {
+		return nil
+	}
+	out := append([]core.AccessPermission(nil), src...)
+	for i := range out {
+		out[i].Operations = append([]string(nil), out[i].Operations...)
+		out[i].Actions = append([]string(nil), out[i].Actions...)
+	}
+	return out
+}
+
 func workflowSystemToolTrustedAgentProvider(req agentSystemToolExecutionRequest, target coreworkflow.Target) string {
 	if target.Agent == nil {
 		return ""
@@ -1068,6 +1390,18 @@ func workflowSystemToolBoolArg(args map[string]any, key string) bool {
 	}
 	result, _ := value.(bool)
 	return result
+}
+
+func workflowSystemToolBoolArgPresent(args map[string]any, key, path string) (bool, bool, error) {
+	value, ok := args[key]
+	if !ok || value == nil {
+		return false, false, nil
+	}
+	result, ok := value.(bool)
+	if !ok {
+		return false, true, fmt.Errorf("%w: %s.%s must be a boolean", invocation.ErrInvalidInvocation, path, key)
+	}
+	return result, true, nil
 }
 
 func workflowSystemToolIntArg(args map[string]any, key string) int {
