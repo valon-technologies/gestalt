@@ -230,7 +230,7 @@ jobs:
           workload_identity_provider: ${{ vars.GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GESTALTD_GCP_SERVICE_ACCOUNT }}
           token_format: access_token
-      - name: Push Helm chart to Artifact Registry
+      - name: Push Helm chart to Gestalt Artifact Registry
         env:
           VERSION: ${{ steps.version.outputs.version }}
           ARTIFACT_REGISTRY_HOST: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
