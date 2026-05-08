@@ -36,13 +36,14 @@ type agentRuntime struct {
 }
 
 type agentSystemToolExecutionRequest struct {
-	Principal      *principal.Principal
-	ProviderName   string
-	Tool           coreagent.Tool
-	Arguments      map[string]any
-	IdempotencyKey string
-	ToolRefs       []coreagent.ToolRef
-	Tools          []coreagent.Tool
+	Principal        *principal.Principal
+	ProviderName     string
+	CallerPluginName string
+	Tool             coreagent.Tool
+	Arguments        map[string]any
+	IdempotencyKey   string
+	ToolRefs         []coreagent.ToolRef
+	Tools            []coreagent.Tool
 }
 
 type agentSystemToolExecutor interface {
@@ -346,13 +347,14 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			return nil, agentmanager.ErrAgentWorkflowToolsNotConfigured
 		}
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
-			Principal:      principalValue,
-			ProviderName:   strings.TrimSpace(grant.ProviderName),
-			Tool:           resolvedTool,
-			Arguments:      maps.Clone(req.Arguments),
-			IdempotencyKey: idempotencyKey,
-			ToolRefs:       append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-			Tools:          append([]coreagent.Tool(nil), grant.Tools...),
+			Principal:        principalValue,
+			ProviderName:     strings.TrimSpace(grant.ProviderName),
+			CallerPluginName: strings.TrimSpace(grant.CallerPluginName),
+			Tool:             resolvedTool,
+			Arguments:        maps.Clone(req.Arguments),
+			IdempotencyKey:   idempotencyKey,
+			ToolRefs:         append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+			Tools:            append([]coreagent.Tool(nil), grant.Tools...),
 		})
 	}
 	if invoker == nil {
