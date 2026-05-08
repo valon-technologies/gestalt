@@ -134,12 +134,286 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "roadmap", Operations: []string{"sync"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "reply",
+				Input:      map[string]any{"format": "plain"},
+			},
+			CredentialMode: core.ConnectionModeNone,
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
+			},
+		},
+	})
+
+	req := coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-1",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Investigate the deployment and summarize the result.",
+					"toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}},
+				},
+			},
+			"deliverResultToCaller": true,
+		},
+	}
+	resp, err := agentRuntime.ExecuteTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("response = %#v, want 201", resp)
+	}
+	if strings.Contains(resp.Body, "outputDelivery") || strings.Contains(resp.Body, "signed-parent-reply-ref") || strings.Contains(resp.Body, "notification") {
+		t.Fatalf("response leaked inherited delivery: %s", resp.Body)
+	}
+	var body struct {
+		Run struct {
+			ID          string `json:"id"`
+			WorkflowKey string `json:"workflowKey"`
+			Target      struct {
+				Agent struct {
+					Prompt string `json:"prompt"`
+				} `json:"agent"`
+			} `json:"target"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	if body.Run.ID == "" || body.Run.WorkflowKey != "slack-child-run" || body.Run.Target.Agent.Prompt == "" {
+		t.Fatalf("run response = %#v", body.Run)
+	}
+	if len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	}
+	started := workflowProvider.startedRuns[0]
+	if started.Target.Agent == nil || started.Target.Agent.OutputDelivery == nil {
+		t.Fatalf("started target missing output delivery: %#v", started.Target)
+	}
+	if got := started.Target.Agent.OutputDelivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
+		t.Fatalf("inherited reply ref = %#v, want signed-parent-reply-ref", got)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), started.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference: %v", err)
+	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "notification", Operations: []string{"reply"}},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	})
+	replayResp, err := agentRuntime.ExecuteTool(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ExecuteTool replay: %v", err)
+	}
+	var replayBody struct {
+		Run struct {
+			ID string `json:"id"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal([]byte(replayResp.Body), &replayBody); err != nil {
+		t.Fatalf("decode replay body: %v", err)
+	}
+	if replayBody.Run.ID != body.Run.ID || len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("replay run id = %q startedRuns=%d, want %q and one provider start", replayBody.Run.ID, len(workflowProvider.startedRuns), body.Run.ID)
+	}
+	conflictingReq := req
+	conflictingReq.Arguments = maps.Clone(req.Arguments)
+	conflictingReq.Arguments["workflowKey"] = "different-slack-child-run"
+	_, err = agentRuntime.ExecuteTool(context.Background(), conflictingReq)
+	if err == nil {
+		t.Fatal("ExecuteTool conflicting workflow key replay succeeded, want provider idempotency conflict")
+	}
+
+	childAgentManager := &workflowRuntimeAgentManagerStub{}
+	childRuntime := &workflowRuntime{}
+	childRuntime.SetAgentManager(childAgentManager)
+	var gotDeliveryParams map[string]any
+	childRuntime.SetInvoker(funcInvoker{
+		invoke: func(_ context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			if providerName != "notification" || operation != "reply" {
+				t.Fatalf("delivery target = %s.%s, want notification.reply", providerName, operation)
+			}
+			gotDeliveryParams = maps.Clone(params)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
+			{Plugin: "notification", Operations: []string{"reply"}},
+		}),
+	})
+	childResp, err := childRuntime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "child-run",
+		Target:       started.Target,
+	})
+	if err != nil {
+		t.Fatalf("Invoke child: %v", err)
+	}
+	if childResp.Status != http.StatusOK {
+		t.Fatalf("child response = %#v", childResp)
+	}
+	if gotDeliveryParams["text"] != "turn completed" || gotDeliveryParams["reply_ref"] != "signed-parent-reply-ref" || gotDeliveryParams["format"] != "plain" {
+		t.Fatalf("child delivery params = %#v", gotDeliveryParams)
+	}
+}
+
+func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
+	t.Parallel()
+
+	schema := workflowSystemToolStartRunSchema()
+	branches, ok := schema["oneOf"].([]any)
+	if !ok || len(branches) != 2 {
+		t.Fatalf("runs.start schema oneOf = %#v, want target and definition branches", schema["oneOf"])
+	}
+	targetBranch, ok := branches[0].(map[string]any)
+	if !ok {
+		t.Fatalf("target branch = %#v", branches[0])
+	}
+	targetProps, ok := targetBranch["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("target branch properties = %#v", targetBranch["properties"])
+	}
+	if _, ok := targetProps["definitionId"]; ok {
+		t.Fatalf("target branch exposes definitionId: %#v", targetProps)
+	}
+	target, ok := targetProps["target"].(map[string]any)
+	if !ok {
+		t.Fatalf("target property = %#v", targetProps["target"])
+	}
+	targetTargetProps, ok := target["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("target properties = %#v", target["properties"])
+	}
+	if _, ok := targetTargetProps["plugin"]; ok {
+		t.Fatalf("runs.start target schema exposes plugin target: %#v", targetTargetProps)
+	}
+	if _, ok := targetTargetProps["agent"]; !ok {
+		t.Fatalf("runs.start target schema missing agent target: %#v", targetTargetProps)
+	}
+	definitionBranch, ok := branches[1].(map[string]any)
+	if !ok {
+		t.Fatalf("definition branch = %#v", branches[1])
+	}
+	definitionProps, ok := definitionBranch["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("definition branch properties = %#v", definitionBranch["properties"])
+	}
+	if _, ok := definitionProps["target"]; ok {
+		t.Fatalf("definition branch exposes target: %#v", definitionProps)
+	}
+	if _, ok := definitionProps["deliverResultToCaller"]; ok {
+		t.Fatalf("definition branch exposes deliverResultToCaller: %#v", definitionProps)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolStartRunRejectsInvalidCallerDelivery(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, _ := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+	baseReq := coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-invalid",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+	}
+	tests := []struct {
+		name string
+		args map[string]any
+	}{
+		{
+			name: "missing inherited output delivery",
+			args: map[string]any{
+				"deliverResultToCaller": true,
+				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}}}},
+			},
+		},
+		{
+			name: "definition callback",
+			args: map[string]any{
+				"definitionId":          "workflow_definition_abc",
+				"deliverResultToCaller": true,
+			},
+		},
+		{
+			name: "direct plugin target",
+			args: map[string]any{
+				"target": map[string]any{"plugin": map[string]any{"name": "roadmap", "operation": "sync"}},
+			},
+		},
+		{
+			name: "non boolean callback flag",
+			args: map[string]any{
+				"deliverResultToCaller": "true",
+				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"plugin": "roadmap", "operation": "sync"}}}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := baseReq
+			req.Arguments = tt.args
+			_, err := agentRuntime.ExecuteTool(context.Background(), req)
+			if err == nil {
+				t.Fatal("ExecuteTool succeeded, want invalid invocation")
+			}
+			if !errors.Is(err, invocation.ErrInvalidInvocation) {
+				t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+			}
+		})
+	}
+}
+
 func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinition(t *testing.T) {
 	t.Parallel()
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
 	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
 	scheduleTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolRunsStart)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{
 			{Plugin: "roadmap", Operations: []string{"sync"}},
@@ -148,9 +422,10 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
 			{Plugin: "roadmap", Operation: "sync"},
 		},
-		Tools: []coreagent.Tool{definitionTool, scheduleTool},
+		Tools: []coreagent.Tool{definitionTool, scheduleTool, runTool},
 	})
 
 	definitionResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -255,6 +530,39 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		t.Fatalf("schedule ref source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionID)
 	}
 	assertWorkflowSystemPermissions(t, scheduleRef.Permissions, []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	})
+
+	runResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "run-definition-call",
+		ToolID:       runTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"definitionId": definitionID,
+			"workflowKey":  "definition-one-off",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool run from definition: %v", err)
+	}
+	if runResp == nil || runResp.Status != http.StatusCreated {
+		t.Fatalf("run response = %#v, want 201", runResp)
+	}
+	if len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	}
+	runRef, err := workflowProvider.GetExecutionReference(context.Background(), workflowProvider.startedRuns[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(run): %v", err)
+	}
+	if runRef.SourceDefinitionID != definitionID {
+		t.Fatalf("run ref source definition id = %q, want %q", runRef.SourceDefinitionID, definitionID)
+	}
+	assertWorkflowSystemPermissions(t, runRef.Permissions, []core.AccessPermission{
 		{Plugin: "managed"},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
 	})
@@ -1120,6 +1428,19 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 	}); err != nil {
 		t.Fatalf("Register roadmap: %v", err)
 	}
+	if err := reg.Providers.Register("notification", &coretesting.StubIntegration{
+		N:        "notification",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "notification",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "reply",
+				Method: http.MethodPost,
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("Register notification: %v", err)
+	}
 	workflowProvider := &workflowSystemToolRecordingProvider{}
 	workflowRuntime := &workflowRuntime{
 		defaultProviderName: "temporal",
@@ -1151,6 +1472,11 @@ func newWorkflowSystemToolRuntime(t *testing.T) (*agentRuntime, *workflowSystemT
 		Workflow:     workflowRuntime,
 		Agent:        runtime,
 		AgentManager: agentManager,
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {
+				{Plugin: "notification", Operation: "reply", CredentialMode: core.ConnectionModeNone},
+			},
+		},
 	})
 	runtime.SetRunGrants(newTestAgentRunGrants(t))
 	runtime.SetToolSearcher(workflowSystemToolResolver{})
@@ -1180,19 +1506,63 @@ func (workflowSystemToolAgentManagerStub) Available() bool {
 }
 
 type workflowSystemToolRecordingProvider struct {
+	startedRuns       []coreworkflow.StartRunRequest
+	runs              map[string]*coreworkflow.Run
+	runIdempotency    map[string]string
 	upsertedSchedules []coreworkflow.UpsertScheduleRequest
 	schedules         map[string]*coreworkflow.Schedule
 	executionRefs     map[string]*coreworkflow.ExecutionReference
 }
 
-func (p *workflowSystemToolRecordingProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
+func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	if p.runs == nil {
+		p.runs = map[string]*coreworkflow.Run{}
+	}
+	if p.runIdempotency == nil {
+		p.runIdempotency = map[string]string{}
+	}
+	if req.IdempotencyKey != "" {
+		for runID, idempotencyKey := range p.runIdempotency {
+			if idempotencyKey == req.IdempotencyKey {
+				run := p.runs[runID]
+				if run.ExecutionRef != req.ExecutionRef {
+					return nil, errors.New("idempotent run replay used a different execution ref")
+				}
+				value := *run
+				return &value, nil
+			}
+		}
+	}
+	p.startedRuns = append(p.startedRuns, req)
+	run := &coreworkflow.Run{
+		ID:           "run-" + req.ExecutionRef,
+		Status:       coreworkflow.RunStatusPending,
+		WorkflowKey:  req.WorkflowKey,
+		Target:       req.Target,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.runs[run.ID] = run
+	if req.IdempotencyKey != "" {
+		p.runIdempotency[run.ID] = req.IdempotencyKey
+	}
+	value := *run
+	return &value, nil
 }
-func (p *workflowSystemToolRecordingProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
+func (p *workflowSystemToolRecordingProvider) GetRun(_ context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	if run := p.runs[req.RunID]; run != nil {
+		value := *run
+		return &value, nil
+	}
+	return nil, core.ErrNotFound
 }
 func (p *workflowSystemToolRecordingProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	return nil, nil
+	out := make([]*coreworkflow.Run, 0, len(p.runs))
+	for _, run := range p.runs {
+		value := *run
+		out = append(out, &value)
+	}
+	return out, nil
 }
 func (p *workflowSystemToolRecordingProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
@@ -1296,10 +1666,11 @@ func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { retu
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
 type workflowSystemRunGrantScope struct {
-	CallerPluginName string
-	Permissions      []core.AccessPermission
-	ToolRefs         []coreagent.ToolRef
-	Tools            []coreagent.Tool
+	CallerPluginName        string
+	Permissions             []core.AccessPermission
+	ToolRefs                []coreagent.ToolRef
+	Tools                   []coreagent.Tool
+	InheritedOutputDelivery *coreworkflow.OutputDelivery
 }
 
 func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemRunGrantScope) string {
@@ -1307,16 +1678,17 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 
 	grants := workflowSystemRunGrants(t, runtime)
 	grant, err := grants.Mint(agentgrant.Grant{
-		ProviderName:        "managed",
-		SessionID:           "session-1",
-		TurnID:              "turn-1",
-		CallerPluginName:    strings.TrimSpace(scope.CallerPluginName),
-		SubjectID:           principal.UserSubjectID("ada"),
-		SubjectKind:         string(principal.KindUser),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
-		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
-		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
-		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
+		ProviderName:            "managed",
+		SessionID:               "session-1",
+		TurnID:                  "turn-1",
+		CallerPluginName:        strings.TrimSpace(scope.CallerPluginName),
+		SubjectID:               principal.UserSubjectID("ada"),
+		SubjectKind:             string(principal.KindUser),
+		CredentialSubjectID:     principal.UserSubjectID("ada"),
+		Permissions:             append([]core.AccessPermission(nil), scope.Permissions...),
+		ToolRefs:                append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		Tools:                   append([]coreagent.Tool(nil), scope.Tools...),
+		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(scope.InheritedOutputDelivery),
 	})
 	if err != nil {
 		t.Fatalf("Mint workflow system run grant: %v", err)

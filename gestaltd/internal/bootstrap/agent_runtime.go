@@ -14,6 +14,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -36,18 +37,19 @@ type agentRuntime struct {
 }
 
 type agentSystemToolExecutionRequest struct {
-	Principal        *principal.Principal
-	ProviderName     string
-	CallerPluginName string
-	SessionID        string
-	TurnID           string
-	ToolCallID       string
-	ToolID           string
-	Tool             coreagent.Tool
-	Arguments        map[string]any
-	IdempotencyKey   string
-	ToolRefs         []coreagent.ToolRef
-	Tools            []coreagent.Tool
+	Principal               *principal.Principal
+	ProviderName            string
+	CallerPluginName        string
+	SessionID               string
+	TurnID                  string
+	ToolCallID              string
+	ToolID                  string
+	Tool                    coreagent.Tool
+	Arguments               map[string]any
+	IdempotencyKey          string
+	ToolRefs                []coreagent.ToolRef
+	Tools                   []coreagent.Tool
+	InheritedOutputDelivery *coreworkflow.OutputDelivery
 }
 
 type agentSystemToolExecutor interface {
@@ -351,18 +353,19 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			return nil, agentmanager.ErrAgentWorkflowToolsNotConfigured
 		}
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
-			Principal:        principalValue,
-			ProviderName:     strings.TrimSpace(grant.ProviderName),
-			CallerPluginName: strings.TrimSpace(grant.CallerPluginName),
-			SessionID:        strings.TrimSpace(req.SessionID),
-			TurnID:           strings.TrimSpace(req.TurnID),
-			ToolCallID:       strings.TrimSpace(req.ToolCallID),
-			ToolID:           strings.TrimSpace(req.ToolID),
-			Tool:             resolvedTool,
-			Arguments:        maps.Clone(req.Arguments),
-			IdempotencyKey:   idempotencyKey,
-			ToolRefs:         append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-			Tools:            append([]coreagent.Tool(nil), grant.Tools...),
+			Principal:               principalValue,
+			ProviderName:            strings.TrimSpace(grant.ProviderName),
+			CallerPluginName:        strings.TrimSpace(grant.CallerPluginName),
+			SessionID:               strings.TrimSpace(req.SessionID),
+			TurnID:                  strings.TrimSpace(req.TurnID),
+			ToolCallID:              strings.TrimSpace(req.ToolCallID),
+			ToolID:                  strings.TrimSpace(req.ToolID),
+			Tool:                    resolvedTool,
+			Arguments:               maps.Clone(req.Arguments),
+			IdempotencyKey:          idempotencyKey,
+			ToolRefs:                append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+			Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
+			InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(grant.InheritedOutputDelivery),
 		})
 	}
 	if invoker == nil {

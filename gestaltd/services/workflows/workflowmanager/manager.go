@@ -151,6 +151,7 @@ type RunStart struct {
 	IdempotencyKey   string
 	WorkflowKey      string
 	CallerPluginName string
+	Permissions      []core.AccessPermission
 }
 
 type RunSignal struct {
@@ -392,8 +393,8 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		return nil, err
 	}
 
-	executionRefID := runExecutionRefID(uuid.NewString())
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
+	executionRefID := newRunExecutionRefID(workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey), req.WorkflowKey)
+	ref, createdRef, err := m.putRunExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -405,11 +406,15 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		ExecutionRef:   executionRefID,
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, ref)
+		if createdRef {
+			m.revokeExecutionRef(ctx, ref)
+		}
 		return nil, err
 	}
-	if !runMatchesExecutionRef(providerName, run, ref) {
-		m.revokeExecutionRef(ctx, ref)
+	if !runMatchesExecutionRef(providerName, run, ref) || strings.TrimSpace(ref.ID) != strings.TrimSpace(run.ExecutionRef) {
+		if createdRef {
+			m.revokeExecutionRef(ctx, ref)
+		}
 		return nil, core.ErrNotFound
 	}
 	return &ManagedRun{
@@ -1334,8 +1339,8 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.Metadata = maps.Clone(target.Metadata)
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
-	target.OutputDelivery = cloneWorkflowOutputDelivery(target.OutputDelivery)
-	target.SessionReadyDelivery = cloneWorkflowOutputDelivery(target.SessionReadyDelivery)
+	target.OutputDelivery = coreworkflow.CloneOutputDelivery(target.OutputDelivery)
+	target.SessionReadyDelivery = coreworkflow.CloneOutputDelivery(target.SessionReadyDelivery)
 	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
 		return coreworkflow.Target{}, err
 	}
@@ -1548,6 +1553,49 @@ func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionR
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		Permissions:         m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions),
 	})
+}
+
+func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, bool, error) {
+	store, err := workflowExecutionReferenceStore(providerName, provider)
+	if err != nil {
+		return nil, false, err
+	}
+	expectedPermissions := m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions)
+	existing, err := store.GetExecutionReference(ctx, executionRefID)
+	if err == nil {
+		existing = workflowExecutionRefForProvider(existing, providerName)
+		if !runExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, sourceDefinitionID, expectedPermissions) {
+			return nil, false, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
+		}
+		if executionRefActive(existing) {
+			return existing, false, nil
+		}
+	} else if !isWorkflowProviderNotFound(err) {
+		return nil, false, err
+	}
+	p = principal.Canonicalized(p)
+	subjectID := strings.TrimSpace(principalSubjectID(p))
+	if subjectID == "" {
+		return nil, false, ErrWorkflowSubjectRequired
+	}
+	actor := workflowActorFromPrincipal(p)
+	ref, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
+		ID:                  executionRefID,
+		ProviderName:        strings.TrimSpace(providerName),
+		Target:              target,
+		CallerPluginName:    strings.TrimSpace(callerPluginName),
+		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
+		SubjectID:           subjectID,
+		SubjectKind:         actor.SubjectKind,
+		DisplayName:         actor.DisplayName,
+		AuthSource:          actor.AuthSource,
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		Permissions:         expectedPermissions,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return ref, true, nil
 }
 
 func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerPluginName string, override []core.AccessPermission) []core.AccessPermission {
@@ -1878,16 +1926,6 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 	return nil
 }
 
-func cloneWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery) *coreworkflow.OutputDelivery {
-	if delivery == nil {
-		return nil
-	}
-	out := *delivery
-	out.Target.Input = maps.Clone(delivery.Target.Input)
-	out.InputBindings = append([]coreworkflow.OutputBinding(nil), delivery.InputBindings...)
-	return &out
-}
-
 func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName string) error {
 	return m.normalizeWorkflowAgentDelivery(delivery, callerPluginName, "output_delivery")
 }
@@ -2120,6 +2158,13 @@ func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, exec
 	return executionRefOwnedBy(ref, p) && targetMatchesExecutionRef(target, ref)
 }
 
+func runExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) bool {
+	if !signalOrStartExecutionRefMatches(ref, executionRefID, providerName, target, p, callerPluginName, permissions) {
+		return false
+	}
+	return strings.TrimSpace(ref.SourceDefinitionID) == strings.TrimSpace(sourceDefinitionID)
+}
+
 func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {
 	return coreworkflow.EventMatch{
 		Type:    strings.TrimSpace(match.Type),
@@ -2257,6 +2302,15 @@ func runExecutionRefID(value string) string {
 		value = uuid.NewString()
 	}
 	return workflowRunExecutionRefBasePrefix + value
+}
+
+func newRunExecutionRefID(idempotencyScope, workflowKey string) string {
+	idempotencyScope = strings.TrimSpace(idempotencyScope)
+	if idempotencyScope == "" {
+		return runExecutionRefID("")
+	}
+	scope := strings.Join([]string{"gestalt.workflow.run", idempotencyScope, strings.TrimSpace(workflowKey)}, "\x00")
+	return runExecutionRefID(uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String())
 }
 
 func signalOrStartExecutionRefID(providerName, workflowKey string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (string, error) {

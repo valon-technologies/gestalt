@@ -115,6 +115,75 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	}
 }
 
+func TestStartRunRejectsProviderReplayWithDifferentExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+	req := RunStart{
+		ProviderName:     "local",
+		CallerPluginName: "github",
+		IdempotencyKey:   "same-idempotency-key",
+		WorkflowKey:      "github:issues:triage:first",
+		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+			PluginName: "github",
+			Operation:  "issues.triage",
+		}},
+	}
+
+	first, err := manager.StartRun(context.Background(), caller, req)
+	if err != nil {
+		t.Fatalf("StartRun(first): %v", err)
+	}
+	if first == nil || first.Run == nil || first.ExecutionRef == nil {
+		t.Fatalf("first run = %#v, want run and execution ref", first)
+	}
+	firstRefID := first.ExecutionRef.ID
+	provider.startRunHook = func(req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+		copied := *first.Run
+		return &copied, nil
+	}
+	req.WorkflowKey = "github:issues:triage:second"
+
+	_, err = manager.StartRun(context.Background(), caller, req)
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("StartRun(second) error = %v, want not found from mismatched execution ref", err)
+	}
+	secondRefID := newRunExecutionRefID(workflowCreateIdempotencyScope(caller, req.CallerPluginName, req.IdempotencyKey), req.WorkflowKey)
+	if secondRefID == firstRefID {
+		t.Fatalf("second execution ref ID = first ref ID %q, want workflow-key scoped ref", firstRefID)
+	}
+	if provider.refs[firstRefID] == nil || provider.refs[firstRefID].RevokedAt != nil {
+		t.Fatalf("first execution ref = %#v, want active", provider.refs[firstRefID])
+	}
+	if provider.refs[secondRefID] == nil || provider.refs[secondRefID].RevokedAt == nil {
+		t.Fatalf("second execution ref = %#v, want revoked after mismatch", provider.refs[secondRefID])
+	}
+}
+
 func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -1445,6 +1514,7 @@ type testWorkflowProvider struct {
 	runs                            map[string]*coreworkflow.Run
 	schedules                       map[string]*coreworkflow.Schedule
 	eventTriggers                   map[string]*coreworkflow.EventTrigger
+	startRunHook                    func(coreworkflow.StartRunRequest) (*coreworkflow.Run, error)
 	upsertedSchedules               []coreworkflow.UpsertScheduleRequest
 	upsertedEventTriggers           []coreworkflow.UpsertEventTriggerRequest
 	signalOrStartErr                error
@@ -1464,6 +1534,9 @@ func newTestWorkflowProvider() *testWorkflowProvider {
 }
 
 func (p *testWorkflowProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	if p.startRunHook != nil {
+		return p.startRunHook(req)
+	}
 	run := &coreworkflow.Run{
 		ID:           "run-started",
 		Status:       coreworkflow.RunStatusRunning,

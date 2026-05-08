@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 )
 
 const (
@@ -34,21 +35,22 @@ type Manager struct {
 }
 
 type Grant struct {
-	ID                  string
-	ProviderName        string
-	SessionID           string
-	TurnID              string
-	CallerPluginName    string
-	SubjectID           string
-	SubjectKind         string
-	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
-	Permissions         []core.AccessPermission
-	ToolRefs            []coreagent.ToolRef
-	Tools               []coreagent.Tool
-	ToolSource          coreagent.ToolSourceMode
-	Connections         []ConnectionBinding
+	ID                      string
+	ProviderName            string
+	SessionID               string
+	TurnID                  string
+	CallerPluginName        string
+	SubjectID               string
+	SubjectKind             string
+	CredentialSubjectID     string
+	DisplayName             string
+	AuthSource              string
+	Permissions             []core.AccessPermission
+	ToolRefs                []coreagent.ToolRef
+	Tools                   []coreagent.Tool
+	ToolSource              coreagent.ToolSourceMode
+	Connections             []ConnectionBinding
+	InheritedOutputDelivery *coreworkflow.OutputDelivery
 }
 
 type claims struct {
@@ -66,10 +68,11 @@ type claims struct {
 }
 
 type toolScope struct {
-	ToolRefs    []coreagent.ToolRef      `json:"tool_refs,omitempty"`
-	Tools       []coreagent.Tool         `json:"tools,omitempty"`
-	ToolSource  coreagent.ToolSourceMode `json:"tool_source,omitempty"`
-	Connections []ConnectionBinding      `json:"connections,omitempty"`
+	ToolRefs                []coreagent.ToolRef          `json:"tool_refs,omitempty"`
+	Tools                   []coreagent.Tool             `json:"tools,omitempty"`
+	ToolSource              coreagent.ToolSourceMode     `json:"tool_source,omitempty"`
+	Connections             []ConnectionBinding          `json:"connections,omitempty"`
+	InheritedOutputDelivery *coreworkflow.OutputDelivery `json:"inherited_output_delivery,omitempty"`
 }
 
 func NewManager(secret []byte) (*Manager, error) {
@@ -116,10 +119,11 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
 	}
 	scope, err := m.sealValue(sealPurposeToolScope, toolScope{
-		ToolRefs:    append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-		Tools:       append([]coreagent.Tool(nil), grant.Tools...),
-		ToolSource:  grant.ToolSource,
-		Connections: append([]ConnectionBinding(nil), grant.Connections...),
+		ToolRefs:                append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
+		ToolSource:              grant.ToolSource,
+		Connections:             append([]ConnectionBinding(nil), grant.Connections...),
+		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(grant.InheritedOutputDelivery),
 	})
 	if err != nil {
 		return "", err
@@ -155,21 +159,22 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
 	grant := Grant{
-		ID:                  strings.TrimSpace(decoded.ID),
-		ProviderName:        strings.TrimSpace(decoded.ProviderName),
-		SessionID:           strings.TrimSpace(decoded.SessionID),
-		TurnID:              strings.TrimSpace(decoded.TurnID),
-		CallerPluginName:    strings.TrimSpace(decoded.CallerPluginName),
-		SubjectID:           strings.TrimSpace(decoded.Subject),
-		SubjectKind:         strings.TrimSpace(decoded.SubjectKind),
-		CredentialSubjectID: strings.TrimSpace(decoded.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(decoded.DisplayName),
-		AuthSource:          strings.TrimSpace(decoded.AuthSource),
-		Permissions:         append([]core.AccessPermission(nil), decoded.Permissions...),
-		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
-		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
-		ToolSource:          scope.ToolSource,
-		Connections:         append([]ConnectionBinding(nil), scope.Connections...),
+		ID:                      strings.TrimSpace(decoded.ID),
+		ProviderName:            strings.TrimSpace(decoded.ProviderName),
+		SessionID:               strings.TrimSpace(decoded.SessionID),
+		TurnID:                  strings.TrimSpace(decoded.TurnID),
+		CallerPluginName:        strings.TrimSpace(decoded.CallerPluginName),
+		SubjectID:               strings.TrimSpace(decoded.Subject),
+		SubjectKind:             strings.TrimSpace(decoded.SubjectKind),
+		CredentialSubjectID:     strings.TrimSpace(decoded.CredentialSubjectID),
+		DisplayName:             strings.TrimSpace(decoded.DisplayName),
+		AuthSource:              strings.TrimSpace(decoded.AuthSource),
+		Permissions:             append([]core.AccessPermission(nil), decoded.Permissions...),
+		ToolRefs:                append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		Tools:                   append([]coreagent.Tool(nil), scope.Tools...),
+		ToolSource:              scope.ToolSource,
+		Connections:             append([]ConnectionBinding(nil), scope.Connections...),
+		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(scope.InheritedOutputDelivery),
 	}
 	if m.revokedTurn(grant) {
 		return Grant{}, fmt.Errorf("agent run grant is revoked")

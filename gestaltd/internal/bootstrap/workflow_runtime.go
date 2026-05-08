@@ -406,7 +406,11 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	if signalMessage := workflowSignalMessage(req.Signals); signalMessage != nil {
 		messages = append(messages, *signalMessage)
 	}
-	turn, err := agentManager.CreateTurn(runCtx, principalValue, coreagent.ManagerCreateTurnRequest{
+	turnCtx := runCtx
+	if inheritedDelivery := workflowInheritedOutputDelivery(agentTarget.OutputDelivery, workflowOutputDeliverySignal(req.Signals)); inheritedDelivery != nil {
+		turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
+	}
+	turn, err := agentManager.CreateTurn(turnCtx, principalValue, coreagent.ManagerCreateTurnRequest{
 		CallerPluginName: callerPluginName,
 		SessionID:        session.ID,
 		Model:            agentTarget.Model,
@@ -537,6 +541,43 @@ func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.S
 		return nil
 	}
 	return &signals[len(signals)-1]
+}
+
+func workflowInheritedOutputDelivery(delivery *coreworkflow.OutputDelivery, signal *coreworkflow.Signal) *coreworkflow.OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := *delivery
+	out.Target.Input = maps.Clone(delivery.Target.Input)
+	out.InputBindings = make([]coreworkflow.OutputBinding, 0, len(delivery.InputBindings))
+	for i := range delivery.InputBindings {
+		binding := delivery.InputBindings[i]
+		source := binding.Value
+		switch {
+		case strings.TrimSpace(source.SignalPayload) != "":
+			if signal == nil {
+				return nil
+			}
+			value, ok, err := workflowMapPathValue(signal.Payload, source.SignalPayload)
+			if err != nil || !ok || value == nil {
+				return nil
+			}
+			binding.Value = coreworkflow.OutputValueSource{Literal: value}
+		case strings.TrimSpace(source.SignalMetadata) != "":
+			if signal == nil {
+				return nil
+			}
+			value, ok, err := workflowMapPathValue(signal.Metadata, source.SignalMetadata)
+			if err != nil || !ok || value == nil {
+				return nil
+			}
+			binding.Value = coreworkflow.OutputValueSource{Literal: value}
+		default:
+			binding.Value = source
+		}
+		out.InputBindings = append(out.InputBindings, binding)
+	}
+	return &out
 }
 
 func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signal, session *coreagent.Session, source coreworkflow.OutputValueSource) (any, bool, error) {

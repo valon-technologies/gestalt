@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -63,6 +64,17 @@ type OutputDelivery struct {
 	Target         PluginTarget
 	InputBindings  []OutputBinding
 	CredentialMode core.ConnectionMode
+}
+
+// CloneOutputDelivery returns a detached shallow clone of delivery.
+func CloneOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
+	if delivery == nil {
+		return nil
+	}
+	out := *delivery
+	out.Target.Input = maps.Clone(delivery.Target.Input)
+	out.InputBindings = append([]OutputBinding(nil), delivery.InputBindings...)
+	return &out
 }
 
 type OutputBinding struct {
