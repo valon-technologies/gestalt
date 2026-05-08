@@ -4,7 +4,7 @@ output "github_actions_variables" {
     GESTALTD_ARTIFACT_REGISTRY_HOST         = local.artifact_registry_host
     GESTALTD_CHART_REPOSITORY               = local.chart_repository
     GESTALTD_GCP_SERVICE_ACCOUNT            = google_service_account.chart_publisher.email
-    GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
+    GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER = local.workload_identity_provider
   }
 }
 
@@ -25,5 +25,5 @@ output "chart_publisher_service_account" {
 
 output "workload_identity_provider" {
   description = "Workload Identity provider resource name used by GitHub Actions."
-  value       = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
+  value       = local.workload_identity_provider
 }

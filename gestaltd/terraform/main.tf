@@ -29,6 +29,8 @@ locals {
 
   artifact_registry_host = "${var.region}-docker.pkg.dev"
   chart_repository       = "oci://${local.artifact_registry_host}/${var.project_id}/${var.artifact_registry_repository_id}"
+
+  workload_identity_provider = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
 }
 
 resource "google_project_service" "required" {
