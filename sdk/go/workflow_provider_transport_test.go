@@ -35,7 +35,7 @@ func (p *fullWorkflowProvider) Metadata() gestalt.ProviderMetadata {
 func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
 	return &gestalt.BoundWorkflowRun{
 		Id:     req.GetIdempotencyKey(),
-		Status: gestalt.WorkflowRunStatusPending,
+		Status: gestalt.WorkflowRunStatusValuePending,
 		Target: req.GetTarget(),
 	}, nil
 }

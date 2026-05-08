@@ -242,13 +242,13 @@ type (
 // WorkflowRunStatus identifies the lifecycle state of a workflow run.
 type WorkflowRunStatus = proto.WorkflowRunStatus
 
-// Workflow run status constants provide stable SDK names for common generated
-// enum values.
+// Workflow run status value constants provide stable SDK names for common
+// generated enum values without colliding with workflow telemetry dimensions.
 const (
-	WorkflowRunStatusUnspecified = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
-	WorkflowRunStatusPending     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
-	WorkflowRunStatusRunning     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
-	WorkflowRunStatusSucceeded   = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
-	WorkflowRunStatusFailed      = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
-	WorkflowRunStatusCanceled    = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
+	WorkflowRunStatusValueUnspecified = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
+	WorkflowRunStatusValuePending     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
+	WorkflowRunStatusValueRunning     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
+	WorkflowRunStatusValueSucceeded   = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
+	WorkflowRunStatusValueFailed      = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
+	WorkflowRunStatusValueCanceled    = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
 )
