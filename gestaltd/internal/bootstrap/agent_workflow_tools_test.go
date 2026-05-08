@@ -259,6 +259,203 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	})
 }
 
+func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRefs(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
+	scheduleTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{
+			{Plugin: "roadmap", Operations: []string{"sync"}},
+			{Plugin: "linear", Operations: []string{"viewer"}},
+			{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+			{Plugin: "linear", Operation: "viewer"},
+			{Plugin: "*"},
+		},
+		Tools: []coreagent.Tool{
+			definitionTool,
+			scheduleTool,
+			{Target: coreagent.ToolTarget{Plugin: "slack", Operation: "chat.postMessage"}},
+		},
+	})
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-call",
+		ToolID:       definitionTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap and post an update.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool definition: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("definition response = %#v, want 201", resp)
+	}
+	var body struct {
+		Definition struct {
+			ID string `json:"id"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
+		t.Fatalf("decode definition response body: %v", err)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), body.Definition.ID)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(definition): %v", err)
+	}
+	if ref.Target.Agent == nil {
+		t.Fatalf("definition target = %#v, want agent", ref.Target)
+	}
+	wantRefs := []coreagent.ToolRef{
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+		{Plugin: "roadmap", Operation: "sync"},
+		{Plugin: "linear", Operation: "viewer"},
+		{Plugin: "slack", Operation: "chat.postMessage"},
+	}
+	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
+	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
+		{Plugin: "linear", Operations: []string{"viewer"}},
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+	})
+}
+
+func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-call",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"cron":     "*/5 * * * *",
+			"timezone": "UTC",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool schedule: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("schedule response = %#v, want 201", resp)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	upsert := workflowProvider.upsertedSchedules[0]
+	if upsert.Target.Agent == nil {
+		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
+	}
+	wantRefs := []coreagent.ToolRef{
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+		{Plugin: "roadmap", Operation: "sync"},
+	}
+	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentToolRefs(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-call",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"cron":     "*/5 * * * *",
+			"timezone": "UTC",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Run without tools.",
+					"toolRefs": []any{},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool schedule: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("schedule response = %#v, want 201", resp)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	upsert := workflowProvider.upsertedSchedules[0]
+	if upsert.Target.Agent == nil {
+		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
+	}
+	if len(upsert.Target.Agent.ToolRefs) != 0 {
+		t.Fatalf("explicit empty tool refs = %#v, want empty slice", upsert.Target.Agent.ToolRefs)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference: %v", err)
+	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{Plugin: "managed"}})
+}
+
 func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
 	t.Parallel()
 

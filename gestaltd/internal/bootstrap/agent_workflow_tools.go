@@ -255,6 +255,7 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 	if err != nil {
 		return nil, err
 	}
+	workflowSystemToolInheritAgentToolRefs(req, &target)
 	if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 		return nil, err
 	}
@@ -322,6 +323,7 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		if err != nil {
 			return nil, err
 		}
+		workflowSystemToolInheritAgentToolRefs(req, &target)
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
@@ -421,7 +423,7 @@ func workflowSystemToolTargetSchema() map[string]any {
 			"model":          workflowSystemToolStringSchema("Agent model."),
 			"prompt":         workflowSystemToolStringSchema("Agent prompt."),
 			"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+			"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Agent tool references. If omitted, the created workflow agent inherits the current agent turn's tool references."},
 			"responseSchema": map[string]any{"type": "object"},
 			"metadata":       map[string]any{"type": "object"},
 			"modelOptions":   map[string]any{"type": "object"},
@@ -537,6 +539,73 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 		ModelOptions:   modelOptions,
 		TimeoutSeconds: workflowSystemToolIntArg(agentMap, "timeoutSeconds"),
 	}}, nil
+}
+
+func workflowSystemToolInheritAgentToolRefs(req agentSystemToolExecutionRequest, target *coreworkflow.Target) {
+	if target == nil || target.Agent == nil || target.Agent.ToolRefs != nil {
+		return
+	}
+	target.Agent.ToolRefs = workflowSystemToolInheritedAgentToolRefs(req)
+}
+
+func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionRequest) []coreagent.ToolRef {
+	out := []coreagent.ToolRef{}
+	seen := map[string]struct{}{}
+	add := func(ref coreagent.ToolRef) {
+		ref.System = strings.TrimSpace(ref.System)
+		ref.Plugin = strings.TrimSpace(ref.Plugin)
+		ref.Operation = strings.TrimSpace(ref.Operation)
+		ref.Connection = strings.TrimSpace(ref.Connection)
+		ref.Instance = strings.TrimSpace(ref.Instance)
+		if ref.System != "" {
+			if ref.System != coreagent.SystemToolWorkflow || ref.Operation == "" {
+				return
+			}
+			if ref.Plugin != "" || ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+				return
+			}
+		} else {
+			if ref.Plugin == "" || ref.Plugin == "*" || ref.Operation == "" {
+				return
+			}
+			if ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+				return
+			}
+		}
+		inherited := coreagent.ToolRef{
+			System:     ref.System,
+			Plugin:     ref.Plugin,
+			Operation:  ref.Operation,
+			Connection: ref.Connection,
+			Instance:   ref.Instance,
+		}
+		key := strings.Join([]string{inherited.System, inherited.Plugin, inherited.Operation, inherited.Connection, inherited.Instance}, "\x00")
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, inherited)
+	}
+	for i := range req.ToolRefs {
+		add(req.ToolRefs[i])
+	}
+	for i := range req.Tools {
+		target := req.Tools[i].Target
+		if strings.TrimSpace(target.System) != "" {
+			add(coreagent.ToolRef{
+				System:    target.System,
+				Operation: target.Operation,
+			})
+			continue
+		}
+		add(coreagent.ToolRef{
+			Plugin:     target.Plugin,
+			Operation:  target.Operation,
+			Connection: target.Connection,
+			Instance:   target.Instance,
+		})
+	}
+	return out
 }
 
 func workflowSystemToolRefsFromValue(value any) ([]coreagent.ToolRef, error) {
