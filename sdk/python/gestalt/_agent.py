@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 import grpc
@@ -8,6 +9,7 @@ import grpc
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
+from ._protocol import has_field, struct_from_dict, struct_to_dict
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
@@ -302,6 +304,182 @@ def AgentManagerResolveInteractionRequest(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentManagerResolveInteractionRequest(*args, **kwargs)
 
 
+def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
+    """Convert an ``AgentActor`` protocol value to a plain dictionary."""
+
+    return _message_fields(
+        actor,
+        ("subject_id", "subject_kind", "display_name", "auth_source"),
+    )
+
+
+def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create an ``AgentActor`` protocol value from a plain dictionary."""
+
+    data = dict(value or {})
+    return pb.AgentActor(
+        subject_id=data.get("subject_id", ""),
+        subject_kind=data.get("subject_kind", ""),
+        display_name=data.get("display_name", ""),
+        auth_source=data.get("auth_source", ""),
+    )
+
+
+def agent_subject_context_to_dict(subject: Any) -> dict[str, Any]:
+    """Convert an ``AgentSubjectContext`` protocol value to a dictionary."""
+
+    return _message_fields(
+        subject,
+        (
+            "subject_id",
+            "subject_kind",
+            "credential_subject_id",
+            "display_name",
+            "auth_source",
+        ),
+    )
+
+
+def agent_subject_context_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create an ``AgentSubjectContext`` protocol value from a dictionary."""
+
+    data = dict(value or {})
+    return pb.AgentSubjectContext(
+        subject_id=data.get("subject_id", ""),
+        subject_kind=data.get("subject_kind", ""),
+        credential_subject_id=data.get("credential_subject_id", ""),
+        display_name=data.get("display_name", ""),
+        auth_source=data.get("auth_source", ""),
+    )
+
+
+def prepared_workspace_to_dict(workspace: Any) -> dict[str, Any]:
+    """Convert ``PreparedAgentWorkspace`` to a dictionary."""
+
+    return _message_fields(workspace, ("root", "cwd"))
+
+
+def prepared_workspace_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create ``PreparedAgentWorkspace`` from a dictionary."""
+
+    data = dict(value or {})
+    return pb.PreparedAgentWorkspace(
+        root=data.get("root", ""),
+        cwd=data.get("cwd", ""),
+    )
+
+
+def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
+    """Convert an ``AgentToolRef`` protocol value to a dictionary."""
+
+    return _message_fields(
+        tool_ref,
+        (
+            "plugin",
+            "operation",
+            "connection",
+            "instance",
+            "title",
+            "description",
+            "system",
+        ),
+    )
+
+
+def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create an ``AgentToolRef`` protocol value from a dictionary."""
+
+    data = dict(value or {})
+    return pb.AgentToolRef(
+        plugin=data.get("plugin", ""),
+        operation=data.get("operation", ""),
+        connection=data.get("connection", ""),
+        instance=data.get("instance", ""),
+        title=data.get("title", ""),
+        description=data.get("description", ""),
+        system=data.get("system", ""),
+    )
+
+
+def agent_message_part_to_dict(part: Any) -> dict[str, Any]:
+    """Convert an ``AgentMessagePart`` to a lower-snake-case dictionary."""
+
+    value: dict[str, Any] = {"type": part.type}
+    if part.text:
+        value["text"] = part.text
+    if has_field(part, "json"):
+        value["json"] = struct_to_dict(part.json)
+    if has_field(part, "tool_call"):
+        value["tool_call"] = _tool_call_to_dict(part.tool_call)
+    if has_field(part, "tool_result"):
+        value["tool_result"] = _tool_result_to_dict(part.tool_result)
+    if has_field(part, "image_ref"):
+        value["image_ref"] = _image_ref_to_dict(part.image_ref)
+    return value
+
+
+def agent_message_part_from_dict(value: Mapping[str, Any]) -> Any:
+    """Create an ``AgentMessagePart`` from a lower-snake-case dictionary."""
+
+    data = dict(value)
+    part = pb.AgentMessagePart(
+        type=data.get("type", pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED)
+    )
+    if "text" in data:
+        part.text = str(data["text"])
+    if data.get("json") is not None:
+        part.json.CopyFrom(struct_from_dict(_mapping_value(data["json"], "json")))
+    if data.get("tool_call") is not None:
+        part.tool_call.CopyFrom(_tool_call_from_dict(data["tool_call"]))
+    if data.get("tool_result") is not None:
+        part.tool_result.CopyFrom(_tool_result_from_dict(data["tool_result"]))
+    if data.get("image_ref") is not None:
+        part.image_ref.CopyFrom(_image_ref_from_dict(data["image_ref"]))
+    return part
+
+
+def agent_message_to_dict(message: Any) -> dict[str, Any]:
+    """Convert an ``AgentMessage`` protocol value to a dictionary."""
+
+    value = _message_fields(message, ("role", "text"))
+    if message.parts:
+        value["parts"] = [agent_message_part_to_dict(part) for part in message.parts]
+    if has_field(message, "metadata"):
+        value["metadata"] = struct_to_dict(message.metadata)
+    return value
+
+
+def agent_messages_to_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
+    """Convert agent protocol messages to dictionaries."""
+
+    return [agent_message_to_dict(message) for message in messages]
+
+
+def agent_message_from_dict(value: Mapping[str, Any]) -> Any:
+    """Create an ``AgentMessage`` protocol value from a dictionary."""
+
+    data = dict(value)
+    message = pb.AgentMessage(
+        role=data.get("role", ""),
+        text=data.get("text", ""),
+    )
+    for part in data.get("parts", []) or []:
+        message.parts.append(
+            agent_message_part_from_dict(_mapping_value(part, "parts[]"))
+        )
+    if data.get("metadata") is not None:
+        message.metadata.CopyFrom(
+            struct_from_dict(_mapping_value(data["metadata"], "metadata"))
+        )
+    return message
+
+
+def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any]:
+    """Create agent protocol messages from dictionaries."""
+
+    return [agent_message_from_dict(message) for message in messages]
+
+
 class AgentHost:
     """Client for the agent host service available inside agent providers.
 
@@ -328,15 +506,84 @@ class AgentHost:
 
         return _grpc_call(self._stub.ExecuteTool, request)
 
+    def execute_tool_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        tool_call_id: str,
+        tool_id: str,
+        arguments: Mapping[str, Any] | None = None,
+        run_grant: str = "",
+        idempotency_key: str = "",
+    ) -> Any:
+        """Execute a host tool using plain Python request fields."""
+
+        request = pb.ExecuteAgentToolRequest(
+            session_id=session_id,
+            turn_id=turn_id,
+            tool_call_id=tool_call_id,
+            tool_id=tool_id,
+            run_grant=run_grant,
+            idempotency_key=idempotency_key,
+        )
+        if arguments is not None:
+            request.arguments.CopyFrom(struct_from_dict(arguments))
+        return self.execute_tool(request)
+
     def list_tools(self, request: Any) -> Any:
         """List host tools visible to the current agent request."""
 
         return _grpc_call(self._stub.ListTools, request)
 
+    def list_tools_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        run_grant: str = "",
+        page_size: int = 0,
+        page_token: str = "",
+        query: str = "",
+    ) -> Any:
+        """List host tools using plain Python request fields."""
+
+        return self.list_tools(
+            pb.ListAgentToolsRequest(
+                session_id=session_id,
+                turn_id=turn_id,
+                run_grant=run_grant,
+                page_size=page_size,
+                page_token=page_token,
+                query=query,
+            )
+        )
+
     def resolve_connection(self, request: Any) -> Any:
         """Resolve an agent connection for the current turn."""
 
         return _grpc_call(self._stub.ResolveConnection, request)
+
+    def resolve_connection_for_turn(
+        self,
+        session_id: str,
+        turn_id: str,
+        *,
+        connection: str,
+        instance: str = "",
+        run_grant: str = "",
+    ) -> Any:
+        """Resolve an agent connection using plain Python request fields."""
+
+        return self.resolve_connection(
+            pb.ResolveAgentConnectionRequest(
+                session_id=session_id,
+                turn_id=turn_id,
+                connection=connection,
+                instance=instance,
+                run_grant=run_grant,
+            )
+        )
 
     def __enter__(self) -> AgentHost:
         """Return the client for ``with`` statements."""
@@ -458,3 +705,72 @@ def _grpc_call(method: Any, request: Any) -> Any:
         return method(request)
     except grpc.RpcError:
         raise
+
+
+def _message_fields(message: Any, fields: tuple[str, ...]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for field in fields:
+        current = getattr(message, field, None)
+        if current:
+            value[field] = current
+    return value
+
+
+def _mapping_value(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{field} must be a mapping")
+    return value
+
+
+def _tool_call_to_dict(tool_call: Any) -> dict[str, Any]:
+    value = _message_fields(tool_call, ("id", "tool_id"))
+    if has_field(tool_call, "arguments"):
+        value["arguments"] = struct_to_dict(tool_call.arguments)
+    return value
+
+
+def _tool_call_from_dict(value: Any) -> Any:
+    data = dict(_mapping_value(value, "tool_call"))
+    tool_call = pb.AgentMessagePartToolCall(
+        id=data.get("id", ""),
+        tool_id=data.get("tool_id", ""),
+    )
+    if data.get("arguments") is not None:
+        tool_call.arguments.CopyFrom(
+            struct_from_dict(_mapping_value(data["arguments"], "tool_call.arguments"))
+        )
+    return tool_call
+
+
+def _tool_result_to_dict(tool_result: Any) -> dict[str, Any]:
+    value = _message_fields(tool_result, ("tool_call_id", "content"))
+    value["status"] = tool_result.status
+    if has_field(tool_result, "output"):
+        value["output"] = struct_to_dict(tool_result.output)
+    return value
+
+
+def _tool_result_from_dict(value: Any) -> Any:
+    data = dict(_mapping_value(value, "tool_result"))
+    tool_result = pb.AgentMessagePartToolResult(
+        tool_call_id=data.get("tool_call_id", ""),
+        status=data.get("status", 0),
+        content=data.get("content", ""),
+    )
+    if data.get("output") is not None:
+        tool_result.output.CopyFrom(
+            struct_from_dict(_mapping_value(data["output"], "tool_result.output"))
+        )
+    return tool_result
+
+
+def _image_ref_to_dict(image_ref: Any) -> dict[str, Any]:
+    return _message_fields(image_ref, ("uri", "mime_type"))
+
+
+def _image_ref_from_dict(value: Any) -> Any:
+    data = dict(_mapping_value(value, "image_ref"))
+    return pb.AgentMessagePartImageRef(
+        uri=data.get("uri", ""),
+        mime_type=data.get("mime_type", ""),
+    )

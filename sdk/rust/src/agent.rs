@@ -15,6 +15,7 @@ use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
 };
+use crate::protocol;
 
 type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
 
@@ -33,9 +34,63 @@ pub enum AgentHostError {
     /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// Plain input could not be converted into the protocol request shape.
+    #[error("{0}")]
+    Input(#[from] crate::Error),
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+}
+
+/// Plain input for listing tools available to one agent turn.
+#[derive(Debug, Clone, Default)]
+pub struct AgentHostListToolsInput {
+    /// Agent session ID.
+    pub session_id: String,
+    /// Agent turn ID.
+    pub turn_id: String,
+    /// Optional run grant scoped to this turn.
+    pub run_grant: String,
+    /// Maximum number of tools to return.
+    pub page_size: i32,
+    /// Opaque page token returned by a previous list call.
+    pub page_token: String,
+    /// Optional server-side tool search query.
+    pub query: String,
+}
+
+/// Plain input for executing a host tool during one agent turn.
+#[derive(Debug, Clone, Default)]
+pub struct AgentHostExecuteToolInput {
+    /// Agent session ID.
+    pub session_id: String,
+    /// Agent turn ID.
+    pub turn_id: String,
+    /// Tool call ID from the agent message.
+    pub tool_call_id: String,
+    /// Host tool ID to execute.
+    pub tool_id: String,
+    /// JSON object to pass as tool arguments.
+    pub arguments: Option<serde_json::Value>,
+    /// Optional run grant scoped to this turn.
+    pub run_grant: String,
+    /// Caller-supplied idempotency key for retries.
+    pub idempotency_key: String,
+}
+
+/// Plain input for resolving a configured connection during one agent turn.
+#[derive(Debug, Clone, Default)]
+pub struct AgentHostResolveConnectionInput {
+    /// Agent session ID.
+    pub session_id: String,
+    /// Agent turn ID.
+    pub turn_id: String,
+    /// Connection name to resolve.
+    pub connection: String,
+    /// Optional connection instance.
+    pub instance: String,
+    /// Optional run grant scoped to this turn.
+    pub run_grant: String,
 }
 
 /// Client for the agent host service available inside agent providers.
@@ -79,6 +134,26 @@ impl AgentHost {
         Ok(self.client.execute_tool(request).await?.into_inner())
     }
 
+    /// Executes a host tool using plain Rust request fields.
+    pub async fn execute_tool_for_turn(
+        &mut self,
+        input: AgentHostExecuteToolInput,
+    ) -> std::result::Result<pb::ExecuteAgentToolResponse, AgentHostError> {
+        self.execute_tool(pb::ExecuteAgentToolRequest {
+            session_id: input.session_id,
+            turn_id: input.turn_id,
+            tool_call_id: input.tool_call_id,
+            tool_id: input.tool_id,
+            arguments: input
+                .arguments
+                .map(protocol::struct_from_json)
+                .transpose()?,
+            run_grant: input.run_grant,
+            idempotency_key: input.idempotency_key,
+        })
+        .await
+    }
+
     /// Lists host tools visible to the current agent request.
     pub async fn list_tools(
         &mut self,
@@ -87,12 +162,43 @@ impl AgentHost {
         Ok(self.client.list_tools(request).await?.into_inner())
     }
 
+    /// Lists host tools using plain Rust request fields.
+    pub async fn list_tools_for_turn(
+        &mut self,
+        input: AgentHostListToolsInput,
+    ) -> std::result::Result<pb::ListAgentToolsResponse, AgentHostError> {
+        self.list_tools(pb::ListAgentToolsRequest {
+            session_id: input.session_id,
+            turn_id: input.turn_id,
+            run_grant: input.run_grant,
+            page_size: input.page_size,
+            page_token: input.page_token,
+            query: input.query,
+        })
+        .await
+    }
+
     /// Resolves a configured agent connection for the current turn.
     pub async fn resolve_connection(
         &mut self,
         request: pb::ResolveAgentConnectionRequest,
     ) -> std::result::Result<pb::ResolvedAgentConnection, AgentHostError> {
         Ok(self.client.resolve_connection(request).await?.into_inner())
+    }
+
+    /// Resolves an agent connection using plain Rust request fields.
+    pub async fn resolve_connection_for_turn(
+        &mut self,
+        input: AgentHostResolveConnectionInput,
+    ) -> std::result::Result<pb::ResolvedAgentConnection, AgentHostError> {
+        self.resolve_connection(pb::ResolveAgentConnectionRequest {
+            session_id: input.session_id,
+            turn_id: input.turn_id,
+            connection: input.connection,
+            instance: input.instance,
+            run_grant: input.run_grant,
+        })
+        .await
     }
 }
 

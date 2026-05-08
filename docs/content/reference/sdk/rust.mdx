@@ -113,6 +113,12 @@ Gestalt-managed sibling host services, including `Cache`, `IndexedDB`, `S3`,
 `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`,
 `PluginInvoker`, and `RuntimeLogHost`.
 
+`AgentHost` includes plain-input helpers named `list_tools_for_turn`,
+`execute_tool_for_turn`, and `resolve_connection_for_turn`. Use
+`gestalt::protocol` for protobuf well-known type conversions, `gestalt::proto::v1`
+for generated protocol bindings in transport fixtures, and the JSON-named
+IndexedDB conversion helpers when asserting lower-level datastore wire shapes.
+
 ## Generated bindings
 
 The crate includes checked-in protobuf and gRPC bindings compiled from

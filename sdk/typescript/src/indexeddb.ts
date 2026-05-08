@@ -1229,27 +1229,31 @@ export class Index {
   }
 }
 
-function fromProtoKeyValue(kv: any): unknown {
+/** Converts a generated IndexedDB key value into the authored JavaScript form. */
+export function fromProtoKeyValue(kv: any): unknown {
   if (kv.kind?.case === "scalar") return fromProtoTypedValue(kv.kind.value);
   if (kv.kind?.case === "array") return kv.kind.value.elements.map(fromProtoKeyValue);
   return undefined;
 }
 
-function toProtoKeyValue(v: unknown): any {
+/** Converts an authored JavaScript key value into the generated protocol shape. */
+export function toProtoKeyValue(v: unknown): any {
   if (Array.isArray(v)) {
     return { kind: { case: "array" as const, value: { elements: v.map(toProtoKeyValue) } } };
   }
   return { kind: { case: "scalar" as const, value: toProtoTypedValue(v) } };
 }
 
-function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
+/** Converts a cursor key into the generated protocol key tuple shape. */
+export function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
   if (indexCursor && Array.isArray(key)) {
     return key.map(toProtoKeyValue);
   }
   return [toProtoKeyValue(key)];
 }
 
-function toProtoRecord(record: Record): any {
+/** Converts an authored IndexedDB record into the generated protocol shape. */
+export function toProtoRecord(record: Record): any {
   const fields: { [key: string]: unknown } = {};
   for (const [key, value] of Object.entries(record)) {
     fields[key] = toProtoTypedValue(value);
@@ -1257,7 +1261,8 @@ function toProtoRecord(record: Record): any {
   return { fields };
 }
 
-function fromProtoRecord(record: any): Record {
+/** Converts a generated IndexedDB record into the authored JavaScript shape. */
+export function fromProtoRecord(record: any): Record {
   const fields = record?.fields ?? {};
   const out: Record = {};
   for (const [key, value] of Object.entries(fields)) {
@@ -1266,7 +1271,8 @@ function fromProtoRecord(record: any): Record {
   return out;
 }
 
-function toProtoTypedValue(v: unknown): any {
+/** Converts an authored IndexedDB field value into the generated protocol shape. */
+export function toProtoTypedValue(v: unknown): any {
   if (v === null || v === undefined) return { kind: { case: "nullValue", value: 0 } };
   if (typeof v === "boolean") return { kind: { case: "boolValue", value: v } };
   if (typeof v === "bigint") return { kind: { case: "intValue", value: v } };
@@ -1283,7 +1289,8 @@ function toProtoTypedValue(v: unknown): any {
   return { kind: { case: "jsonValue", value: toProtoJsonValue(v) } };
 }
 
-function fromProtoTypedValue(v: any): unknown {
+/** Converts a generated IndexedDB field value into the authored JavaScript shape. */
+export function fromProtoTypedValue(v: any): unknown {
   switch (v?.kind?.case) {
     case undefined:
     case "nullValue":
@@ -1307,7 +1314,8 @@ function fromProtoTypedValue(v: any): unknown {
   }
 }
 
-function toProtoKeyRange(kr: KeyRange): any {
+/** Converts an authored key range into the generated protocol shape. */
+export function toProtoKeyRange(kr: KeyRange): any {
   return {
     lower: kr.lower !== undefined ? toProtoTypedValue(kr.lower) : undefined,
     upper: kr.upper !== undefined ? toProtoTypedValue(kr.upper) : undefined,

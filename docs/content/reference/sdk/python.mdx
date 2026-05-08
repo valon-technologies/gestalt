@@ -98,6 +98,14 @@ The SDK also exposes clients such as `Cache`, `IndexedDB`, `S3`,
 `PluginInvoker`, `Authorization`, and `RuntimeLogHost` for provider code that
 needs to call sibling host services.
 
+`AgentHost` includes plain Python helpers such as `list_tools_for_turn`,
+`execute_tool_for_turn`, and `resolve_connection_for_turn`. For protocol-level
+fixtures, use `gestalt.protocol.v1` or `gestalt.testing` instead of importing
+from private generated modules. Helpers such as `struct_from_dict`,
+`value_from_json`, `timestamp_from_datetime`, and the public IndexedDB
+conversion functions cover common protobuf well-known type and datastore
+shapes.
+
 ## Record provider telemetry
 
 `gestaltd` owns OpenTelemetry exporter configuration and passes standard
@@ -121,6 +129,5 @@ with telemetry.model_operation(
 
 - [Open the Python API reference](/api/python/index.html)
 
-Generated protobuf stubs are private runtime internals. Provider code should
-use the authored classes, clients, constants, and request builders exported from
-`gestalt`.
+Provider code should use the authored classes, clients, constants, request
+builders, and protocol helpers exported from `gestalt`.

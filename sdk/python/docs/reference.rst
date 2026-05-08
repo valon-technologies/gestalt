@@ -15,8 +15,9 @@ The supported import surface is the top-level :mod:`gestalt` package:
 
    from gestalt import Model, Plugin, Cache, IndexedDB, S3
 
-Generated protobuf bindings are private runtime internals. Provider code should
-use the authored SDK helpers documented here instead.
+Provider code should prefer the authored SDK helpers documented here. For
+low-level fixtures and interoperability tests, :mod:`gestalt.protocol.v1` and
+:mod:`gestalt.testing` re-export the checked-in generated protobuf bindings.
 
 Core authoring types
 --------------------
@@ -120,6 +121,93 @@ re-exports for lower-level catalog integration work.
 .. autoclass:: CatalogParameter
 
 .. autoclass:: OperationAnnotations
+
+Protocol helpers
+----------------
+
+These helpers convert between Python values and protobuf well-known types
+without importing generated runtime internals.
+
+.. autosummary::
+   :nosignatures:
+
+   struct_from_dict
+   struct_to_dict
+   value_from_json
+   value_to_json
+   timestamp_from_datetime
+   datetime_from_timestamp
+   has_field
+   which_oneof
+
+.. autofunction:: struct_from_dict
+
+.. autofunction:: struct_to_dict
+
+.. autofunction:: value_from_json
+
+.. autofunction:: value_to_json
+
+.. autofunction:: timestamp_from_datetime
+
+.. autofunction:: datetime_from_timestamp
+
+.. autofunction:: has_field
+
+.. autofunction:: which_oneof
+
+Agent protocol helpers
+----------------------
+
+These helpers convert common agent protocol messages to and from plain
+lower-snake-case dictionaries while preserving protobuf field presence for
+optional structured payloads.
+
+.. autosummary::
+   :nosignatures:
+
+   agent_actor_to_dict
+   agent_actor_from_dict
+   agent_subject_context_to_dict
+   agent_subject_context_from_dict
+   prepared_workspace_to_dict
+   prepared_workspace_from_dict
+   agent_tool_ref_to_dict
+   agent_tool_ref_from_dict
+   agent_message_part_to_dict
+   agent_message_part_from_dict
+   agent_message_to_dict
+   agent_message_from_dict
+   agent_messages_to_dicts
+   agent_messages_from_dicts
+
+.. autofunction:: agent_actor_to_dict
+
+.. autofunction:: agent_actor_from_dict
+
+.. autofunction:: agent_subject_context_to_dict
+
+.. autofunction:: agent_subject_context_from_dict
+
+.. autofunction:: prepared_workspace_to_dict
+
+.. autofunction:: prepared_workspace_from_dict
+
+.. autofunction:: agent_tool_ref_to_dict
+
+.. autofunction:: agent_tool_ref_from_dict
+
+.. autofunction:: agent_message_part_to_dict
+
+.. autofunction:: agent_message_part_from_dict
+
+.. autofunction:: agent_message_to_dict
+
+.. autofunction:: agent_message_from_dict
+
+.. autofunction:: agent_messages_to_dicts
+
+.. autofunction:: agent_messages_from_dicts
 
 Provider interfaces
 -------------------
@@ -342,6 +430,14 @@ IndexedDB client
    KeyRange
    IndexSchema
    ObjectStoreSchema
+   indexeddb_record_to_proto
+   indexeddb_record_from_proto
+   indexeddb_typed_value_from_python
+   indexeddb_typed_value_to_python
+   indexeddb_key_value_from_python
+   indexeddb_key_value_to_python
+   indexeddb_cursor_key_to_proto
+   indexeddb_key_range_to_proto
    IndexedDB
    ObjectStore
    Index
@@ -361,6 +457,22 @@ IndexedDB client
 .. autofunction:: indexeddb_socket_env
 
 .. autofunction:: indexeddb_socket_token_env
+
+.. autofunction:: indexeddb_record_to_proto
+
+.. autofunction:: indexeddb_record_from_proto
+
+.. autofunction:: indexeddb_typed_value_from_python
+
+.. autofunction:: indexeddb_typed_value_to_python
+
+.. autofunction:: indexeddb_key_value_from_python
+
+.. autofunction:: indexeddb_key_value_to_python
+
+.. autofunction:: indexeddb_cursor_key_to_proto
+
+.. autofunction:: indexeddb_key_range_to_proto
 
 .. autoexception:: NotFoundError
 

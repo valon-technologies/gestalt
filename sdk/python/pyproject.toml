@@ -33,6 +33,9 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["gestalt*"]
 
+[tool.setuptools.package-data]
+gestalt = ["py.typed", "_gen/v1/*.pyi"]
+
 [project.urls]
 Documentation = "https://gestaltd.ai/reference/python-sdk"
 Repository = "https://github.com/valon-technologies/gestalt"

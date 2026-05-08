@@ -16,6 +16,8 @@ mod generated;
 pub mod indexeddb;
 mod invoker;
 mod plugin_runtime;
+/// Protocol conversion helpers for generated protobuf well-known types.
+pub mod protocol;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -38,7 +40,9 @@ pub mod proto {
 }
 
 pub use agent::{
-    AgentHost, AgentHostError, AgentProvider, ENV_AGENT_HOST_SOCKET, ENV_AGENT_HOST_SOCKET_TOKEN,
+    AgentHost, AgentHostError, AgentHostExecuteToolInput, AgentHostListToolsInput,
+    AgentHostResolveConnectionInput, AgentProvider, ENV_AGENT_HOST_SOCKET,
+    ENV_AGENT_HOST_SOCKET_TOKEN,
 };
 pub use agent_manager::{
     AgentManager, AgentManagerError, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN,
