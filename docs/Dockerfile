@@ -1,4 +1,4 @@
-FROM node:26.0.0-alpine3.23@sha256:30f5a66e7265ef70aac56b4753ffa7905e54eca1084bc25503893ad8e9273f05 AS builder
+FROM node:26.1.0-alpine3.23@sha256:e71ac5e964b9201072425d59d2e876359efa25dc96bb1768cb73295728d6e4ea AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
