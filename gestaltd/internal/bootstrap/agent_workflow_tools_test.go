@@ -456,6 +456,305 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{Plugin: "managed"}})
 }
 
+func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	createTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
+	getTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsGet)
+	updateTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsUpdate)
+	deleteTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsDelete)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsGet},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsUpdate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{createTool, getTool, updateTool, deleteTool},
+	})
+
+	createResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-create",
+		ToolID:       createTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool create definition: %v", err)
+	}
+	var createBody struct {
+		Definition struct {
+			ID string `json:"id"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(createResp.Body), &createBody); err != nil {
+		t.Fatalf("decode create definition response body: %v", err)
+	}
+	definitionID := createBody.Definition.ID
+	if definitionID == "" {
+		t.Fatalf("definition id is empty")
+	}
+
+	updateResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-update",
+		ToolID:       updateTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"definitionId": definitionID,
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap and summarize changes.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool update definition: %v", err)
+	}
+	if updateResp == nil || updateResp.Status != http.StatusOK {
+		t.Fatalf("update definition response = %#v, want 200", updateResp)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(definition): %v", err)
+	}
+	if ref.Target.Agent == nil || ref.Target.Agent.Prompt != "Sync the roadmap and summarize changes." {
+		t.Fatalf("definition target = %#v", ref.Target)
+	}
+	wantRefs := []coreagent.ToolRef{
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsGet},
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsUpdate},
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
+		{Plugin: "roadmap", Operation: "sync"},
+	}
+	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
+		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
+	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	})
+
+	getResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-get",
+		ToolID:       getTool.ID,
+		RunGrant:     runGrant,
+		Arguments:    map[string]any{"definitionId": definitionID},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool get definition: %v", err)
+	}
+	if getResp == nil || getResp.Status != http.StatusOK {
+		t.Fatalf("get definition response = %#v, want 200", getResp)
+	}
+
+	deleteResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-delete",
+		ToolID:       deleteTool.ID,
+		RunGrant:     runGrant,
+		Arguments:    map[string]any{"definitionId": definitionID},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool delete definition: %v", err)
+	}
+	if deleteResp == nil || deleteResp.Status != http.StatusOK {
+		t.Fatalf("delete definition response = %#v, want 200", deleteResp)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-get-deleted",
+		ToolID:       getTool.ID,
+		RunGrant:     runGrant,
+		Arguments:    map[string]any{"definitionId": definitionID},
+	})
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("get deleted definition error = %v, want not found", err)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	definitionTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolDefinitionsCreate)
+	createTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	getTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesGet)
+	updateTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesUpdate)
+	deleteTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesDelete)
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesGet},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesUpdate},
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesDelete},
+			{Plugin: "roadmap", Operation: "sync"},
+		},
+		Tools: []coreagent.Tool{definitionTool, createTool, getTool, updateTool, deleteTool},
+	})
+
+	definitionResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "definition-create",
+		ToolID:       definitionTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Sync the roadmap.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool create definition: %v", err)
+	}
+	var definitionBody struct {
+		Definition struct {
+			ID string `json:"id"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(definitionResp.Body), &definitionBody); err != nil {
+		t.Fatalf("decode definition response body: %v", err)
+	}
+
+	createResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-create",
+		ToolID:       createTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"cron":         "*/5 * * * *",
+			"timezone":     "UTC",
+			"definitionId": definitionBody.Definition.ID,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool create schedule: %v", err)
+	}
+	var createBody struct {
+		Schedule struct {
+			ID                 string `json:"id"`
+			SourceDefinitionID string `json:"sourceDefinitionId"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(createResp.Body), &createBody); err != nil {
+		t.Fatalf("decode create schedule response body: %v", err)
+	}
+	scheduleID := createBody.Schedule.ID
+	if scheduleID == "" || createBody.Schedule.SourceDefinitionID != definitionBody.Definition.ID {
+		t.Fatalf("created schedule = %#v", createBody.Schedule)
+	}
+
+	updateResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-update",
+		ToolID:       updateTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"scheduleId": scheduleID,
+			"cron":       "*/15 * * * *",
+			"paused":     true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool update schedule: %v", err)
+	}
+	if updateResp == nil || updateResp.Status != http.StatusOK {
+		t.Fatalf("update schedule response = %#v, want 200", updateResp)
+	}
+	var updateBody struct {
+		Schedule struct {
+			ID                 string `json:"id"`
+			Cron               string `json:"cron"`
+			Paused             bool   `json:"paused"`
+			SourceDefinitionID string `json:"sourceDefinitionId"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(updateResp.Body), &updateBody); err != nil {
+		t.Fatalf("decode update schedule response body: %v", err)
+	}
+	if updateBody.Schedule.ID != scheduleID || updateBody.Schedule.Cron != "*/15 * * * *" || !updateBody.Schedule.Paused || updateBody.Schedule.SourceDefinitionID != definitionBody.Definition.ID {
+		t.Fatalf("updated schedule = %#v", updateBody.Schedule)
+	}
+	if len(workflowProvider.upsertedSchedules) != 2 {
+		t.Fatalf("upserted schedules = %d, want 2", len(workflowProvider.upsertedSchedules))
+	}
+	updateUpsert := workflowProvider.upsertedSchedules[1]
+	if updateUpsert.Target.Agent == nil || updateUpsert.Target.Agent.Prompt != "Sync the roadmap." {
+		t.Fatalf("updated upsert target = %#v", updateUpsert.Target)
+	}
+	scheduleRef, err := workflowProvider.GetExecutionReference(context.Background(), updateUpsert.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(schedule): %v", err)
+	}
+	if scheduleRef.SourceDefinitionID != definitionBody.Definition.ID {
+		t.Fatalf("schedule source definition id = %q, want %q", scheduleRef.SourceDefinitionID, definitionBody.Definition.ID)
+	}
+
+	deleteResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-delete",
+		ToolID:       deleteTool.ID,
+		RunGrant:     runGrant,
+		Arguments:    map[string]any{"scheduleId": scheduleID},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool delete schedule: %v", err)
+	}
+	if deleteResp == nil || deleteResp.Status != http.StatusOK {
+		t.Fatalf("delete schedule response = %#v, want 200", deleteResp)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-get-deleted",
+		ToolID:       getTool.ID,
+		RunGrant:     runGrant,
+		Arguments:    map[string]any{"scheduleId": scheduleID},
+	})
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("get deleted schedule error = %v, want not found", err)
+	}
+}
+
 func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
 	t.Parallel()
 

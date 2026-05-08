@@ -114,14 +114,16 @@ type Manager struct {
 }
 
 type ScheduleUpsert struct {
-	ProviderName     string
-	Cron             string
-	Timezone         string
-	Target           coreworkflow.Target
-	DefinitionID     string
-	Paused           bool
-	IdempotencyKey   string
-	CallerPluginName string
+	ProviderName       string
+	Cron               string
+	Timezone           string
+	Target             coreworkflow.Target
+	DefinitionID       string
+	SourceDefinitionID string
+	Paused             bool
+	IdempotencyKey     string
+	CallerPluginName   string
+	Permissions        []core.AccessPermission
 }
 
 type DefinitionUpsert struct {
@@ -129,6 +131,7 @@ type DefinitionUpsert struct {
 	Target           coreworkflow.Target
 	IdempotencyKey   string
 	CallerPluginName string
+	Permissions      []core.AccessPermission
 }
 
 type EventTriggerUpsert struct {
@@ -250,7 +253,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 			return nil, err
 		}
 	}
-	ref, err := m.putExecutionRef(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName, "")
+	ref, err := m.putExecutionRefWithPermissions(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +289,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		if _, err := m.revokeExecutionRefWithError(ctx, existing.Definition); err != nil {
 			return nil, err
 		}
-		ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "")
+		ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
 		if err != nil {
 			m.restoreExecutionRef(ctx, existing.Definition)
 			return nil, err
@@ -297,7 +300,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 			provider:     provider,
 		}, nil
 	}
-	ref, err := m.putExecutionRef(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "")
+	ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -683,7 +686,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return existing, nil
 	}
 	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
+	ref, err := m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -743,6 +746,13 @@ func managedScheduleMatchesDefinitionUpsert(existing *ManagedSchedule, req Sched
 	return existing.Schedule.Paused == req.Paused
 }
 
+func scheduleUpsertSourceDefinitionID(req ScheduleUpsert) string {
+	if definitionID := strings.TrimSpace(req.DefinitionID); definitionID != "" {
+		return definitionID
+	}
+	return strings.TrimSpace(req.SourceDefinitionID)
+}
+
 func (m *Manager) GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error) {
 	return m.requireOwnedSchedule(ctx, scheduleID, p)
 }
@@ -762,7 +772,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, req.DefinitionID)
+	nextRef, err := m.putExecutionRefWithPermissions(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -1511,6 +1521,10 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 }
 
 func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string) (*coreworkflow.ExecutionReference, error) {
+	return m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, callerPluginName, sourceDefinitionID, nil)
+}
+
+func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -1532,8 +1546,19 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 		DisplayName:         actor.DisplayName,
 		AuthSource:          actor.AuthSource,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         m.executionRefPermissions(p, target, callerPluginName),
+		Permissions:         m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions),
 	})
+}
+
+func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerPluginName string, override []core.AccessPermission) []core.AccessPermission {
+	if override == nil {
+		return m.executionRefPermissions(p, target, callerPluginName)
+	}
+	out := principal.PermissionsToAccessPermissions(principal.CompilePermissions(override))
+	if len(out) == 0 {
+		return []core.AccessPermission{{Plugin: workflowNoProviderPermissionsPlugin}}
+	}
+	return out
 }
 
 func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
