@@ -2281,6 +2281,59 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	}
 }
 
+func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "chat.postMessage",
+				Title: "Post message",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:   "service_account:slack-bot",
+		SubjectKind: "service_account",
+		DisplayName: "Platform Slack Bot",
+	}
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:         "slack",
+				Operation:      "chat.postMessage",
+				CredentialMode: core.ConnectionModeNone,
+				RunAs:          runAs,
+			}},
+		},
+	})
+
+	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slack",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "slack",
+			Operation: "chat.postMessage",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
+	}
+	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("tool credential mode = %q, want %q", tools[0].Target.CredentialMode, core.ConnectionModeNone)
+	}
+	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
+		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
+	}
+}
+
 func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 	t.Parallel()
 
