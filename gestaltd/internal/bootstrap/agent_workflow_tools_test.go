@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -394,6 +395,85 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	}
 	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
 		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRefs(t *testing.T) {
+	t.Parallel()
+
+	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
+	runAs := &core.RunAsSubject{
+		SubjectID:   "service_account:github-toolshed",
+		SubjectKind: "service_account",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "github_app_installation",
+		ID:   "repo:valon-technologies/toolshed",
+	}
+	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "github",
+			Operations: []string{"bot.createPullRequest"},
+		}},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+			{
+				Plugin:                "github",
+				Operation:             "bot.createPullRequest",
+				CredentialMode:        core.ConnectionModeNone,
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+			},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "schedule-call",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"cron":     "*/5 * * * *",
+			"timezone": "UTC",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"prompt":   "Open a GitHub pull request.",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool schedule: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("schedule response = %#v, want 201", resp)
+	}
+	if len(workflowProvider.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
+	}
+	upsert := workflowProvider.upsertedSchedules[0]
+	if upsert.Target.Agent == nil {
+		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
+	}
+	wantRefs := []coreagent.ToolRef{
+		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
+		{Plugin: "github", Operation: "bot.createPullRequest"},
+	}
+	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference(schedule): %v", err)
+	}
+	if ref.CallerPluginName != "slack" {
+		t.Fatalf("schedule caller plugin = %q, want slack", ref.CallerPluginName)
 	}
 }
 
@@ -1216,9 +1296,10 @@ func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { retu
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
 type workflowSystemRunGrantScope struct {
-	Permissions []core.AccessPermission
-	ToolRefs    []coreagent.ToolRef
-	Tools       []coreagent.Tool
+	CallerPluginName string
+	Permissions      []core.AccessPermission
+	ToolRefs         []coreagent.ToolRef
+	Tools            []coreagent.Tool
 }
 
 func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemRunGrantScope) string {
@@ -1229,6 +1310,7 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		ProviderName:        "managed",
 		SessionID:           "session-1",
 		TurnID:              "turn-1",
+		CallerPluginName:    strings.TrimSpace(scope.CallerPluginName),
 		SubjectID:           principal.UserSubjectID("ada"),
 		SubjectKind:         string(principal.KindUser),
 		CredentialSubjectID: principal.UserSubjectID("ada"),

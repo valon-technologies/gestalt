@@ -1456,6 +1456,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 	threshold := 0
 	linear := agentCatalogTestProvider("linear", "Linear", "issues")
 	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestRunGrants(t)
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, linear),
 		Agent: &routeCountingAgentControl{
@@ -1465,6 +1466,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 				"alpha": alpha,
 			},
 		},
+		RunGrants:                     grants,
 		DefaultToolNarrowingThreshold: &threshold,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
@@ -1487,6 +1489,13 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 	}
 	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for caller plugin default", got)
+	}
+	grant, err := grants.Resolve(alpha.createTurnReqs[0].RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if grant.CallerPluginName != "slack" {
+		t.Fatalf("grant caller plugin = %q, want slack", grant.CallerPluginName)
 	}
 	if linear.catalogCalls != 0 {
 		t.Fatalf("linear catalog calls = %d, want caller plugin default to skip narrowing probes", linear.catalogCalls)

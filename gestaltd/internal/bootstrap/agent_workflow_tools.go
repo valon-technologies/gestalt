@@ -313,7 +313,7 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 		ProviderName:     workflowSystemToolStringArg(args, "provider"),
 		Target:           target,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
-		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
+		CallerPluginName: workflowSystemToolCallerScope(req),
 	})
 	if err != nil {
 		return nil, err
@@ -365,7 +365,7 @@ func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req a
 	definition, err := t.manager.UpdateDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID, workflowmanager.DefinitionUpsert{
 		ProviderName:     workflowSystemToolStringArg(args, "provider"),
 		Target:           target,
-		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
+		CallerPluginName: workflowSystemToolCallerScope(req),
 		Permissions:      permissions,
 	})
 	if err != nil {
@@ -458,7 +458,7 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		DefinitionID:     definitionID,
 		Paused:           workflowSystemToolBoolArg(args, "paused"),
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
-		CallerPluginName: workflowSystemToolCallerScope(req.ProviderName),
+		CallerPluginName: workflowSystemToolCallerScope(req),
 	})
 	if err != nil {
 		return nil, err
@@ -585,7 +585,7 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 		DefinitionID:       definitionID,
 		SourceDefinitionID: sourceDefinitionID,
 		Paused:             paused,
-		CallerPluginName:   workflowSystemToolCallerScope(req.ProviderName),
+		CallerPluginName:   workflowSystemToolCallerScope(req),
 		Permissions:        permissions,
 	})
 	if err != nil {
@@ -609,8 +609,11 @@ func (t *workflowSystemTools) executeDeleteSchedule(ctx context.Context, req age
 	return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"scheduleId": scheduleID, "deleted": true})
 }
 
-func workflowSystemToolCallerScope(providerName string) string {
-	providerName = strings.TrimSpace(providerName)
+func workflowSystemToolCallerScope(req agentSystemToolExecutionRequest) string {
+	if callerPluginName := strings.TrimSpace(req.CallerPluginName); callerPluginName != "" {
+		return callerPluginName
+	}
+	providerName := strings.TrimSpace(req.ProviderName)
 	if providerName == "" {
 		return "agent"
 	}
@@ -844,13 +847,8 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 			if ref.Plugin != "" || ref.Connection != "" || ref.Instance != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
 				return
 			}
-		} else {
-			if ref.Plugin == "" || ref.Plugin == "*" || ref.Operation == "" {
-				return
-			}
-			if ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
-				return
-			}
+		} else if ref.Plugin == "" || ref.Plugin == "*" || ref.Operation == "" {
+			return
 		}
 		inherited := coreagent.ToolRef{
 			System:     ref.System,
@@ -972,13 +970,10 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 		if ref.CredentialMode != "" {
 			return fmt.Errorf("%w: target.agent.toolRefs[%d] credentialMode is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, i)
 		}
-		pluginTarget := coreworkflow.PluginTarget{
-			PluginName: ref.Plugin,
-			Operation:  ref.Operation,
-			Connection: ref.Connection,
-			Instance:   ref.Instance,
+		if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+			return fmt.Errorf("%w: target.agent.toolRefs[%d] runAs is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, i)
 		}
-		if !workflowSystemToolPluginTargetAllowed(pluginTarget, req.ToolRefs, req.Tools) {
+		if !workflowSystemToolAgentPluginRefAllowed(ref, req.ToolRefs, req.Tools) {
 			return fmt.Errorf("%w: target.agent.toolRefs[%d] %s.%s is outside the current agent tool scope", invocation.ErrScopeDenied, i, ref.Plugin, ref.Operation)
 		}
 	}
@@ -989,8 +984,8 @@ func workflowSystemToolValidateFutureSystemRef(index int, ref coreagent.ToolRef,
 	if strings.TrimSpace(ref.System) != coreagent.SystemToolWorkflow || strings.TrimSpace(ref.Operation) == "" {
 		return fmt.Errorf("%w: target.agent.toolRefs[%d] workflow system refs require an exact operation", invocation.ErrInvalidInvocation, index)
 	}
-	if strings.TrimSpace(ref.Plugin) != "" || strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" || ref.CredentialMode != "" {
-		return fmt.Errorf("%w: target.agent.toolRefs[%d] system refs cannot include plugin, connection, instance, or credentialMode", invocation.ErrInvalidInvocation, index)
+	if strings.TrimSpace(ref.Plugin) != "" || strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+		return fmt.Errorf("%w: target.agent.toolRefs[%d] system refs cannot include plugin, connection, instance, credentialMode, or runAs", invocation.ErrInvalidInvocation, index)
 	}
 	for i := range req.ToolRefs {
 		if strings.TrimSpace(req.ToolRefs[i].System) == coreagent.SystemToolWorkflow && strings.TrimSpace(req.ToolRefs[i].Operation) == strings.TrimSpace(ref.Operation) {
@@ -1003,6 +998,20 @@ func workflowSystemToolValidateFutureSystemRef(index int, ref coreagent.ToolRef,
 		}
 	}
 	return fmt.Errorf("%w: target.agent.toolRefs[%d] workflow.%s is outside the current agent tool scope", invocation.ErrScopeDenied, index, ref.Operation)
+}
+
+func workflowSystemToolAgentPluginRefAllowed(target coreagent.ToolRef, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+	for i := range refs {
+		if workflowSystemToolPluginRefMatchesAgentRef(refs[i], target) {
+			return true
+		}
+	}
+	for i := range tools {
+		if workflowSystemToolResolvedToolMatchesAgentRef(tools[i], target) {
+			return true
+		}
+	}
+	return false
 }
 
 func workflowSystemToolPluginTargetAllowed(target coreworkflow.PluginTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
@@ -1032,6 +1041,16 @@ func workflowSystemToolPluginRefMatchesTarget(ref coreagent.ToolRef, target core
 	return workflowSystemToolRefBindingMatchesTarget(ref.Connection, ref.Instance, target.Connection, target.Instance)
 }
 
+func workflowSystemToolPluginRefMatchesAgentRef(ref coreagent.ToolRef, target coreagent.ToolRef) bool {
+	if strings.TrimSpace(ref.System) != "" || strings.TrimSpace(ref.Plugin) == "" || strings.TrimSpace(ref.Plugin) == "*" || strings.TrimSpace(ref.Operation) == "" {
+		return false
+	}
+	if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) || strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
+		return false
+	}
+	return workflowSystemToolRefBindingMatchesTarget(ref.Connection, ref.Instance, target.Connection, target.Instance)
+}
+
 func workflowSystemToolResolvedToolMatchesTarget(tool coreagent.Tool, target coreworkflow.PluginTarget) bool {
 	if strings.TrimSpace(tool.Target.System) != "" || strings.TrimSpace(tool.Target.Plugin) == "" || strings.TrimSpace(tool.Target.Operation) == "" {
 		return false
@@ -1040,6 +1059,16 @@ func workflowSystemToolResolvedToolMatchesTarget(tool coreagent.Tool, target cor
 		return false
 	}
 	if strings.TrimSpace(tool.Target.Plugin) != strings.TrimSpace(target.PluginName) || strings.TrimSpace(tool.Target.Operation) != strings.TrimSpace(target.Operation) {
+		return false
+	}
+	return workflowSystemToolResolvedBindingMatchesTarget(tool.Target.Connection, tool.Target.Instance, target.Connection, target.Instance)
+}
+
+func workflowSystemToolResolvedToolMatchesAgentRef(tool coreagent.Tool, target coreagent.ToolRef) bool {
+	if strings.TrimSpace(tool.Target.System) != "" || strings.TrimSpace(tool.Target.Plugin) == "" || strings.TrimSpace(tool.Target.Operation) == "" {
+		return false
+	}
+	if strings.TrimSpace(tool.Target.Plugin) != strings.TrimSpace(target.Plugin) || strings.TrimSpace(tool.Target.Operation) != strings.TrimSpace(target.Operation) {
 		return false
 	}
 	return workflowSystemToolResolvedBindingMatchesTarget(tool.Target.Connection, tool.Target.Instance, target.Connection, target.Instance)

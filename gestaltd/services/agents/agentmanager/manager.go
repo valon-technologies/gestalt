@@ -1430,6 +1430,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		ProviderName:        providerName,
 		SessionID:           sessionID,
 		TurnID:              turnID,
+		CallerPluginName:    strings.TrimSpace(callerPluginName),
 		SubjectID:           subject.SubjectID,
 		SubjectKind:         subject.SubjectKind,
 		CredentialSubjectID: subject.CredentialSubjectID,
