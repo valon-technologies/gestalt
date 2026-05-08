@@ -9,13 +9,22 @@ import (
 // AuthorizationMetadata describes the host authorization provider.
 type AuthorizationMetadata = proto.AuthorizationMetadata
 
-// AuthorizationSubject is a generated subject descriptor.
+// AuthorizationSubject identifies a subject in the authorization graph.
+//
+// SDK callers should construct values with [NewAuthorizationSubject] instead of
+// importing generated protobuf packages directly.
 type AuthorizationSubject = proto.Subject
 
-// AuthorizationResource is a generated resource descriptor.
+// AuthorizationResource identifies a protected resource in the authorization graph.
+//
+// SDK callers should construct values with [NewAuthorizationResource] instead of
+// importing generated protobuf packages directly.
 type AuthorizationResource = proto.Resource
 
-// AuthorizationAction is a generated action descriptor.
+// AuthorizationAction identifies an action being evaluated against a resource.
+//
+// SDK callers should construct values with [NewAuthorizationAction] instead of
+// importing generated protobuf packages directly.
 type AuthorizationAction = proto.Action
 
 // AccessEvaluationRequest asks whether one subject can perform one action.
@@ -49,6 +58,9 @@ type ActionSearchRequest = proto.ActionSearchRequest
 type ActionSearchResponse = proto.ActionSearchResponse
 
 // Relationship describes one authorization relationship tuple.
+//
+// A relationship grants a subject a relation on a resource, for example
+// subject "user:123" has relation "editor" on resource "agent_session:sess_123".
 type Relationship = proto.Relationship
 
 // RelationshipKey identifies one authorization relationship tuple.
@@ -61,6 +73,8 @@ type ReadRelationshipsRequest = proto.ReadRelationshipsRequest
 type ReadRelationshipsResponse = proto.ReadRelationshipsResponse
 
 // WriteRelationshipsRequest mutates authorization relationships.
+//
+// Writes are upserts and deletes remove exact [RelationshipKey] tuples.
 type WriteRelationshipsRequest = proto.WriteRelationshipsRequest
 
 // AuthorizationModel describes an authorization model.
@@ -90,7 +104,61 @@ type ListModelsResponse = proto.ListModelsResponse
 // WriteModelRequest stores an authorization model.
 type WriteModelRequest = proto.WriteModelRequest
 
+// NewAuthorizationSubject creates a subject reference for authorization requests.
+func NewAuthorizationSubject(subjectType, id string) *AuthorizationSubject {
+	return &AuthorizationSubject{Type: subjectType, Id: id}
+}
+
+// NewAuthorizationResource creates a resource reference for authorization requests.
+func NewAuthorizationResource(resourceType, id string) *AuthorizationResource {
+	return &AuthorizationResource{Type: resourceType, Id: id}
+}
+
+// NewAuthorizationAction creates an action reference for authorization requests.
+func NewAuthorizationAction(name string) *AuthorizationAction {
+	return &AuthorizationAction{Name: name}
+}
+
+// NewAccessEvaluationRequest creates an access-evaluation request.
+func NewAccessEvaluationRequest(subject *AuthorizationSubject, action *AuthorizationAction, resource *AuthorizationResource) *AccessEvaluationRequest {
+	return &AccessEvaluationRequest{
+		Subject:  subject,
+		Action:   action,
+		Resource: resource,
+	}
+}
+
+// NewRelationship creates a relationship tuple for authorization writes.
+func NewRelationship(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *Relationship {
+	return &Relationship{
+		Subject:  subject,
+		Relation: relation,
+		Resource: resource,
+	}
+}
+
+// NewRelationshipKey creates a relationship key for authorization deletes.
+func NewRelationshipKey(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *RelationshipKey {
+	return &RelationshipKey{
+		Subject:  subject,
+		Relation: relation,
+		Resource: resource,
+	}
+}
+
+// NewWriteRelationshipsRequest creates a relationship mutation request.
+func NewWriteRelationshipsRequest(writes []*Relationship, deletes []*RelationshipKey) *WriteRelationshipsRequest {
+	return &WriteRelationshipsRequest{
+		Writes:  writes,
+		Deletes: deletes,
+	}
+}
+
 // AuthorizationProvider serves authorization APIs to the host.
+//
+// Provider implementations can use the SDK authorization aliases and
+// constructors in this package; they do not need to import generated protobuf
+// packages directly.
 type AuthorizationProvider interface {
 	Provider
 	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)

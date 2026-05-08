@@ -25,7 +25,10 @@ const EnvAuthorizationSocket = "GESTALT_AUTHORIZATION_SOCKET"
 // EnvAuthorizationSocketToken names the optional authorization relay-token variable.
 const EnvAuthorizationSocketToken = EnvAuthorizationSocket + "_TOKEN"
 
-// AuthorizationClient calls the read-only host authorization provider.
+// AuthorizationClient calls the host authorization provider.
+//
+// The client accepts SDK authorization request types from this package and
+// hides the generated protobuf transport used on the wire.
 type AuthorizationClient struct {
 	client proto.AuthorizationProviderClient
 }
@@ -38,7 +41,7 @@ var sharedAuthorizationTransport struct {
 	client proto.AuthorizationProviderClient
 }
 
-// Authorization returns a shared read-only authorization client.
+// Authorization returns a shared authorization client.
 func Authorization() (*AuthorizationClient, error) {
 	target := os.Getenv(EnvAuthorizationSocket)
 	if target == "" {
@@ -191,6 +194,39 @@ func parseAuthorizationTarget(raw string) (network string, address string, err e
 // Close is a no-op compatibility method because this client uses shared transport.
 func (c *AuthorizationClient) Close() error { return nil }
 
+// Evaluate evaluates one authorization request.
+func (c *AuthorizationClient) Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.Evaluate(ctx, req)
+}
+
+// EvaluateMany evaluates multiple authorization requests in one RPC.
+func (c *AuthorizationClient) EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.EvaluateMany(ctx, req)
+}
+
+// SearchResources searches resources visible to a subject for an action.
+func (c *AuthorizationClient) SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.SearchResources(ctx, req)
+}
+
 // SearchSubjects searches subjects related to a resource and action.
 func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSearchRequest) (*SubjectSearchResponse, error) {
 	if c == nil || c.client == nil {
@@ -200,6 +236,40 @@ func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSe
 		return nil, fmt.Errorf("authorization: request is required")
 	}
 	return c.client.SearchSubjects(ctx, req)
+}
+
+// SearchActions searches actions available between a subject and resource.
+func (c *AuthorizationClient) SearchActions(ctx context.Context, req *ActionSearchRequest) (*ActionSearchResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.SearchActions(ctx, req)
+}
+
+// ReadRelationships reads authorization relationships matching a request.
+func (c *AuthorizationClient) ReadRelationships(ctx context.Context, req *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.ReadRelationships(ctx, req)
+}
+
+// WriteRelationships writes and deletes authorization relationships.
+func (c *AuthorizationClient) WriteRelationships(ctx context.Context, req *WriteRelationshipsRequest) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return fmt.Errorf("authorization: request is required")
+	}
+	_, err := c.client.WriteRelationships(ctx, req)
+	return err
 }
 
 // GetMetadata returns host authorization provider metadata.
