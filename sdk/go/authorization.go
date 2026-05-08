@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 )
@@ -117,6 +118,16 @@ func NewAuthorizationResource(resourceType, id string) *AuthorizationResource {
 // NewAuthorizationAction creates an action reference for authorization requests.
 func NewAuthorizationAction(name string) *AuthorizationAction {
 	return &AuthorizationAction{Name: name}
+}
+
+// NewAuthorizationModelRef creates an authorization model reference from native
+// Go values.
+func NewAuthorizationModelRef(id, version string, createdAt time.Time) *AuthorizationModelRef {
+	return &AuthorizationModelRef{
+		Id:        id,
+		Version:   version,
+		CreatedAt: timestampFromNonZeroTime(createdAt),
+	}
 }
 
 // NewAccessEvaluationRequest creates an access-evaluation request.

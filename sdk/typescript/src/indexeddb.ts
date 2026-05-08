@@ -8,6 +8,7 @@ import {
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
 } from "./internal/gen/v1/datastore_pb";
+import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
 const INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN";
@@ -1283,7 +1284,7 @@ export function toProtoTypedValue(v: unknown): any {
     return { kind: { case: "floatValue", value: v } };
   }
   if (typeof v === "string") return { kind: { case: "stringValue", value: v } };
-  if (v instanceof Date) return { kind: { case: "timeValue", value: toProtoTimestamp(v) } };
+  if (v instanceof Date) return { kind: { case: "timeValue", value: timestampFromDate(v) } };
   if (v instanceof Uint8Array) return { kind: { case: "bytesValue", value: v } };
   if (v instanceof ArrayBuffer) return { kind: { case: "bytesValue", value: new Uint8Array(v) } };
   return { kind: { case: "jsonValue", value: toProtoJsonValue(v) } };
@@ -1304,7 +1305,7 @@ export function fromProtoTypedValue(v: any): unknown {
     case "boolValue":
       return v.kind.value;
     case "timeValue":
-      return fromProtoTimestamp(v.kind.value);
+      return dateFromTimestamp(v.kind.value);
     case "bytesValue":
       return new Uint8Array(v.kind.value);
     case "jsonValue":
@@ -1322,19 +1323,6 @@ export function toProtoKeyRange(kr: KeyRange): any {
     lowerOpen: kr.lowerOpen ?? false,
     upperOpen: kr.upperOpen ?? false,
   };
-}
-
-function toProtoTimestamp(value: Date): any {
-  const millis = value.getTime();
-  const seconds = Math.trunc(millis / 1000);
-  const nanos = Math.trunc((millis % 1000) * 1_000_000);
-  return { seconds: BigInt(seconds), nanos };
-}
-
-function fromProtoTimestamp(value: any): Date {
-  const seconds = Number(value?.seconds ?? 0n);
-  const nanos = Number(value?.nanos ?? 0);
-  return new Date((seconds * 1000) + Math.trunc(nanos / 1_000_000));
 }
 
 function toJsInt(value: bigint): number | bigint {

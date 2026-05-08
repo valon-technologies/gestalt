@@ -29,6 +29,7 @@ import {
 } from "./internal/gen/v1/s3_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
+import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
 
 /** Base environment variable for discovering S3 runtime sockets. */
 export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
@@ -517,7 +518,7 @@ export function createS3Service(
         expiresAt?: { seconds: bigint; nanos: number };
       };
       if (result.expiresAt) {
-        response.expiresAt = toProtoTimestamp(result.expiresAt);
+        response.expiresAt = timestampFromDate(result.expiresAt);
       }
       return create(PresignObjectResponseSchema, response);
     },
@@ -693,7 +694,7 @@ export class S3 {
       headers: cloneStringMap(response.headers),
     };
     if (response.expiresAt) {
-      result.expiresAt = fromProtoTimestamp(response.expiresAt);
+      result.expiresAt = dateFromTimestamp(response.expiresAt);
     }
     return result;
   }
@@ -722,7 +723,7 @@ export class S3 {
       headers: cloneStringMap(response.headers),
     };
     if (response.expiresAt) {
-      result.expiresAt = fromProtoTimestamp(response.expiresAt);
+      result.expiresAt = dateFromTimestamp(response.expiresAt);
     }
     return result;
   }
@@ -1185,7 +1186,7 @@ function toProtoObjectMeta(meta: ObjectMeta) {
     storageClass: meta.storageClass,
   };
   if (meta.lastModified) {
-    value.lastModified = toProtoTimestamp(meta.lastModified);
+    value.lastModified = timestampFromDate(meta.lastModified);
   }
   return value;
 }
@@ -1200,7 +1201,7 @@ function fromProtoObjectMeta(meta: ProtoS3ObjectMeta | undefined): ObjectMeta {
     storageClass: meta?.storageClass ?? "",
   };
   if (meta?.lastModified) {
-    value.lastModified = fromProtoTimestamp(meta.lastModified);
+    value.lastModified = dateFromTimestamp(meta.lastModified);
   }
   return value;
 }
@@ -1214,10 +1215,10 @@ function toProtoReadOptions(options?: ReadOptions) {
     proto.range = toProtoByteRange(options.range);
   }
   if (options?.ifModifiedSince) {
-    proto.ifModifiedSince = toProtoTimestamp(options.ifModifiedSince);
+    proto.ifModifiedSince = timestampFromDate(options.ifModifiedSince);
   }
   if (options?.ifUnmodifiedSince) {
-    proto.ifUnmodifiedSince = toProtoTimestamp(options.ifUnmodifiedSince);
+    proto.ifUnmodifiedSince = timestampFromDate(options.ifUnmodifiedSince);
   }
   return proto;
 }
@@ -1234,10 +1235,10 @@ function fromProtoReadOptions(request: ProtoReadObjectRequest | undefined): Read
     options.ifNoneMatch = request.ifNoneMatch;
   }
   if (request?.ifModifiedSince) {
-    options.ifModifiedSince = fromProtoTimestamp(request.ifModifiedSince);
+    options.ifModifiedSince = dateFromTimestamp(request.ifModifiedSince);
   }
   if (request?.ifUnmodifiedSince) {
-    options.ifUnmodifiedSince = fromProtoTimestamp(request.ifUnmodifiedSince);
+    options.ifUnmodifiedSince = dateFromTimestamp(request.ifUnmodifiedSince);
   }
   return options;
 }
@@ -1328,22 +1329,6 @@ function fromProtoPresignMethod(method: ProtoPresignMethod): PresignMethod {
     default:
       return PresignMethod.Get;
   }
-}
-
-function toProtoTimestamp(value: Date) {
-  const millis = value.getTime();
-  const seconds = Math.floor(millis / 1000);
-  const nanos = Math.trunc((millis - (seconds * 1000)) * 1_000_000);
-  return {
-    seconds: BigInt(seconds),
-    nanos,
-  };
-}
-
-function fromProtoTimestamp(value: { seconds?: bigint; nanos?: number }): Date {
-  const seconds = Number(value.seconds ?? 0n);
-  const nanos = Number(value.nanos ?? 0);
-  return new Date((seconds * 1000) + Math.trunc(nanos / 1_000_000));
 }
 
 function normalizeProtoInt(value: number | bigint | undefined): bigint {

@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from concurrent import futures
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from importlib import resources
 from typing import Any
 
@@ -24,6 +25,9 @@ from gestalt import (
     AgentManager,
     AgentMessage,
     AgentProvider,
+    AgentSession,
+    AgentTurn,
+    AgentTurnEvent,
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
@@ -702,6 +706,17 @@ class AgentTransportTests(unittest.TestCase):
         self.assertTrue(
             resources.files("gestalt").joinpath("_gen/v1/agent_pb2.pyi").is_file()
         )
+
+    def test_agent_protocol_wrappers_accept_native_datetimes(self) -> None:
+        created_at = datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc)
+
+        session = AgentSession(id="session-1", created_at=created_at)
+        turn = AgentTurn(id="turn-1", created_at=created_at)
+        event = AgentTurnEvent(id="event-1", created_at=created_at)
+
+        self.assertEqual(session.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
+        self.assertEqual(turn.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
+        self.assertEqual(event.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
 
     def test_agent_message_dict_helpers_preserve_presence(self) -> None:
         message = agent_message_from_dict(

@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
@@ -311,11 +311,5 @@ pub fn runtime_session_id() -> std::result::Result<String, RuntimeLogHostError> 
 }
 
 fn timestamp_now() -> prost_types::Timestamp {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("unix epoch");
-    prost_types::Timestamp {
-        seconds: now.as_secs() as i64,
-        nanos: now.subsec_nanos() as i32,
-    }
+    crate::protocol::timestamp_from_system_time(SystemTime::now())
 }

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, TypeAlias
 
 import grpc
+from typing_extensions import TypedDict, Unpack
 
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
@@ -57,6 +59,49 @@ AGENT_SESSION_STATE_ARCHIVED = pb.AGENT_SESSION_STATE_ARCHIVED
 
 AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = pb.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+
+TimestampInput: TypeAlias = _dt.datetime | Mapping[str, Any] | None
+
+
+class AgentSessionInput(TypedDict, total=False):
+    id: str
+    provider_name: str
+    model: str
+    client_ref: str
+    state: int | str
+    metadata: JsonObjectInput | None
+    created_by: Any
+    created_at: TimestampInput
+    updated_at: TimestampInput
+    last_turn_at: TimestampInput
+
+
+class AgentTurnInput(TypedDict, total=False):
+    id: str
+    session_id: str
+    provider_name: str
+    model: str
+    status: int | str
+    messages: Iterable[Any]
+    output_text: str
+    structured_output: JsonObjectInput | None
+    status_message: str
+    execution_ref: str
+    created_by: Any
+    created_at: TimestampInput
+    started_at: TimestampInput
+    completed_at: TimestampInput
+
+
+class AgentTurnEventInput(TypedDict, total=False):
+    id: str
+    turn_id: str
+    seq: int
+    type: str
+    source: str
+    visibility: str
+    data: JsonObjectInput | None
+    created_at: TimestampInput
 
 
 def AgentMessage(*args: Any, **kwargs: Any) -> Any:
@@ -113,7 +158,7 @@ def AgentProviderCapabilities(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentProviderCapabilities(*args, **kwargs)
 
 
-def AgentSession(*args: Any, **kwargs: Any) -> Any:
+def AgentSession(*args: Any, **kwargs: Unpack[AgentSessionInput]) -> Any:
     """Create an agent session protocol value."""
 
     return pb.AgentSession(*args, **kwargs)
@@ -137,13 +182,13 @@ def AgentSessionStartHookOutput(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentSessionStartHookOutput(*args, **kwargs)
 
 
-def AgentTurn(*args: Any, **kwargs: Any) -> Any:
+def AgentTurn(*args: Any, **kwargs: Unpack[AgentTurnInput]) -> Any:
     """Create an agent turn protocol value."""
 
     return pb.AgentTurn(*args, **kwargs)
 
 
-def AgentTurnEvent(*args: Any, **kwargs: Any) -> Any:
+def AgentTurnEvent(*args: Any, **kwargs: Unpack[AgentTurnEventInput]) -> Any:
     """Create an agent turn event protocol value."""
 
     return pb.AgentTurnEvent(*args, **kwargs)

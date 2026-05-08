@@ -15,6 +15,7 @@ import {
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
   PluginRuntimeLogStream,
 } from "./internal/gen/v1/pluginruntime_pb.ts";
+import { timestampFromDate } from "./protocol.ts";
 
 /** Environment variable containing the runtime-log host-service target. */
 export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";
@@ -123,7 +124,7 @@ export class RuntimeLogHost {
         {
           stream: runtimeLogStream(input.stream ?? "runtime"),
           message: runtimeLogMessage(input.message),
-          observedAt: toProtoTimestamp(input.observedAt ?? new Date()),
+          observedAt: timestampFromDate(input.observedAt ?? new Date()),
           sourceSeq,
         },
       ],
@@ -253,16 +254,6 @@ function runtimeLogMessage(message: string | Uint8Array): string {
     return message;
   }
   return Buffer.from(message).toString("utf8");
-}
-
-function toProtoTimestamp(value: Date): { seconds: bigint; nanos: number } {
-  const millis = value.getTime();
-  const seconds = Math.floor(millis / 1000);
-  const nanos = Math.trunc((millis - (seconds * 1000)) * 1_000_000);
-  return {
-    seconds: BigInt(seconds),
-    nanos,
-  };
 }
 
 function toError(error: unknown): Error {
