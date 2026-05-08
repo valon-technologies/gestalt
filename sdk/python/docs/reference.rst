@@ -126,13 +126,16 @@ Protocol helpers
 ----------------
 
 These helpers convert between Python values and protobuf well-known types
-without importing generated runtime internals.
+without importing generated runtime internals. Struct and Value helpers accept
+JSON-compatible mappings and dataclass instances; datetime-like values are
+rejected in generic JSON payloads and should use timestamp helpers instead.
 
 .. autosummary::
    :nosignatures:
 
    struct_from_dict
    struct_to_dict
+   json_from_native
    value_from_json
    value_to_json
    message_to_dict
@@ -145,6 +148,8 @@ without importing generated runtime internals.
 .. autofunction:: struct_from_dict
 
 .. autofunction:: struct_to_dict
+
+.. autofunction:: json_from_native
 
 .. autofunction:: value_from_json
 

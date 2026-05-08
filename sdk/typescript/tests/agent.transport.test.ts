@@ -308,6 +308,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       toolId: "lookup-status",
       arguments: {
         deployment: "blue",
+        metadata: Object.freeze({ owner: "runtime" }),
       },
       runGrant: "grant-token",
       idempotencyKey: "tool-call-key-123",
@@ -317,6 +318,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     expect(JSON.parse(response.body)).toEqual({
       arguments: {
         deployment: "blue",
+        metadata: { owner: "runtime" },
       },
       toolId: "lookup-status",
     });
@@ -328,6 +330,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         toolId: "lookup-status",
         arguments: {
           deployment: "blue",
+          metadata: { owner: "runtime" },
         },
         runGrant: "grant-token",
         idempotencyKey: "tool-call-key-123",

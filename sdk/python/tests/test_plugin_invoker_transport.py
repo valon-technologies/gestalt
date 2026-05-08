@@ -1,4 +1,5 @@
 """Transport-backed PluginInvoker SDK tests over a real Unix socket."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +7,8 @@ import os
 import tempfile
 import unittest
 from concurrent import futures
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import grpc
@@ -22,6 +25,13 @@ from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
+
+
+@dataclass
+class IssueParams:
+    repo: str
+    issue_number: int
+
 
 _server: grpc.Server | None = None
 _socket_path: str = ""
@@ -178,7 +188,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
             response = client.invoke(
                 "github",
                 "get_issue",
-                {"repo": "valon-technologies/gestalt", "issue_number": 1026},
+                IssueParams(repo="valon-technologies/gestalt", issue_number=1026),
                 connection="work",
                 instance="prod",
                 idempotency_key=" issue-1026-create ",
@@ -208,7 +218,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
                             "operations": [],
                             "surfaces": [],
                             "all_operations": True,
-                        }
+                        },
                     ],
                     "ttl_seconds": 45,
                 }
@@ -231,6 +241,24 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 "idempotency_key": "issue-1026-create",
             },
         )
+
+    def test_invoke_rejects_non_json_dataclass_values(self) -> None:
+        @dataclass
+        class BadParams:
+            created_at: datetime
+
+        with PluginInvoker("invoke-bad") as client:
+            with self.assertRaisesRegex(TypeError, "timestamp helpers"):
+                client.invoke(
+                    "github",
+                    "bad",
+                    BadParams(created_at=datetime(2026, 5, 8, tzinfo=timezone.utc)),
+                )
+
+    def test_invoke_rejects_dataclass_types(self) -> None:
+        with PluginInvoker("invoke-bad-type") as client:
+            with self.assertRaisesRegex(TypeError, "dataclass instance"):
+                client.invoke("github", "bad", IssueParams)
 
     def test_invoke_graphql_roundtrip(self) -> None:
         with PluginInvoker("invoke-graphql") as client:

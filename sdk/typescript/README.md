@@ -86,8 +86,11 @@ can import generated schemas, services, and message types from
 `@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
 paths. Public IndexedDB conversion helpers are exported for lower-level
 datastore fixtures. The root package also exports protocol conversion helpers
-such as `structFromJsonObject`, `valueFromJson`, and `timestampFromDate` for
-protobuf well-known type fields used by workflow and agent payloads.
+such as `structFromObject`, `structFromJsonObject`, `valueFromJson`, and
+`timestampFromDate` for protobuf well-known type fields used by workflow and
+agent payloads. Struct helpers accept plain JSON objects and reject unsupported
+values like `Date`, `Map`, class instances, `undefined`, `bigint`, and
+non-finite numbers instead of silently dropping or stringifying them.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use hyper_util::rt::TokioIo;
+use serde::Serialize;
 use tokio::net::UnixStream;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
@@ -77,6 +78,20 @@ pub struct AgentHostExecuteToolInput {
     pub run_grant: String,
     /// Caller-supplied idempotency key for retries.
     pub idempotency_key: String,
+}
+
+impl AgentHostExecuteToolInput {
+    /// Returns this input with JSON object arguments serialized from a typed value.
+    pub fn with_arguments<T: Serialize>(mut self, arguments: T) -> ProviderResult<Self> {
+        let arguments = protocol::json_from_serializable(arguments)?;
+        if !arguments.is_object() {
+            return Err(crate::Error::bad_request(
+                "agent host tool arguments must serialize to a JSON object",
+            ));
+        }
+        self.arguments = Some(arguments);
+        Ok(self)
+    }
 }
 
 /// Plain input for resolving a configured connection during one agent turn.

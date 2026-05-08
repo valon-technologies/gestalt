@@ -125,8 +125,12 @@ The crate keeps generated bindings behind a higher-level authoring API:
   socket exposed by `gestaltd`.
 - `proto::v1` exposes generated protocol bindings for low-level integration
   work.
-- `protocol` converts JSON values, `Struct`, `Value`, `SystemTime`, and
-  `Timestamp` without depending on private generated modules.
+- `protocol` converts JSON and `Serialize` values, `Struct`, `Value`,
+  `SystemTime`, and `Timestamp` without depending on private generated modules.
+  SDK clients that own request construction use these conversions so typed
+  structs can become protobuf `Struct` payloads without hand-building protos.
+  Generic JSON payloads reject non-finite numbers, bytes, and non-string map
+  keys instead of coercing them through `serde_json`.
 
 ## Package layout
 

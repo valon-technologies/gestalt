@@ -10,6 +10,7 @@ from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
 from ._protocol import (
+    JsonObjectInput,
     has_field,
     message_from_dict,
     message_to_dict,
@@ -500,7 +501,7 @@ def agent_message_part_from_dict(value: Mapping[str, Any]) -> Any:
     if "text" in data:
         part.text = str(data["text"])
     if data.get("json") is not None:
-        part.json.CopyFrom(struct_from_dict(_mapping_value(data["json"], "json")))
+        part.json.CopyFrom(struct_from_dict(data["json"]))
     if data.get("tool_call") is not None:
         part.tool_call.CopyFrom(_tool_call_from_dict(data["tool_call"]))
     if data.get("tool_result") is not None:
@@ -540,9 +541,7 @@ def agent_message_from_dict(value: Mapping[str, Any]) -> Any:
             agent_message_part_from_dict(_mapping_value(part, "parts[]"))
         )
     if data.get("metadata") is not None:
-        message.metadata.CopyFrom(
-            struct_from_dict(_mapping_value(data["metadata"], "metadata"))
-        )
+        message.metadata.CopyFrom(struct_from_dict(data["metadata"]))
     return message
 
 
@@ -612,7 +611,7 @@ class AgentHost:
         *,
         tool_call_id: str,
         tool_id: str,
-        arguments: Mapping[str, Any] | None = None,
+        arguments: JsonObjectInput | None = None,
         run_grant: str = "",
         idempotency_key: str = "",
     ) -> Any:
@@ -835,9 +834,7 @@ def _tool_call_from_dict(value: Any) -> Any:
         tool_id=data.get("tool_id", ""),
     )
     if data.get("arguments") is not None:
-        tool_call.arguments.CopyFrom(
-            struct_from_dict(_mapping_value(data["arguments"], "tool_call.arguments"))
-        )
+        tool_call.arguments.CopyFrom(struct_from_dict(data["arguments"]))
     return tool_call
 
 
@@ -857,9 +854,7 @@ def _tool_result_from_dict(value: Any) -> Any:
         content=data.get("content", ""),
     )
     if data.get("output") is not None:
-        tool_result.output.CopyFrom(
-            struct_from_dict(_mapping_value(data["output"], "tool_result.output"))
-        )
+        tool_result.output.CopyFrom(struct_from_dict(data["output"]))
     return tool_result
 
 

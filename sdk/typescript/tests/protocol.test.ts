@@ -6,6 +6,7 @@ import {
   dateFromTimestamp,
   jsonFromValue,
   jsonObjectFromStruct,
+  structFromObject,
   structFromJsonObject,
   timestampFromDate,
   valueFromJson,
@@ -16,7 +17,7 @@ import {
 } from "../src/internal/gen/v1/workflow_pb.ts";
 
 test("protocol helpers produce generated workflow field shapes", () => {
-  const payload = structFromJsonObject({ ok: true, nested: { value: "yes" } });
+  const payload = structFromObject({ ok: true, nested: { value: "yes" } });
   const metadata = structFromJsonObject({ source: "test" });
   const extension = valueFromJson(["trace", 1]);
   const timestamp = timestampFromDate(new Date("1969-12-31T23:59:59.999Z"));
@@ -52,6 +53,26 @@ test("protocol helpers produce generated workflow field shapes", () => {
   expect(dateFromTimestamp(timestamp).toISOString()).toBe(
     "1969-12-31T23:59:59.999Z",
   );
+});
+
+test("structFromObject rejects non-JSON object values explicitly", () => {
+  class CustomObject {
+    value = "hidden";
+  }
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  const symbolKey = Symbol("hidden");
+
+  expect(() => structFromObject({ when: new Date() } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ map: new Map() } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ custom: new CustomObject() } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ missing: undefined } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ id: 1n } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ score: Number.NaN } as any)).toThrow(TypeError);
+  expect(() => structFromObject({ [symbolKey]: "secret", visible: true } as any)).toThrow(
+    TypeError,
+  );
+  expect(() => structFromObject(cyclic as any)).toThrow(TypeError);
 });
 
 test("timestampFromDate rejects invalid dates and dateFromTimestamp validates nanos", () => {

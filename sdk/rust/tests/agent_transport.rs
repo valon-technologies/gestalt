@@ -19,10 +19,21 @@ use gestalt::{
     AgentProvider, ENV_AGENT_HOST_SOCKET_TOKEN, RuntimeMetadata,
 };
 use hyper_util::rt::tokio::TokioIo;
+use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+#[derive(Serialize)]
+struct LookupArguments {
+    query: String,
+}
+
+#[derive(Serialize)]
+struct BadLookupArguments {
+    score: f64,
+}
 use tower::service_fn;
 
 #[derive(Default)]
@@ -737,21 +748,37 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     assert_eq!(listed.next_page_token, "next-1");
 
     let invoked = host
-        .execute_tool_for_turn(AgentHostExecuteToolInput {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            tool_call_id: "call-7".to_string(),
-            tool_id: "lookup".to_string(),
-            run_grant: "grant-token".to_string(),
-            idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
-            arguments: Some(serde_json::json!({
-                "query": "Ada Lovelace"
-            })),
-        })
+        .execute_tool_for_turn(
+            AgentHostExecuteToolInput {
+                session_id: "session-1".to_string(),
+                turn_id: "turn-1".to_string(),
+                tool_call_id: "call-7".to_string(),
+                tool_id: "lookup".to_string(),
+                run_grant: "grant-token".to_string(),
+                idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
+                arguments: None,
+            }
+            .with_arguments(LookupArguments {
+                query: "Ada Lovelace".to_string(),
+            })
+            .expect("typed tool arguments"),
+        )
         .await
         .expect("execute tool");
     assert_eq!(invoked.status, 207);
     assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
+    let bad_arguments = AgentHostExecuteToolInput::default().with_arguments("not-object");
+    assert!(
+        bad_arguments.is_err(),
+        "non-object tool arguments should fail"
+    );
+    let bad_arguments = AgentHostExecuteToolInput::default().with_arguments(BadLookupArguments {
+        score: f64::INFINITY,
+    });
+    assert!(
+        bad_arguments.is_err(),
+        "non-finite tool arguments should fail"
+    );
 
     let resolved_connection = host
         .resolve_connection_for_turn(AgentHostResolveConnectionInput {

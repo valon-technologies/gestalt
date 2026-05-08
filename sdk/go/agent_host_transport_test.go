@@ -13,6 +13,10 @@ import (
 	gproto "google.golang.org/protobuf/proto"
 )
 
+type agentToolArguments struct {
+	Query string `json:"query"`
+}
+
 type agentHostTransportHarness struct {
 	proto.UnimplementedAgentHostServer
 
@@ -104,7 +108,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 		TurnID:         "turn-1",
 		ToolCallID:     "call-1",
 		ToolID:         "tool-1",
-		Arguments:      map[string]any{"query": "Ada Lovelace"},
+		Arguments:      agentToolArguments{Query: "Ada Lovelace"},
 		RunGrant:       "run-grant-1",
 		IdempotencyKey: "tool-call-key-1",
 	})

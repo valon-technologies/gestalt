@@ -70,7 +70,12 @@
 // protobuf bindings. StructFromMap, StructFromAny, ValueFromAny,
 // ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the IndexedDB
 // codec helpers convert between native Go values and protobuf well-known or
-// IndexedDB wire types without importing internal packages.
+// IndexedDB wire types without importing internal packages. StructFromAny also
+// accepts structs, string-keyed map aliases, and pointers to either form; it
+// rejects time.Time, json.Marshaler values, non-string map keys, cycles, and
+// non-finite numbers in generic Struct payloads. Embedded struct fields are
+// not flattened like encoding/json; anonymous embedded fields must have an
+// explicit json tag name.
 //
 // See https://gestaltd.ai/reference/go-sdk for the Go SDK guide.
 // See https://gestaltd.ai/custom-providers/plugins for the full typed plugin
