@@ -1,6 +1,5 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use prost::Message;
 use prost_types::{ListValue, value::Kind};
 pub use prost_types::{Struct, Timestamp, Value};
 use serde::Serialize;
@@ -12,37 +11,6 @@ use serde::ser::{
 use crate::{Error, Result};
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
-
-/// Common trait implemented by generated protobuf messages.
-pub trait ProtoMessage: Message {}
-
-impl<T: Message> ProtoMessage for T {}
-
-/// Serializes a protobuf message to binary wire bytes.
-///
-/// The SDK-generated Rust messages use ordered maps, so their map fields encode
-/// stably across process runs.
-pub fn marshal_proto_deterministic<M: ProtoMessage>(message: &M) -> Vec<u8> {
-    message.encode_to_vec()
-}
-
-/// Parses protobuf binary wire data into a new generated message.
-pub fn unmarshal_proto<M>(data: impl AsRef<[u8]>) -> Result<M>
-where
-    M: ProtoMessage + Default,
-{
-    M::decode(data.as_ref()).map_err(|err| Error::bad_request(format!("parse protobuf: {err}")))
-}
-
-/// Parses protobuf binary wire data into an existing generated message.
-pub fn unmarshal_proto_into<M>(data: impl AsRef<[u8]>, message: &mut M) -> Result<()>
-where
-    M: ProtoMessage,
-{
-    message
-        .merge(data.as_ref())
-        .map_err(|err| Error::bad_request(format!("parse protobuf: {err}")))
-}
 
 /// Converts a JSON object into a protobuf `Struct`.
 pub fn struct_from_json(value: serde_json::Value) -> Result<Struct> {
@@ -127,7 +95,7 @@ pub fn json_from_value(value: &Value) -> serde_json::Value {
 }
 
 /// Converts a `SystemTime` into a protobuf `Timestamp`.
-pub fn timestamp_from_system_time(value: SystemTime) -> Timestamp {
+pub(crate) fn timestamp_from_system_time(value: SystemTime) -> Timestamp {
     let total_nanos = match value.duration_since(UNIX_EPOCH) {
         Ok(duration) => duration_to_nanos(duration),
         Err(err) => -duration_to_nanos(err.duration()),
@@ -139,7 +107,7 @@ pub fn timestamp_from_system_time(value: SystemTime) -> Timestamp {
 }
 
 /// Converts a protobuf `Timestamp` into `SystemTime`.
-pub fn system_time_from_timestamp(value: &Timestamp) -> Result<SystemTime> {
+pub(crate) fn system_time_from_timestamp(value: &Timestamp) -> Result<SystemTime> {
     if !(0..1_000_000_000).contains(&value.nanos) {
         return Err(Error::bad_request("protobuf Timestamp nanos out of range"));
     }

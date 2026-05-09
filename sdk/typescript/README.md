@@ -86,9 +86,9 @@ can import generated schemas, services, and message types from
 `@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
 paths. Public IndexedDB conversion helpers are exported for lower-level
 datastore fixtures. The root package also exports protocol conversion helpers
-such as `structFromObject`, `structFromJsonObject`, `valueFromJson`, and
-`timestampFromDate` for protobuf well-known type fields used by workflow and
-agent payloads. Struct helpers accept plain JSON objects and reject unsupported
+such as `structFromObject`, `structFromJsonObject`, and `valueFromJson` for
+protobuf well-known type fields used by workflow and agent payloads. Struct
+helpers accept plain JSON objects and reject unsupported
 values like `Date`, `Map`, class instances, `undefined`, `bigint`, and
 non-finite numbers instead of silently dropping or stringifying them.
 Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
@@ -96,10 +96,9 @@ Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
 and native `Date` values, then produce the generated protocol messages used by
 workflow providers. Copy helpers such as `boundWorkflowTargetFromTarget`
 preserve wire shape without requiring provider code to import generated schemas
-or hand-build protobuf oneofs. Boundary helpers such as
-`marshalProtoDeterministic`, `unmarshalProto`, `marshalProtoJson`, and
-`unmarshalProtoJson` remain available for persistence keys, fixtures, and other
-interop code that must still serialize protocol-shaped values.
+or hand-build protobuf oneofs. The SDK does not expose generic protobuf
+marshal/unmarshal helpers; provider-facing APIs should accept native TypeScript
+values and keep protocol serialization inside transport adapters.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.

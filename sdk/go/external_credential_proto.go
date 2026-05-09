@@ -6,19 +6,19 @@ func externalCredentialFromProto(value *proto.ExternalCredential) (*ExternalCred
 	if value == nil {
 		return nil, nil
 	}
-	expiresAt, err := TimePtrFromTimestamp(value.GetExpiresAt())
+	expiresAt, err := timePtrFromTimestamp(value.GetExpiresAt())
 	if err != nil {
 		return nil, err
 	}
-	lastRefreshedAt, err := TimePtrFromTimestamp(value.GetLastRefreshedAt())
+	lastRefreshedAt, err := timePtrFromTimestamp(value.GetLastRefreshedAt())
 	if err != nil {
 		return nil, err
 	}
-	createdAt, err := TimePtrFromTimestamp(value.GetCreatedAt())
+	createdAt, err := timePtrFromTimestamp(value.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	updatedAt, err := TimePtrFromTimestamp(value.GetUpdatedAt())
+	updatedAt, err := timePtrFromTimestamp(value.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +336,7 @@ func resolveExternalCredentialResponseFromProto(value *proto.ResolveExternalCred
 	if value == nil {
 		return nil, nil
 	}
-	expiresAt, err := TimePtrFromTimestamp(value.GetExpiresAt())
+	expiresAt, err := timePtrFromTimestamp(value.GetExpiresAt())
 	if err != nil {
 		return nil, err
 	}

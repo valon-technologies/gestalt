@@ -80,12 +80,12 @@ The crate also exposes clients for sibling host services, including `Cache`,
 
 `AgentHost` includes plain-input helpers for listing tools, executing tools, and
 resolving connections during one turn. Use `gestalt::protocol` helpers such as
-`marshal_proto_deterministic`, `unmarshal_proto`, `struct_from_json`,
-`struct_from_map`, `json_from_struct`, `value_from_json`, `json_from_value`,
-`timestamp_from_system_time`, and `system_time_from_timestamp` for protobuf
-boundary and well-known type conversions, and use `gestalt::proto::v1` when
-transport fixtures need generated messages or service traits. The IndexedDB
-module also exposes JSON-named conversion helpers for
+`struct_from_json`, `struct_from_map`, `json_from_struct`, `value_from_json`,
+and `json_from_value` for well-known type conversions, and use
+`gestalt::proto::v1` when transport fixtures need generated messages or service
+traits. The SDK does not expose generic protobuf marshal/unmarshal or timestamp
+wrapper helpers.
+The IndexedDB module also exposes JSON-named conversion helpers for
 asserting datastore wire shapes.
 Workflow builders such as `new_bound_workflow_target`,
 `new_workflow_signal`, `new_bound_workflow_run`, and
@@ -133,10 +133,10 @@ The crate keeps generated bindings behind a higher-level authoring API:
   socket exposed by `gestaltd`.
 - `proto::v1` exposes generated protocol bindings for low-level integration
   work.
-- `protocol` converts JSON and `Serialize` values, `Struct`, `Value`,
-  `SystemTime`, and `Timestamp` without depending on private generated modules.
-  SDK clients that own request construction use these conversions so typed
-  structs can become protobuf `Struct` payloads without hand-building protos.
+- `protocol` converts JSON and `Serialize` values, `Struct`, and `Value`
+  without depending on private generated modules. SDK clients that own request
+  construction use these conversions so typed structs can become protobuf
+  `Struct` payloads without hand-building protos.
   Generic JSON payloads reject non-finite numbers, bytes, and non-string map
   keys instead of coercing them through `serde_json`.
 - Workflow builder inputs such as `BoundWorkflowPluginTargetInput`,

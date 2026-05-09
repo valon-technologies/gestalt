@@ -8,14 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-// ProtoMessage is the common interface implemented by generated protobuf messages.
-type ProtoMessage = gproto.Message
 
 // Struct aliases google.protobuf.Struct for low-level protocol interop.
 type Struct = structpb.Struct
@@ -26,66 +21,10 @@ type Value = structpb.Value
 // Timestamp aliases google.protobuf.Timestamp for low-level protocol interop.
 type Timestamp = timestamppb.Timestamp
 
-// ProtoJSONMarshalOptions configures MarshalProtoJSON.
-type ProtoJSONMarshalOptions struct {
-	UseProtoNames     bool
-	EmitUnpopulated   bool
-	EmitDefaultValues bool
-}
-
-// ProtoJSONUnmarshalOptions configures UnmarshalProtoJSON.
-type ProtoJSONUnmarshalOptions struct {
-	DiscardUnknown bool
-}
-
 var (
 	jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
 	timeType          = reflect.TypeOf(time.Time{})
 )
-
-// MarshalProtoDeterministic serializes a protobuf message with deterministic
-// map ordering. It is intended for hashes, persistence keys, and wire payloads
-// that must remain stable across process runs.
-func MarshalProtoDeterministic(msg ProtoMessage) ([]byte, error) {
-	if msg == nil {
-		return nil, nil
-	}
-	return gproto.MarshalOptions{Deterministic: true}.Marshal(msg)
-}
-
-// UnmarshalProto parses protobuf binary wire data into msg.
-func UnmarshalProto(data []byte, msg ProtoMessage) error {
-	return gproto.Unmarshal(data, msg)
-}
-
-// MarshalProtoJSON serializes a protobuf message using protojson.
-//
-// Mirrors MarshalProtoDeterministic by returning (nil, nil) for a nil
-// message. protojson.MarshalOptions.Marshal would otherwise panic when it
-// dereferences the nil interface via m.ProtoReflect().
-func MarshalProtoJSON(msg ProtoMessage, options ...ProtoJSONMarshalOptions) ([]byte, error) {
-	if msg == nil {
-		return nil, nil
-	}
-	var opt ProtoJSONMarshalOptions
-	if len(options) > 0 {
-		opt = options[0]
-	}
-	return (protojson.MarshalOptions{
-		UseProtoNames:     opt.UseProtoNames,
-		EmitUnpopulated:   opt.EmitUnpopulated,
-		EmitDefaultValues: opt.EmitDefaultValues,
-	}).Marshal(msg)
-}
-
-// UnmarshalProtoJSON parses protojson data into msg.
-func UnmarshalProtoJSON(data []byte, msg ProtoMessage, options ...ProtoJSONUnmarshalOptions) error {
-	var opt ProtoJSONUnmarshalOptions
-	if len(options) > 0 {
-		opt = options[0]
-	}
-	return (protojson.UnmarshalOptions{DiscardUnknown: opt.DiscardUnknown}).Unmarshal(data, msg)
-}
 
 // StructFromMap converts a Go map into a protobuf Struct.
 func StructFromMap(value map[string]any) (*structpb.Struct, error) {
@@ -129,14 +68,6 @@ func MapFromStruct(value *structpb.Struct) map[string]any {
 		return nil
 	}
 	return value.AsMap()
-}
-
-// CloneStruct returns a deep copy of a protobuf Struct.
-func CloneStruct(value *structpb.Struct) *structpb.Struct {
-	if value == nil {
-		return nil
-	}
-	return gproto.Clone(value).(*structpb.Struct)
 }
 
 // ValueFromAny converts a Go JSON-compatible value into a protobuf Value.
@@ -188,43 +119,16 @@ func MapFromValues(values map[string]*structpb.Value) map[string]any {
 	return out
 }
 
-// TimestampFromTime converts a Go time into a protobuf Timestamp.
-func TimestampFromTime(value time.Time) *timestamppb.Timestamp {
-	return timestamppb.New(value)
-}
-
-// TimestampFromTimePtr converts an optional Go time into an optional Timestamp.
-func TimestampFromTimePtr(value *time.Time) *timestamppb.Timestamp {
-	if value == nil {
-		return nil
-	}
-	return TimestampFromTime(*value)
-}
-
-// SetTime writes a native Go time into a generated protobuf timestamp field.
-//
-// Prefer native SDK constructors when creating new values. Use SetTime when
-// updating an existing generated message in place.
-func SetTime(target **timestamppb.Timestamp, value time.Time) {
-	*target = timestampFromNonZeroTime(value)
-}
-
-// SetOptionalTime writes an optional native Go time into a generated protobuf
-// timestamp field.
-func SetOptionalTime(target **timestamppb.Timestamp, value *time.Time) {
-	*target = timestampFromOptionalTime(value)
-}
-
-// TimeFromTimestamp converts a protobuf Timestamp into a Go time.
-func TimeFromTimestamp(value *timestamppb.Timestamp) time.Time {
+// timeFromTimestamp converts a protobuf Timestamp into a Go time.
+func timeFromTimestamp(value *timestamppb.Timestamp) time.Time {
 	if value == nil {
 		return time.Time{}
 	}
 	return value.AsTime()
 }
 
-// TimePtrFromTimestamp converts an optional protobuf Timestamp into an optional time.
-func TimePtrFromTimestamp(value *timestamppb.Timestamp) (*time.Time, error) {
+// timePtrFromTimestamp converts an optional protobuf Timestamp into an optional time.
+func timePtrFromTimestamp(value *timestamppb.Timestamp) (*time.Time, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -233,14 +137,6 @@ func TimePtrFromTimestamp(value *timestamppb.Timestamp) (*time.Time, error) {
 	}
 	out := value.AsTime()
 	return &out, nil
-}
-
-// CloneTimestamp returns a deep copy of a protobuf Timestamp.
-func CloneTimestamp(value *timestamppb.Timestamp) *timestamppb.Timestamp {
-	if value == nil {
-		return nil
-	}
-	return gproto.Clone(value).(*timestamppb.Timestamp)
 }
 
 func normalizeJSONObject(value any, path string) (map[string]any, error) {
