@@ -129,6 +129,24 @@ supply a token.
 | --- | --- |
 | `providerRepositories.<name>.url` | HTTP(S) or `file://` URL for a `gestaltd-provider-index` YAML file. |
 
+## `providerSnapshotRepositories`
+
+`providerSnapshotRepositories` declares immutable artifact roots for commit-pinned
+git provider sources. Snapshot repositories are used by `source.git` entries
+that set `artifactRepository`.
+
+```yaml
+providerSnapshotRepositories:
+  valon:
+    url: https://storage.googleapis.com/valon-gestalt-provider-snapshots
+    gestaltRef: 651a5c30feb995c9364c38f63d0d5c3880bc2055
+```
+
+| Field | Description |
+| --- | --- |
+| `providerSnapshotRepositories.<name>.url` | HTTP(S) root containing deterministic snapshot `provider-release.yaml` files and archives. |
+| `providerSnapshotRepositories.<name>.gestaltRef` | Optional full Gestalt commit SHA expected for snapshots from this repository. |
+
 ## `server`
 
 ```yaml
@@ -1144,7 +1162,7 @@ plugins:
 | `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
 | `ui` | Optional plugin-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
-| `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
+| `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the plugin manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
@@ -1186,6 +1204,38 @@ source:
 `gestaltd provider add` writes package sources by default. See
 [Provider Packages](/providers/packages) for repository, add, list, remove, and
 upgrade behavior.
+
+For commit-pinned first-party development, use a git source. `ref` must be a
+full commit SHA. `artifactMode: source` fetches and builds from the git source
+when prepared artifacts are missing:
+
+```yaml
+source:
+  git:
+    repo: https://github.com/acme/gestalt-providers.git
+    ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
+    path: plugins/github/manifest.yaml
+    artifactMode: source
+```
+
+To consume prebuilt snapshots, set `artifactRepository` and an explicit
+`artifactMode`. `require` never falls back to git or provider indexes:
+
+```yaml
+providerSnapshotRepositories:
+  acme:
+    url: https://storage.googleapis.com/acme-gestalt-provider-snapshots
+
+plugins:
+  github:
+    source:
+      git:
+        repo: https://github.com/acme/gestalt-providers.git
+        ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
+        path: plugins/github/manifest.yaml
+        artifactRepository: acme
+        artifactMode: require
+```
 
 For exact published releases, point at a `provider-release.yaml` URL:
 

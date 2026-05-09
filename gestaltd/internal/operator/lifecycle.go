@@ -70,12 +70,24 @@ type LockArchive struct {
 	SHA256 string `json:"sha256,omitempty"`
 }
 
+type LockSourceRef struct {
+	Type               string `json:"type,omitempty"`
+	Repo               string `json:"repo,omitempty"`
+	Ref                string `json:"ref,omitempty"`
+	Path               string `json:"path,omitempty"`
+	ArtifactRepository string `json:"artifactRepository,omitempty"`
+	ArtifactMode       string `json:"artifactMode,omitempty"`
+	ResolvedMode       string `json:"resolvedMode,omitempty"`
+	ResolvedGestaltRef string `json:"resolvedGestaltRef,omitempty"`
+}
+
 type LockEntry struct {
 	Fingerprint              string                       `json:"fingerprint"`
 	Package                  string                       `json:"package,omitempty"`
 	Kind                     string                       `json:"kind,omitempty"`
 	Runtime                  string                       `json:"runtime,omitempty"`
 	Source                   string                       `json:"source,omitempty"`
+	SourceRef                *LockSourceRef               `json:"sourceRef,omitempty"`
 	Version                  string                       `json:"version,omitempty"`
 	Archives                 map[string]LockArchive       `json:"archives,omitempty"`
 	Manifest                 string                       `json:"manifest"`
@@ -351,7 +363,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 				}
 			}
 			destDir := componentDestDir(paths, collection.kind, name)
-			lockEntry, err := l.writeComponentArtifact(ctx, paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
+			lockEntry, err := l.writeComponentArtifact(ctx, cfg, paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
 			if err != nil {
 				return nil, err
 			}
@@ -363,7 +375,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 			continue
 		}
 		destDir := componentDestDir(paths, config.HostProviderKindRuntime, name)
-		lockEntry, err := l.writeComponentArtifact(ctx, paths, providerManifestKind(config.HostProviderKindRuntime), name, destDir, &entry.ProviderEntry, entry.Config)
+		lockEntry, err := l.writeComponentArtifact(ctx, cfg, paths, providerManifestKind(config.HostProviderKindRuntime), name, destDir, &entry.ProviderEntry, entry.Config)
 		if err != nil {
 			return nil, err
 		}
@@ -384,7 +396,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 	}
 	for name, def := range cfg.Providers.IndexedDB {
 		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
+			entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
 			if err != nil {
 				return nil, err
 			}
@@ -393,7 +405,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 	}
 	for name, def := range cfg.Providers.S3 {
 		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
+			entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
 			if err != nil {
 				return nil, err
 			}
@@ -407,7 +419,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 					continue
 				}
 			}
-			uiEntry, err := l.writeNamedUIProviderArtifact(ctx, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+			uiEntry, err := l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
 			if err != nil {
 				return nil, err
 			}
@@ -592,6 +604,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			return
 		}
 		tokens[location] = entry.Source.Auth.Token
+		if entry.Source.IsGit() {
+			if snapshot, err := resolveGitSnapshotSource(cfg, entry); err == nil && snapshot.MetadataURL != "" {
+				tokens[snapshot.MetadataURL] = entry.Source.Auth.Token
+			}
+		}
 	}
 	for _, entry := range cfg.Plugins {
 		addEntry(entry)
@@ -957,7 +974,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 						return nil, err
 					}
 				} else {
-					entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
+					entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
 					if err != nil {
 						return nil, err
 					}
@@ -1669,6 +1686,9 @@ func providerSourceLockLocation(entry *config.ProviderEntry, configDir string) s
 	if entry.Source.IsPackage() {
 		return strings.TrimSpace(entry.Source.ResolvedPackageMetadataURL())
 	}
+	if entry.Source.IsGit() {
+		return canonicalGitSourceLocation(entry)
+	}
 	if entry.HasRemoteSource() {
 		return entry.SourceRemoteLocation()
 	}
@@ -1690,12 +1710,18 @@ func providerSourceFingerprintLocation(entry *config.ProviderEntry, configDir st
 			entry.Source.PackageVersionConstraint(),
 		}, "\x00")
 	}
+	if entry.Source.IsGit() {
+		return gitSourceFingerprintLocation(entry)
+	}
 	return providerSourceLockLocation(entry, configDir)
 }
 
 func lockEntrySourceMatchesProvider(paths lifecyclePaths, provider *config.ProviderEntry, entry LockEntry) bool {
 	if provider == nil {
 		return false
+	}
+	if provider.Source.IsGit() {
+		return gitSourceMatchesLockRef(provider, entry.SourceRef)
 	}
 	if provider.Source.IsPackage() {
 		if strings.TrimSpace(entry.Package) != provider.Source.PackageAddress() {
@@ -2258,7 +2284,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 		if !sourceBacked(entry) {
 			continue
 		}
-		lockEntry, err := l.lockProviderEntryForSource(ctx, paths, name, entry, configMap)
+		lockEntry, err := l.lockProviderEntryForSource(ctx, cfg, paths, name, entry, configMap)
 		if err != nil {
 			return nil, err
 		}
@@ -2268,15 +2294,15 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 	return written, nil
 }
 
-func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
+func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
 	configMap, err := config.NodeToMap(configNode)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 	}
-	return l.lockComponentEntryForSource(ctx, paths, kind, name, destDir, plugin, configMap)
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
 }
 
-func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	if plugin != nil && plugin.HasLocalSource() {
 		install, err := prepareLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
 		if err != nil {
@@ -2289,6 +2315,9 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths lifec
 			return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
 		}
 		return localLockEntryFromPreparedInstall(paths, kind, name, plugin, install)
+	}
+	if plugin != nil && plugin.HasGitSource() {
+		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
 	}
 
 	sourceLocation := plugin.SourceReleaseLocation()
@@ -2331,7 +2360,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths lifec
 	return entry, nil
 }
 
-func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	if plugin != nil && plugin.HasLocalSource() {
 		install, err := prepareLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), providerDestDir(paths, name))
 		if err != nil {
@@ -2344,6 +2373,9 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths lifecy
 			return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
 		}
 		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, install)
+	}
+	if plugin != nil && plugin.HasGitSource() {
+		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, plugin, configMap)
 	}
 
 	sourceLocation := plugin.SourceReleaseLocation()
@@ -2385,7 +2417,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths lifecy
 	return entry, nil
 }
 
-func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
+func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
 	if plugin == nil || !sourceBacked(plugin) {
 		return LockEntry{}, fmt.Errorf("%s requires source configuration", subject)
 	}
@@ -2414,6 +2446,9 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths life
 		}
 		entry.Fingerprint = fingerprint
 		return entry, nil
+	}
+	if plugin.HasGitSource() {
+		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, plugin, destDir, subject, configMap)
 	}
 	expectedPackage := plugin.SourceReleaseLocation()
 
@@ -3026,6 +3061,28 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 		}
 		return nil
 	}
+	if provider.HasGitSource() && found && len(entry.Archives) == 0 {
+		install, cleanup, _, err := l.stageGitSourceInstall(ctx, paths, kind, name, destDir, provider)
+		if err != nil {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return err
+		}
+		if !preparedManifestMatchesLock(entry, install.manifest) {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
+		}
+		if err := bind(install.manifestPath, install.manifest); err != nil {
+			if cleanup != nil {
+				_ = cleanup()
+			}
+			return err
+		}
+		return nil
+	}
 	if !found {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
 	}
@@ -3350,11 +3407,15 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				return "", preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
 			}
 			if len(lockEntry.Archives) == 0 {
-				if !provider.HasLocalSource() {
+				if !provider.HasLocalSource() && !provider.HasGitSource() {
 					return "", preparedArtifactStaleError(paths, "prepared artifact for %s is missing or stale", subject)
 				}
 				if stagedInstall == nil {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindUI, logicalName, provider.SourcePath(), destDir)
+					if provider.HasGitSource() {
+						stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindUI, logicalName, destDir, provider)
+					} else {
+						stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindUI, logicalName, provider.SourcePath(), destDir)
+					}
 					if err != nil {
 						return "", err
 					}
@@ -3478,11 +3539,15 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 		}
 		if len(entry.Archives) == 0 {
-			if !plugin.HasLocalSource() {
+			if !plugin.HasLocalSource() && !plugin.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 			}
 			if stagedInstall == nil {
-				stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), destDir)
+				if plugin.HasGitSource() {
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindPlugin, name, destDir, plugin)
+				} else {
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), destDir)
+				}
 				if err != nil {
 					return err
 				}
@@ -3574,11 +3639,15 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
 		}
 		if len(entry.Archives) == 0 {
-			if !plugin.HasLocalSource() {
+			if !plugin.HasLocalSource() && !plugin.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
 			}
 			if stagedInstall == nil {
-				stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
+				if plugin.HasGitSource() {
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, plugin)
+				} else {
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
+				}
 				if err != nil {
 					return err
 				}

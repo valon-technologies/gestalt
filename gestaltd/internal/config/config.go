@@ -48,19 +48,25 @@ const PluginConnectionAlias = core.PluginConnectionAlias
 const ConfigAPIVersion = "gestaltd.config/v5"
 
 type Config struct {
-	APIVersion           string                              `yaml:"apiVersion,omitempty"`
-	ProviderRepositories map[string]ProviderRepositoryConfig `yaml:"providerRepositories,omitempty"`
-	Server               ServerConfig                        `yaml:"server"`
-	Authorization        AuthorizationConfig                 `yaml:"authorization,omitempty"`
-	Connections          map[string]*ConnectionDef           `yaml:"connections,omitempty"`
-	Providers            ProvidersConfig                     `yaml:"providers"`
-	Runtime              RuntimeConfig                       `yaml:"runtime,omitempty"`
-	Workflows            WorkflowsConfig                     `yaml:"workflows,omitempty"`
-	Plugins              map[string]*ProviderEntry           `yaml:"plugins,omitempty"`
+	APIVersion                   string                                      `yaml:"apiVersion,omitempty"`
+	ProviderRepositories         map[string]ProviderRepositoryConfig         `yaml:"providerRepositories,omitempty"`
+	ProviderSnapshotRepositories map[string]ProviderSnapshotRepositoryConfig `yaml:"providerSnapshotRepositories,omitempty"`
+	Server                       ServerConfig                                `yaml:"server"`
+	Authorization                AuthorizationConfig                         `yaml:"authorization,omitempty"`
+	Connections                  map[string]*ConnectionDef                   `yaml:"connections,omitempty"`
+	Providers                    ProvidersConfig                             `yaml:"providers"`
+	Runtime                      RuntimeConfig                               `yaml:"runtime,omitempty"`
+	Workflows                    WorkflowsConfig                             `yaml:"workflows,omitempty"`
+	Plugins                      map[string]*ProviderEntry                   `yaml:"plugins,omitempty"`
 }
 
 type ProviderRepositoryConfig struct {
 	URL string `yaml:"url,omitempty"`
+}
+
+type ProviderSnapshotRepositoryConfig struct {
+	URL        string `yaml:"url,omitempty"`
+	GestaltRef string `yaml:"gestaltRef,omitempty"`
 }
 
 type ProvidersConfig struct {
@@ -143,6 +149,7 @@ type ServerProvidersConfig struct {
 //   - Builtin:  recognized host builtins such as source: "env" or "stdout"
 //   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
 //   - GitHub:   source: {githubRelease: {repo, tag, asset}}  -> ProviderSource{GitHubRelease: ...}
+//   - Git:      source: {git: {repo, ref, path}} -> ProviderSource{Git: ...}
 //   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."}
 //   - Local metadata: source: {path} or source: "./dist/provider-release.yaml"
 //     -> ProviderSource{metadataPath: "..."}
@@ -158,6 +165,7 @@ type ProviderSource struct {
 	resolvedVersion     string                  `yaml:"-"`
 	unsupported         string                  `yaml:"-"`
 	GitHubRelease       *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
+	Git                 *GitSourceDef           `yaml:"git,omitempty"`
 	Path                string                  `yaml:"path,omitempty"`
 	Auth                *SourceAuthDef          `yaml:"auth,omitempty"`
 }
@@ -168,6 +176,7 @@ type providerSourceYAML struct {
 	Package       string                  `yaml:"package,omitempty"`
 	Version       string                  `yaml:"version,omitempty"`
 	GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
+	Git           *GitSourceDef           `yaml:"git,omitempty"`
 	Path          string                  `yaml:"path,omitempty"`
 	Auth          *SourceAuthDef          `yaml:"auth,omitempty"`
 }
@@ -180,6 +189,14 @@ type GitHubReleaseSourceDef struct {
 	Repo  string `yaml:"repo,omitempty"`
 	Tag   string `yaml:"tag,omitempty"`
 	Asset string `yaml:"asset,omitempty"`
+}
+
+type GitSourceDef struct {
+	Repo               string `yaml:"repo,omitempty"`
+	Ref                string `yaml:"ref,omitempty"`
+	Path               string `yaml:"path,omitempty"`
+	ArtifactRepository string `yaml:"artifactRepository,omitempty"`
+	ArtifactMode       string `yaml:"artifactMode,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
@@ -202,6 +219,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 			return err
 		}
 		s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
+		s.Git = cloneGitSourceDef(raw.Git)
 		s.Path = strings.TrimSpace(raw.Path)
 		s.metadataURL = strings.TrimSpace(raw.URL)
 		s.packageRepo = strings.TrimSpace(raw.Repo)
@@ -215,6 +233,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
+	s.Git = cloneGitSourceDef(raw.Git)
 	s.Path = strings.TrimSpace(raw.Path)
 	s.metadataURL = strings.TrimSpace(raw.URL)
 	s.packageRepo = strings.TrimSpace(raw.Repo)
@@ -246,6 +265,12 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 			Auth:          auth,
 		}, nil
 	}
+	if s.Git != nil && s.Path == "" && s.metadataPath == "" && s.metadataURL == "" && s.packageName == "" && s.GitHubRelease == nil {
+		return providerSourceYAML{
+			Git:  cloneGitSourceDef(s.Git),
+			Auth: auth,
+		}, nil
+	}
 	if s.scalar != "" && s.Path == "" && s.metadataPath == "" && auth == nil {
 		return s.scalar, nil
 	}
@@ -258,6 +283,7 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 		Package:       strings.TrimSpace(s.packageName),
 		Version:       strings.TrimSpace(s.packageVersion),
 		GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease),
+		Git:           cloneGitSourceDef(s.Git),
 		Path:          s.Path,
 		Auth:          auth,
 	}, nil
@@ -266,6 +292,7 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 func (s ProviderSource) IsBuiltin() bool       { return s.Builtin != "" }
 func (s ProviderSource) IsMetadataURL() bool   { return s.metadataURL != "" }
 func (s ProviderSource) IsGitHubRelease() bool { return s.GitHubRelease != nil }
+func (s ProviderSource) IsGit() bool           { return s.Git != nil }
 func (s ProviderSource) IsPackage() bool       { return s.packageName != "" }
 func (s ProviderSource) IsLocal() bool         { return s.Path != "" }
 func (s ProviderSource) IsLocalMetadataPath() bool {
@@ -290,6 +317,9 @@ func (s *ProviderSource) SetResolvedPackage(metadataURL, version string) {
 func (s ProviderSource) GitHubReleaseSource() *GitHubReleaseSourceDef {
 	return cloneGitHubReleaseSourceDef(s.GitHubRelease)
 }
+func (s ProviderSource) GitSource() *GitSourceDef {
+	return cloneGitSourceDef(s.Git)
+}
 func (s ProviderSource) UnsupportedURL() string {
 	return s.unsupported
 }
@@ -299,6 +329,13 @@ func (s ProviderSource) GitHubReleaseLocation() string {
 		return ""
 	}
 	return s.GitHubRelease.Location()
+}
+
+func (s ProviderSource) GitLocation() string {
+	if s.Git == nil {
+		return ""
+	}
+	return s.Git.Location()
 }
 
 func NewMetadataSource(rawURL string) ProviderSource {
@@ -347,6 +384,10 @@ func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
 	return ProviderSource{metadataPath: strings.TrimSpace(rawPath)}
 }
 
+func NewGitSource(src GitSourceDef) ProviderSource {
+	return ProviderSource{Git: cloneGitSourceDef(&src)}
+}
+
 func cloneSourceAuthDef(src *SourceAuthDef) *SourceAuthDef {
 	if src == nil {
 		return nil
@@ -367,6 +408,19 @@ func cloneGitHubReleaseSourceDef(src *GitHubReleaseSourceDef) *GitHubReleaseSour
 	return &cloned
 }
 
+func cloneGitSourceDef(src *GitSourceDef) *GitSourceDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Repo = strings.TrimSpace(cloned.Repo)
+	cloned.Ref = strings.TrimSpace(cloned.Ref)
+	cloned.Path = strings.TrimSpace(cloned.Path)
+	cloned.ArtifactRepository = strings.TrimSpace(cloned.ArtifactRepository)
+	cloned.ArtifactMode = strings.TrimSpace(cloned.ArtifactMode)
+	return &cloned
+}
+
 func (g GitHubReleaseSourceDef) Location() string {
 	repo := strings.TrimSpace(g.Repo)
 	tag := strings.TrimSpace(g.Tag)
@@ -383,6 +437,41 @@ func (g GitHubReleaseSourceDef) Location() string {
 			"asset": []string{asset},
 		}.Encode(),
 	}).String()
+}
+
+func (g GitSourceDef) Location() string {
+	repo, ref, manifestPath := g.NormalizedLocationParts()
+	if repo == "" || ref == "" || manifestPath == "" {
+		return ""
+	}
+	return "git+" + repo + "@" + ref + "#" + manifestPath
+}
+
+// NormalizedLocationParts returns the canonical repo, ref, and manifest path used by Location.
+func (g GitSourceDef) NormalizedLocationParts() (repo, ref, manifestPath string) {
+	return normalizeGitLocationRepoURL(g.Repo),
+		strings.ToLower(strings.TrimSpace(g.Ref)),
+		normalizeGitLocationManifestPath(g.Path)
+}
+
+func normalizeGitLocationRepoURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Scheme != "" {
+		switch parsed.Scheme {
+		case "http", "https":
+			parsed.Scheme = strings.ToLower(parsed.Scheme)
+			parsed.Host = strings.ToLower(parsed.Host)
+			if strings.EqualFold(parsed.Host, "github.com") {
+				parsed.Path = strings.TrimSuffix(parsed.Path, ".git") + ".git"
+			}
+			return parsed.String()
+		}
+	}
+	return trimmed
+}
+
+func normalizeGitLocationManifestPath(raw string) string {
+	return path.Clean(filepath.ToSlash(strings.TrimSpace(raw)))
 }
 
 // ProviderEntry is the universal configuration for any provider.
@@ -1486,7 +1575,7 @@ func (e *ProviderEntry) HasReleaseMetadataSource() bool {
 }
 
 func (e *ProviderEntry) HasRemoteSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsPackage())
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsPackage() || e.Source.IsGit())
 }
 
 func (e *ProviderEntry) HasRemoteReleaseSource() bool {
@@ -1499,6 +1588,10 @@ func (e *ProviderEntry) HasLocalSource() bool {
 
 func (e *ProviderEntry) HasLocalReleaseSource() bool {
 	return e != nil && e.Source.IsLocalMetadataPath()
+}
+
+func (e *ProviderEntry) HasGitSource() bool {
+	return e != nil && e.Source.IsGit()
 }
 
 func (e *ProviderEntry) SourceMetadataURL() string {
@@ -1524,6 +1617,9 @@ func (e *ProviderEntry) SourceRemoteLocation() string {
 	if e.Source.IsPackage() {
 		return e.Source.ResolvedPackageMetadataURL()
 	}
+	if e.Source.IsGit() {
+		return e.Source.GitLocation()
+	}
 	return ""
 }
 
@@ -1542,6 +1638,9 @@ func (e *ProviderEntry) SourceReleaseLocation() string {
 	}
 	if e.Source.IsPackage() {
 		return e.Source.ResolvedPackageMetadataURL()
+	}
+	if e.Source.IsGit() {
+		return e.Source.GitLocation()
 	}
 	return ""
 }
@@ -3145,7 +3244,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.IsPackage() || entry.Source.UnsupportedURL() != "" {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsGit() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.IsPackage() || entry.Source.UnsupportedURL() != "" {
 			continue
 		}
 		entry.Source.Builtin = builtin

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -36,6 +37,299 @@ const (
 	testBinary  = "fake-binary-content"
 )
 
+func TestLifecycleGitSourceBuildLockSyncContract(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "providers")
+	const packageSource = "github.com/acme/providers/plugins/alpha"
+	writeSourceProviderTree(t, filepath.Join(repoDir, "plugins", "alpha"), packageSource, "1.2.3", "alpha-binary")
+	runGitTestCommand(t, repoDir, "init")
+	runGitTestCommand(t, repoDir, "config", "user.email", "test@example.com")
+	runGitTestCommand(t, repoDir, "config", "user.name", "Test")
+	runGitTestCommand(t, repoDir, "add", ".")
+	runGitTestCommand(t, repoDir, "commit", "-m", "provider")
+	ref := strings.TrimSpace(runGitTestOutput(t, repoDir, "rev-parse", "HEAD"))
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      git:
+        repo: file://%s
+        ref: %s
+        path: plugins/alpha/manifest.yaml
+        artifactMode: source
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir), filepath.ToSlash(repoDir), ref)
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.Providers["alpha"]
+	if entry.SourceRef == nil {
+		t.Fatal("sourceRef missing")
+	}
+	if entry.SourceRef.ResolvedMode != gitResolvedModeSource {
+		t.Fatalf("sourceRef.resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSource)
+	}
+	if entry.SourceRef.Ref != ref {
+		t.Fatalf("sourceRef.ref = %q, want %q", entry.SourceRef.Ref, ref)
+	}
+	if entry.Source != "git+file://"+repoDir+"@"+ref+"#plugins/alpha/manifest.yaml" {
+		t.Fatalf("source = %q", entry.Source)
+	}
+	if entry.Version != "1.2.3" {
+		t.Fatalf("version = %q, want 1.2.3", entry.Version)
+	}
+	if len(entry.Archives) != 0 {
+		t.Fatalf("source-built git lock archives = %+v, want none", entry.Archives)
+	}
+
+	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")); err != nil {
+		t.Fatalf("remove prepared provider: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared provider: %v", err)
+	}
+	preparedManifest := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha", "manifest.yaml")
+	if _, err := os.Stat(preparedManifest); err != nil {
+		t.Fatalf("prepared manifest not restored: %v", err)
+	}
+}
+
+func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		ref           = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		gestaltRef    = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		packageSource = "github.com/acme/providers/plugins/alpha"
+		version       = "0.0.0-snapshot.gaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	)
+	archivePath := buildV2Archive(t, dir, packageSource, version, "snapshot-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archivePath)
+	if err != nil {
+		t.Fatalf("archive digest: %v", err)
+	}
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/provider-release.yaml":
+			metadataCount.Add(1)
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   "alpha.tar.gz",
+						SHA256: archiveSHA,
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				t.Fatalf("marshal metadata: %v", err)
+			}
+			_, _ = w.Write(data)
+		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/alpha.tar.gz":
+			archiveCount.Add(1)
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+providerSnapshotRepositories:
+  valon:
+    url: %s/snapshots
+    gestaltRef: %s
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      git:
+        repo: https://github.com/acme/providers.git
+        ref: %s
+        path: plugins/alpha/manifest.yaml
+        artifactRepository: valon
+        artifactMode: require
+`, srv.URL, gestaltRef, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "snapshot.db")), filepath.ToSlash(artifactsDir), ref)
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.Providers["alpha"]
+	if entry.SourceRef == nil {
+		t.Fatal("sourceRef missing")
+	}
+	if entry.SourceRef.ResolvedMode != gitResolvedModeSnapshot {
+		t.Fatalf("resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSnapshot)
+	}
+	if entry.SourceRef.ResolvedGestaltRef != gestaltRef {
+		t.Fatalf("resolvedGestaltRef = %q, want %q", entry.SourceRef.ResolvedGestaltRef, gestaltRef)
+	}
+	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/plugins/alpha/provider-release.yaml" {
+		t.Fatalf("source = %q", entry.Source)
+	}
+	if entry.Version != version {
+		t.Fatalf("version = %q, want %q", entry.Version, version)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive count = %d, want 1", got)
+	}
+}
+
+func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		ref           = "cccccccccccccccccccccccccccccccccccccccc"
+		gestaltRef    = "dddddddddddddddddddddddddddddddddddddddd"
+		packageSource = "github.com/acme/providers/secrets/google"
+		version       = "0.0.0-snapshot.gcccccccccccccccccccccccccccccccccccccccc"
+	)
+	archivePath := buildV2ArchiveForKind(t, dir, providermanifestv1.KindSecrets, packageSource, version, artifactRelPath("secrets-provider"), "secrets-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archivePath)
+	if err != nil {
+		t.Fatalf("archive digest: %v", err)
+	}
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml":
+			metadataCount.Add(1)
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindSecrets,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   "secrets.tar.gz",
+						SHA256: archiveSHA,
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				t.Fatalf("marshal metadata: %v", err)
+			}
+			_, _ = w.Write(data)
+		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/secrets.tar.gz":
+			archiveCount.Add(1)
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+providerSnapshotRepositories:
+  valon:
+    url: %s/snapshots
+    gestaltRef: %s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey:
+    secret:
+      provider: secrets
+      name: encryption-key
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+  secrets:
+    secrets:
+      source:
+        git:
+          repo: https://github.com/acme/providers.git
+          ref: %s
+          path: secrets/google/manifest.yaml
+          artifactRepository: valon
+          artifactMode: require
+`, srv.URL, gestaltRef, filepath.ToSlash(artifactsDir), filepath.ToSlash(indexedDBManifestPath), filepath.Join(dir, "secrets.db"), ref)
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.Secrets["secrets"]
+	if entry.SourceRef == nil {
+		t.Fatal("secrets sourceRef missing")
+	}
+	if entry.SourceRef.ResolvedMode != gitResolvedModeSnapshot {
+		t.Fatalf("secrets resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSnapshot)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive count = %d, want 1", got)
+	}
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -47,6 +341,61 @@ func sha256hex(data string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create source provider dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "provider"), []byte(binaryContent), 0o755); err != nil {
+		t.Fatalf("write provider binary: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: alpha\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("write catalog: %v", err)
+	}
+	manifest := &providermanifestv1.Manifest{
+		Source:      source,
+		Version:     version,
+		Kind:        providermanifestv1.KindPlugin,
+		DisplayName: "Alpha",
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   "provider",
+			SHA256: sha256hex(binaryContent),
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+	}
+	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), data, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+}
+
+func runGitTestCommand(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+}
+
+func runGitTestOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out)
+}
+
 func artifactRelPath(binary string) string {
 	return filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, binary))
 }
@@ -56,6 +405,45 @@ func buildV2Archive(t *testing.T, dir, source, version, binaryContent string) st
 
 	artPath := artifactRelPath("provider")
 	return buildV2ArchiveForArtifact(t, dir, source, version, artPath, "", binaryContent)
+}
+
+func buildV2ArchiveForKind(t *testing.T, dir, kind, source, version, artifactPath, binaryContent string) string {
+	t.Helper()
+
+	safeName := strings.NewReplacer("/", "-", ".", "_").Replace(kind + "-" + artifactPath + "-" + binaryContent)
+	srcDir := filepath.Join(dir, safeName+"-src")
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artifactPath))), 0o755); err != nil {
+		t.Fatalf("create provider src dir: %v", err)
+	}
+	manifest := &providermanifestv1.Manifest{
+		Source:  source,
+		Version: version,
+		Kind:    kind,
+		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: sha256hex(binaryContent),
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}
+	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "manifest.json"), manifestBytes, 0o644); err != nil {
+		t.Fatalf("write provider manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artifactPath)), []byte(binaryContent), 0o755); err != nil {
+		t.Fatalf("write provider artifact: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, safeName+".tar.gz")
+	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir %s: %v", kind, err)
+	}
+	return archivePath
 }
 
 func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath, libc, binaryContent string) string {
