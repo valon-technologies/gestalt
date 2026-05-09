@@ -33,6 +33,7 @@ const (
 	workflowSystemToolSchedulesDelete   = "schedules.delete"
 	workflowSystemToolSchedulesPause    = "schedules.pause"
 	workflowSystemToolSchedulesResume   = "schedules.resume"
+	workflowSystemToolRunsStart         = "runs.start"
 	workflowSystemToolRunsList          = "runs.list"
 	workflowSystemToolRunsGet           = "runs.get"
 )
@@ -123,6 +124,12 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 		Name:             "workflow_schedules_resume",
 		Description:      "Resume a workflow schedule owned by the current caller.",
 		ParametersSchema: workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{"scheduleId": workflowSystemToolStringSchema("Schedule ID.")}),
+	},
+	workflowSystemToolRunsStart: {
+		Operation:        workflowSystemToolRunsStart,
+		Name:             "workflow_runs_start",
+		Description:      "Start a one-off workflow run for a delegated agent target or an existing workflow definition.",
+		ParametersSchema: workflowSystemToolStartRunSchema(),
 	},
 	workflowSystemToolRunsList: {
 		Operation:        workflowSystemToolRunsList,
@@ -257,6 +264,8 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 			return nil, err
 		}
 		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
+	case workflowSystemToolRunsStart:
+		return t.executeStartRun(ctx, req)
 	case workflowSystemToolRunsList:
 		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.list"); err != nil {
 			return nil, err
@@ -473,6 +482,93 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"schedule": workflowSystemToolScheduleInfo(schedule)})
 }
 
+func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
+	args := req.Arguments
+	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.runs.start", "provider", "workflowKey", "target", "definitionId", "deliverResultToCaller"); err != nil {
+		return nil, err
+	}
+	deliverResultToCaller, _, err := workflowSystemToolBoolArgPresent(args, "deliverResultToCaller", "workflow.runs.start")
+	if err != nil {
+		return nil, err
+	}
+	definitionID := workflowSystemToolStringArg(args, "definitionId")
+	targetValue, hasTarget := args["target"]
+	if definitionID == "" && !hasTarget {
+		return nil, fmt.Errorf("%w: target or definitionId is required", invocation.ErrInvalidInvocation)
+	}
+	if definitionID != "" && hasTarget {
+		return nil, fmt.Errorf("%w: target and definitionId cannot both be set", invocation.ErrInvalidInvocation)
+	}
+	if definitionID != "" && deliverResultToCaller {
+		return nil, fmt.Errorf("%w: deliverResultToCaller is only supported with direct agent targets", invocation.ErrInvalidInvocation)
+	}
+
+	var target coreworkflow.Target
+	startTarget := coreworkflow.Target{}
+	var scopedPrincipal *principal.Principal
+	var permissions []core.AccessPermission
+	if definitionID != "" {
+		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
+		definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil || definition.Definition == nil {
+			return nil, core.ErrNotFound
+		}
+		target = definition.Definition.Target
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions = definition.Definition.Permissions
+		if permissions == nil {
+			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		}
+		scopedPrincipal, err = workflowSystemToolExactPermissionsPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		target, err = workflowSystemToolTargetFromValue(targetValue)
+		if err != nil {
+			return nil, err
+		}
+		if target.Plugin != nil {
+			return nil, fmt.Errorf("%w: workflow.runs.start only supports direct agent targets", invocation.ErrInvalidInvocation)
+		}
+		workflowSystemToolInheritAgentToolRefs(req, &target)
+		if deliverResultToCaller {
+			if err := workflowSystemToolApplyInheritedOutputDelivery(req, &target); err != nil {
+				return nil, err
+			}
+		}
+		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
+			return nil, err
+		}
+		permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
+		scopedPrincipal, err = workflowSystemToolScopedPrincipal(req.Principal, permissions, workflowSystemToolTrustedAgentProvider(req, target))
+		if err != nil {
+			return nil, err
+		}
+		startTarget = target
+	}
+	run, err := t.manager.StartRun(ctx, scopedPrincipal, workflowmanager.RunStart{
+		ProviderName:     workflowSystemToolStringArg(args, "provider"),
+		Target:           startTarget,
+		DefinitionID:     definitionID,
+		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:      workflowSystemToolStringArg(args, "workflowKey"),
+		CallerPluginName: workflowSystemToolCallerScope(req),
+		Permissions:      permissions,
+	})
+	if err != nil {
+		return nil, err
+	}
+	slog.InfoContext(ctx, "agent workflow system tool started run", workflowSystemToolRunLogAttrs(req, run)...)
+	return workflowSystemToolJSONResponse(http.StatusCreated, map[string]any{"run": workflowSystemRunInfo(run)})
+}
+
 func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req agentSystemToolExecutionRequest) (*coreagent.ExecuteToolResponse, error) {
 	args := req.Arguments
 	if err := workflowSystemToolRejectUnknownKeys(args, "workflow.schedules.update", "scheduleId", "provider", "cron", "timezone", "paused", "target", "definitionId"); err != nil {
@@ -687,6 +783,30 @@ func workflowSystemToolScheduleLogAttrs(req agentSystemToolExecutionRequest, sch
 	return attrs
 }
 
+func workflowSystemToolRunLogAttrs(req agentSystemToolExecutionRequest, run *workflowmanager.ManagedRun) []any {
+	attrs := workflowSystemToolBaseLogAttrs(req)
+	if run == nil {
+		return attrs
+	}
+	attrs = append(attrs, "workflow_provider", strings.TrimSpace(run.ProviderName))
+	if run.Run != nil {
+		attrs = append(attrs,
+			"workflow_run_id", strings.TrimSpace(run.Run.ID),
+			"workflow_run_status", strings.TrimSpace(string(run.Run.Status)),
+			"workflow_run_execution_ref", strings.TrimSpace(run.Run.ExecutionRef),
+			"workflow_target", workflowTargetContext(run.Run.Target),
+		)
+	}
+	if run.ExecutionRef != nil {
+		attrs = append(attrs,
+			"workflow_execution_ref", strings.TrimSpace(run.ExecutionRef.ID),
+			"workflow_source_definition_id", strings.TrimSpace(run.ExecutionRef.SourceDefinitionID),
+			"workflow_caller_plugin", strings.TrimSpace(run.ExecutionRef.CallerPluginName),
+		)
+	}
+	return attrs
+}
+
 func workflowSystemToolCallerScope(req agentSystemToolExecutionRequest) string {
 	if callerPluginName := strings.TrimSpace(req.CallerPluginName); callerPluginName != "" {
 		return callerPluginName
@@ -743,6 +863,25 @@ func workflowSystemToolCreateScheduleSchema() map[string]any {
 	})
 }
 
+func workflowSystemToolStartRunSchema() map[string]any {
+	common := map[string]any{
+		"provider":    workflowSystemToolStringSchema("Workflow provider name."),
+		"workflowKey": workflowSystemToolStringSchema("Workflow key."),
+	}
+	targetProperties := maps.Clone(common)
+	targetProperties["target"] = workflowSystemToolAgentTargetSchema()
+	targetProperties["deliverResultToCaller"] = map[string]any{"type": "boolean", "description": "When true, deliver the child agent's final result back to the current caller."}
+	definitionProperties := maps.Clone(common)
+	definitionProperties["definitionId"] = workflowSystemToolStringSchema("Workflow definition ID to run.")
+	return map[string]any{
+		"type": "object",
+		"oneOf": []any{
+			workflowSystemToolObjectSchema([]string{"target"}, targetProperties),
+			workflowSystemToolObjectSchema([]string{"definitionId"}, definitionProperties),
+		},
+	}
+}
+
 func workflowSystemToolUpdateScheduleSchema() map[string]any {
 	return workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{
 		"scheduleId":   workflowSystemToolStringSchema("Schedule ID."),
@@ -779,17 +918,27 @@ func workflowSystemToolTargetSchema() map[string]any {
 			"instance":   workflowSystemToolStringSchema("Instance name."),
 			"input":      map[string]any{"type": "object"},
 		}),
-		"agent": workflowSystemToolObjectSchema([]string{}, map[string]any{
-			"provider":       workflowSystemToolStringSchema("Agent provider name."),
-			"model":          workflowSystemToolStringSchema("Agent model."),
-			"prompt":         workflowSystemToolStringSchema("Agent prompt."),
-			"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
-			"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Agent tool references. If omitted, the created workflow agent inherits the current agent turn's tool references."},
-			"responseSchema": map[string]any{"type": "object"},
-			"metadata":       map[string]any{"type": "object"},
-			"modelOptions":   map[string]any{"type": "object"},
-			"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
-		}),
+		"agent": workflowSystemToolAgentSchema(),
+	})
+}
+
+func workflowSystemToolAgentTargetSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"agent"}, map[string]any{
+		"agent": workflowSystemToolAgentSchema(),
+	})
+}
+
+func workflowSystemToolAgentSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{}, map[string]any{
+		"provider":       workflowSystemToolStringSchema("Agent provider name."),
+		"model":          workflowSystemToolStringSchema("Agent model."),
+		"prompt":         workflowSystemToolStringSchema("Agent prompt."),
+		"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+		"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Agent tool references. If omitted, the created workflow agent inherits the current agent turn's tool references."},
+		"responseSchema": map[string]any{"type": "object"},
+		"metadata":       map[string]any{"type": "object"},
+		"modelOptions":   map[string]any{"type": "object"},
+		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
 	})
 }
 
@@ -907,6 +1056,20 @@ func workflowSystemToolInheritAgentToolRefs(req agentSystemToolExecutionRequest,
 		return
 	}
 	target.Agent.ToolRefs = workflowSystemToolInheritedAgentToolRefs(req)
+}
+
+func workflowSystemToolApplyInheritedOutputDelivery(req agentSystemToolExecutionRequest, target *coreworkflow.Target) error {
+	if target == nil || target.Agent == nil {
+		return fmt.Errorf("%w: deliverResultToCaller requires a direct agent target", invocation.ErrInvalidInvocation)
+	}
+	if target.Agent.OutputDelivery != nil || target.Agent.SessionReadyDelivery != nil {
+		return fmt.Errorf("%w: deliverResultToCaller cannot override an agent delivery target", invocation.ErrInvalidInvocation)
+	}
+	if req.InheritedOutputDelivery == nil {
+		return fmt.Errorf("%w: no caller output delivery is available for this turn", invocation.ErrInvalidInvocation)
+	}
+	target.Agent.OutputDelivery = coreworkflow.CloneOutputDelivery(req.InheritedOutputDelivery)
+	return nil
 }
 
 func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionRequest) []coreagent.ToolRef {
@@ -1215,6 +1378,12 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultA
 			if strings.TrimSpace(ref.System) == "" {
 				addOperation(ref.Plugin, ref.Operation)
 			}
+		}
+		if delivery := target.Agent.OutputDelivery; delivery != nil {
+			addOperation(delivery.Target.PluginName, delivery.Target.Operation)
+		}
+		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
+			addOperation(delivery.Target.PluginName, delivery.Target.Operation)
 		}
 	}
 	if len(operationsByPlugin) == 0 {

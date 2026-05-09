@@ -193,6 +193,7 @@ type workflowRuntimeAgentManagerStub struct {
 	createSessionRequests           []coreagent.ManagerCreateSessionRequest
 	createSessionDeadlines          []time.Duration
 	createTurnRequests              []coreagent.ManagerCreateTurnRequest
+	createTurnInheritedDeliveries   []*coreworkflow.OutputDelivery
 	createTurnDeadlines             []time.Duration
 	createTurnProviderCallDeadlines []time.Duration
 	getTurnDeadlines                []time.Duration
@@ -221,6 +222,7 @@ func (m *workflowRuntimeAgentManagerStub) CreateSession(ctx context.Context, _ *
 func (m *workflowRuntimeAgentManagerStub) CreateTurn(ctx context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	m.events = append(m.events, "create-turn")
 	m.createTurnRequests = append(m.createTurnRequests, req)
+	m.createTurnInheritedDeliveries = append(m.createTurnInheritedDeliveries, agentmanager.InheritedOutputDeliveryFromContext(ctx))
 	m.createTurnDeadlines = append(m.createTurnDeadlines, remainingDeadline(ctx))
 	callCtx, cancel := runtimehost.ProviderWorkflowAgentCallContext(ctx)
 	m.createTurnProviderCallDeadlines = append(m.createTurnProviderCallDeadlines, remainingDeadline(callCtx))
@@ -882,6 +884,91 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	}
 	if gotCredentialMode != "" {
 		t.Fatalf("delivery credential mode without override = %q, want empty", gotCredentialMode)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetCarriesMaterializedInheritedOutputDelivery(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: http.StatusOK}, nil
+		},
+	})
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-delivery-inherit",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "Start a child workflow if this takes a while.",
+			OutputDelivery: &coreworkflow.OutputDelivery{
+				Target: coreworkflow.PluginTarget{
+					PluginName: "notification",
+					Operation:  "reply",
+					Input:      map[string]any{"format": "plain"},
+				},
+				CredentialMode: core.ConnectionModeNone,
+				InputBindings: []coreworkflow.OutputBinding{
+					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
+					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
+				},
+			},
+		}},
+		Signals: []coreworkflow.Signal{{
+			ID:       "signal-1",
+			Payload:  map[string]any{"reply_ref": "signed-parent-reply-ref"},
+			Metadata: map[string]any{"event": map[string]any{"type": "app_mention"}},
+		}},
+	}
+	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentManager.createTurnInheritedDeliveries) != 1 {
+		t.Fatalf("inherited deliveries = %d, want 1", len(agentManager.createTurnInheritedDeliveries))
+	}
+	delivery := agentManager.createTurnInheritedDeliveries[0]
+	if delivery == nil {
+		t.Fatal("inherited delivery is nil")
+	}
+	if delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" || delivery.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("inherited delivery target = %#v", delivery)
+	}
+	if got := delivery.InputBindings[0].Value.AgentOutput; got != "text" {
+		t.Fatalf("agent output binding = %q, want text", got)
+	}
+	if got := delivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
+		t.Fatalf("reply_ref binding = %#v, want signed-parent-reply-ref", got)
+	}
+	if got := delivery.InputBindings[2].Value.Literal; got != "app_mention" {
+		t.Fatalf("event_type binding = %#v, want app_mention", got)
+	}
+	if got := delivery.InputBindings[3].Value.AgentSession; got != "id" {
+		t.Fatalf("agent session binding = %q, want id", got)
+	}
+}
+
+func TestWorkflowRuntimeInheritedOutputDeliverySkipsNilSignalValues(t *testing.T) {
+	t.Parallel()
+
+	delivery := workflowInheritedOutputDelivery(&coreworkflow.OutputDelivery{
+		Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+		InputBindings: []coreworkflow.OutputBinding{
+			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
+		},
+	}, &coreworkflow.Signal{Payload: map[string]any{"reply_ref": nil}})
+	if delivery != nil {
+		t.Fatalf("delivery = %#v, want nil for unmaterializable nil signal value", delivery)
 	}
 }
 

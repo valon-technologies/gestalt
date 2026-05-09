@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -956,7 +957,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource)
+	inheritedOutputDelivery := InheritedOutputDeliveryFromContext(ctx)
+	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource, inheritedOutputDelivery)
 	if err != nil {
 		return nil, err
 	}
@@ -1687,26 +1689,29 @@ func agentProviderReturnedNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
 	if m == nil || m.runGrants == nil {
 		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
 	subject := agentSubjectFromPrincipal(p)
+	permissions := agentRunPermissions(ctx, p, callerPluginName, toolRefs)
+	permissions = agentRunPermissionsWithInheritedOutputDelivery(p, permissions, inheritedOutputDelivery)
 	return m.runGrants.Mint(agentgrant.Grant{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		TurnID:              turnID,
-		CallerPluginName:    strings.TrimSpace(callerPluginName),
-		SubjectID:           subject.SubjectID,
-		SubjectKind:         subject.SubjectKind,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-		Permissions:         agentRunPermissions(ctx, p, callerPluginName, toolRefs),
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		Tools:               append([]coreagent.Tool(nil), tools...),
-		ToolSource:          toolSource,
-		Connections:         m.agentConnectionBindings(providerName),
+		ProviderName:            providerName,
+		SessionID:               sessionID,
+		TurnID:                  turnID,
+		CallerPluginName:        strings.TrimSpace(callerPluginName),
+		SubjectID:               subject.SubjectID,
+		SubjectKind:             subject.SubjectKind,
+		CredentialSubjectID:     subject.CredentialSubjectID,
+		DisplayName:             subject.DisplayName,
+		AuthSource:              subject.AuthSource,
+		Permissions:             permissions,
+		ToolRefs:                append([]coreagent.ToolRef(nil), toolRefs...),
+		Tools:                   append([]coreagent.Tool(nil), tools...),
+		ToolSource:              toolSource,
+		Connections:             m.agentConnectionBindings(providerName),
+		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(inheritedOutputDelivery),
 	})
 }
 
@@ -3334,6 +3339,38 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPlug
 		return nil
 	}
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
+}
+
+func agentRunPermissionsWithInheritedOutputDelivery(p *principal.Principal, permissions []core.AccessPermission, delivery *coreworkflow.OutputDelivery) []core.AccessPermission {
+	if permissions == nil || delivery == nil {
+		return permissions
+	}
+	pluginName := strings.TrimSpace(delivery.Target.PluginName)
+	operation := strings.TrimSpace(delivery.Target.Operation)
+	if pluginName == "" || operation == "" || !principal.AllowsOperationPermission(p, pluginName, operation) {
+		return permissions
+	}
+	compiled := principal.CompilePermissions(permissions)
+	if compiled == nil {
+		compiled = principal.PermissionSet{}
+	}
+	addAgentRunPermission(compiled, pluginName, operation)
+	return principal.PermissionsToAccessPermissions(compiled)
+}
+
+func addAgentRunPermission(permissions principal.PermissionSet, pluginName, operation string) {
+	if permissions == nil {
+		return
+	}
+	if operations, ok := permissions[pluginName]; ok && operations == nil {
+		return
+	}
+	operations := permissions[pluginName]
+	if operations == nil {
+		operations = map[string]struct{}{}
+		permissions[pluginName] = operations
+	}
+	operations[operation] = struct{}{}
 }
 
 func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.ToolRef) ([]core.AccessPermission, bool) {
