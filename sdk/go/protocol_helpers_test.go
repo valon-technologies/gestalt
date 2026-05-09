@@ -45,3 +45,29 @@ func TestProtoBoundaryHelpers(t *testing.T) {
 		t.Fatalf("fromJSON = %#v", got)
 	}
 }
+
+func TestMarshalProtoHelpersNilMessage(t *testing.T) {
+	detBytes, err := MarshalProtoDeterministic(nil)
+	if err != nil {
+		t.Fatalf("MarshalProtoDeterministic(nil): %v", err)
+	}
+	if detBytes != nil {
+		t.Fatalf("MarshalProtoDeterministic(nil) bytes = %v, want nil", detBytes)
+	}
+
+	jsonBytes, err := MarshalProtoJSON(nil)
+	if err != nil {
+		t.Fatalf("MarshalProtoJSON(nil): %v", err)
+	}
+	if jsonBytes != nil {
+		t.Fatalf("MarshalProtoJSON(nil) bytes = %v, want nil", jsonBytes)
+	}
+
+	jsonBytes, err = MarshalProtoJSON(nil, ProtoJSONMarshalOptions{UseProtoNames: true})
+	if err != nil {
+		t.Fatalf("MarshalProtoJSON(nil, opts): %v", err)
+	}
+	if jsonBytes != nil {
+		t.Fatalf("MarshalProtoJSON(nil, opts) bytes = %v, want nil", jsonBytes)
+	}
+}
