@@ -239,6 +239,25 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	if value := gestalt.TimestampFromTimePtr(nil); value != nil {
 		t.Fatalf("TimestampFromTimePtr(nil) = %#v, want nil", value)
 	}
+	var setTimeValue *timestamppb.Timestamp
+	setTimeWant := time.Unix(1700, 25).UTC()
+	gestalt.SetTime(&setTimeValue, setTimeWant)
+	if setTimeValue == nil || !setTimeValue.AsTime().Equal(setTimeWant) {
+		t.Fatalf("SetTime = %#v, want %v", setTimeValue, setTimeWant)
+	}
+	gestalt.SetTime(&setTimeValue, time.Time{})
+	if setTimeValue != nil {
+		t.Fatalf("SetTime(zero) = %#v, want nil", setTimeValue)
+	}
+	setOptionalWant := time.Unix(1800, 0).UTC()
+	gestalt.SetOptionalTime(&setTimeValue, &setOptionalWant)
+	if setTimeValue == nil || !setTimeValue.AsTime().Equal(setOptionalWant) {
+		t.Fatalf("SetOptionalTime = %#v, want %v", setTimeValue, setOptionalWant)
+	}
+	gestalt.SetOptionalTime(&setTimeValue, nil)
+	if setTimeValue != nil {
+		t.Fatalf("SetOptionalTime(nil) = %#v, want nil", setTimeValue)
+	}
 	if value, err := gestalt.TimePtrFromTimestamp(nil); err != nil || value != nil {
 		t.Fatalf("TimePtrFromTimestamp(nil) = %#v, %v; want nil, nil", value, err)
 	}
