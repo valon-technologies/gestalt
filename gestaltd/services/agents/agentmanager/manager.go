@@ -827,7 +827,7 @@ func (m *Manager) listSharedAgentSessions(ctx context.Context, p *principal.Prin
 	out := make([]*coreagent.Session, 0)
 	seen := map[string]struct{}{}
 	for {
-		resp, err := m.authorizationProvider.SearchResources(ctx, &core.ResourceSearchRequest{
+		resp, err := m.searchSharedAgentSessionResources(ctx, &core.ResourceSearchRequest{
 			Subject: &core.SubjectRef{
 				Type: authorization.ProviderSubjectTypeSubject,
 				Id:   subjectID,
@@ -870,6 +870,22 @@ func (m *Manager) listSharedAgentSessions(ctx context.Context, p *principal.Prin
 			return out
 		}
 	}
+}
+
+func (m *Manager) searchSharedAgentSessionResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	if m == nil || m.authorizationProvider == nil {
+		return &core.ResourceSearchResponse{}, nil
+	}
+	if effective, ok := m.authorizationProvider.(core.AuthorizationProviderEffectiveSearch); ok {
+		resp, err := effective.EffectiveSearchResources(ctx, req)
+		if err == nil {
+			return resp, nil
+		}
+		if status.Code(err) != codes.Unimplemented {
+			return nil, err
+		}
+	}
+	return m.authorizationProvider.SearchResources(ctx, req)
 }
 
 func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (session *coreagent.Session, err error) {

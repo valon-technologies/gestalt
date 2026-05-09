@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
@@ -282,11 +283,12 @@ func (s *Server) providerDynamicRelationshipsForSubject(ctx context.Context, res
 }
 
 func (s *Server) providerRelationshipMatchesSubject(_ context.Context, rel *core.Relationship, subjectID string) (bool, error) {
-	if rel == nil || rel.GetSubject() == nil {
+	subject := authorization.RelationshipSubject(rel)
+	if subject == nil {
 		return false, nil
 	}
-	subjectType := strings.TrimSpace(rel.GetSubject().GetType())
-	relationshipSubjectID := strings.TrimSpace(rel.GetSubject().GetId())
+	subjectType := strings.TrimSpace(subject.GetType())
+	relationshipSubjectID := strings.TrimSpace(subject.GetId())
 	switch subjectType {
 	case authorization.ProviderSubjectTypeSubject:
 		return subjectID != "" && relationshipSubjectID == subjectID, nil
@@ -343,6 +345,7 @@ func relationshipKeys(rels []*core.Relationship) []*core.RelationshipKey {
 			Subject:  cloneSubjectRef(rel.GetSubject()),
 			Relation: rel.GetRelation(),
 			Resource: cloneResourceRef(rel.GetResource()),
+			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
 		})
 	}
 	return keys
@@ -368,18 +371,18 @@ func filterRelationshipKeys(rels []*core.Relationship, keep []*core.Relationship
 			Subject:  cloneSubjectRef(rel.GetSubject()),
 			Relation: rel.GetRelation(),
 			Resource: cloneResourceRef(rel.GetResource()),
+			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
 		})
 	}
 	return keys
 }
 
 func providerRelationshipKey(rel *core.Relationship) string {
-	if rel == nil || rel.GetSubject() == nil || rel.GetResource() == nil {
+	if rel == nil || rel.GetResource() == nil {
 		return ""
 	}
 	return strings.Join([]string{
-		strings.TrimSpace(rel.GetSubject().GetType()),
-		strings.TrimSpace(rel.GetSubject().GetId()),
+		authorization.RelationshipTargetMapKey(rel.GetTarget(), rel.GetSubject()),
 		strings.TrimSpace(rel.GetRelation()),
 		strings.TrimSpace(rel.GetResource().GetType()),
 		strings.TrimSpace(rel.GetResource().GetId()),
@@ -399,6 +402,7 @@ func cloneRelationships(rels []*core.Relationship) []*core.Relationship {
 			Subject:  cloneSubjectRef(rel.GetSubject()),
 			Relation: rel.GetRelation(),
 			Resource: cloneResourceRef(rel.GetResource()),
+			Target:   cloneRelationshipTarget(rel.GetTarget(), rel.GetSubject()),
 		})
 	}
 	return out
@@ -421,5 +425,34 @@ func cloneResourceRef(resource *core.ResourceRef) *core.ResourceRef {
 	return &core.ResourceRef{
 		Type: resource.GetType(),
 		Id:   resource.GetId(),
+	}
+}
+
+func cloneRelationshipTarget(target *core.RelationshipTargetRef, subject *core.SubjectRef) *core.RelationshipTargetRef {
+	if target != nil {
+		if targetSubject := target.GetSubject(); targetSubject != nil {
+			return &core.RelationshipTargetRef{
+				Kind: &proto.RelationshipTarget_Subject{Subject: cloneSubjectRef(targetSubject)},
+			}
+		}
+		if targetResource := target.GetResource(); targetResource != nil {
+			return &core.RelationshipTargetRef{
+				Kind: &proto.RelationshipTarget_Resource{Resource: cloneResourceRef(targetResource)},
+			}
+		}
+		if targetSet := target.GetSubjectSet(); targetSet != nil {
+			return &core.RelationshipTargetRef{
+				Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+					Resource: cloneResourceRef(targetSet.GetResource()),
+					Relation: targetSet.GetRelation(),
+				}},
+			}
+		}
+	}
+	if subject == nil {
+		return nil
+	}
+	return &core.RelationshipTargetRef{
+		Kind: &proto.RelationshipTarget_Subject{Subject: cloneSubjectRef(subject)},
 	}
 }

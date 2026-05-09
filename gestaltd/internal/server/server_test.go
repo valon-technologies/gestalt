@@ -2103,15 +2103,15 @@ func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req 
 	if p.validateModel {
 		for _, rel := range req.GetWrites() {
 			if !memoryAuthorizationModelAllowsRelationship(p.modelDefs[modelID], rel) {
-				return fmt.Errorf("model %q does not allow relationship %s", modelID, memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource()))
+				return fmt.Errorf("model %q does not allow relationship %s", modelID, memoryAuthorizationRelationshipKeyForRelationship(rel))
 			}
 		}
 	}
 	for _, key := range req.GetDeletes() {
-		delete(rels, memoryAuthorizationRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
+		delete(rels, memoryAuthorizationRelationshipKeyForKey(key))
 	}
 	for _, rel := range req.GetWrites() {
-		rels[memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneMemoryAuthorizationRelationship(rel)
+		rels[memoryAuthorizationRelationshipKeyForRelationship(rel)] = cloneMemoryAuthorizationRelationship(rel)
 	}
 	return nil
 }
@@ -2194,10 +2194,11 @@ func memoryAuthorizationModelAllowsRelationship(model *core.AuthorizationModel, 
 }
 
 func memoryAuthorizationRelationshipGrantsAction(model *core.AuthorizationModel, rel *core.Relationship, subject *core.SubjectRef, action string, resource *core.ResourceRef) bool {
-	if rel == nil || rel.GetSubject() == nil || rel.GetResource() == nil || resource == nil {
+	targetSubject := memoryAuthorizationRelationshipSubject(rel)
+	if rel == nil || targetSubject == nil || rel.GetResource() == nil || resource == nil {
 		return false
 	}
-	if subject != nil && (rel.GetSubject().GetType() != subject.GetType() || rel.GetSubject().GetId() != subject.GetId()) {
+	if subject != nil && (targetSubject.GetType() != subject.GetType() || targetSubject.GetId() != subject.GetId()) {
 		return false
 	}
 	if rel.GetResource().GetType() != resource.GetType() || rel.GetResource().GetId() != resource.GetId() {
@@ -2233,7 +2234,12 @@ func memoryAuthorizationRelationshipMatches(rel *core.Relationship, req *core.Re
 		return rel != nil
 	}
 	if subject := req.GetSubject(); subject != nil {
-		if got := rel.GetSubject(); got == nil || got.GetType() != subject.GetType() || got.GetId() != subject.GetId() {
+		if got := memoryAuthorizationRelationshipSubject(rel); got == nil || got.GetType() != subject.GetType() || got.GetId() != subject.GetId() {
+			return false
+		}
+	}
+	if target := req.GetTarget(); target != nil {
+		if memoryAuthorizationRelationshipTargetKey(rel.GetTarget(), rel.GetSubject()) != memoryAuthorizationRelationshipTargetKey(target, nil) {
 			return false
 		}
 	}
@@ -2248,14 +2254,35 @@ func memoryAuthorizationRelationshipMatches(rel *core.Relationship, req *core.Re
 	return true
 }
 
-func memoryAuthorizationRelationshipKey(subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
+func memoryAuthorizationRelationshipKeyForRelationship(rel *core.Relationship) string {
+	if rel == nil {
+		return ""
+	}
+	return memoryAuthorizationRelationshipKey(rel.GetTarget(), rel.GetSubject(), rel.GetRelation(), rel.GetResource())
+}
+
+func memoryAuthorizationRelationshipKeyForKey(key *core.RelationshipKey) string {
+	if key == nil {
+		return ""
+	}
+	return memoryAuthorizationRelationshipKey(key.GetTarget(), key.GetSubject(), key.GetRelation(), key.GetResource())
+}
+
+func memoryAuthorizationRelationshipKey(target *core.RelationshipTargetRef, subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
 	return strings.Join([]string{
-		subject.GetType(),
-		subject.GetId(),
+		memoryAuthorizationRelationshipTargetKey(target, subject),
 		relation,
 		resource.GetType(),
 		resource.GetId(),
 	}, "\x00")
+}
+
+func memoryAuthorizationRelationshipTargetKey(target *core.RelationshipTargetRef, subject *core.SubjectRef) string {
+	return authorization.RelationshipTargetMapKey(target, subject)
+}
+
+func memoryAuthorizationRelationshipSubject(rel *core.Relationship) *core.SubjectRef {
+	return authorization.RelationshipSubject(rel)
 }
 
 func cloneMemoryAuthorizationRelationship(rel *core.Relationship) *core.Relationship {
@@ -2263,16 +2290,49 @@ func cloneMemoryAuthorizationRelationship(rel *core.Relationship) *core.Relation
 		return nil
 	}
 	return &core.Relationship{
-		Subject: &core.SubjectRef{
-			Type: rel.GetSubject().GetType(),
-			Id:   rel.GetSubject().GetId(),
-		},
+		Subject:  cloneMemoryAuthorizationSubject(rel.GetSubject()),
 		Relation: rel.GetRelation(),
 		Resource: &core.ResourceRef{
 			Type: rel.GetResource().GetType(),
 			Id:   rel.GetResource().GetId(),
 		},
+		Target: cloneMemoryAuthorizationTarget(rel.GetTarget(), rel.GetSubject()),
 	}
+}
+
+func cloneMemoryAuthorizationSubject(subject *core.SubjectRef) *core.SubjectRef {
+	if subject == nil {
+		return nil
+	}
+	return &core.SubjectRef{Type: subject.GetType(), Id: subject.GetId()}
+}
+
+func cloneMemoryAuthorizationResource(resource *core.ResourceRef) *core.ResourceRef {
+	if resource == nil {
+		return nil
+	}
+	return &core.ResourceRef{Type: resource.GetType(), Id: resource.GetId()}
+}
+
+func cloneMemoryAuthorizationTarget(target *core.RelationshipTargetRef, subject *core.SubjectRef) *core.RelationshipTargetRef {
+	if target != nil {
+		if targetSubject := target.GetSubject(); targetSubject != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: cloneMemoryAuthorizationSubject(targetSubject)}}
+		}
+		if targetResource := target.GetResource(); targetResource != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: cloneMemoryAuthorizationResource(targetResource)}}
+		}
+		if targetSet := target.GetSubjectSet(); targetSet != nil {
+			return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+				Resource: cloneMemoryAuthorizationResource(targetSet.GetResource()),
+				Relation: targetSet.GetRelation(),
+			}}}
+		}
+	}
+	if subject == nil {
+		return nil
+	}
+	return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: cloneMemoryAuthorizationSubject(subject)}}
 }
 
 func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.Relationship) {
@@ -2281,7 +2341,7 @@ func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.
 	if p.relsByModel[modelID] == nil {
 		p.relsByModel[modelID] = map[string]*core.Relationship{}
 	}
-	p.relsByModel[modelID][memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneMemoryAuthorizationRelationship(rel)
+	p.relsByModel[modelID][memoryAuthorizationRelationshipKeyForRelationship(rel)] = cloneMemoryAuthorizationRelationship(rel)
 }
 
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
@@ -2553,6 +2613,49 @@ func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, 
 	return authz
 }
 
+func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	provider.activeModelID = "model"
+	invalidMixedGrant := &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
+		Relation: authorization.ProviderAgentSessionActionView,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T999:C999"},
+			Relation: authorization.ProviderRelationMember,
+		}}},
+	}
+	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{invalidMixedGrant}}); err != nil {
+		t.Fatalf("WriteRelationships: %v", err)
+	}
+
+	decision, err := provider.Evaluate(context.Background(), &core.AccessEvaluationRequest{
+		Subject:  invalidMixedGrant.Subject,
+		Action:   &core.ActionRef{Name: invalidMixedGrant.Relation},
+		Resource: invalidMixedGrant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("Evaluate: %v", err)
+	}
+	if decision.GetAllowed() {
+		t.Fatal("Evaluate allowed invalid mixed subject/subject-set relationship, want denied")
+	}
+
+	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Subject:  invalidMixedGrant.Subject,
+		Relation: invalidMixedGrant.Relation,
+		Resource: invalidMixedGrant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships(subject): %v", err)
+	}
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("ReadRelationships(subject) = %+v, want no direct-subject match", resp.GetRelationships())
+	}
+}
+
 func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing.T) {
 	t.Parallel()
 
@@ -2568,27 +2671,82 @@ func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing
 		t.Fatalf("authorization.New: %v", err)
 	}
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	grant := &core.Relationship{
+	editorGrant := &core.Relationship{
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:shared"},
 		Relation: authorization.ProviderAgentSessionRelationEditor,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
 	}
-	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{grant}}); err != nil {
+	channelGrant := &core.Relationship{
+		Relation: authorization.ProviderAgentSessionRelationViewer,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T123:C456"},
+			Relation: authorization.ProviderRelationMember,
+		}}},
+	}
+	parentGrant := &core.Relationship{
+		Relation: authorization.ProviderAgentSessionRelationParent,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-child"},
+		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"}}},
+	}
+	invalidMixedGrant := &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
+		Relation: authorization.ProviderAgentSessionRelationViewer,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T999:C999"},
+			Relation: authorization.ProviderRelationMember,
+		}}},
+	}
+	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{editorGrant, channelGrant, parentGrant, invalidMixedGrant}}); err != nil {
 		t.Fatalf("WriteRelationships: %v", err)
 	}
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState: %v", err)
 	}
 	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Subject:  grant.Subject,
-		Relation: grant.Relation,
-		Resource: grant.Resource,
+		Subject:  editorGrant.Subject,
+		Relation: editorGrant.Relation,
+		Resource: editorGrant.Resource,
 	})
 	if err != nil {
 		t.Fatalf("ReadRelationships: %v", err)
 	}
 	if len(resp.GetRelationships()) != 1 {
 		t.Fatalf("agent session grants after reload = %+v, want preserved editor grant", resp.GetRelationships())
+	}
+	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Target:   channelGrant.Target,
+		Relation: channelGrant.Relation,
+		Resource: channelGrant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships channel grant: %v", err)
+	}
+	if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("agent session channel grants after reload = %+v, want preserved subject-set grant", resp.GetRelationships())
+	}
+	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Target:   parentGrant.Target,
+		Relation: parentGrant.Relation,
+		Resource: parentGrant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships parent grant: %v", err)
+	}
+	if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("agent session parent grants after reload = %+v, want preserved resource-target grant", resp.GetRelationships())
+	}
+	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Target:   invalidMixedGrant.Target,
+		Relation: invalidMixedGrant.Relation,
+		Resource: invalidMixedGrant.Resource,
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships invalid mixed grant: %v", err)
+	}
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("invalid mixed subject/target grant after reload = %+v, want removed", resp.GetRelationships())
 	}
 }
 
@@ -5818,8 +5976,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
+	rawSubjectID := principal.UserSubjectID("raw-subject")
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "raw-subject"},
+		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID}}},
 		Relation: "viewer",
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
 	})
@@ -5839,8 +5998,18 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
 		t.Fatalf("decoding members: %v", err)
 	}
-	if len(members) != 2 {
+	if len(members) != 3 {
 		t.Fatalf("expected provider-backed merged members, got %d (%+v)", len(members), members)
+	}
+	foundRawSubject := false
+	for _, member := range members {
+		if member["selectorValue"] == rawSubjectID {
+			foundRawSubject = true
+			break
+		}
+	}
+	if !foundRawSubject {
+		t.Fatalf("members = %+v, want target-only direct subject %q", members, rawSubjectID)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/provider", nil)
