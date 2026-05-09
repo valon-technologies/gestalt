@@ -2,6 +2,7 @@ package agentmanager
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -2523,6 +2524,409 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestManagerProjectsAgentFacingPluginToolSchemas(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "planner",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "planner",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "choose_target",
+						ProviderID:  "internal_secret_provider",
+						Path:        "/planner/{x-secret}/choose",
+						Title:       "Choose target",
+						Description: "Choose a public target",
+						InputSchema: json.RawMessage(`{
+							"type":["object","null"],
+							"properties":{
+								"root_choice":{"type":"string"},
+								"public_body":{
+									"type":"object",
+									"description":"public wrapper around internal tunnel token",
+									"$ref":"#/$defs/internal_secret",
+									"properties":{"internal_secret":{"type":"string","description":"internal tunnel token"},"visible_child":{"type":"string"}},
+									"required":["internal_secret","visible_child"]
+								},
+								"internal_secret":{"type":"string"},
+								"x-secret":{"type":"string"}
+							},
+							"required":["root_choice","internal_secret"],
+							"dependentRequired":{"root_choice":["internal_secret"]},
+							"patternProperties":{"^x-secret$":{"description":"internal tunnel token"}},
+							"$defs":{"internal_secret":{"description":"internal tunnel token"}},
+							"oneOf":[
+								{"type":"object","properties":{"mcp_name":{"type":"string"},"internal_secret":{"type":"string"}},"required":["mcp_name"]},
+								{"properties":{"ref":{"type":"string"},"x-secret":{"type":"string"}},"required":["ref","x-secret"]}
+							],
+							"anyOf":[
+								{"properties":{"optional":{"type":"string"}},"required":["optional"]}
+							]
+						}`),
+						Parameters: []catalog.CatalogParameter{
+							{Name: "root_choice", Type: "string", Required: true},
+							{Name: "internal_secret", WireName: "x-secret", Type: "string", Description: "internal tunnel token", Required: true, Internal: true},
+						},
+					},
+					{
+						ID:          "bad_schema",
+						Title:       "Bad schema",
+						Description: "Falls back to public parameter metadata",
+						InputSchema: json.RawMessage(`"not an object"`),
+						Parameters: []catalog.CatalogParameter{
+							{Name: "visible_query", Type: "string", Description: "Visible query", Required: true},
+							{Name: "private_header", WireName: "X-Private-Header", Type: "string", Description: "private header value", Required: true, Internal: true},
+						},
+					},
+					{
+						ID:          "conflict_schema",
+						Title:       "Conflict schema",
+						Description: "Falls back when merged branches disagree",
+						InputSchema: json.RawMessage(`{
+							"allOf":[
+								{"properties":{"same":{"type":"integer"}}}
+							],
+							"properties":{"local":{"type":"string"},"same":{"type":"string"}}
+						}`),
+						Parameters: []catalog.CatalogParameter{
+							{Name: "fallback_query", Type: "string", Description: "Fallback query", Required: true},
+							{Name: "private_conflict", Type: "string", Description: "private conflict value", Internal: true},
+						},
+					},
+					{
+						ID:          "hidden_admin",
+						Title:       "Hidden admin",
+						Description: "Hidden exact-grant operation",
+						Visible:     &hidden,
+						InputSchema: json.RawMessage(`{
+							"type":"object",
+							"properties":{"public_action":{"type":"string"},"internal_admin":{"type":"string"}},
+							"required":["public_action","internal_admin"]
+						}`),
+						Parameters: []catalog.CatalogParameter{
+							{Name: "public_action", Type: "string", Required: true},
+							{Name: "internal_admin", Type: "string", Description: "admin-only token", Required: true, Internal: true},
+						},
+					},
+					{
+						ID:    "empty_schema",
+						Title: "Empty schema",
+					},
+				},
+			},
+		},
+	}
+	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	refs := []coreagent.ToolRef{
+		{Plugin: "planner", Operation: "choose_target"},
+		{Plugin: "planner", Operation: "bad_schema"},
+		{Plugin: "planner", Operation: "conflict_schema"},
+		{Plugin: "planner", Operation: "hidden_admin"},
+	}
+
+	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   refs,
+		PageSize:   10,
+	})
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(listed.Tools) != len(refs) {
+		t.Fatalf("ListTools returned %d tools, want %d: %#v", len(listed.Tools), len(refs), listed.Tools)
+	}
+
+	choose := requireListedOperation(t, listed.Tools, "choose_target")
+	chooseSchema := mustDecodeAgentToolSchema(t, choose.InputSchemaJSON)
+	requireAgentToolSchemaProperties(t, chooseSchema, "root_choice", "public_body", "mcp_name", "ref", "optional")
+	requireAgentToolSchemaMissingProperties(t, chooseSchema, "internal_secret", "x-secret")
+	requireAgentToolSchemaMissingKeys(t, chooseSchema, "oneOf", "anyOf", "allOf", "dependentRequired", "patternProperties", "$defs")
+	requireAgentToolSchemaRequired(t, chooseSchema, "root_choice")
+	requireAgentToolSchemaJSONOmits(t, chooseSchema, "internal_secret", "x-secret", "internal tunnel token", "$ref", "internal_secret_provider")
+	requireSearchTextOmits(t, choose.SearchText, "internal_secret", "x-secret", "internal tunnel token", "internal_secret_provider")
+
+	bad := requireListedOperation(t, listed.Tools, "bad_schema")
+	badSchema := mustDecodeAgentToolSchema(t, bad.InputSchemaJSON)
+	requireAgentToolSchemaProperties(t, badSchema, "visible_query")
+	requireAgentToolSchemaMissingProperties(t, badSchema, "private_header", "X-Private-Header")
+	requireAgentToolSchemaRequired(t, badSchema, "visible_query")
+	requireSearchTextOmits(t, bad.SearchText, "private_header", "X-Private-Header", "private header value")
+
+	conflict := requireListedOperation(t, listed.Tools, "conflict_schema")
+	conflictSchema := mustDecodeAgentToolSchema(t, conflict.InputSchemaJSON)
+	requireAgentToolSchemaProperties(t, conflictSchema, "fallback_query")
+	requireAgentToolSchemaMissingProperties(t, conflictSchema, "local", "same", "private_conflict")
+	requireAgentToolSchemaRequired(t, conflictSchema, "fallback_query")
+
+	hiddenTool := requireListedOperation(t, listed.Tools, "hidden_admin")
+	if !hiddenTool.Hidden {
+		t.Fatal("hidden exact operation was not marked hidden")
+	}
+	hiddenSchema := mustDecodeAgentToolSchema(t, hiddenTool.InputSchemaJSON)
+	requireAgentToolSchemaProperties(t, hiddenSchema, "public_action")
+	requireAgentToolSchemaMissingProperties(t, hiddenSchema, "internal_admin")
+	requireAgentToolSchemaRequired(t, hiddenSchema, "public_action")
+	requireSearchTextOmits(t, hiddenTool.SearchText, "internal_admin", "admin-only token")
+
+	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "planner", Operation: "bad_schema"},
+			{Plugin: "planner", Operation: "empty_schema"},
+			{Plugin: "planner", Operation: "hidden_admin"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	badResolved := requireResolvedOperation(t, resolved, "bad_schema")
+	requireAgentToolSchemaProperties(t, badResolved.ParametersSchema, "visible_query")
+	requireAgentToolSchemaMissingProperties(t, badResolved.ParametersSchema, "private_header", "X-Private-Header")
+	emptyResolved := requireResolvedOperation(t, resolved, "empty_schema")
+	if emptyResolved.ParametersSchema["type"] != "object" || emptyResolved.ParametersSchema["additionalProperties"] != true {
+		t.Fatalf("empty resolved schema = %#v, want permissive object", emptyResolved.ParametersSchema)
+	}
+	hiddenResolved := requireResolvedOperation(t, resolved, "hidden_admin")
+	requireAgentToolSchemaProperties(t, hiddenResolved.ParametersSchema, "public_action")
+	requireAgentToolSchemaMissingProperties(t, hiddenResolved.ParametersSchema, "internal_admin")
+}
+
+func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
+	t.Parallel()
+
+	ref := coreagent.ToolRef{System: coreagent.SystemToolWorkflow, Operation: "schedules.update"}
+	workflowTools := projectionWorkflowSystemTools{
+		tools: map[string]coreagent.Tool{
+			ref.Operation: {
+				Name:        "Update schedule",
+				Description: "Update a workflow schedule",
+				ParametersSchema: map[string]any{
+					"allOf": []any{
+						map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"scheduleId": map[string]any{"type": "string"},
+							},
+							"required": []any{"scheduleId"},
+						},
+						map[string]any{
+							"properties": map[string]any{
+								"cron": map[string]any{"type": "string"},
+							},
+							"required": []any{"cron"},
+						},
+					},
+				},
+				Target: coreagent.ToolTarget{System: ref.System, Operation: ref.Operation},
+			},
+		},
+	}
+	provider := agentCatalogTestProvider("docs", "Docs")
+	manager := newTestManager(t, Config{
+		Providers:     testutil.NewProviderRegistry(t, provider),
+		WorkflowTools: workflowTools,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   []coreagent.ToolRef{ref},
+	})
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(listed.Tools) != 1 {
+		t.Fatalf("ListTools returned %d tools, want one", len(listed.Tools))
+	}
+	listedSchema := mustDecodeAgentToolSchema(t, listed.Tools[0].InputSchemaJSON)
+	requireAgentToolSchemaProperties(t, listedSchema, "scheduleId", "cron")
+	requireAgentToolSchemaRequired(t, listedSchema, "cron", "scheduleId")
+	requireAgentToolSchemaMissingKeys(t, listedSchema, "allOf", "oneOf", "anyOf")
+
+	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
+		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolRefs:   []coreagent.ToolRef{ref},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(resolved) != 1 {
+		t.Fatalf("ResolveTools returned %d tools, want one", len(resolved))
+	}
+	requireAgentToolSchemaProperties(t, resolved[0].ParametersSchema, "scheduleId", "cron")
+	requireAgentToolSchemaRequired(t, resolved[0].ParametersSchema, "cron", "scheduleId")
+	requireAgentToolSchemaMissingKeys(t, resolved[0].ParametersSchema, "allOf", "oneOf", "anyOf")
+
+	one, err := manager.ResolveTool(context.Background(), p, ref)
+	if err != nil {
+		t.Fatalf("ResolveTool: %v", err)
+	}
+	requireAgentToolSchemaProperties(t, one.ParametersSchema, "scheduleId", "cron")
+	requireAgentToolSchemaRequired(t, one.ParametersSchema, "cron", "scheduleId")
+	requireAgentToolSchemaMissingKeys(t, one.ParametersSchema, "allOf", "oneOf", "anyOf")
+}
+
+type projectionWorkflowSystemTools struct {
+	tools map[string]coreagent.Tool
+}
+
+func (t projectionWorkflowSystemTools) Available() bool {
+	return true
+}
+
+func (t projectionWorkflowSystemTools) ResolveTool(_ context.Context, _ *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
+	tool, ok := t.tools[strings.TrimSpace(ref.Operation)]
+	if !ok {
+		return coreagent.Tool{}, fmt.Errorf("%w: %s", invocation.ErrOperationNotFound, ref.Operation)
+	}
+	tool.Target = coreagent.ToolTarget{System: strings.TrimSpace(ref.System), Operation: strings.TrimSpace(ref.Operation)}
+	return tool, nil
+}
+
+func (t projectionWorkflowSystemTools) ResolveTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
+	out := make([]coreagent.Tool, 0, len(refs))
+	for _, ref := range refs {
+		tool, err := t.ResolveTool(ctx, p, ref)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, tool)
+	}
+	return out, nil
+}
+
+func (t projectionWorkflowSystemTools) AllowTool(context.Context, *principal.Principal, coreagent.Tool) bool {
+	return true
+}
+
+func requireListedOperation(t *testing.T, tools []coreagent.ListedTool, operation string) coreagent.ListedTool {
+	t.Helper()
+	for _, tool := range tools {
+		if tool.Ref.Operation == operation {
+			return tool
+		}
+	}
+	t.Fatalf("listed tools missing operation %q: %#v", operation, tools)
+	return coreagent.ListedTool{}
+}
+
+func requireResolvedOperation(t *testing.T, tools []coreagent.Tool, operation string) coreagent.Tool {
+	t.Helper()
+	for _, tool := range tools {
+		if tool.Target.Operation == operation {
+			return tool
+		}
+	}
+	t.Fatalf("resolved tools missing operation %q: %#v", operation, tools)
+	return coreagent.Tool{}
+}
+
+func mustDecodeAgentToolSchema(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	var schema map[string]any
+	if err := json.Unmarshal([]byte(raw), &schema); err != nil {
+		t.Fatalf("decode schema %q: %v", raw, err)
+	}
+	return schema
+}
+
+func requireAgentToolSchemaProperties(t *testing.T, schema map[string]any, names ...string) {
+	t.Helper()
+	properties := agentToolSchemaPropertiesForTest(t, schema)
+	for _, name := range names {
+		if _, ok := properties[name]; !ok {
+			t.Fatalf("schema properties = %#v, missing %q", properties, name)
+		}
+	}
+}
+
+func requireAgentToolSchemaMissingProperties(t *testing.T, schema map[string]any, names ...string) {
+	t.Helper()
+	properties := agentToolSchemaPropertiesForTest(t, schema)
+	for _, name := range names {
+		if _, ok := properties[name]; ok {
+			t.Fatalf("schema properties = %#v, unexpectedly contained %q", properties, name)
+		}
+	}
+}
+
+func requireAgentToolSchemaMissingKeys(t *testing.T, schema map[string]any, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		if _, ok := schema[key]; ok {
+			t.Fatalf("schema = %#v, unexpectedly contained key %q", schema, key)
+		}
+	}
+}
+
+func requireAgentToolSchemaJSONOmits(t *testing.T, schema map[string]any, values ...string) {
+	t.Helper()
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	text := string(raw)
+	for _, value := range values {
+		if strings.Contains(text, value) {
+			t.Fatalf("schema JSON %q unexpectedly contained %q", text, value)
+		}
+	}
+}
+
+func requireAgentToolSchemaRequired(t *testing.T, schema map[string]any, names ...string) {
+	t.Helper()
+	got := map[string]struct{}{}
+	switch required := schema["required"].(type) {
+	case []any:
+		for _, item := range required {
+			if name, ok := item.(string); ok {
+				got[name] = struct{}{}
+			}
+		}
+	case []string:
+		for _, name := range required {
+			got[name] = struct{}{}
+		}
+	case nil:
+	default:
+		t.Fatalf("schema required = %#v, want array", schema["required"])
+	}
+	want := map[string]struct{}{}
+	for _, name := range names {
+		want[name] = struct{}{}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("schema required = %#v, want %#v", got, want)
+	}
+}
+
+func requireSearchTextOmits(t *testing.T, searchText string, values ...string) {
+	t.Helper()
+	for _, value := range values {
+		needle := agentToolSearchText(value)
+		if needle == "" {
+			needle = value
+		}
+		if strings.Contains(searchText, needle) {
+			t.Fatalf("search text %q unexpectedly contained %q", searchText, value)
+		}
+	}
+}
+
+func agentToolSchemaPropertiesForTest(t *testing.T, schema map[string]any) map[string]any {
+	t.Helper()
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties = %#v, want object", schema["properties"])
+	}
+	return properties
 }
 
 func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
