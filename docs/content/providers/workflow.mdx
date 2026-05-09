@@ -8,6 +8,12 @@ Today that primarily means cron-based schedules, triggers, workflow run
 history, event publishing, and run cancelation. The workflow model is global.
 A workflow target is always explicit: `target.plugin` or `target.agent`.
 
+<Callout type="warning">
+  **Alpha.** Gestalt is under active development. APIs and configuration may
+  change between releases. Feedback and bug reports are welcome via [GitHub
+  Issues](https://github.com/valon-technologies/gestalt/issues).
+</Callout>
+
 <Callout type="info">
   The public workflow surface now covers schedules, triggers, event publishing,
   and runs.
@@ -1236,7 +1242,7 @@ For package publishing, lock/sync, and release behavior, see
 
 ## What to read next
 
-If you want the surrounding config model, read [Configuration](/configuration)
+If you want the surrounding config model, read [Configuration](/reference/configuration)
 and the full [Config File](/reference/config-file) reference. For route and
 command details, see [HTTP API](/reference/http-api) and [CLI](/client/cli).
 The [Built-in Providers](/reference/built-in-providers) reference lists

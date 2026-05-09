@@ -7,6 +7,12 @@ sessions, turns, interactions, and turn events. Callers create a session,
 submit turns into that session, then inspect or stream the resulting turn
 state through the shared Gestalt HTTP API, CLI, or SDKs.
 
+<Callout type="warning">
+  **Alpha.** Gestalt is under active development. APIs and configuration may
+  change between releases. Feedback and bug reports are welcome via [GitHub
+  Issues](https://github.com/valon-technologies/gestalt/issues).
+</Callout>
+
 <Callout type="info">
   Agent providers are global, not plugin-scoped. A session either selects a
   named `providers.agent` entry explicitly or inherits the sole/default

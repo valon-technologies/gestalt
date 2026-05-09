@@ -1,43 +1,35 @@
-import { Cards, Callout } from 'nextra/components'
+import { Cards } from 'nextra/components'
 import ArchitectureDiagram from '../components/ArchitectureDiagram'
 
 # Gestalt
 
-Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the sum of its parts.
+> Gestalt (/ɡəˈʃtält/) refers to the idea that the whole is greater than the sum of its parts.
 
-Gestalt is a self-hostable, open source platform for managing agentic tools
-and services, with declarative configuration and secure credential management
-built in. Plugins can wrap REST/OpenAPI, GraphQL, MCP, or executable provider
-code while exposing the same operation model to callers.
-
-<Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and configuration may
-  change between releases. Feedback and bug reports are welcome via [GitHub
-  Issues](https://github.com/valon-technologies/gestalt/issues).
-</Callout>
+Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and primitives for authentication and authorization. External REST/OpenAPI, GraphQL, MCP and executable custom-defined code are all supported, while exposing the same operation model to callers.
 
 ## Why Gestalt
 
-Agents need tools. Tools need authentication. Authentication needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
+Gestalt is intentionally lightweight and technology-agnostic. Run it on a laptop or productionize it on a VM or container without buying into a specific cloud, database, or programming language. Tools can be external APIs, MCP servers, GraphQL, or executable code, and callers still get one operation model.
 
-Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed, even when those tools come from different upstream API surfaces. The platform takes care of the rest.
+Add only what you need. Local deployments can run without external services or provider-backed dependencies: no authentication/authorization, no hosted runtime, and no mounted UI unless you configure them.
+
+When you need production controls, add them through the [provider](/providers) ecosystem.
 
 <ArchitectureDiagram />
 
 ### What Gestalt provides
 
-- Credentials and connection data are encrypted at rest, on infrastructure you control. See [Security](/security).
-- A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed. See [Configuration](/configuration).
-- REST/OpenAPI, GraphQL, MCP, and executable plugins share the same operation catalog, credential model, and invocation paths. See [Plugins](/providers/plugins).
-- The same operations are available over MCP, HTTP, CLI, and optional mounted UIs for cloud agents, local coding assistants, and human operators. See [HTTP API](/reference/http-api).
-- Authentication backends, datastores, secret managers, and the UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
-- Deploy on any infrastructure you control with Docker, Helm, or bare containers. See [Deploy](/deploy).
+- Plug-and-play [providers](/providers), inspired by [Terraform providers](https://developer.hashicorp.com/terraform/language/providers), so you add only what you need.
+- A unified tool surface for agents over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators. See [Plugin](/providers/plugins).
+- [Authentication](/providers/authentication) flows, [credential storage](/providers/external-credentials), encryption at rest, token refresh, and [RBAC](/providers/authorization) on infrastructure you control.
+- [OpenTelemetry](https://opentelemetry.io/) compatible [observability](/observability) and [audit logging](/audit-logging).
+- [Workflows](/providers/workflow) and [agents](/providers/agent) with durable state, retries, and delegated invocations.<sup className="gestalt-footnote-ref">*</sup>
 
 ## What Gestalt is not
 
-Gestalt is not a SaaS platform. It is open source and self-hostable on any infrastructure you control, giving you full ownership of your data, credentials, and deployment. Gestalt will remain free and open source; self-hosting is a first-class feature.
+Gestalt is not a SaaS platform. It is open source and self-hostable on any infrastructure you control, giving you full ownership of your data, credentials, and deployment.
 
-Gestalt does not replace your existing APIs. It sits between agents and upstream services, handling authentication and credential lifecycle. Your APIs stay where they are.
+Gestalt is not a mono-repo with hundreds or thousands of integrations built out-of-the-box. You configure exactly what you need. Gestalt is not an agent harness, but it provides first-class support for Claude Code, Codex, and Cursor.
 
 ## Start here
 
@@ -45,20 +37,14 @@ Gestalt does not replace your existing APIs. It sits between agents and upstream
   <Cards.Card title="Getting Started" href="/getting-started">
     Run Gestalt locally, add a plugin, and invoke an operation in five minutes.
   </Cards.Card>
-  <Cards.Card title="Configuration" href="/configuration">
-    The config model, plugin setup, authentication, connections, and MCP.
-  </Cards.Card>
-  <Cards.Card title="Workflows" href="/providers/workflow">
-    Schedules, runs, triggers, and the current workflow API surface.
-  </Cards.Card>
   <Cards.Card title="Providers" href="/providers">
-    Plugins, authentication backends, datastores, and custom UIs as provider packages.
+    Plug-and-play packages for the capabilities you choose to enable.
+  </Cards.Card>
+  <Cards.Card title="CLI" href="/client/cli">
+    Authenticate, connect providers, invoke operations, and automate from the terminal.
   </Cards.Card>
   <Cards.Card title="Applications" href="/applications">
     Compose a plugin, UI, policy, IndexedDB, S3, and workflows.
-  </Cards.Card>
-  <Cards.Card title="Security" href="/security">
-    Trust boundaries, encryption, headers, and token handling.
   </Cards.Card>
   <Cards.Card title="Deploy" href="/deploy">
     Docker, Helm, and production deployment patterns.
@@ -67,3 +53,5 @@ Gestalt does not replace your existing APIs. It sits between agents and upstream
     Config syntax, manifest fields, API routes, and CLI commands.
   </Cards.Card>
 </Cards>
+
+<div className="gestalt-footnote"><sup>*</sup> Workflows and agents are both alpha features, and not yet stable.</div>

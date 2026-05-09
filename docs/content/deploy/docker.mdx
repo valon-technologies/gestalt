@@ -70,7 +70,7 @@ CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 
 This produces a self-contained image that starts without fetching, resolving, or writing provider artifacts at runtime.
 
-See [Configuration](/configuration) for what `gestalt.lock.json` records and
+See [Configuration](/reference/configuration) for what `gestalt.lock.json` records and
 why `serve --locked` depends on it.
 
 ## Environment variables and secrets
@@ -87,7 +87,7 @@ docker run --rm \
 ```
 
 For production, use a dedicated secret manager with structured secret refs. See
-[Configuration](/configuration) for details.
+[Configuration](/reference/configuration) for details.
 
 ## Health endpoints
 
