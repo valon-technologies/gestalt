@@ -13,7 +13,10 @@ use gestalt::proto::v1::{
     ConfigureProviderRequest, ProviderKind, PublishWorkflowProviderEventRequest,
     StartWorkflowProviderRunRequest, WorkflowEvent, WorkflowRunStatus, bound_workflow_target,
 };
-use gestalt::{ENV_WORKFLOW_HOST_SOCKET_TOKEN, RuntimeMetadata, WorkflowHost, WorkflowProvider};
+use gestalt::{
+    BoundWorkflowPluginTargetInput, BoundWorkflowTargetInput, ENV_WORKFLOW_HOST_SOCKET_TOKEN,
+    InvokeWorkflowOperationInput, RuntimeMetadata, WorkflowHost, WorkflowProvider,
+};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -269,16 +272,14 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
         .await
         .expect("connect workflow host");
     let invoked = host
-        .invoke_operation(pb::InvokeWorkflowOperationRequest {
-            target: Some(pb::BoundWorkflowTarget {
-                kind: Some(pb::bound_workflow_target::Kind::Plugin(
-                    pb::BoundWorkflowPluginTarget {
-                        plugin_name: "demo".to_string(),
-                        operation: "sync".to_string(),
-                        ..Default::default()
-                    },
-                )),
-            }),
+        .invoke_operation(InvokeWorkflowOperationInput {
+            target: Some(BoundWorkflowTargetInput::Plugin(
+                BoundWorkflowPluginTargetInput {
+                    plugin_name: "demo".to_string(),
+                    operation: "sync".to_string(),
+                    ..Default::default()
+                },
+            )),
             run_id: "run-42".to_string(),
             ..Default::default()
         })
@@ -318,16 +319,14 @@ async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .await
         .expect("connect workflow host");
     let invoked = host
-        .invoke_operation(pb::InvokeWorkflowOperationRequest {
-            target: Some(pb::BoundWorkflowTarget {
-                kind: Some(pb::bound_workflow_target::Kind::Plugin(
-                    pb::BoundWorkflowPluginTarget {
-                        plugin_name: "demo".to_string(),
-                        operation: "sync".to_string(),
-                        ..Default::default()
-                    },
-                )),
-            }),
+        .invoke_operation(InvokeWorkflowOperationInput {
+            target: Some(BoundWorkflowTargetInput::Plugin(
+                BoundWorkflowPluginTargetInput {
+                    plugin_name: "demo".to_string(),
+                    operation: "sync".to_string(),
+                    ..Default::default()
+                },
+            )),
             run_id: "run-42".to_string(),
             ..Default::default()
         })

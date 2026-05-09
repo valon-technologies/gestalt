@@ -62,16 +62,15 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	resp, err := client.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
-		RunId: "run-1",
-		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_Plugin{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "roadmap",
-					Operation:  "sync_items",
-				},
+	resp, err := client.InvokeOperation(context.Background(), gestalt.InvokeWorkflowOperationInput{
+		RunID: "run-1",
+		Target: &gestalt.BoundWorkflowTargetInput{
+			Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+				PluginName: "roadmap",
+				Operation:  "sync_items",
 			},
 		},
+		Metadata: map[string]any{"workflow_key": "roadmap-sync"},
 	})
 	if err != nil {
 		t.Fatalf("InvokeOperation: %v", err)
@@ -91,5 +90,8 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 	got := harness.requests[0]
 	if got.GetRunId() != "run-1" || got.GetTarget().GetPlugin().GetPluginName() != "roadmap" || got.GetTarget().GetPlugin().GetOperation() != "sync_items" {
 		t.Fatalf("invoke request = %#v", got)
+	}
+	if got.GetMetadata().AsMap()["workflow_key"] != "roadmap-sync" {
+		t.Fatalf("invoke metadata = %#v", got.GetMetadata().AsMap())
 	}
 }

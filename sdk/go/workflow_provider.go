@@ -217,8 +217,6 @@ type (
 	PauseWorkflowProviderEventTriggerRequest  = proto.PauseWorkflowProviderEventTriggerRequest
 	ResumeWorkflowProviderEventTriggerRequest = proto.ResumeWorkflowProviderEventTriggerRequest
 	PublishWorkflowProviderEventRequest       = proto.PublishWorkflowProviderEventRequest
-	InvokeWorkflowOperationRequest            = proto.InvokeWorkflowOperationRequest
-	InvokeWorkflowOperationResponse           = proto.InvokeWorkflowOperationResponse
 	ManagedWorkflowSchedule                   = proto.ManagedWorkflowSchedule
 	ManagedWorkflowEventTrigger               = proto.ManagedWorkflowEventTrigger
 	ManagedWorkflowRun                        = proto.ManagedWorkflowRun

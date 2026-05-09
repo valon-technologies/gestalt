@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"fmt"
 	"time"
 
 	gproto "google.golang.org/protobuf/proto"
@@ -181,6 +182,39 @@ type BoundWorkflowTargetInput struct {
 	Agent  *BoundWorkflowAgentTargetInput
 }
 
+// WorkflowActorInput contains native Go values for constructing workflow actor
+// metadata.
+type WorkflowActorInput struct {
+	SubjectID   string
+	SubjectKind string
+	DisplayName string
+	AuthSource  string
+}
+
+// NewWorkflowActor creates workflow actor metadata from native Go values.
+func NewWorkflowActor(input WorkflowActorInput) *WorkflowActor {
+	return &WorkflowActor{
+		SubjectId:   input.SubjectID,
+		SubjectKind: input.SubjectKind,
+		DisplayName: input.DisplayName,
+		AuthSource:  input.AuthSource,
+	}
+}
+
+// WorkflowActorInputFromActor converts existing workflow actor metadata into
+// native builder input.
+func WorkflowActorInputFromActor(value *WorkflowActor) WorkflowActorInput {
+	if value == nil {
+		return WorkflowActorInput{}
+	}
+	return WorkflowActorInput{
+		SubjectID:   value.GetSubjectId(),
+		SubjectKind: value.GetSubjectKind(),
+		DisplayName: value.GetDisplayName(),
+		AuthSource:  value.GetAuthSource(),
+	}
+}
+
 // NewBoundWorkflowTarget creates a workflow target from native Go values.
 func NewBoundWorkflowTarget(input BoundWorkflowTargetInput) (*BoundWorkflowTarget, error) {
 	switch {
@@ -298,7 +332,7 @@ type WorkflowSignalInput struct {
 	Name           string
 	Payload        any
 	Metadata       any
-	CreatedBy      *WorkflowActor
+	CreatedBy      *WorkflowActorInput
 	CreatedAt      time.Time
 	IdempotencyKey string
 	Sequence       int64
@@ -319,7 +353,7 @@ func NewWorkflowSignal(input WorkflowSignalInput) (*WorkflowSignal, error) {
 		Name:           input.Name,
 		Payload:        payload,
 		Metadata:       metadata,
-		CreatedBy:      input.CreatedBy,
+		CreatedBy:      workflowActorFromInput(input.CreatedBy),
 		CreatedAt:      timestampFromNonZeroTime(input.CreatedAt),
 		IdempotencyKey: input.IdempotencyKey,
 		Sequence:       input.Sequence,
@@ -337,7 +371,7 @@ func WorkflowSignalInputFromSignal(value *WorkflowSignal) WorkflowSignalInput {
 		Name:           value.GetName(),
 		Payload:        MapFromStruct(value.GetPayload()),
 		Metadata:       MapFromStruct(value.GetMetadata()),
-		CreatedBy:      copyWorkflowActor(value.GetCreatedBy()),
+		CreatedBy:      workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		CreatedAt:      TimeFromTimestamp(value.GetCreatedAt()),
 		IdempotencyKey: value.GetIdempotencyKey(),
 		Sequence:       value.GetSequence(),
@@ -353,6 +387,28 @@ func NewWorkflowSignalFromSignal(value *WorkflowSignal) (*WorkflowSignal, error)
 	return NewWorkflowSignal(WorkflowSignalInputFromSignal(value))
 }
 
+// WorkflowScheduleTriggerInput contains native Go values for constructing a
+// schedule-triggered workflow run trigger.
+type WorkflowScheduleTriggerInput struct {
+	ScheduleID   string
+	ScheduledFor *time.Time
+}
+
+// WorkflowEventTriggerInvocationInput contains native Go values for
+// constructing an event-triggered workflow run trigger.
+type WorkflowEventTriggerInvocationInput struct {
+	TriggerID string
+	Event     *WorkflowEventInput
+}
+
+// WorkflowRunTriggerInput contains native Go values for constructing a
+// workflow run trigger. Exactly one trigger kind should be set.
+type WorkflowRunTriggerInput struct {
+	Manual   bool
+	Schedule *WorkflowScheduleTriggerInput
+	Event    *WorkflowEventTriggerInvocationInput
+}
+
 // NewWorkflowScheduleTrigger creates a schedule-trigger run trigger from native
 // Go values.
 func NewWorkflowScheduleTrigger(scheduleID string, scheduledFor time.Time) *WorkflowRunTrigger {
@@ -362,35 +418,95 @@ func NewWorkflowScheduleTrigger(scheduleID string, scheduledFor time.Time) *Work
 	}}}
 }
 
-// NewWorkflowRunTriggerFromTrigger creates a copy of an existing workflow run
-// trigger.
-func NewWorkflowRunTriggerFromTrigger(value *WorkflowRunTrigger) (*WorkflowRunTrigger, error) {
-	if value == nil {
-		return nil, nil
+// NewWorkflowRunTrigger creates a workflow run trigger from native Go values.
+func NewWorkflowRunTrigger(input WorkflowRunTriggerInput) (*WorkflowRunTrigger, error) {
+	selected := 0
+	if input.Manual {
+		selected++
 	}
-	switch kind := value.GetKind().(type) {
-	case *WorkflowRunTriggerManual:
+	if input.Schedule != nil {
+		selected++
+	}
+	if input.Event != nil {
+		selected++
+	}
+	if selected == 0 {
+		return &WorkflowRunTrigger{}, nil
+	}
+	if selected > 1 {
+		return nil, fmt.Errorf("workflow run trigger must set exactly one trigger kind")
+	}
+	if input.Manual {
 		return &WorkflowRunTrigger{Kind: &WorkflowRunTriggerManual{Manual: &WorkflowManualTrigger{}}}, nil
-	case *WorkflowRunTriggerSchedule:
-		if kind.Schedule == nil {
-			return &WorkflowRunTrigger{}, nil
-		}
-		return NewWorkflowScheduleTrigger(kind.Schedule.GetScheduleId(), TimeFromTimestamp(kind.Schedule.GetScheduledFor())), nil
-	case *WorkflowRunTriggerEvent:
-		if kind.Event == nil {
-			return &WorkflowRunTrigger{}, nil
-		}
-		event, err := NewWorkflowEventFromEvent(kind.Event.GetEvent())
+	}
+	if input.Schedule != nil {
+		return &WorkflowRunTrigger{Kind: &WorkflowRunTriggerSchedule{Schedule: &WorkflowScheduleTrigger{
+			ScheduleId:   input.Schedule.ScheduleID,
+			ScheduledFor: timestampFromOptionalTime(input.Schedule.ScheduledFor),
+		}}}, nil
+	}
+
+	var event *WorkflowEvent
+	if input.Event.Event != nil {
+		value, err := NewWorkflowEvent(*input.Event.Event)
 		if err != nil {
 			return nil, err
 		}
-		return &WorkflowRunTrigger{Kind: &WorkflowRunTriggerEvent{Event: &WorkflowEventTriggerInvocation{
-			TriggerId: kind.Event.GetTriggerId(),
-			Event:     event,
-		}}}, nil
-	default:
-		return &WorkflowRunTrigger{}, nil
+		event = value
 	}
+	return &WorkflowRunTrigger{Kind: &WorkflowRunTriggerEvent{Event: &WorkflowEventTriggerInvocation{
+		TriggerId: input.Event.TriggerID,
+		Event:     event,
+	}}}, nil
+}
+
+// WorkflowRunTriggerInputFromTrigger converts an existing protocol trigger into
+// native builder input.
+func WorkflowRunTriggerInputFromTrigger(value *WorkflowRunTrigger) (WorkflowRunTriggerInput, error) {
+	if value == nil {
+		return WorkflowRunTriggerInput{}, nil
+	}
+	switch kind := value.GetKind().(type) {
+	case *WorkflowRunTriggerManual:
+		return WorkflowRunTriggerInput{Manual: true}, nil
+	case *WorkflowRunTriggerSchedule:
+		if kind.Schedule == nil {
+			return WorkflowRunTriggerInput{}, nil
+		}
+		scheduledFor, err := TimePtrFromTimestamp(kind.Schedule.GetScheduledFor())
+		if err != nil {
+			return WorkflowRunTriggerInput{}, err
+		}
+		return WorkflowRunTriggerInput{Schedule: &WorkflowScheduleTriggerInput{
+			ScheduleID:   kind.Schedule.GetScheduleId(),
+			ScheduledFor: scheduledFor,
+		}}, nil
+	case *WorkflowRunTriggerEvent:
+		if kind.Event == nil {
+			return WorkflowRunTriggerInput{}, nil
+		}
+		var event *WorkflowEventInput
+		if kind.Event.GetEvent() != nil {
+			input := WorkflowEventInputFromEvent(kind.Event.GetEvent())
+			event = &input
+		}
+		return WorkflowRunTriggerInput{Event: &WorkflowEventTriggerInvocationInput{
+			TriggerID: kind.Event.GetTriggerId(),
+			Event:     event,
+		}}, nil
+	default:
+		return WorkflowRunTriggerInput{}, nil
+	}
+}
+
+// NewWorkflowRunTriggerFromTrigger creates a copy of an existing workflow run
+// trigger.
+func NewWorkflowRunTriggerFromTrigger(value *WorkflowRunTrigger) (*WorkflowRunTrigger, error) {
+	input, err := WorkflowRunTriggerInputFromTrigger(value)
+	if err != nil || value == nil {
+		return nil, err
+	}
+	return NewWorkflowRunTrigger(input)
 }
 
 // BoundWorkflowRunInput contains native Go values for constructing a
@@ -405,7 +521,7 @@ type BoundWorkflowRunInput struct {
 	CompletedAt   *time.Time
 	StatusMessage string
 	ResultBody    string
-	CreatedBy     *WorkflowActor
+	CreatedBy     *WorkflowActorInput
 	ExecutionRef  string
 	WorkflowKey   string
 }
@@ -422,7 +538,7 @@ func NewBoundWorkflowRun(input BoundWorkflowRunInput) *BoundWorkflowRun {
 		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
 		StatusMessage: input.StatusMessage,
 		ResultBody:    input.ResultBody,
-		CreatedBy:     input.CreatedBy,
+		CreatedBy:     workflowActorFromInput(input.CreatedBy),
 		ExecutionRef:  input.ExecutionRef,
 		WorkflowKey:   input.WorkflowKey,
 	}
@@ -460,7 +576,7 @@ func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInpu
 		CompletedAt:   completedAt,
 		StatusMessage: value.GetStatusMessage(),
 		ResultBody:    value.GetResultBody(),
-		CreatedBy:     copyWorkflowActor(value.GetCreatedBy()),
+		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef:  value.GetExecutionRef(),
 		WorkflowKey:   value.GetWorkflowKey(),
 	}, nil
@@ -487,7 +603,7 @@ type BoundWorkflowScheduleInput struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	NextRunAt    *time.Time
-	CreatedBy    *WorkflowActor
+	CreatedBy    *WorkflowActorInput
 	ExecutionRef string
 }
 
@@ -503,7 +619,7 @@ func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) *BoundWorkflowSc
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
-		CreatedBy:    input.CreatedBy,
+		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
 	}
 }
@@ -531,7 +647,7 @@ func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (Bound
 		CreatedAt:    TimeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    TimeFromTimestamp(value.GetUpdatedAt()),
 		NextRunAt:    nextRunAt,
-		CreatedBy:    copyWorkflowActor(value.GetCreatedBy()),
+		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
 	}, nil
 }
@@ -555,7 +671,7 @@ type BoundWorkflowEventTriggerInput struct {
 	Paused       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
-	CreatedBy    *WorkflowActor
+	CreatedBy    *WorkflowActorInput
 	ExecutionRef string
 }
 
@@ -569,7 +685,7 @@ func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTriggerInput) *BoundWo
 		Paused:       input.Paused,
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
-		CreatedBy:    input.CreatedBy,
+		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
 	}
 }
@@ -591,7 +707,7 @@ func BoundWorkflowEventTriggerInputFromTrigger(value *BoundWorkflowEventTrigger)
 		Paused:       value.GetPaused(),
 		CreatedAt:    TimeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    TimeFromTimestamp(value.GetUpdatedAt()),
-		CreatedBy:    copyWorkflowActor(value.GetCreatedBy()),
+		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
 	}, nil
 }
@@ -737,16 +853,19 @@ func copyAgentToolRefs(values []*AgentToolRef) []*AgentToolRef {
 	return out
 }
 
-func copyWorkflowActor(value *WorkflowActor) *WorkflowActor {
+func workflowActorFromInput(input *WorkflowActorInput) *WorkflowActor {
+	if input == nil {
+		return nil
+	}
+	return NewWorkflowActor(*input)
+}
+
+func workflowActorInputPtrFromActor(value *WorkflowActor) *WorkflowActorInput {
 	if value == nil {
 		return nil
 	}
-	return &WorkflowActor{
-		SubjectId:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
+	input := WorkflowActorInputFromActor(value)
+	return &input
 }
 
 func copyWorkflowEventMatch(value *WorkflowEventMatch) *WorkflowEventMatch {

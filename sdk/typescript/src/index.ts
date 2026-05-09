@@ -527,7 +527,7 @@ export {
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
-  type InvokeWorkflowOperationRequest,
+  type InvokeWorkflowOperationInput,
   type InvokeWorkflowOperationResponse,
   type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowExecutionReferencesResponse,
