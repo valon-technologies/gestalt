@@ -438,9 +438,9 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Provider struct {
@@ -479,26 +479,26 @@ func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExte
 
 	value := cloneExternalCredential(req.GetCredential())
 	key := externalCredentialLookupKey(value.GetSubjectId(), value.GetConnectionId(), value.GetInstance())
-	now := timestamppb.Now()
+	now := time.Now().UTC()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if existing := p.credentials[key]; existing != nil {
-		value.Id = existing.GetId()
+		value.ID = existing.GetId()
 		if value.GetCreatedAt() == nil {
-			value.CreatedAt = existing.GetCreatedAt()
+			value.CreatedAt = cloneTime(existing.GetCreatedAt())
 		}
 	} else {
 		if value.GetId() == "" {
-			value.Id = "cred-" + value.GetConnectionId() + "-" + value.GetInstance()
+			value.ID = "cred-" + value.GetConnectionId() + "-" + value.GetInstance()
 		}
 		if value.GetCreatedAt() == nil {
-			value.CreatedAt = now
+			value.CreatedAt = timePtr(now)
 		}
 	}
 	if value.GetUpdatedAt() == nil {
-		value.UpdatedAt = now
+		value.UpdatedAt = timePtr(now)
 	}
 
 	p.credentials[key] = cloneExternalCredential(value)
@@ -628,7 +628,7 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 	return &gestalt.ResolveExternalCredentialResponse{
 		Token:        credential.GetAccessToken(),
 		ExpiresAt:    credential.GetExpiresAt(),
-		MetadataJson: credential.GetMetadataJson(),
+		MetadataJSON: credential.GetMetadataJson(),
 		Credential:   cloneExternalCredential(credential),
 	}, nil
 }
@@ -650,6 +650,22 @@ func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.Exchange
 }
 
 func cloneExternalCredential(src *gestalt.ExternalCredential) *gestalt.ExternalCredential {
+	if src == nil {
+		return nil
+	}
+	value := *src
+	value.ExpiresAt = cloneTime(src.ExpiresAt)
+	value.LastRefreshedAt = cloneTime(src.LastRefreshedAt)
+	value.CreatedAt = cloneTime(src.CreatedAt)
+	value.UpdatedAt = cloneTime(src.UpdatedAt)
+	return &value
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
+}
+
+func cloneTime(src *time.Time) *time.Time {
 	if src == nil {
 		return nil
 	}
