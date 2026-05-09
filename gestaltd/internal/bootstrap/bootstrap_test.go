@@ -271,12 +271,38 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 	}
 	out := make([]*core.Relationship, 0, len(p.relsByModel[modelID]))
 	for _, rel := range p.relsByModel[modelID] {
+		if !bootstrapRelationshipMatches(rel, req) {
+			continue
+		}
 		out = append(out, cloneRelationship(rel))
+		if req.GetPageSize() > 0 && int32(len(out)) >= req.GetPageSize() {
+			break
+		}
 	}
 	return &core.ReadRelationshipsResponse{
 		Relationships: out,
 		ModelId:       modelID,
 	}, nil
+}
+
+func bootstrapRelationshipMatches(rel *core.Relationship, req *core.ReadRelationshipsRequest) bool {
+	if rel == nil {
+		return false
+	}
+	if subject := req.GetSubject(); subject != nil {
+		if rel.GetSubject().GetType() != subject.GetType() || rel.GetSubject().GetId() != subject.GetId() {
+			return false
+		}
+	}
+	if relation := strings.TrimSpace(req.GetRelation()); relation != "" && rel.GetRelation() != relation {
+		return false
+	}
+	if resource := req.GetResource(); resource != nil {
+		if rel.GetResource().GetType() != resource.GetType() || rel.GetResource().GetId() != resource.GetId() {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
@@ -9579,7 +9605,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("authorization provider denies until reload heals active model drift", func(t *testing.T) {
+	t.Run("authorization provider uses cached model while active model drifts", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
@@ -9634,11 +9660,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind:      principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
-		if allowed {
-			t.Fatal("expected access to be denied while the provider active model drifts")
+		if !allowed {
+			t.Fatal("expected access to use the cached model while the provider active model drifts")
 		}
-		if access.Role != "" {
-			t.Fatalf("role during active model drift = %q, want empty", access.Role)
+		if access.Role != "viewer" {
+			t.Fatalf("role during active model drift = %q, want %q", access.Role, "viewer")
 		}
 		if err := result.Authorizer.ReloadAuthorizationState(ctx); err != nil {
 			t.Fatalf("expected authorization state reload to heal active model drift: %v", err)
