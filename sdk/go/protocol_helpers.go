@@ -10,16 +10,12 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ProtoMessage is the common interface implemented by generated protobuf messages.
 type ProtoMessage = gproto.Message
-
-// Empty aliases google.protobuf.Empty for provider RPC boundary methods.
-type Empty = emptypb.Empty
 
 // Struct aliases google.protobuf.Struct for low-level protocol interop.
 type Struct = structpb.Struct

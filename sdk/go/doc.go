@@ -68,14 +68,13 @@
 // ListToolsForTurn, and ResolveConnectionForTurn. For lower-level fixtures and
 // interoperability tests, package gen/v1 re-exports selected generated
 // protobuf bindings. SDK constructors such as NewBoundWorkflowRun,
-// NewWorkflowSignal, and NewAuthorizationModelRef accept native time.Time
-// values and JSON-compatible maps or structs, so provider code can keep
-// protobuf timestamp and Struct conversion at the SDK boundary. SetTime and
-// SetOptionalTime accept native time.Time values when provider code needs to
-// update existing generated messages in place. StructFromMap, StructFromAny,
-// ValueFromAny, ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the
-// IndexedDB codec helpers remain available for lower-level interop and tests.
-// Empty, Struct, Value, Timestamp, ProtoMessage, MarshalProtoDeterministic,
+// NewWorkflowSignal, NewAuthorizationModelRef, and the external credential
+// request/response structs accept native time.Time values and JSON-compatible
+// maps or structs, so provider code can keep protobuf timestamp and Struct
+// conversion at the SDK boundary. StructFromMap, StructFromAny, ValueFromAny,
+// ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the IndexedDB
+// codec helpers remain available for lower-level interop and transport tests.
+// Struct, Value, Timestamp, ProtoMessage, MarshalProtoDeterministic,
 // UnmarshalProto, MarshalProtoJSON, and UnmarshalProtoJSON are thin aliases or
 // wrappers for RPC and persistence boundaries that still need protocol-shaped
 // values.

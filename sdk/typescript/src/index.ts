@@ -113,7 +113,6 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
-  EmptySchema,
   dateFromTimestamp,
   jsonFromInput,
   jsonFromValue,
@@ -131,7 +130,6 @@ export {
   valueFromJson,
   type BinaryReadOptions,
   type BinaryWriteOptions,
-  type Empty,
   type JsonInput,
   type JsonObjectInput,
   type JsonPrimitiveInput,

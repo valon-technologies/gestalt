@@ -143,7 +143,6 @@ _AGENT_HELPER_EXPORTS = (
 
 _PROTOBUF_HELPER_EXPORTS = (
     "datetime_from_timestamp",
-    "Empty",
     "has_field",
     "JsonInput",
     "JsonObject",

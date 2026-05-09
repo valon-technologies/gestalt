@@ -6,8 +6,6 @@ import (
 )
 
 func TestProtoBoundaryHelpers(t *testing.T) {
-	var _ ProtoMessage = (*Empty)(nil)
-
 	msg, err := StructFromAny(map[string]any{"ok": true, "count": 2})
 	if err != nil {
 		t.Fatalf("StructFromAny: %v", err)

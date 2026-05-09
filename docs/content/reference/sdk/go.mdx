@@ -98,10 +98,10 @@ The same module includes host-service clients such as `CacheClient`,
 `ExternalCredentialClient`, `RuntimeLogHostClient`, and `InvokerClient`.
 
 `AgentHostClient` exposes plain Go helpers named `ListToolsForTurn`,
-`ExecuteToolForTurn`, and `ResolveConnectionForTurn`. Use `StructFromMap`,
-`StructFromAny`, `ValueFromAny`, `ValuesFromMap`, `TimestampFromTime`,
-`TimestampFromTimePtr`, and the matching map/time clone helpers for protobuf
-well-known type conversions. The `gen/v1` subpackage re-exports selected
+`ExecuteToolForTurn`, and `ResolveConnectionForTurn`. Workflow and external
+credential helpers accept native `time.Time` values, pointers, maps, structs,
+and slices; provider code should not need protobuf timestamp or empty-message
+constructors for normal authoring. The `gen/v1` subpackage re-exports selected
 generated bindings for transport fixtures, and the IndexedDB codec helpers
 convert records, keys, and typed values without importing internal packages.
 
@@ -127,8 +127,8 @@ func connectedInstances(ctx context.Context, subjectID, connectionID string) ([]
 	defer credentials.Close()
 
 	resp, err := credentials.ListCredentials(ctx, &gestalt.ListExternalCredentialsRequest{
-		SubjectId:    subjectID,
-		ConnectionId: connectionID,
+		SubjectID:    subjectID,
+		ConnectionID: connectionID,
 	})
 	if err != nil {
 		return nil, err
