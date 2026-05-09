@@ -75,6 +75,10 @@
 // update existing generated messages in place. StructFromMap, StructFromAny,
 // ValueFromAny, ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the
 // IndexedDB codec helpers remain available for lower-level interop and tests.
+// Empty, Struct, Value, Timestamp, ProtoMessage, MarshalProtoDeterministic,
+// UnmarshalProto, MarshalProtoJSON, and UnmarshalProtoJSON are thin aliases or
+// wrappers for RPC and persistence boundaries that still need protocol-shaped
+// values.
 // StructFromAny accepts structs, string-keyed map aliases, and pointers to
 // either form; it rejects time.Time,
 // json.Marshaler values, non-string map keys, cycles, and non-finite numbers in
