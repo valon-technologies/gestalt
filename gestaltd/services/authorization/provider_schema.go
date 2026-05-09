@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
@@ -16,9 +17,16 @@ const (
 	ProviderResourceTypeExternalIdentity               = "external_identity"
 	ProviderResourceTypeManagedSubject                 = "managed_subject"
 	ProviderResourceTypeAgentSession                   = "agent_session"
+	ProviderResourceTypeEveryone                       = "everyone"
+	ProviderResourceTypeTeam                           = "team"
+	ProviderResourceTypeSlackChannel                   = "slack_channel"
 	ProviderResourceIDAdminDynamicGlobal               = "global"
+	ProviderResourceIDEveryoneGlobal                   = "global"
 	ProviderExternalIdentityRelationAssume             = "assume"
+	ProviderRelationMember                             = "member"
+	ProviderAgentSessionRelationViewer                 = "viewer"
 	ProviderAgentSessionRelationEditor                 = "editor"
+	ProviderAgentSessionRelationParent                 = "parent"
 	ProviderAgentSessionActionView                     = "view"
 	ProviderAgentSessionActionEdit                     = "edit"
 	ProviderManagedSubjectRelationViewer               = "viewer"
@@ -44,9 +52,16 @@ const (
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
 	resourceTypeManagedSubject     = ProviderResourceTypeManagedSubject
 	resourceTypeAgentSession       = ProviderResourceTypeAgentSession
+	resourceTypeEveryone           = ProviderResourceTypeEveryone
+	resourceTypeTeam               = ProviderResourceTypeTeam
+	resourceTypeSlackChannel       = ProviderResourceTypeSlackChannel
 	resourceIDAdminDynamicGlobal   = ProviderResourceIDAdminDynamicGlobal
+	resourceIDEveryoneGlobal       = ProviderResourceIDEveryoneGlobal
 	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
+	relationMember                 = ProviderRelationMember
+	relationAgentSessionViewer     = ProviderAgentSessionRelationViewer
 	relationAgentSessionEditor     = ProviderAgentSessionRelationEditor
+	relationAgentSessionParent     = ProviderAgentSessionRelationParent
 	relationManagedSubjectViewer   = ProviderManagedSubjectRelationViewer
 	relationManagedSubjectEditor   = ProviderManagedSubjectRelationEditor
 	relationManagedSubjectAdmin    = ProviderManagedSubjectRelationAdmin
@@ -67,7 +82,10 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 		ProviderResourceTypeAdminDynamic,
 		ProviderResourceTypeExternalIdentity,
 		ProviderResourceTypeManagedSubject,
-		ProviderResourceTypeAgentSession:
+		ProviderResourceTypeAgentSession,
+		ProviderResourceTypeEveryone,
+		ProviderResourceTypeTeam,
+		ProviderResourceTypeSlackChannel:
 		return true
 	default:
 		return false
@@ -166,21 +184,113 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		&core.AuthorizationModelResourceType{
 			Name: resourceTypeAgentSession,
-			Relations: []*core.AuthorizationModelRelation{{
-				Name:         relationAgentSessionEditor,
-				SubjectTypes: []string{subjectTypeSubject},
-			}},
+			Relations: []*core.AuthorizationModelRelation{
+				agentSessionAccessRelation(relationAgentSessionViewer),
+				agentSessionAccessRelation(relationAgentSessionEditor),
+				{
+					Name:         relationAgentSessionParent,
+					SubjectTypes: []string{subjectTypeSubject},
+					AllowedTargets: []*core.AuthorizationModelAllowedTarget{{
+						Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: resourceTypeAgentSession},
+					}},
+				},
+			},
 			Actions: []*core.AuthorizationModelAction{
-				{Name: ProviderAgentSessionActionView, Relations: []string{relationAgentSessionEditor}},
-				{Name: ProviderAgentSessionActionEdit, Relations: []string{relationAgentSessionEditor}},
+				{
+					Name:      ProviderAgentSessionActionView,
+					Relations: []string{relationAgentSessionViewer, relationAgentSessionEditor},
+					Rewrite: rewriteUnion(
+						rewriteComputedUserset(relationAgentSessionViewer),
+						rewriteComputedUserset(relationAgentSessionEditor),
+					),
+				},
+				{
+					Name:      ProviderAgentSessionActionEdit,
+					Relations: []string{relationAgentSessionEditor},
+					Rewrite:   rewriteComputedUserset(relationAgentSessionEditor),
+				},
 			},
 		},
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		membershipResourceType(resourceTypeEveryone),
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		membershipResourceType(resourceTypeTeam),
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		membershipResourceType(resourceTypeSlackChannel),
 	)
 
 	slices.SortFunc(model.ResourceTypes, func(left, right *core.AuthorizationModelResourceType) int {
 		return strings.Compare(left.GetName(), right.GetName())
 	})
 	return model
+}
+
+func agentSessionAccessRelation(name string) *core.AuthorizationModelRelation {
+	children := []*core.AuthorizationModelRewrite{rewriteThis()}
+	if name == relationAgentSessionViewer {
+		children = append(children, rewriteComputedUserset(relationAgentSessionEditor))
+	}
+	children = append(children, rewriteTupleToUserset(relationAgentSessionParent, name))
+	return &core.AuthorizationModelRelation{
+		Name:         name,
+		SubjectTypes: []string{subjectTypeSubject},
+		AllowedTargets: []*core.AuthorizationModelAllowedTarget{
+			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectTypeSubject}},
+			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeEveryone, Relation: relationMember}}},
+			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeTeam, Relation: relationMember}}},
+			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeSlackChannel, Relation: relationMember}}},
+		},
+		Rewrite: rewriteUnion(children...),
+	}
+}
+
+func membershipResourceType(name string) *core.AuthorizationModelResourceType {
+	return &core.AuthorizationModelResourceType{
+		Name: name,
+		Relations: []*core.AuthorizationModelRelation{{
+			Name:         relationMember,
+			SubjectTypes: []string{subjectTypeSubject},
+			AllowedTargets: []*core.AuthorizationModelAllowedTarget{{
+				Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectTypeSubject},
+			}},
+			Rewrite: rewriteThis(),
+		}},
+		Actions: []*core.AuthorizationModelAction{{
+			Name:      relationMember,
+			Relations: []string{relationMember},
+			Rewrite:   rewriteComputedUserset(relationMember),
+		}},
+	}
+}
+
+func rewriteThis() *core.AuthorizationModelRewrite {
+	return &core.AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_This{This: &core.AuthorizationModelRewriteThis{}},
+	}
+}
+
+func rewriteComputedUserset(relation string) *core.AuthorizationModelRewrite {
+	return &core.AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_ComputedUserset{ComputedUserset: &core.AuthorizationModelComputedUserset{Relation: relation}},
+	}
+}
+
+func rewriteTupleToUserset(tuplesetRelation, computedRelation string) *core.AuthorizationModelRewrite {
+	return &core.AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_TupleToUserset{TupleToUserset: &core.AuthorizationModelTupleToUserset{
+			TuplesetRelation: tuplesetRelation,
+			ComputedRelation: computedRelation,
+		}},
+	}
+}
+
+func rewriteUnion(children ...*core.AuthorizationModelRewrite) *core.AuthorizationModelRewrite {
+	return &core.AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_Union{Union: &core.AuthorizationModelRewriteUnion{Children: children}},
+	}
 }
 
 func appendIfModelResourceType(target []*core.AuthorizationModelResourceType, resourceType *core.AuthorizationModelResourceType) []*core.AuthorizationModelResourceType {

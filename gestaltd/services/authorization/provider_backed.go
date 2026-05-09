@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -633,10 +634,11 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			adminDynamicRoles[relation] = struct{}{}
 		case resourceTypeExternalIdentity:
 			relation := strings.TrimSpace(rel.GetRelation())
-			if relation != relationExternalIdentityAssume || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+			subject := relationshipTargetSubject(rel)
+			if relation != relationExternalIdentityAssume || subject == nil || strings.TrimSpace(subject.GetId()) == "" {
 				continue
 			}
-			switch strings.TrimSpace(rel.GetSubject().GetType()) {
+			switch strings.TrimSpace(subject.GetType()) {
 			case subjectTypeSubject, subjectTypeUser:
 			default:
 				continue
@@ -644,18 +646,21 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			addDesiredRelationship(desired, rel)
 		case resourceTypeManagedSubject:
 			relation := strings.TrimSpace(rel.GetRelation())
-			if !managedSubjectManagementRelation(relation) || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+			subject := relationshipTargetSubject(rel)
+			if !managedSubjectManagementRelation(relation) || subject == nil || strings.TrimSpace(subject.GetId()) == "" {
 				continue
 			}
-			if strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeSubject {
+			if strings.TrimSpace(subject.GetType()) != subjectTypeSubject {
 				continue
 			}
 			addDesiredRelationship(desired, rel)
 		case resourceTypeAgentSession:
-			if strings.TrimSpace(rel.GetResource().GetId()) == "" || strings.TrimSpace(rel.GetRelation()) != relationAgentSessionEditor {
+			if !validManagedAgentSessionRelationship(rel) {
 				continue
 			}
-			if rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeSubject || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+			addDesiredRelationship(desired, rel)
+		case resourceTypeEveryone, resourceTypeTeam, resourceTypeSlackChannel:
+			if !validManagedMembershipRelationship(rel) {
 				continue
 			}
 			addDesiredRelationship(desired, rel)
@@ -735,11 +740,7 @@ func diffRelationships(existing, desired map[string]*core.Relationship) ([]*core
 		if _, ok := desired[key]; ok {
 			continue
 		}
-		deletes = append(deletes, &core.RelationshipKey{
-			Subject:  rel.GetSubject(),
-			Relation: rel.GetRelation(),
-			Resource: rel.GetResource(),
-		})
+		deletes = append(deletes, relationshipKeyForRelationship(rel))
 	}
 	sort.Slice(writes, func(i, j int) bool { return relationshipMapKey(writes[i]) < relationshipMapKey(writes[j]) })
 	sort.Slice(deletes, func(i, j int) bool { return relationshipKeyMapKey(deletes[i]) < relationshipKeyMapKey(deletes[j]) })
@@ -796,6 +797,61 @@ func managedSubjectManagementRelation(relation string) bool {
 	default:
 		return false
 	}
+}
+
+func validManagedAgentSessionRelationship(rel *core.Relationship) bool {
+	if rel == nil || rel.GetResource() == nil || strings.TrimSpace(rel.GetResource().GetId()) == "" {
+		return false
+	}
+	switch strings.TrimSpace(rel.GetRelation()) {
+	case relationAgentSessionViewer, relationAgentSessionEditor:
+		return validAgentSessionAccessTarget(rel)
+	case relationAgentSessionParent:
+		target := relationshipTargetResource(rel)
+		return target != nil &&
+			strings.TrimSpace(target.GetType()) == resourceTypeAgentSession &&
+			strings.TrimSpace(target.GetId()) != ""
+	default:
+		return false
+	}
+}
+
+func validAgentSessionAccessTarget(rel *core.Relationship) bool {
+	if subject := relationshipTargetSubject(rel); subject != nil {
+		return strings.TrimSpace(subject.GetType()) == subjectTypeSubject && strings.TrimSpace(subject.GetId()) != ""
+	}
+	subjectSet := relationshipTargetSubjectSet(rel)
+	if subjectSet == nil || strings.TrimSpace(subjectSet.GetRelation()) != relationMember {
+		return false
+	}
+	resource := subjectSet.GetResource()
+	if resource == nil || strings.TrimSpace(resource.GetId()) == "" {
+		return false
+	}
+	switch strings.TrimSpace(resource.GetType()) {
+	case resourceTypeEveryone:
+		return strings.TrimSpace(resource.GetId()) == resourceIDEveryoneGlobal
+	case resourceTypeTeam, resourceTypeSlackChannel:
+		return true
+	default:
+		return false
+	}
+}
+
+func validManagedMembershipRelationship(rel *core.Relationship) bool {
+	if rel == nil || rel.GetResource() == nil {
+		return false
+	}
+	if strings.TrimSpace(rel.GetRelation()) != relationMember || strings.TrimSpace(rel.GetResource().GetId()) == "" {
+		return false
+	}
+	if strings.TrimSpace(rel.GetResource().GetType()) == resourceTypeEveryone && strings.TrimSpace(rel.GetResource().GetId()) != resourceIDEveryoneGlobal {
+		return false
+	}
+	subject := relationshipTargetSubject(rel)
+	return subject != nil &&
+		strings.TrimSpace(subject.GetType()) == subjectTypeSubject &&
+		strings.TrimSpace(subject.GetId()) != ""
 }
 
 func roleSortKey(role string) string {
@@ -886,8 +942,7 @@ func relationshipMapKey(rel *core.Relationship) string {
 		return ""
 	}
 	return strings.Join([]string{
-		rel.GetSubject().GetType(),
-		rel.GetSubject().GetId(),
+		RelationshipTargetMapKey(rel.GetTarget(), rel.GetSubject()),
 		rel.GetRelation(),
 		rel.GetResource().GetType(),
 		rel.GetResource().GetId(),
@@ -899,12 +954,100 @@ func relationshipKeyMapKey(rel *core.RelationshipKey) string {
 		return ""
 	}
 	return strings.Join([]string{
-		rel.GetSubject().GetType(),
-		rel.GetSubject().GetId(),
+		RelationshipTargetMapKey(rel.GetTarget(), rel.GetSubject()),
 		rel.GetRelation(),
 		rel.GetResource().GetType(),
 		rel.GetResource().GetId(),
 	}, "\x00")
+}
+
+func relationshipKeyForRelationship(rel *core.Relationship) *core.RelationshipKey {
+	if rel == nil {
+		return nil
+	}
+	key := &core.RelationshipKey{
+		Subject:  rel.GetSubject(),
+		Relation: rel.GetRelation(),
+		Resource: rel.GetResource(),
+		Target:   rel.GetTarget(),
+	}
+	if key.GetTarget() == nil && key.GetSubject() != nil {
+		key.Target = &core.RelationshipTargetRef{
+			Kind: &proto.RelationshipTarget_Subject{Subject: key.GetSubject()},
+		}
+	}
+	return key
+}
+
+// RelationshipTargetMapKey returns the canonical key for a target-aware
+// relationship target. Legacy subject-only tuples are represented as subject
+// targets.
+func RelationshipTargetMapKey(target *core.RelationshipTargetRef, subject *core.SubjectRef) string {
+	if target != nil {
+		if targetSubject := target.GetSubject(); targetSubject != nil {
+			return strings.Join([]string{"subject", strings.TrimSpace(targetSubject.GetType()), strings.TrimSpace(targetSubject.GetId())}, "\x00")
+		}
+		if targetResource := target.GetResource(); targetResource != nil {
+			return strings.Join([]string{"resource", strings.TrimSpace(targetResource.GetType()), strings.TrimSpace(targetResource.GetId())}, "\x00")
+		}
+		if targetSet := target.GetSubjectSet(); targetSet != nil {
+			resource := targetSet.GetResource()
+			return strings.Join([]string{
+				"subject_set",
+				strings.TrimSpace(resource.GetType()),
+				strings.TrimSpace(resource.GetId()),
+				strings.TrimSpace(targetSet.GetRelation()),
+			}, "\x00")
+		}
+	}
+	if subject != nil {
+		return strings.Join([]string{"subject", strings.TrimSpace(subject.GetType()), strings.TrimSpace(subject.GetId())}, "\x00")
+	}
+	return ""
+}
+
+// RelationshipSubject returns the effective direct subject for a relationship.
+// Non-subject targets and inconsistent legacy subject/target pairs return nil.
+func RelationshipSubject(rel *core.Relationship) *core.SubjectRef {
+	if rel == nil {
+		return nil
+	}
+	if target := rel.GetTarget(); target != nil {
+		targetSubject := target.GetSubject()
+		if targetSubject == nil {
+			return nil
+		}
+		if subject := rel.GetSubject(); subject != nil && !sameSubjectRef(subject, targetSubject) {
+			return nil
+		}
+		return targetSubject
+	}
+	return rel.GetSubject()
+}
+
+func relationshipTargetSubject(rel *core.Relationship) *core.SubjectRef {
+	return RelationshipSubject(rel)
+}
+
+func relationshipTargetResource(rel *core.Relationship) *core.ResourceRef {
+	if rel == nil || rel.GetTarget() == nil || rel.GetSubject() != nil {
+		return nil
+	}
+	return rel.GetTarget().GetResource()
+}
+
+func relationshipTargetSubjectSet(rel *core.Relationship) *core.SubjectSetRef {
+	if rel == nil || rel.GetTarget() == nil || rel.GetSubject() != nil {
+		return nil
+	}
+	return rel.GetTarget().GetSubjectSet()
+}
+
+func sameSubjectRef(left, right *core.SubjectRef) bool {
+	return left != nil &&
+		right != nil &&
+		strings.TrimSpace(left.GetType()) == strings.TrimSpace(right.GetType()) &&
+		strings.TrimSpace(left.GetId()) == strings.TrimSpace(right.GetId())
 }
 
 func (a *ProviderBackedAuthorizer) logProviderEvalError(scope, name string, err error) {

@@ -17,8 +17,11 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type catalogCountingProvider struct {
@@ -150,6 +153,94 @@ type routeCountingAgentProvider struct {
 	cancelStatus      coreagent.ExecutionStatus
 	getSessionCalls   int
 	getTurnCalls      int
+}
+
+type sharedSessionAuthorizationProvider struct {
+	directResources              []*core.ResourceRef
+	effectiveResources           []*core.ResourceRef
+	effectiveErr                 error
+	allowedSessions              map[string]struct{}
+	searchResourceCalls          int
+	effectiveSearchResourceCalls int
+}
+
+func (p *sharedSessionAuthorizationProvider) Name() string { return "shared-session-authz" }
+
+func (p *sharedSessionAuthorizationProvider) Evaluate(_ context.Context, req *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
+	_, allowed := p.allowedSessions[strings.TrimSpace(req.GetResource().GetId())]
+	return &core.AccessDecision{Allowed: allowed}, nil
+}
+
+func (p *sharedSessionAuthorizationProvider) EvaluateMany(ctx context.Context, req *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+	resp := &core.AccessEvaluationsResponse{Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests()))}
+	for _, item := range req.GetRequests() {
+		decision, err := p.Evaluate(ctx, item)
+		if err != nil {
+			return nil, err
+		}
+		resp.Decisions = append(resp.Decisions, decision)
+	}
+	return resp, nil
+}
+
+func (p *sharedSessionAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	p.searchResourceCalls++
+	return &core.ResourceSearchResponse{Resources: cloneAuthzResources(p.directResources)}, nil
+}
+
+func (p *sharedSessionAuthorizationProvider) EffectiveSearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	p.effectiveSearchResourceCalls++
+	if p.effectiveErr != nil {
+		return nil, p.effectiveErr
+	}
+	return &core.ResourceSearchResponse{Resources: cloneAuthzResources(p.effectiveResources)}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+	return &core.SubjectSearchResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) EffectiveSearchSubjects(context.Context, *core.EffectiveSubjectSearchRequest) (*core.EffectiveSubjectSearchResponse, error) {
+	return &core.EffectiveSubjectSearchResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
+	return &core.ActionSearchResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
+	return &core.AuthorizationMetadata{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+	return &core.ReadRelationshipsResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
+	return nil
+}
+
+func (*sharedSessionAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+	return &core.GetActiveModelResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+	return &core.ListModelsResponse{}, nil
+}
+
+func (*sharedSessionAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+	return &core.AuthorizationModelRef{Id: "model-test", Version: "1"}, nil
+}
+
+func cloneAuthzResources(resources []*core.ResourceRef) []*core.ResourceRef {
+	out := make([]*core.ResourceRef, 0, len(resources))
+	for _, resource := range resources {
+		if resource == nil {
+			continue
+		}
+		out = append(out, &core.ResourceRef{Type: resource.GetType(), Id: resource.GetId()})
+	}
+	return out
 }
 
 func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
@@ -1112,6 +1203,89 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 	}
 	if len(provider.listSessionReqs) != 0 {
 		t.Fatalf("provider ListSessions calls = %d, want 0", len(provider.listSessionReqs))
+	}
+}
+
+func TestManagerListSharedSessionsUsesEffectiveSearchResources(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.sessions["shared-session"] = &coreagent.Session{
+		ID:           "shared-session",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("owner")},
+	}
+	authz := &sharedSessionAuthorizationProvider{
+		effectiveResources: []*core.ResourceRef{{Type: authorization.ProviderResourceTypeAgentSession, Id: "shared-session"}},
+		allowedSessions:    map[string]struct{}{"shared-session": {}},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		AuthorizationProvider: authz,
+	})
+
+	sessions, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "shared-session" {
+		t.Fatalf("ListSessions shared sessions = %#v, want shared-session", sessions)
+	}
+	if authz.effectiveSearchResourceCalls != 1 {
+		t.Fatalf("EffectiveSearchResources calls = %d, want 1", authz.effectiveSearchResourceCalls)
+	}
+	if authz.searchResourceCalls != 0 {
+		t.Fatalf("SearchResources calls = %d, want 0", authz.searchResourceCalls)
+	}
+}
+
+func TestManagerListSharedSessionsFallsBackWhenEffectiveSearchUnimplemented(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.sessions["shared-session"] = &coreagent.Session{
+		ID:           "shared-session",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("owner")},
+	}
+	authz := &sharedSessionAuthorizationProvider{
+		effectiveErr:    status.Error(codes.Unimplemented, "effective search is not supported"),
+		directResources: []*core.ResourceRef{{Type: authorization.ProviderResourceTypeAgentSession, Id: "shared-session"}},
+		allowedSessions: map[string]struct{}{"shared-session": {}},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		AuthorizationProvider: authz,
+	})
+
+	sessions, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "shared-session" {
+		t.Fatalf("ListSessions shared sessions = %#v, want shared-session", sessions)
+	}
+	if authz.effectiveSearchResourceCalls != 1 {
+		t.Fatalf("EffectiveSearchResources calls = %d, want 1", authz.effectiveSearchResourceCalls)
+	}
+	if authz.searchResourceCalls != 1 {
+		t.Fatalf("SearchResources calls = %d, want 1", authz.searchResourceCalls)
 	}
 }
 

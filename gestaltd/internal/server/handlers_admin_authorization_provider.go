@@ -213,7 +213,8 @@ func (s *Server) adminAuthorizationRowsFromProviderRelationships(ctx context.Con
 }
 
 func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx context.Context, plugin string, rel *core.Relationship) (adminAuthorizationMemberRow, bool, error) {
-	if rel == nil || rel.GetSubject() == nil {
+	subject := authorization.RelationshipSubject(rel)
+	if subject == nil {
 		return adminAuthorizationMemberRow{}, false, nil
 	}
 
@@ -228,9 +229,9 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 		return adminAuthorizationMemberRow{}, false, nil
 	}
 
-	switch strings.TrimSpace(rel.GetSubject().GetType()) {
+	switch strings.TrimSpace(subject.GetType()) {
 	case authorization.ProviderSubjectTypeSubject:
-		subjectID := strings.TrimSpace(rel.GetSubject().GetId())
+		subjectID := strings.TrimSpace(subject.GetId())
 		if !adminAuthorizationValidSubjectID(subjectID) {
 			return adminAuthorizationMemberRow{}, false, nil
 		}
@@ -263,6 +264,7 @@ func (s *Server) readAllAuthorizationRelationships(ctx context.Context, req *cor
 			PageSize:  pageSize,
 			PageToken: pageToken,
 			ModelId:   req.GetModelId(),
+			Target:    req.GetTarget(),
 		})
 		if err != nil {
 			return nil, err
