@@ -63,7 +63,14 @@ func UnmarshalProto(data []byte, msg ProtoMessage) error {
 }
 
 // MarshalProtoJSON serializes a protobuf message using protojson.
+//
+// Mirrors MarshalProtoDeterministic by returning (nil, nil) for a nil
+// message. protojson.MarshalOptions.Marshal would otherwise panic when it
+// dereferences the nil interface via m.ProtoReflect().
 func MarshalProtoJSON(msg ProtoMessage, options ...ProtoJSONMarshalOptions) ([]byte, error) {
+	if msg == nil {
+		return nil, nil
+	}
 	var opt ProtoJSONMarshalOptions
 	if len(options) > 0 {
 		opt = options[0]
