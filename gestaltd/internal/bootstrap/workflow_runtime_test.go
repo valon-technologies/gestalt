@@ -420,6 +420,24 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 						"number":     123,
 					},
 				},
+				"webhook_policy": map[string]any{
+					"id": "github-review",
+					"trigger": map[string]any{
+						"manual_commands": []any{"@gestalt review"},
+					},
+				},
+				"review_check_run": map[string]any{
+					"id":          456,
+					"name":        "Gestalt Review",
+					"status":      "in_progress",
+					"external_id": "gestalt-review:abc123",
+				},
+				"check_run": map[string]any{
+					"id":         789,
+					"name":       "CI",
+					"status":     "completed",
+					"conclusion": "success",
+				},
 				"payload_sha256": "abc123",
 			},
 		}},
@@ -545,6 +563,27 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	}
 	if prompt, _ := agentRequest["user_prompt"].(string); !strings.Contains(prompt, "please inspect") || len(prompt) > workflowSignalContextMaxStringBytes {
 		t.Fatalf("workflow signal user_prompt = %q", prompt)
+	}
+	webhookPolicy, ok := signalPayload["webhook_policy"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow signal webhook_policy = %#v", signalPayload["webhook_policy"])
+	}
+	if webhookPolicy["id"] != "github-review" {
+		t.Fatalf("workflow signal webhook_policy.id = %#v", webhookPolicy["id"])
+	}
+	reviewCheckRun, ok := signalPayload["review_check_run"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow signal review_check_run = %#v", signalPayload["review_check_run"])
+	}
+	if got := reviewCheckRun["id"]; got != 456 && got != float64(456) {
+		t.Fatalf("workflow signal review_check_run.id = %#v", got)
+	}
+	checkRun, ok := signalPayload["check_run"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow signal check_run = %#v", signalPayload["check_run"])
+	}
+	if checkRun["name"] != "CI" {
+		t.Fatalf("workflow signal check_run.name = %#v", checkRun["name"])
 	}
 }
 
