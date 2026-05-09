@@ -41,7 +41,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertFalse(target.plugin.input.fields["ok"].bool_value)
         self.assertEqual(signal.payload.fields["ok"].bool_value, True)
         self.assertEqual(signal.sequence, 0)
-        self.assertEqual(gestalt.datetime_from_timestamp(run.created_at), created_at)
+        self.assertEqual(run.created_at.ToDatetime(tzinfo=dt.timezone.utc), created_at)
 
     def test_copy_helpers_do_not_alias_nested_payloads(self) -> None:
         target = gestalt.bound_workflow_target(

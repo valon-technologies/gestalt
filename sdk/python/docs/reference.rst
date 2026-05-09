@@ -128,7 +128,8 @@ Protocol helpers
 These helpers convert between Python values and protobuf well-known types
 without importing generated runtime internals. Struct and Value helpers accept
 JSON-compatible mappings and dataclass instances; datetime-like values are
-rejected in generic JSON payloads and should use timestamp helpers instead.
+rejected in generic JSON payloads and should be passed through typed SDK APIs
+that accept native ``datetime`` fields.
 
 .. autosummary::
    :nosignatures:
@@ -136,16 +137,10 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
    struct_from_dict
    struct_to_dict
    json_from_native
-   marshal_proto_deterministic
-   marshal_proto_json
    value_from_json
    value_to_json
    message_to_dict
    message_from_dict
-   unmarshal_proto
-   unmarshal_proto_json
-   timestamp_from_datetime
-   datetime_from_timestamp
    has_field
    which_oneof
 
@@ -155,10 +150,6 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 
 .. autofunction:: json_from_native
 
-.. autofunction:: marshal_proto_deterministic
-
-.. autofunction:: marshal_proto_json
-
 .. autofunction:: value_from_json
 
 .. autofunction:: value_to_json
@@ -166,14 +157,6 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 .. autofunction:: message_to_dict
 
 .. autofunction:: message_from_dict
-
-.. autofunction:: unmarshal_proto
-
-.. autofunction:: unmarshal_proto_json
-
-.. autofunction:: timestamp_from_datetime
-
-.. autofunction:: datetime_from_timestamp
 
 .. autofunction:: has_field
 

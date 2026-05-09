@@ -142,7 +142,6 @@ _AGENT_HELPER_EXPORTS = (
 )
 
 _PROTOBUF_HELPER_EXPORTS = (
-    "datetime_from_timestamp",
     "has_field",
     "JsonInput",
     "JsonObject",
@@ -150,18 +149,12 @@ _PROTOBUF_HELPER_EXPORTS = (
     "JsonPrimitive",
     "JsonValue",
     "json_from_native",
-    "marshal_proto_deterministic",
-    "marshal_proto_json",
     "message_from_dict",
     "message_to_dict",
-    "ProtoMessage",
     "struct_from_dict",
     "Struct",
     "struct_to_dict",
     "Timestamp",
-    "timestamp_from_datetime",
-    "unmarshal_proto",
-    "unmarshal_proto_json",
     "Value",
     "value_from_json",
     "value_to_json",

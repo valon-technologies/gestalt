@@ -72,12 +72,10 @@
 // request/response structs accept native time.Time values and JSON-compatible
 // maps or structs, so provider code can keep protobuf timestamp and Struct
 // conversion at the SDK boundary. StructFromMap, StructFromAny, ValueFromAny,
-// ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the IndexedDB
-// codec helpers remain available for lower-level interop and transport tests.
-// Struct, Value, Timestamp, ProtoMessage, MarshalProtoDeterministic,
-// UnmarshalProto, MarshalProtoJSON, and UnmarshalProtoJSON are thin aliases or
-// wrappers for RPC and persistence boundaries that still need protocol-shaped
-// values.
+// ValuesFromMap, and the IndexedDB codec helpers remain available for
+// lower-level interop and transport tests. The SDK no longer exposes generic
+// protobuf marshal/unmarshal wrappers; provider-facing APIs should accept
+// native values and keep protocol serialization inside transport adapters.
 // StructFromAny accepts structs, string-keyed map aliases, and pointers to
 // either form; it rejects time.Time,
 // json.Marshaler values, non-string map keys, cycles, and non-finite numbers in

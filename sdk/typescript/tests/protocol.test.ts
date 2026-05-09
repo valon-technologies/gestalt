@@ -3,17 +3,14 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { expect, test } from "bun:test";
 
 import {
-  ValueSchema,
   dateFromTimestamp,
+  timestampFromDate,
+} from "../src/protocol.ts";
+import {
   jsonFromValue,
   jsonObjectFromStruct,
-  marshalProtoDeterministic,
-  marshalProtoJson,
   structFromObject,
   structFromJsonObject,
-  timestampFromDate,
-  unmarshalProto,
-  unmarshalProtoJson,
   valueFromJson,
 } from "../src/index.ts";
 import {
@@ -58,25 +55,6 @@ test("protocol helpers produce generated workflow field shapes", () => {
   expect(dateFromTimestamp(timestamp).toISOString()).toBe(
     "1969-12-31T23:59:59.999Z",
   );
-});
-
-test("protocol boundary helpers round-trip protobuf binary and JSON", () => {
-  const message = valueFromJson({ b: 2, a: 1 });
-  const sameMessageDifferentOrder = valueFromJson({ a: 1, b: 2 });
-  const first = marshalProtoDeterministic(ValueSchema, message);
-  const second = marshalProtoDeterministic(ValueSchema, sameMessageDifferentOrder);
-
-  expect(first).toEqual(second);
-  expect(jsonFromValue(unmarshalProto(ValueSchema, first))).toEqual({
-    a: 1,
-    b: 2,
-  });
-
-  const json = marshalProtoJson(ValueSchema, message, { useProtoFieldName: true });
-  expect(jsonFromValue(unmarshalProtoJson(ValueSchema, json))).toEqual({
-    a: 1,
-    b: 2,
-  });
 });
 
 test("structFromObject rejects non-JSON object values explicitly", () => {

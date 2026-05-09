@@ -158,7 +158,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 		t.Fatalf("ValuesFromMap: %v", err)
 	}
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
-	createdAt := gestalt.TimestampFromTimePtr(&createdAtValue)
+	createdAt := timestamppb.New(createdAtValue)
 	resp, err := client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
@@ -208,18 +208,15 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	if extensions := gestalt.MapFromValues(event.GetExtensions()); extensions["attempt"] != float64(1) {
 		t.Fatalf("signal extensions = %#v", extensions)
 	}
-	roundTripCreatedAt, err := gestalt.TimePtrFromTimestamp(got.GetSignal().GetCreatedAt())
-	if err != nil {
-		t.Fatalf("TimePtrFromTimestamp: %v", err)
+	roundTripCreatedAt := got.GetSignal().GetCreatedAt()
+	if roundTripCreatedAt == nil {
+		t.Fatalf("created_at is nil, want %v", createdAtValue)
 	}
-	if roundTripCreatedAt == nil || !roundTripCreatedAt.Equal(createdAtValue) {
-		t.Fatalf("created_at = %v, want %v", roundTripCreatedAt, createdAtValue)
+	if err := roundTripCreatedAt.CheckValid(); err != nil {
+		t.Fatalf("created_at invalid: %v", err)
 	}
-	if gestalt.CloneStruct(got.GetSignal().GetPayload()) == got.GetSignal().GetPayload() {
-		t.Fatal("CloneStruct returned the original pointer")
-	}
-	if gestalt.CloneTimestamp(got.GetSignal().GetCreatedAt()) == got.GetSignal().GetCreatedAt() {
-		t.Fatal("CloneTimestamp returned the original pointer")
+	if !roundTripCreatedAt.AsTime().Equal(createdAtValue) {
+		t.Fatalf("created_at = %v, want %v", roundTripCreatedAt.AsTime(), createdAtValue)
 	}
 	if value, err := gestalt.StructFromAny(nil); err != nil || value != nil {
 		t.Fatalf("StructFromAny(nil) = %#v, %v; want nil, nil", value, err)
@@ -236,32 +233,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	if value := gestalt.MapFromValues(nil); value != nil {
 		t.Fatalf("MapFromValues(nil) = %#v, want nil", value)
 	}
-	if value := gestalt.TimestampFromTimePtr(nil); value != nil {
-		t.Fatalf("TimestampFromTimePtr(nil) = %#v, want nil", value)
-	}
-	var setTimeValue *timestamppb.Timestamp
-	setTimeWant := time.Unix(1700, 25).UTC()
-	gestalt.SetTime(&setTimeValue, setTimeWant)
-	if setTimeValue == nil || !setTimeValue.AsTime().Equal(setTimeWant) {
-		t.Fatalf("SetTime = %#v, want %v", setTimeValue, setTimeWant)
-	}
-	gestalt.SetTime(&setTimeValue, time.Time{})
-	if setTimeValue != nil {
-		t.Fatalf("SetTime(zero) = %#v, want nil", setTimeValue)
-	}
-	setOptionalWant := time.Unix(1800, 0).UTC()
-	gestalt.SetOptionalTime(&setTimeValue, &setOptionalWant)
-	if setTimeValue == nil || !setTimeValue.AsTime().Equal(setOptionalWant) {
-		t.Fatalf("SetOptionalTime = %#v, want %v", setTimeValue, setOptionalWant)
-	}
-	gestalt.SetOptionalTime(&setTimeValue, nil)
-	if setTimeValue != nil {
-		t.Fatalf("SetOptionalTime(nil) = %#v, want nil", setTimeValue)
-	}
-	if value, err := gestalt.TimePtrFromTimestamp(nil); err != nil || value != nil {
-		t.Fatalf("TimePtrFromTimestamp(nil) = %#v, %v; want nil, nil", value, err)
-	}
-	if value, err := gestalt.TimePtrFromTimestamp(&timestamppb.Timestamp{Nanos: -1}); err == nil || value != nil {
-		t.Fatalf("TimePtrFromTimestamp(invalid) = %#v, %v; want nil error", value, err)
+	if err := (&timestamppb.Timestamp{Nanos: -1}).CheckValid(); err == nil {
+		t.Fatal("invalid timestamp CheckValid() = nil, want error")
 	}
 }

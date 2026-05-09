@@ -309,7 +309,7 @@ func WorkflowEventInputFromEvent(value *WorkflowEvent) WorkflowEventInput {
 		SpecVersion:     value.GetSpecVersion(),
 		Type:            value.GetType(),
 		Subject:         value.GetSubject(),
-		Time:            TimeFromTimestamp(value.GetTime()),
+		Time:            timeFromTimestamp(value.GetTime()),
 		DataContentType: value.GetDatacontenttype(),
 		Data:            MapFromStruct(value.GetData()),
 		Extensions:      MapFromValues(value.GetExtensions()),
@@ -372,7 +372,7 @@ func WorkflowSignalInputFromSignal(value *WorkflowSignal) WorkflowSignalInput {
 		Payload:        MapFromStruct(value.GetPayload()),
 		Metadata:       MapFromStruct(value.GetMetadata()),
 		CreatedBy:      workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		CreatedAt:      TimeFromTimestamp(value.GetCreatedAt()),
+		CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
 		IdempotencyKey: value.GetIdempotencyKey(),
 		Sequence:       value.GetSequence(),
 	}
@@ -473,7 +473,7 @@ func WorkflowRunTriggerInputFromTrigger(value *WorkflowRunTrigger) (WorkflowRunT
 		if kind.Schedule == nil {
 			return WorkflowRunTriggerInput{}, nil
 		}
-		scheduledFor, err := TimePtrFromTimestamp(kind.Schedule.GetScheduledFor())
+		scheduledFor, err := timePtrFromTimestamp(kind.Schedule.GetScheduledFor())
 		if err != nil {
 			return WorkflowRunTriggerInput{}, err
 		}
@@ -554,11 +554,11 @@ func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInpu
 	if err != nil {
 		return BoundWorkflowRunInput{}, err
 	}
-	startedAt, err := TimePtrFromTimestamp(value.GetStartedAt())
+	startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
 	if err != nil {
 		return BoundWorkflowRunInput{}, err
 	}
-	completedAt, err := TimePtrFromTimestamp(value.GetCompletedAt())
+	completedAt, err := timePtrFromTimestamp(value.GetCompletedAt())
 	if err != nil {
 		return BoundWorkflowRunInput{}, err
 	}
@@ -571,7 +571,7 @@ func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInpu
 		Status:        value.GetStatus(),
 		Target:        target,
 		Trigger:       trigger,
-		CreatedAt:     TimeFromTimestamp(value.GetCreatedAt()),
+		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
 		StartedAt:     startedAt,
 		CompletedAt:   completedAt,
 		StatusMessage: value.GetStatusMessage(),
@@ -634,7 +634,7 @@ func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (Bound
 	if err != nil {
 		return BoundWorkflowScheduleInput{}, err
 	}
-	nextRunAt, err := TimePtrFromTimestamp(value.GetNextRunAt())
+	nextRunAt, err := timePtrFromTimestamp(value.GetNextRunAt())
 	if err != nil {
 		return BoundWorkflowScheduleInput{}, err
 	}
@@ -644,8 +644,8 @@ func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (Bound
 		Timezone:     value.GetTimezone(),
 		Target:       target,
 		Paused:       value.GetPaused(),
-		CreatedAt:    TimeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    TimeFromTimestamp(value.GetUpdatedAt()),
+		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
+		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		NextRunAt:    nextRunAt,
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
@@ -705,8 +705,8 @@ func BoundWorkflowEventTriggerInputFromTrigger(value *BoundWorkflowEventTrigger)
 		Match:        copyWorkflowEventMatch(value.GetMatch()),
 		Target:       target,
 		Paused:       value.GetPaused(),
-		CreatedAt:    TimeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    TimeFromTimestamp(value.GetUpdatedAt()),
+		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
+		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
 	}, nil
@@ -772,7 +772,7 @@ func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionRefere
 	if err != nil {
 		return WorkflowExecutionReferenceInput{}, err
 	}
-	revokedAt, err := TimePtrFromTimestamp(value.GetRevokedAt())
+	revokedAt, err := timePtrFromTimestamp(value.GetRevokedAt())
 	if err != nil {
 		return WorkflowExecutionReferenceInput{}, err
 	}
@@ -783,7 +783,7 @@ func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionRefere
 		SubjectID:           value.GetSubjectId(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
 		Permissions:         copyWorkflowAccessPermissions(value.GetPermissions()),
-		CreatedAt:           TimeFromTimestamp(value.GetCreatedAt()),
+		CreatedAt:           timeFromTimestamp(value.GetCreatedAt()),
 		RevokedAt:           revokedAt,
 		SubjectKind:         value.GetSubjectKind(),
 		DisplayName:         value.GetDisplayName(),
@@ -808,14 +808,14 @@ func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
 	if value.IsZero() {
 		return nil
 	}
-	return TimestampFromTime(value)
+	return timestamppb.New(value)
 }
 
 func timestampFromOptionalTime(value *time.Time) *timestamppb.Timestamp {
 	if value == nil || value.IsZero() {
 		return nil
 	}
-	return TimestampFromTime(*value)
+	return timestamppb.New(*value)
 }
 
 func newOptionalWorkflowOutputDelivery(input *WorkflowOutputDeliveryInput) (*WorkflowOutputDelivery, error) {

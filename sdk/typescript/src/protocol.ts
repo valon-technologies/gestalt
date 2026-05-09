@@ -1,21 +1,9 @@
 import {
-  clone,
   create,
-  fromBinary,
   fromJson,
-  fromJsonString,
-  toBinary,
   toJson,
-  toJsonString,
-  type BinaryReadOptions,
-  type BinaryWriteOptions,
-  type DescMessage,
   type JsonObject,
-  type JsonReadOptions,
   type JsonValue,
-  type JsonWriteStringOptions,
-  type Message,
-  type MessageShape,
 } from "@bufbuild/protobuf";
 import {
   StructSchema,
@@ -37,22 +25,12 @@ export type JsonPrimitiveInput = null | boolean | number | string;
 export type JsonInput = JsonPrimitiveInput | readonly unknown[] | object;
 /** Native object accepted by SDK-owned Struct helpers before runtime validation. */
 export type JsonObjectInput = object;
-/** Common shape implemented by generated protobuf messages. */
-export type ProtoMessage = Message;
 /** Alias for google.protobuf.Struct at protocol boundaries. */
 export type { Struct };
 /** Alias for google.protobuf.Value at protocol boundaries. */
 export type { Value };
 /** Alias for google.protobuf.Timestamp at protocol boundaries. */
 export type { Timestamp };
-/** Binary parse options accepted by unmarshalProto. */
-export type { BinaryReadOptions };
-/** Binary serialize options accepted by marshalProtoDeterministic. */
-export type { BinaryWriteOptions };
-/** JSON parse options accepted by unmarshalProtoJson. */
-export type { JsonReadOptions };
-/** JSON serialize options accepted by marshalProtoJson. */
-export type { JsonWriteStringOptions };
 
 /** Schema for google.protobuf.Struct. */
 export { StructSchema };
@@ -134,42 +112,6 @@ export function jsonFromInput(value: JsonInput): JsonValue {
   return normalizeJsonValue(value, "value", new WeakSet<object>());
 }
 
-/** Serializes a protobuf message after normalizing map field insertion order. */
-export function marshalProtoDeterministic<Desc extends DescMessage>(
-  schema: Desc,
-  message: MessageShape<Desc>,
-  options?: Partial<BinaryWriteOptions>,
-): Uint8Array {
-  return toBinary(schema, deterministicMessage(schema, message), options);
-}
-
-/** Parses protobuf binary wire data with a generated message schema. */
-export function unmarshalProto<Desc extends DescMessage>(
-  schema: Desc,
-  data: Uint8Array,
-  options?: Partial<BinaryReadOptions>,
-): MessageShape<Desc> {
-  return fromBinary(schema, data, options);
-}
-
-/** Serializes a protobuf message to protobuf JSON text. */
-export function marshalProtoJson<Desc extends DescMessage>(
-  schema: Desc,
-  message: MessageShape<Desc>,
-  options?: Partial<JsonWriteStringOptions>,
-): string {
-  return toJsonString(schema, message, options);
-}
-
-/** Parses protobuf JSON text with a generated message schema. */
-export function unmarshalProtoJson<Desc extends DescMessage>(
-  schema: Desc,
-  data: string,
-  options?: Partial<JsonReadOptions>,
-): MessageShape<Desc> {
-  return fromJsonString(schema, data, options);
-}
-
 function normalizeJsonObject(
   value: unknown,
   path: string,
@@ -238,80 +180,4 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
-}
-
-function deterministicMessage<Desc extends DescMessage>(
-  schema: Desc,
-  message: MessageShape<Desc>,
-): MessageShape<Desc> {
-  const copy = clone(schema, message);
-  sortMapFields(schema, copy);
-  return copy;
-}
-
-function sortMapFields(schema: DescMessage, message: unknown): void {
-  if (!isObjectRecord(message)) {
-    return;
-  }
-  for (const field of schema.fields) {
-    if (field.fieldKind === "map") {
-      const mapValue = message[field.localName];
-      if (!isObjectRecord(mapValue)) {
-        continue;
-      }
-      const sorted: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(mapValue).sort(compareMapEntries)) {
-        if (field.mapKind === "message") {
-          sortMapFields(field.message, value);
-        }
-        sorted[key] = value;
-      }
-      message[field.localName] = sorted;
-      continue;
-    }
-    if (field.fieldKind === "message") {
-      const value = field.oneof === undefined
-        ? message[field.localName]
-        : selectedOneofValue(message, field.oneof.localName, field.localName);
-      sortMapFields(field.message, value);
-      continue;
-    }
-    if (field.fieldKind === "list" && field.listKind === "message") {
-      const values = message[field.localName];
-      if (Array.isArray(values)) {
-        for (const value of values) {
-          sortMapFields(field.message, value);
-        }
-      }
-    }
-  }
-}
-
-function selectedOneofValue(
-  message: Record<string, unknown>,
-  oneofName: string,
-  fieldName: string,
-): unknown {
-  const oneof = message[oneofName];
-  if (!isObjectRecord(oneof) || oneof.case !== fieldName) {
-    return undefined;
-  }
-  return oneof.value;
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
-
-function compareMapEntries(
-  [left]: [string, unknown],
-  [right]: [string, unknown],
-): number {
-  if (left < right) {
-    return -1;
-  }
-  if (left > right) {
-    return 1;
-  }
-  return 0;
 }
