@@ -307,6 +307,15 @@ func (c *AuthorizationClient) WriteRelationships(ctx context.Context, req *Write
 	return err
 }
 
+// GrantAgentSessionEditor grants a canonical Gestalt subject id editor access
+// to an agent session.
+//
+// This is a convenience wrapper around WriteRelationships using the managed
+// agent-session resource and editor relation.
+func (c *AuthorizationClient) GrantAgentSessionEditor(ctx context.Context, subjectID, sessionID string) error {
+	return c.WriteRelationships(ctx, NewAgentSessionEditorWriteRequest(subjectID, sessionID))
+}
+
 // GetMetadata returns host authorization provider metadata.
 func (c *AuthorizationClient) GetMetadata(ctx context.Context) (*AuthorizationMetadata, error) {
 	if c == nil || c.client == nil {

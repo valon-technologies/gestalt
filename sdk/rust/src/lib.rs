@@ -57,8 +57,10 @@ pub use auth::{
     CompleteLoginRequest,
 };
 pub use authorization::{
-    AccessDecision, AccessEvaluationRequest, ActionSearchRequest, ActionSearchResponse,
-    Authorization, AuthorizationAction, AuthorizationError, AuthorizationMetadata,
+    AGENT_SESSION_ACTION_EDIT, AGENT_SESSION_ACTION_VIEW, AGENT_SESSION_RELATION_EDITOR,
+    AGENT_SESSION_RESOURCE_TYPE, AUTHORIZATION_SUBJECT_TYPE_SUBJECT, AccessDecision,
+    AccessEvaluationRequest, ActionSearchRequest, ActionSearchResponse, Authorization,
+    AuthorizationAction, AuthorizationError, AuthorizationMetadata,
     AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
     AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
     EffectiveSubjectSearchRequest, EffectiveSubjectSearchResponse, ExpandNode, ExpandRequest,

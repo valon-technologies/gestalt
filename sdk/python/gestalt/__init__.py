@@ -189,8 +189,13 @@ _AUTHENTICATION_PROTOCOL_EXPORTS = (
 )
 
 _AUTHORIZATION_PROTOCOL_EXPORTS = (
+    "AGENT_SESSION_ACTION_EDIT",
+    "AGENT_SESSION_ACTION_VIEW",
+    "AGENT_SESSION_RELATION_EDITOR",
+    "AGENT_SESSION_RESOURCE_TYPE",
     "AccessEvaluationRequest",
     "ActionSearchRequest",
+    "AUTHORIZATION_SUBJECT_TYPE_SUBJECT",
     "AuthorizationAction",
     "AuthorizationRelationshipTarget",
     "AuthorizationResource",
@@ -204,6 +209,9 @@ _AUTHORIZATION_PROTOCOL_EXPORTS = (
     "ResourceSearchRequest",
     "SubjectSearchRequest",
     "WriteRelationshipsRequest",
+    "agent_session_editor_relationship",
+    "agent_session_editor_write_request",
+    "agent_session_resource",
 )
 
 _WORKFLOW_PROTOCOL_EXPORTS = (

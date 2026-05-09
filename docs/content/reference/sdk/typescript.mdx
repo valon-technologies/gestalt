@@ -132,6 +132,11 @@ helpers for lower-level datastore tests. Use root exports such as
 `jsonFromValue`, `timestampFromDate`, and `dateFromTimestamp` for protobuf
 well-known type fields without importing from `@bufbuild/protobuf/wkt`.
 
+Use `Authorization().grantAgentSessionEditor(subjectId, sessionId)` when
+trusted provider code needs to share an agent session with another canonical
+Gestalt subject id. The helper writes the host-managed `agent_session#editor`
+relationship without generated protobuf imports.
+
 ## Runtime and build entrypoints
 
 Use the runtime entrypoint for local source execution:

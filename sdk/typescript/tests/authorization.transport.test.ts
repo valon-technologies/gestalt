@@ -24,6 +24,7 @@ import {
   AuthorizationClient,
   ENV_AUTHORIZATION_SOCKET,
   ENV_AUTHORIZATION_SOCKET_TOKEN,
+  agentSessionEditorRelationship,
   authorizationAction,
   authorizationRelationshipWithTarget,
   authorizationResource,
@@ -74,6 +75,7 @@ test("Authorization() forwards authorization requests to the host socket", async
     relation: string;
   }> = [];
   const writeCalls: Array<{
+    targetSubjectId: string;
     targetResourceType: string;
     targetRelation: string;
     relation: string;
@@ -168,6 +170,10 @@ test("Authorization() forwards authorization requests to the host socket", async
           async writeRelationships(input) {
             for (const write of input.writes) {
               writeCalls.push({
+                targetSubjectId:
+                  write.target?.kind.case === "subject"
+                    ? write.target.kind.value.id
+                    : "",
                 targetResourceType:
                   write.target?.kind.case === "subjectSet"
                     ? write.target.kind.value.resource?.type ?? ""
@@ -287,10 +293,32 @@ test("Authorization() forwards authorization requests to the host socket", async
         ),
       ],
     });
+    await Authorization().grantAgentSessionEditor("user:user-123", "session-123");
+    expect(
+      agentSessionEditorRelationship("user:user-123", "session-123"),
+    ).toEqual({
+      target: {
+        kind: {
+          case: "subject",
+          value: { type: "subject", id: "user:user-123" },
+        },
+      },
+      relation: "editor",
+      resource: { type: "agent_session", id: "session-123" },
+    });
     expect(writeCalls).toEqual([
       {
+        targetSubjectId: "",
         targetResourceType: "slack_channel",
         targetRelation: "member",
+        relation: "editor",
+        resourceType: "agent_session",
+        resourceId: "session-123",
+      },
+      {
+        targetSubjectId: "user:user-123",
+        targetResourceType: "",
+        targetRelation: "",
         relation: "editor",
         resourceType: "agent_session",
         resourceId: "session-123",

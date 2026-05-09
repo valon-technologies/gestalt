@@ -151,6 +151,28 @@ type ExpandNode = proto.ExpandNode
 // ExpandResponse contains an expanded authorization graph.
 type ExpandResponse = proto.ExpandResponse
 
+const (
+	// AuthorizationSubjectTypeSubject identifies canonical Gestalt subjects in
+	// managed authorization relationships.
+	AuthorizationSubjectTypeSubject = "subject"
+
+	// AuthorizationResourceTypeAgentSession is the managed authorization
+	// resource type for agent sessions.
+	AuthorizationResourceTypeAgentSession = "agent_session"
+
+	// AuthorizationAgentSessionRelationEditor grants view and edit access to an
+	// agent session in the host-managed authorization model.
+	AuthorizationAgentSessionRelationEditor = "editor"
+
+	// AuthorizationAgentSessionActionView is the action checked when reading a
+	// shared agent session.
+	AuthorizationAgentSessionActionView = "view"
+
+	// AuthorizationAgentSessionActionEdit is the action checked when creating
+	// turns or resolving interactions in a shared agent session.
+	AuthorizationAgentSessionActionEdit = "edit"
+)
+
 // NewAuthorizationSubject creates a subject reference for authorization requests.
 func NewAuthorizationSubject(subjectType, id string) *AuthorizationSubject {
 	return &AuthorizationSubject{Type: subjectType, Id: id}
@@ -319,6 +341,34 @@ func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *
 			Union: &AuthorizationModelRewriteUnion{Children: children},
 		},
 	}
+}
+
+// NewAgentSessionAuthorizationResource creates the managed authorization
+// resource for an agent session.
+func NewAgentSessionAuthorizationResource(sessionID string) *AuthorizationResource {
+	return NewAuthorizationResource(AuthorizationResourceTypeAgentSession, sessionID)
+}
+
+// NewAgentSessionEditorRelationship creates the relationship that shares an
+// agent session with a canonical Gestalt subject id such as "user:123".
+//
+// The editor relation grants both view and edit actions in the host-managed
+// authorization model.
+func NewAgentSessionEditorRelationship(subjectID, sessionID string) *Relationship {
+	return NewRelationshipWithTarget(
+		NewAuthorizationSubjectTarget(NewAuthorizationSubject(AuthorizationSubjectTypeSubject, subjectID)),
+		AuthorizationAgentSessionRelationEditor,
+		NewAgentSessionAuthorizationResource(sessionID),
+	)
+}
+
+// NewAgentSessionEditorWriteRequest creates a relationship-write request that
+// shares an agent session with a canonical Gestalt subject id.
+func NewAgentSessionEditorWriteRequest(subjectID, sessionID string) *WriteRelationshipsRequest {
+	return NewWriteRelationshipsRequest(
+		[]*Relationship{NewAgentSessionEditorRelationship(subjectID, sessionID)},
+		nil,
+	)
 }
 
 // AuthorizationProvider serves authorization APIs to the host.

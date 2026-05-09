@@ -22,6 +22,7 @@ from gestalt import (
     Relationship,
     ResourceSearchRequest,
     WriteRelationshipsRequest,
+    agent_session_editor_relationship,
 )
 from gestalt.testing import authorization_pb2, authorization_pb2_grpc
 
@@ -156,11 +157,12 @@ class AuthorizationTransportTest(unittest.TestCase):
                         ]
                     )
                 )
+                client.grant_agent_session_editor("user:shared", "session-1")
                 client.close()
             finally:
                 server.stop(grace=0)
 
-        self.assertEqual(len(provider.writes), 1)
+        self.assertEqual(len(provider.writes), 2)
         self.assertEqual(
             provider.writes[0].writes[0],
             authorization_pb2.Relationship(
@@ -172,6 +174,27 @@ class AuthorizationTransportTest(unittest.TestCase):
                         ),
                         relation="member",
                     )
+                ),
+                relation="editor",
+                resource=authorization_pb2.Resource(
+                    type="agent_session",
+                    id="session-1",
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            provider.writes[1].writes[0],
+            agent_session_editor_relationship("user:shared", "session-1"),
+        )
+        self.assertEqual(
+            agent_session_editor_relationship("user:shared", "session-1"),
+            authorization_pb2.Relationship(
+                target=authorization_pb2.RelationshipTarget(
+                    subject=authorization_pb2.Subject(
+                        type="subject",
+                        id="user:shared",
+                    ),
                 ),
                 relation="editor",
                 resource=authorization_pb2.Resource(

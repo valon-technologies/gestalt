@@ -105,6 +105,12 @@ constructors for normal authoring. The `gen/v1` subpackage re-exports selected
 generated bindings for transport fixtures, and the IndexedDB codec helpers
 convert records, keys, and typed values without importing internal packages.
 
+Use `AuthorizationClient.GrantAgentSessionEditor` when trusted provider code
+needs to share an agent session with another canonical Gestalt subject id. For
+lower-level composition, `NewAgentSessionEditorWriteRequest` builds the same
+host-managed `agent_session#editor` relationship without generated protobuf
+imports.
+
 ## Use external credential clients
 
 Go provider code can call the selected host external-credential provider through

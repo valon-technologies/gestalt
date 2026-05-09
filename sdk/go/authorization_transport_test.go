@@ -214,11 +214,14 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	)); err != nil {
 		t.Fatalf("WriteRelationships: %v", err)
 	}
+	if err := client.GrantAgentSessionEditor(context.Background(), "user:user-123", "session-123"); err != nil {
+		t.Fatalf("GrantAgentSessionEditor: %v", err)
+	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
-	if len(harness.tokens) != 5 {
-		t.Fatalf("relay tokens = %#v, want five relay-token-go entries", harness.tokens)
+	if len(harness.tokens) != 6 {
+		t.Fatalf("relay tokens = %#v, want six relay-token-go entries", harness.tokens)
 	}
 	for i, token := range harness.tokens {
 		if token != "relay-token-go" {
@@ -255,8 +258,8 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	if harness.requests[0].GetAction().GetName() != "assume" {
 		t.Fatalf("action name = %q, want %q", harness.requests[0].GetAction().GetName(), "assume")
 	}
-	if len(harness.writes) != 1 {
-		t.Fatalf("write relationship requests len = %d, want 1", len(harness.writes))
+	if len(harness.writes) != 2 {
+		t.Fatalf("write relationship requests len = %d, want 2", len(harness.writes))
 	}
 	write := harness.writes[0].GetWrites()[0]
 	if write.GetTarget().GetSubjectSet().GetResource().GetType() != "slack_channel" {
@@ -270,6 +273,11 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	}
 	if write.GetResource().GetType() != "agent_session" || write.GetResource().GetId() != "session-123" {
 		t.Fatalf("write resource = %#v, want agent_session/session-123", write.GetResource())
+	}
+	helperWrite := harness.writes[1].GetWrites()[0]
+	expectedHelperWrite := gestalt.NewAgentSessionEditorWriteRequest("user:user-123", "session-123").GetWrites()[0]
+	if !gproto.Equal(helperWrite, expectedHelperWrite) {
+		t.Fatalf("helper write = %#v, want %#v", helperWrite, expectedHelperWrite)
 	}
 }
 
