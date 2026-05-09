@@ -63,9 +63,12 @@ The top-level `gestalt` package exposes the supported authoring API:
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
 The SDK also exposes authored protocol helpers for agent, workflow,
-authorization, and authentication request payloads. The generated protobuf
-stubs are private runtime internals and are not part of the provider authoring
-API.
+authorization, and authentication request payloads. Workflow helpers such as
+`bound_workflow_target`, `workflow_signal`, and `bound_workflow_run` accept
+plain dictionaries, dataclass instances, and native `datetime` values for
+structured payloads and timestamp fields, then build the protocol messages used
+on the wire. The generated protobuf stubs are private runtime internals and are
+not part of the provider authoring API.
 
 ## Regenerating protobuf stubs
 

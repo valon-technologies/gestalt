@@ -167,6 +167,94 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 
 .. autofunction:: which_oneof
 
+Workflow protocol helpers
+-------------------------
+
+These helpers build workflow protocol messages from native Python inputs.
+Structured payload fields accept JSON-compatible mappings or dataclass
+instances through the protocol helpers above. Timestamp fields accept
+``datetime`` values, and copy helpers return non-aliased message copies without
+provider code importing private ``pb2`` modules.
+
+.. autosummary::
+   :nosignatures:
+
+   BoundWorkflowPluginTargetInput
+   BoundWorkflowAgentTargetInput
+   BoundWorkflowTargetInput
+   BoundWorkflowRunInput
+   BoundWorkflowScheduleInput
+   BoundWorkflowEventTriggerInput
+   WorkflowExecutionReferenceInput
+   bound_workflow_plugin_target
+   bound_workflow_agent_target
+   bound_workflow_target
+   bound_workflow_target_from_target
+   workflow_event
+   workflow_event_from_event
+   workflow_signal
+   workflow_signal_from_signal
+   workflow_run_trigger
+   workflow_run_trigger_from_trigger
+   bound_workflow_run
+   bound_workflow_run_from_run
+   bound_workflow_schedule
+   bound_workflow_schedule_from_schedule
+   bound_workflow_event_trigger
+   bound_workflow_event_trigger_from_trigger
+   workflow_execution_reference
+   workflow_execution_reference_from_reference
+
+.. autoclass:: BoundWorkflowPluginTargetInput
+
+.. autoclass:: BoundWorkflowAgentTargetInput
+
+.. autoclass:: BoundWorkflowTargetInput
+
+.. autoclass:: BoundWorkflowRunInput
+
+.. autoclass:: BoundWorkflowScheduleInput
+
+.. autoclass:: BoundWorkflowEventTriggerInput
+
+.. autoclass:: WorkflowExecutionReferenceInput
+
+.. autofunction:: bound_workflow_plugin_target
+
+.. autofunction:: bound_workflow_agent_target
+
+.. autofunction:: bound_workflow_target
+
+.. autofunction:: bound_workflow_target_from_target
+
+.. autofunction:: workflow_event
+
+.. autofunction:: workflow_event_from_event
+
+.. autofunction:: workflow_signal
+
+.. autofunction:: workflow_signal_from_signal
+
+.. autofunction:: workflow_run_trigger
+
+.. autofunction:: workflow_run_trigger_from_trigger
+
+.. autofunction:: bound_workflow_run
+
+.. autofunction:: bound_workflow_run_from_run
+
+.. autofunction:: bound_workflow_schedule
+
+.. autofunction:: bound_workflow_schedule_from_schedule
+
+.. autofunction:: bound_workflow_event_trigger
+
+.. autofunction:: bound_workflow_event_trigger_from_trigger
+
+.. autofunction:: workflow_execution_reference
+
+.. autofunction:: workflow_execution_reference_from_reference
+
 Agent protocol helpers
 ----------------------
 
