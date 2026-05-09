@@ -55,10 +55,25 @@ class AuthorizationProviderStub(object):
                 request_serializer=v1_dot_authorization__pb2.SubjectSearchRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.SubjectSearchResponse.FromString,
                 _registered_method=True)
+        self.EffectiveSearchResources = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources',
+                request_serializer=v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+                _registered_method=True)
+        self.EffectiveSearchSubjects = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects',
+                request_serializer=v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.FromString,
+                _registered_method=True)
         self.SearchActions = channel.unary_unary(
                 '/gestalt.provider.v1.AuthorizationProvider/SearchActions',
                 request_serializer=v1_dot_authorization__pb2.ActionSearchRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.ActionSearchResponse.FromString,
+                _registered_method=True)
+        self.Expand = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/Expand',
+                request_serializer=v1_dot_authorization__pb2.ExpandRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.ExpandResponse.FromString,
                 _registered_method=True)
         self.GetMetadata = channel.unary_unary(
                 '/gestalt.provider.v1.AuthorizationProvider/GetMetadata',
@@ -108,19 +123,45 @@ class AuthorizationProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def SearchResources(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Direct search over stored relationships. Implementations must not expand
+        inherited or computed permissions here.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SearchSubjects(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Direct search over stored relationships. Implementations must not expand
+        inherited or computed permissions here.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def EffectiveSearchResources(self, request, context):
+        """Effective search that evaluates rewrites and inherited relations.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def EffectiveSearchSubjects(self, request, context):
+        """Effective search that evaluates rewrites and inherited relations.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SearchActions(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Expand(self, request, context):
+        """Expands one resource relation into the relationship targets that contribute
+        to it. Responses may be partial when truncated or max_depth_reached is true.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -184,10 +225,25 @@ def add_AuthorizationProviderServicer_to_server(servicer, server):
                     request_deserializer=v1_dot_authorization__pb2.SubjectSearchRequest.FromString,
                     response_serializer=v1_dot_authorization__pb2.SubjectSearchResponse.SerializeToString,
             ),
+            'EffectiveSearchResources': grpc.unary_unary_rpc_method_handler(
+                    servicer.EffectiveSearchResources,
+                    request_deserializer=v1_dot_authorization__pb2.ResourceSearchRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.ResourceSearchResponse.SerializeToString,
+            ),
+            'EffectiveSearchSubjects': grpc.unary_unary_rpc_method_handler(
+                    servicer.EffectiveSearchSubjects,
+                    request_deserializer=v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.SerializeToString,
+            ),
             'SearchActions': grpc.unary_unary_rpc_method_handler(
                     servicer.SearchActions,
                     request_deserializer=v1_dot_authorization__pb2.ActionSearchRequest.FromString,
                     response_serializer=v1_dot_authorization__pb2.ActionSearchResponse.SerializeToString,
+            ),
+            'Expand': grpc.unary_unary_rpc_method_handler(
+                    servicer.Expand,
+                    request_deserializer=v1_dot_authorization__pb2.ExpandRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.ExpandResponse.SerializeToString,
             ),
             'GetMetadata': grpc.unary_unary_rpc_method_handler(
                     servicer.GetMetadata,
@@ -339,6 +395,60 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
+    def EffectiveSearchResources(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources',
+            v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
+            v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def EffectiveSearchSubjects(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects',
+            v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.SerializeToString,
+            v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def SearchActions(request,
             target,
             options=(),
@@ -355,6 +465,33 @@ class AuthorizationProvider(object):
             '/gestalt.provider.v1.AuthorizationProvider/SearchActions',
             v1_dot_authorization__pb2.ActionSearchRequest.SerializeToString,
             v1_dot_authorization__pb2.ActionSearchResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Expand(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthorizationProvider/Expand',
+            v1_dot_authorization__pb2.ExpandRequest.SerializeToString,
+            v1_dot_authorization__pb2.ExpandResponse.FromString,
             options,
             channel_credentials,
             insecure,

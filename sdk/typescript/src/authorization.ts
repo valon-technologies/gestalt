@@ -13,20 +13,28 @@ import {
   type ActionSearchResponse,
   type AuthorizationMetadata,
   AuthorizationProvider as AuthorizationProviderService,
+  type EffectiveSubjectSearchResponse,
+  type ExpandResponse,
   type ReadRelationshipsResponse,
   type Relationship,
   type RelationshipKey,
+  type RelationshipTarget,
   type ResourceSearchResponse,
+  type SubjectSet,
   type SubjectSearchResponse,
   AccessEvaluationRequestSchema,
   ActionSearchRequestSchema,
   ActionSchema,
+  EffectiveSubjectSearchRequestSchema,
+  ExpandRequestSchema,
   ReadRelationshipsRequestSchema,
   RelationshipKeySchema,
   RelationshipSchema,
+  RelationshipTargetSchema,
   ResourceSchema,
   ResourceSearchRequestSchema,
   SubjectSchema,
+  SubjectSetSchema,
   SubjectSearchRequestSchema,
   WriteRelationshipsRequestSchema,
 } from "./internal/gen/v1/authorization_pb.ts";
@@ -50,8 +58,14 @@ export type AuthorizationSearchResourcesInput = MessageInitShape<
 export type AuthorizationSearchSubjectsInput = MessageInitShape<
   typeof SubjectSearchRequestSchema
 >;
+export type AuthorizationEffectiveSearchSubjectsInput = MessageInitShape<
+  typeof EffectiveSubjectSearchRequestSchema
+>;
 export type AuthorizationSearchActionsInput = MessageInitShape<
   typeof ActionSearchRequestSchema
+>;
+export type AuthorizationExpandInput = MessageInitShape<
+  typeof ExpandRequestSchema
 >;
 export type AuthorizationReadRelationshipsInput = MessageInitShape<
   typeof ReadRelationshipsRequestSchema
@@ -61,6 +75,10 @@ export type AuthorizationWriteRelationshipsInput = MessageInitShape<
 >;
 export type AuthorizationSubject = MessageInitShape<typeof SubjectSchema>;
 export type AuthorizationResource = MessageInitShape<typeof ResourceSchema>;
+export type AuthorizationSubjectSet = MessageInitShape<typeof SubjectSetSchema>;
+export type AuthorizationRelationshipTarget = MessageInitShape<
+  typeof RelationshipTargetSchema
+>;
 export type AuthorizationAction = MessageInitShape<typeof ActionSchema>;
 export type AuthorizationRelationship = MessageInitShape<
   typeof RelationshipSchema
@@ -73,10 +91,15 @@ export type AuthorizationDecisionMessage = AccessDecision;
 export type AuthorizationMetadataMessage = AuthorizationMetadata;
 export type AuthorizationResourceSearchMessage = ResourceSearchResponse;
 export type AuthorizationSubjectSearchMessage = SubjectSearchResponse;
+export type AuthorizationEffectiveSubjectSearchMessage =
+  EffectiveSubjectSearchResponse;
 export type AuthorizationActionSearchMessage = ActionSearchResponse;
+export type AuthorizationExpandMessage = ExpandResponse;
 export type AuthorizationReadRelationshipsMessage = ReadRelationshipsResponse;
 export type AuthorizationRelationshipMessage = Relationship;
 export type AuthorizationRelationshipKeyMessage = RelationshipKey;
+export type AuthorizationRelationshipTargetMessage = RelationshipTarget;
+export type AuthorizationSubjectSetMessage = SubjectSet;
 
 const sharedAuthorizationTransport: {
   target: string;
@@ -139,10 +162,28 @@ export class AuthorizationClient {
     return await this.client.searchSubjects(request);
   }
 
+  async effectiveSearchResources(
+    request: AuthorizationSearchResourcesInput,
+  ): Promise<AuthorizationResourceSearchMessage> {
+    return await this.client.effectiveSearchResources(request);
+  }
+
+  async effectiveSearchSubjects(
+    request: AuthorizationEffectiveSearchSubjectsInput,
+  ): Promise<AuthorizationEffectiveSubjectSearchMessage> {
+    return await this.client.effectiveSearchSubjects(request);
+  }
+
   async searchActions(
     request: AuthorizationSearchActionsInput,
   ): Promise<AuthorizationActionSearchMessage> {
     return await this.client.searchActions(request);
+  }
+
+  async expand(
+    request: AuthorizationExpandInput,
+  ): Promise<AuthorizationExpandMessage> {
+    return await this.client.expand(request);
   }
 
   async readRelationships(
@@ -202,6 +243,41 @@ export function authorizationResource(
   return properties === undefined ? { type, id } : { type, id, properties };
 }
 
+/** Creates an authorization subject-set reference. */
+export function authorizationSubjectSet(
+  resource: AuthorizationResource,
+  relation: string,
+): AuthorizationSubjectSet {
+  return { resource, relation };
+}
+
+/** Creates a relationship target from a subject. */
+export function authorizationSubjectTarget(
+  subject: AuthorizationSubject,
+): AuthorizationRelationshipTarget {
+  return { kind: { case: "subject", value: subject } };
+}
+
+/** Creates a relationship target from a resource. */
+export function authorizationResourceTarget(
+  resource: AuthorizationResource,
+): AuthorizationRelationshipTarget {
+  return { kind: { case: "resource", value: resource } };
+}
+
+/** Creates a relationship target from a subject set. */
+export function authorizationSubjectSetTarget(
+  resource: AuthorizationResource,
+  relation: string,
+): AuthorizationRelationshipTarget {
+  return {
+    kind: {
+      case: "subjectSet",
+      value: authorizationSubjectSet(resource, relation),
+    },
+  };
+}
+
 /** Creates an authorization action reference. */
 export function authorizationAction(
   name: string,
@@ -222,6 +298,18 @@ export function authorizationRelationship(
     : { subject, relation, resource, properties };
 }
 
+/** Creates a generalized relationship tuple for authorization writes. */
+export function authorizationRelationshipWithTarget(
+  target: AuthorizationRelationshipTarget,
+  relation: string,
+  resource: AuthorizationResource,
+  properties?: JsonObject,
+): AuthorizationRelationship {
+  return properties === undefined
+    ? { target, relation, resource }
+    : { target, relation, resource, properties };
+}
+
 /** Creates a relationship key for authorization deletes. */
 export function authorizationRelationshipKey(
   subject: AuthorizationSubject,
@@ -229,6 +317,15 @@ export function authorizationRelationshipKey(
   resource: AuthorizationResource,
 ): AuthorizationRelationshipKey {
   return { subject, relation, resource };
+}
+
+/** Creates a generalized relationship key for authorization deletes. */
+export function authorizationRelationshipKeyWithTarget(
+  target: AuthorizationRelationshipTarget,
+  relation: string,
+  resource: AuthorizationResource,
+): AuthorizationRelationshipKey {
+  return { target, relation, resource };
 }
 
 function resolveAuthorizationSocketTarget(

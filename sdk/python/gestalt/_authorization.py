@@ -47,6 +47,18 @@ def AuthorizationResource(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.Resource(*args, **kwargs)
 
 
+def AuthorizationSubjectSet(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization subject-set protocol value."""
+
+    return authorization_pb2.SubjectSet(*args, **kwargs)
+
+
+def AuthorizationRelationshipTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-target protocol value."""
+
+    return authorization_pb2.RelationshipTarget(*args, **kwargs)
+
+
 def AuthorizationAction(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization action protocol value."""
 
@@ -71,10 +83,22 @@ def SubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.SubjectSearchRequest(*args, **kwargs)
 
 
+def EffectiveSubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization effective-subject-search request."""
+
+    return authorization_pb2.EffectiveSubjectSearchRequest(*args, **kwargs)
+
+
 def ActionSearchRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization action-search request."""
 
     return authorization_pb2.ActionSearchRequest(*args, **kwargs)
+
+
+def ExpandRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-expansion request."""
+
+    return authorization_pb2.ExpandRequest(*args, **kwargs)
 
 
 def ReadRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
@@ -165,6 +189,26 @@ class AuthorizationClient:
             )
         )
 
+    def effective_search_resources(self, request: Any) -> Any:
+        """Search effective resources visible through inherited relationships."""
+
+        return self._stub.EffectiveSearchResources(
+            _authorization_message(
+                request,
+                authorization_pb2.ResourceSearchRequest,
+            )
+        )
+
+    def effective_search_subjects(self, request: Any) -> Any:
+        """Search effective subjects or subject sets for a resource and action."""
+
+        return self._stub.EffectiveSearchSubjects(
+            _authorization_message(
+                request,
+                authorization_pb2.EffectiveSubjectSearchRequest,
+            )
+        )
+
     def search_actions(self, request: Any) -> Any:
         """Search actions available between a subject and resource."""
 
@@ -172,6 +216,16 @@ class AuthorizationClient:
             _authorization_message(
                 request,
                 authorization_pb2.ActionSearchRequest,
+            )
+        )
+
+    def expand(self, request: Any) -> Any:
+        """Expand one resource relation into contributing relationship targets."""
+
+        return self._stub.Expand(
+            _authorization_message(
+                request,
+                authorization_pb2.ExpandRequest,
             )
         )
 

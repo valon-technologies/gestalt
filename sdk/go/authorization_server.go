@@ -9,6 +9,12 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+const (
+	authorizationCapabilityEffectiveSearchResources = "effective_search_resources"
+	authorizationCapabilityEffectiveSearchSubjects  = "effective_search_subjects"
+	authorizationCapabilityExpand                   = "expand"
+)
+
 type authorizationServer struct {
 	proto.UnimplementedAuthorizationProviderServer
 	provider AuthorizationProvider
@@ -74,6 +80,42 @@ func (s *authorizationServer) SearchSubjects(ctx context.Context, req *proto.Sub
 	return resp, nil
 }
 
+func (s *authorizationServer) EffectiveSearchResources(ctx context.Context, req *proto.ResourceSearchRequest) (*proto.ResourceSearchResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	provider, ok := s.provider.(AuthorizationProviderEffectiveSearch)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement effective resource search")
+	}
+	resp, err := provider.EffectiveSearchResources(ctx, req)
+	if err != nil {
+		return nil, providerRPCError("effective search resources", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
+}
+
+func (s *authorizationServer) EffectiveSearchSubjects(ctx context.Context, req *proto.EffectiveSubjectSearchRequest) (*proto.EffectiveSubjectSearchResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	provider, ok := s.provider.(AuthorizationProviderEffectiveSearch)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement effective subject search")
+	}
+	resp, err := provider.EffectiveSearchSubjects(ctx, req)
+	if err != nil {
+		return nil, providerRPCError("effective search subjects", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
+}
+
 func (s *authorizationServer) SearchActions(ctx context.Context, req *proto.ActionSearchRequest) (*proto.ActionSearchResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -81,6 +123,24 @@ func (s *authorizationServer) SearchActions(ctx context.Context, req *proto.Acti
 	resp, err := s.provider.SearchActions(ctx, req)
 	if err != nil {
 		return nil, providerRPCError("search actions", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
+	}
+	return resp, nil
+}
+
+func (s *authorizationServer) Expand(ctx context.Context, req *proto.ExpandRequest) (*proto.ExpandResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	provider, ok := s.provider.(AuthorizationProviderExpansion)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "authorization provider does not implement relationship expansion")
+	}
+	resp, err := provider.Expand(ctx, req)
+	if err != nil {
+		return nil, providerRPCError("expand", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil response")
@@ -96,7 +156,12 @@ func (s *authorizationServer) GetMetadata(ctx context.Context, _ *emptypb.Empty)
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authorization provider returned nil metadata")
 	}
-	return resp, nil
+	out := &proto.AuthorizationMetadata{
+		Capabilities:  append([]string(nil), resp.GetCapabilities()...),
+		ActiveModelId: resp.GetActiveModelId(),
+	}
+	out.Capabilities = appendMissingAuthorizationCapabilities(out.Capabilities, authorizationProviderCapabilities(s.provider)...)
+	return out, nil
 }
 
 func (s *authorizationServer) ReadRelationships(ctx context.Context, req *proto.ReadRelationshipsRequest) (*proto.ReadRelationshipsResponse, error) {
@@ -160,4 +225,30 @@ func (s *authorizationServer) WriteModel(ctx context.Context, req *proto.WriteMo
 		return nil, status.Error(codes.Internal, "authorization provider returned nil model")
 	}
 	return resp, nil
+}
+
+func authorizationProviderCapabilities(provider AuthorizationProvider) []string {
+	var capabilities []string
+	if _, ok := provider.(AuthorizationProviderEffectiveSearch); ok {
+		capabilities = append(capabilities, authorizationCapabilityEffectiveSearchResources, authorizationCapabilityEffectiveSearchSubjects)
+	}
+	if _, ok := provider.(AuthorizationProviderExpansion); ok {
+		capabilities = append(capabilities, authorizationCapabilityExpand)
+	}
+	return capabilities
+}
+
+func appendMissingAuthorizationCapabilities(capabilities []string, required ...string) []string {
+	seen := make(map[string]struct{}, len(capabilities)+len(required))
+	for _, capability := range capabilities {
+		seen[capability] = struct{}{}
+	}
+	for _, capability := range required {
+		if _, ok := seen[capability]; ok {
+			continue
+		}
+		capabilities = append(capabilities, capability)
+		seen[capability] = struct{}{}
+	}
+	return capabilities
 }

@@ -59,10 +59,12 @@ pub use auth::{
 pub use authorization::{
     AccessDecision, AccessEvaluationRequest, ActionSearchRequest, ActionSearchResponse,
     Authorization, AuthorizationAction, AuthorizationError, AuthorizationMetadata,
-    AuthorizationResource, AuthorizationSubject, ENV_AUTHORIZATION_SOCKET,
-    ENV_AUTHORIZATION_SOCKET_TOKEN, ReadRelationshipsRequest, ReadRelationshipsResponse,
-    Relationship, RelationshipKey, ResourceSearchRequest, ResourceSearchResponse,
-    SubjectSearchRequest, SubjectSearchResponse, WriteRelationshipsRequest,
+    AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
+    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
+    EffectiveSubjectSearchRequest, EffectiveSubjectSearchResponse, ExpandNode, ExpandRequest,
+    ExpandResponse, ReadRelationshipsRequest, ReadRelationshipsResponse, Relationship,
+    RelationshipKey, ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest,
+    SubjectSearchResponse, WriteRelationshipsRequest,
 };
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,

@@ -11,10 +11,16 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 
 from gestalt import (
+    AuthorizationAction,
     AuthorizationClient,
+    AuthorizationRelationshipTarget,
     AuthorizationResource,
     AuthorizationSubject,
+    AuthorizationSubjectSet,
+    EffectiveSubjectSearchRequest,
+    ExpandRequest,
     Relationship,
+    ResourceSearchRequest,
     WriteRelationshipsRequest,
 )
 from gestalt.testing import authorization_pb2, authorization_pb2_grpc
@@ -25,6 +31,49 @@ empty_pb2: Any = _empty_pb2
 class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderServicer):
     def __init__(self) -> None:
         self.writes: list[Any] = []
+
+    def EffectiveSearchResources(
+        self,
+        request: Any,
+        context: grpc.ServicerContext,
+    ) -> Any:
+        return authorization_pb2.ResourceSearchResponse(
+            resources=[
+                authorization_pb2.Resource(type="agent_session", id="session-1"),
+            ],
+            model_id="authz-model-1",
+        )
+
+    def EffectiveSearchSubjects(
+        self,
+        request: Any,
+        context: grpc.ServicerContext,
+    ) -> Any:
+        return authorization_pb2.EffectiveSubjectSearchResponse(
+            targets=[
+                authorization_pb2.RelationshipTarget(
+                    subject_set=authorization_pb2.SubjectSet(
+                        resource=authorization_pb2.Resource(
+                            type="slack_channel",
+                            id="C123",
+                        ),
+                        relation="member",
+                    ),
+                )
+            ],
+            model_id="authz-model-1",
+            truncated=True,
+        )
+
+    def Expand(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return authorization_pb2.ExpandResponse(
+            root=authorization_pb2.ExpandNode(
+                target=authorization_pb2.RelationshipTarget(resource=request.resource),
+                relation=request.relation,
+            ),
+            model_id="authz-model-1",
+            max_depth_reached=True,
+        )
 
     def WriteRelationships(self, request: Any, context: grpc.ServicerContext) -> Any:
         self.writes.append(request)
@@ -45,13 +94,58 @@ class AuthorizationTransportTest(unittest.TestCase):
             server.start()
             try:
                 client = AuthorizationClient(f"unix://{socket_path}")
+                resource_response = client.effective_search_resources(
+                    ResourceSearchRequest(
+                        subject=AuthorizationSubject(
+                            type="subject",
+                            id="user:shared",
+                        ),
+                        action=AuthorizationAction(name="edit"),
+                        resource_type="agent_session",
+                    )
+                )
+                self.assertEqual(resource_response.resources[0].id, "session-1")
+
+                subject_response = client.effective_search_subjects(
+                    EffectiveSubjectSearchRequest(
+                        resource=AuthorizationResource(
+                            type="agent_session",
+                            id="session-1",
+                        ),
+                        action=AuthorizationAction(name="edit"),
+                    )
+                )
+                self.assertTrue(subject_response.truncated)
+                self.assertEqual(
+                    subject_response.targets[0].subject_set.relation,
+                    "member",
+                )
+
+                expand_response = client.expand(
+                    ExpandRequest(
+                        resource=AuthorizationResource(
+                            type="agent_session",
+                            id="session-1",
+                        ),
+                        relation="editor",
+                        max_depth=1,
+                    )
+                )
+                self.assertTrue(expand_response.max_depth_reached)
+                self.assertEqual(expand_response.root.target.resource.id, "session-1")
+
                 client.write_relationships(
                     WriteRelationshipsRequest(
                         writes=[
                             Relationship(
-                                subject=AuthorizationSubject(
-                                    type="subject",
-                                    id="user:shared",
+                                target=AuthorizationRelationshipTarget(
+                                    subject_set=AuthorizationSubjectSet(
+                                        resource=AuthorizationResource(
+                                            type="slack_channel",
+                                            id="C123",
+                                        ),
+                                        relation="member",
+                                    )
                                 ),
                                 relation="editor",
                                 resource=AuthorizationResource(
@@ -70,7 +164,15 @@ class AuthorizationTransportTest(unittest.TestCase):
         self.assertEqual(
             provider.writes[0].writes[0],
             authorization_pb2.Relationship(
-                subject=authorization_pb2.Subject(type="subject", id="user:shared"),
+                target=authorization_pb2.RelationshipTarget(
+                    subject_set=authorization_pb2.SubjectSet(
+                        resource=authorization_pb2.Resource(
+                            type="slack_channel",
+                            id="C123",
+                        ),
+                        relation="member",
+                    )
+                ),
                 relation="editor",
                 resource=authorization_pb2.Resource(
                     type="agent_session",

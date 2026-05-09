@@ -15,21 +15,26 @@ use gestalt::proto::v1::{
     ActionSearchResponse as ProtoActionSearchResponse,
     AuthorizationMetadata as ProtoAuthorizationMetadata,
     AuthorizationModelRef as ProtoAuthorizationModelRef,
-    GetActiveModelResponse as ProtoGetActiveModelResponse,
+    EffectiveSubjectSearchRequest as ProtoEffectiveSubjectSearchRequest,
+    EffectiveSubjectSearchResponse as ProtoEffectiveSubjectSearchResponse,
+    ExpandNode as ProtoExpandNode, ExpandRequest as ProtoExpandRequest,
+    ExpandResponse as ProtoExpandResponse, GetActiveModelResponse as ProtoGetActiveModelResponse,
     ListModelsRequest as ProtoListModelsRequest, ListModelsResponse as ProtoListModelsResponse,
     ReadRelationshipsRequest as ProtoReadRelationshipsRequest,
-    ReadRelationshipsResponse as ProtoReadRelationshipsResponse, Resource as ProtoResource,
+    ReadRelationshipsResponse as ProtoReadRelationshipsResponse,
+    RelationshipTarget as ProtoRelationshipTarget, Resource as ProtoResource,
     ResourceSearchRequest as ProtoResourceSearchRequest,
     ResourceSearchResponse as ProtoResourceSearchResponse, Subject as ProtoSubject,
     SubjectSearchRequest as ProtoSubjectSearchRequest,
-    SubjectSearchResponse as ProtoSubjectSearchResponse,
+    SubjectSearchResponse as ProtoSubjectSearchResponse, SubjectSet as ProtoSubjectSet,
     WriteModelRequest as ProtoWriteModelRequest,
-    WriteRelationshipsRequest as ProtoWriteRelationshipsRequest,
+    WriteRelationshipsRequest as ProtoWriteRelationshipsRequest, relationship_target,
 };
 use gestalt::{
-    Authorization, AuthorizationAction, AuthorizationResource, AuthorizationSubject,
-    ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN, Relationship, SubjectSearchRequest,
-    WriteRelationshipsRequest,
+    Authorization, AuthorizationAction, AuthorizationRelationshipTarget, AuthorizationResource,
+    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
+    EffectiveSubjectSearchRequest, ExpandRequest, Relationship, ResourceSearchRequest,
+    SubjectSearchRequest, WriteRelationshipsRequest,
 };
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
@@ -110,6 +115,44 @@ impl ProtoAuthorizationProvider for TestAuthorizationServer {
         }))
     }
 
+    async fn effective_search_resources(
+        &self,
+        request: GrpcRequest<ProtoResourceSearchRequest>,
+    ) -> std::result::Result<GrpcResponse<ProtoResourceSearchResponse>, Status> {
+        maybe_record_relay_token(&self.seen_tokens, request.metadata());
+        Ok(GrpcResponse::new(ProtoResourceSearchResponse {
+            resources: vec![ProtoResource {
+                r#type: "agent_session".to_string(),
+                id: "session-123".to_string(),
+                properties: None,
+            }],
+            next_page_token: String::new(),
+            model_id: "authz-model-1".to_string(),
+        }))
+    }
+
+    async fn effective_search_subjects(
+        &self,
+        request: GrpcRequest<ProtoEffectiveSubjectSearchRequest>,
+    ) -> std::result::Result<GrpcResponse<ProtoEffectiveSubjectSearchResponse>, Status> {
+        maybe_record_relay_token(&self.seen_tokens, request.metadata());
+        Ok(GrpcResponse::new(ProtoEffectiveSubjectSearchResponse {
+            targets: vec![ProtoRelationshipTarget {
+                kind: Some(relationship_target::Kind::SubjectSet(ProtoSubjectSet {
+                    resource: Some(ProtoResource {
+                        r#type: "slack_channel".to_string(),
+                        id: "C123".to_string(),
+                        properties: None,
+                    }),
+                    relation: "member".to_string(),
+                })),
+            }],
+            next_page_token: String::new(),
+            model_id: "authz-model-1".to_string(),
+            truncated: true,
+        }))
+    }
+
     async fn search_actions(
         &self,
         _request: GrpcRequest<ProtoActionSearchRequest>,
@@ -120,6 +163,27 @@ impl ProtoAuthorizationProvider for TestAuthorizationServer {
                 properties: None,
             }],
             next_page_token: String::new(),
+            model_id: "authz-model-1".to_string(),
+        }))
+    }
+
+    async fn expand(
+        &self,
+        request: GrpcRequest<ProtoExpandRequest>,
+    ) -> std::result::Result<GrpcResponse<ProtoExpandResponse>, Status> {
+        maybe_record_relay_token(&self.seen_tokens, request.metadata());
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(ProtoExpandResponse {
+            root: Some(ProtoExpandNode {
+                target: Some(ProtoRelationshipTarget {
+                    kind: request.resource.map(relationship_target::Kind::Resource),
+                }),
+                relation: request.relation,
+                children: Vec::new(),
+            }),
+            truncated: false,
+            cycle_detected: false,
+            max_depth_reached: true,
             model_id: "authz-model-1".to_string(),
         }))
     }
@@ -234,12 +298,58 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     assert_eq!(subjects.model_id, "authz-model-1");
     assert_eq!(subjects.subjects[0].id, "user:user-123");
 
+    let resources = authorization
+        .effective_search_resources(ResourceSearchRequest {
+            subject: gestalt::AuthorizationSubject::new("subject", "user:user-123"),
+            action: AuthorizationAction::new("edit"),
+            resource_type: "agent_session".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("effective search resources");
+    assert_eq!(resources.resources[0].id, "session-123");
+
+    let targets = authorization
+        .effective_search_subjects(EffectiveSubjectSearchRequest {
+            resource: AuthorizationResource::new("agent_session", "session-123"),
+            action: AuthorizationAction::new("edit"),
+            ..Default::default()
+        })
+        .await
+        .expect("effective search subjects");
+    assert!(targets.truncated);
+    assert!(matches!(
+        &targets.targets[0],
+        AuthorizationRelationshipTarget::SubjectSet(subject_set)
+            if subject_set.resource.r#type == "slack_channel" && subject_set.relation == "member"
+    ));
+
+    let expanded = authorization
+        .expand(ExpandRequest {
+            resource: AuthorizationResource::new("agent_session", "session-123"),
+            relation: "editor".to_string(),
+            max_depth: 1,
+            ..Default::default()
+        })
+        .await
+        .expect("expand");
+    assert!(expanded.max_depth_reached);
+    assert!(matches!(
+        expanded.root.and_then(|root| root.target),
+        Some(AuthorizationRelationshipTarget::Resource(resource)) if resource.id == "session-123"
+    ));
+
     authorization
-        .write_relationships(WriteRelationshipsRequest::writes([Relationship::new(
-            AuthorizationSubject::new("subject", "user:user-123"),
-            "editor",
-            AuthorizationResource::new("agent_session", "session-123"),
-        )]))
+        .write_relationships(WriteRelationshipsRequest::writes([
+            Relationship::with_target(
+                AuthorizationRelationshipTarget::SubjectSet(AuthorizationSubjectSet::new(
+                    AuthorizationResource::new("slack_channel", "C123"),
+                    "member",
+                )),
+                "editor",
+                AuthorizationResource::new("agent_session", "session-123"),
+            ),
+        ]))
         .await
         .expect("write relationships");
 
@@ -254,7 +364,14 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     let writes = server.writes.lock().expect("writes lock").clone();
     assert_eq!(writes.len(), 1);
     let write = writes[0].writes[0].clone();
-    assert_eq!(write.subject.as_ref().expect("subject").id, "user:user-123");
+    assert!(write.subject.is_none());
+    let target = write.target.expect("target");
+    assert!(matches!(
+        target.kind,
+        Some(relationship_target::Kind::SubjectSet(subject_set))
+            if subject_set.resource.as_ref().expect("resource").r#type == "slack_channel"
+                && subject_set.relation == "member"
+    ));
     assert_eq!(write.relation, "editor");
     assert_eq!(
         write.resource.as_ref().expect("resource").r#type,
@@ -266,6 +383,9 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     assert_eq!(
         tokens,
         vec![
+            "relay-token-rust".to_string(),
+            "relay-token-rust".to_string(),
+            "relay-token-rust".to_string(),
             "relay-token-rust".to_string(),
             "relay-token-rust".to_string()
         ]

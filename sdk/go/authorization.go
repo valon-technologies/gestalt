@@ -22,6 +22,13 @@ type AuthorizationSubject = proto.Subject
 // importing generated protobuf packages directly.
 type AuthorizationResource = proto.Resource
 
+// AuthorizationSubjectSet identifies a Zanzibar-style userset target.
+type AuthorizationSubjectSet = proto.SubjectSet
+
+// AuthorizationRelationshipTarget identifies the left side of an authorization
+// relationship. It can be a subject, resource, or subject set.
+type AuthorizationRelationshipTarget = proto.RelationshipTarget
+
 // AuthorizationAction identifies an action being evaluated against a resource.
 //
 // SDK callers should construct values with [NewAuthorizationAction] instead of
@@ -51,6 +58,14 @@ type SubjectSearchRequest = proto.SubjectSearchRequest
 
 // SubjectSearchResponse contains subjects related to a resource and action.
 type SubjectSearchResponse = proto.SubjectSearchResponse
+
+// EffectiveSubjectSearchRequest searches effective targets related to a
+// resource and action through computed usersets and inherited relationships.
+type EffectiveSubjectSearchRequest = proto.EffectiveSubjectSearchRequest
+
+// EffectiveSubjectSearchResponse contains effective subjects or subject sets
+// related to a resource and action.
+type EffectiveSubjectSearchResponse = proto.EffectiveSubjectSearchResponse
 
 // ActionSearchRequest searches actions available between a subject and resource.
 type ActionSearchRequest = proto.ActionSearchRequest
@@ -90,6 +105,28 @@ type AuthorizationModelRelation = proto.AuthorizationModelRelation
 // AuthorizationModelAction describes one action in a model.
 type AuthorizationModelAction = proto.AuthorizationModelAction
 
+// AuthorizationModelAllowedTarget describes one valid target kind for a relation.
+type AuthorizationModelAllowedTarget = proto.AuthorizationModelAllowedTarget
+
+// AuthorizationModelSubjectSetTarget describes a valid userset target.
+type AuthorizationModelSubjectSetTarget = proto.AuthorizationModelSubjectSetTarget
+
+// AuthorizationModelRewrite describes how to compute one relation or action.
+type AuthorizationModelRewrite = proto.AuthorizationModelRewrite
+
+// AuthorizationModelRewriteThis includes directly related targets in a rewrite.
+type AuthorizationModelRewriteThis = proto.AuthorizationModelRewriteThis
+
+// AuthorizationModelComputedUserset references another relation on the same resource.
+type AuthorizationModelComputedUserset = proto.AuthorizationModelComputedUserset
+
+// AuthorizationModelTupleToUserset follows one relation and computes another
+// relation on each related resource.
+type AuthorizationModelTupleToUserset = proto.AuthorizationModelTupleToUserset
+
+// AuthorizationModelRewriteUnion unions multiple rewrite branches.
+type AuthorizationModelRewriteUnion = proto.AuthorizationModelRewriteUnion
+
 // AuthorizationModelRef identifies a stored authorization model.
 type AuthorizationModelRef = proto.AuthorizationModelRef
 
@@ -105,6 +142,15 @@ type ListModelsResponse = proto.ListModelsResponse
 // WriteModelRequest stores an authorization model.
 type WriteModelRequest = proto.WriteModelRequest
 
+// ExpandRequest asks a provider to explain one resource relation.
+type ExpandRequest = proto.ExpandRequest
+
+// ExpandNode describes one node in an expanded authorization graph.
+type ExpandNode = proto.ExpandNode
+
+// ExpandResponse contains an expanded authorization graph.
+type ExpandResponse = proto.ExpandResponse
+
 // NewAuthorizationSubject creates a subject reference for authorization requests.
 func NewAuthorizationSubject(subjectType, id string) *AuthorizationSubject {
 	return &AuthorizationSubject{Type: subjectType, Id: id}
@@ -113,6 +159,34 @@ func NewAuthorizationSubject(subjectType, id string) *AuthorizationSubject {
 // NewAuthorizationResource creates a resource reference for authorization requests.
 func NewAuthorizationResource(resourceType, id string) *AuthorizationResource {
 	return &AuthorizationResource{Type: resourceType, Id: id}
+}
+
+// NewAuthorizationSubjectSet creates a subject-set reference.
+func NewAuthorizationSubjectSet(resource *AuthorizationResource, relation string) *AuthorizationSubjectSet {
+	return &AuthorizationSubjectSet{Resource: resource, Relation: relation}
+}
+
+// NewAuthorizationSubjectTarget creates a relationship target from a subject.
+func NewAuthorizationSubjectTarget(subject *AuthorizationSubject) *AuthorizationRelationshipTarget {
+	return &AuthorizationRelationshipTarget{
+		Kind: &proto.RelationshipTarget_Subject{Subject: subject},
+	}
+}
+
+// NewAuthorizationResourceTarget creates a relationship target from a resource.
+func NewAuthorizationResourceTarget(resource *AuthorizationResource) *AuthorizationRelationshipTarget {
+	return &AuthorizationRelationshipTarget{
+		Kind: &proto.RelationshipTarget_Resource{Resource: resource},
+	}
+}
+
+// NewAuthorizationSubjectSetTarget creates a relationship target from a subject set.
+func NewAuthorizationSubjectSetTarget(resource *AuthorizationResource, relation string) *AuthorizationRelationshipTarget {
+	return &AuthorizationRelationshipTarget{
+		Kind: &proto.RelationshipTarget_SubjectSet{
+			SubjectSet: NewAuthorizationSubjectSet(resource, relation),
+		},
+	}
 }
 
 // NewAuthorizationAction creates an action reference for authorization requests.
@@ -148,10 +222,28 @@ func NewRelationship(subject *AuthorizationSubject, relation string, resource *A
 	}
 }
 
+// NewRelationshipWithTarget creates a generalized authorization tuple.
+func NewRelationshipWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *Relationship {
+	return &Relationship{
+		Target:   target,
+		Relation: relation,
+		Resource: resource,
+	}
+}
+
 // NewRelationshipKey creates a relationship key for authorization deletes.
 func NewRelationshipKey(subject *AuthorizationSubject, relation string, resource *AuthorizationResource) *RelationshipKey {
 	return &RelationshipKey{
 		Subject:  subject,
+		Relation: relation,
+		Resource: resource,
+	}
+}
+
+// NewRelationshipKeyWithTarget creates a generalized authorization tuple key.
+func NewRelationshipKeyWithTarget(target *AuthorizationRelationshipTarget, relation string, resource *AuthorizationResource) *RelationshipKey {
+	return &RelationshipKey{
+		Target:   target,
 		Relation: relation,
 		Resource: resource,
 	}
@@ -162,6 +254,70 @@ func NewWriteRelationshipsRequest(writes []*Relationship, deletes []*Relationshi
 	return &WriteRelationshipsRequest{
 		Writes:  writes,
 		Deletes: deletes,
+	}
+}
+
+// NewAuthorizationModelSubjectTypeTarget allows a relation target subject type.
+func NewAuthorizationModelSubjectTypeTarget(subjectType string) *AuthorizationModelAllowedTarget {
+	return &AuthorizationModelAllowedTarget{
+		Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectType},
+	}
+}
+
+// NewAuthorizationModelResourceTypeTarget allows a relation target resource type.
+func NewAuthorizationModelResourceTypeTarget(resourceType string) *AuthorizationModelAllowedTarget {
+	return &AuthorizationModelAllowedTarget{
+		Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: resourceType},
+	}
+}
+
+// NewAuthorizationModelSubjectSetAllowedTarget allows a relation target subject set.
+func NewAuthorizationModelSubjectSetAllowedTarget(resourceType, relation string) *AuthorizationModelAllowedTarget {
+	return &AuthorizationModelAllowedTarget{
+		Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{
+			SubjectSet: &AuthorizationModelSubjectSetTarget{
+				ResourceType: resourceType,
+				Relation:     relation,
+			},
+		},
+	}
+}
+
+// NewAuthorizationModelThisRewrite includes directly related targets.
+func NewAuthorizationModelThisRewrite() *AuthorizationModelRewrite {
+	return &AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_This{This: &AuthorizationModelRewriteThis{}},
+	}
+}
+
+// NewAuthorizationModelComputedUsersetRewrite computes another relation on the same resource.
+func NewAuthorizationModelComputedUsersetRewrite(relation string) *AuthorizationModelRewrite {
+	return &AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_ComputedUserset{
+			ComputedUserset: &AuthorizationModelComputedUserset{Relation: relation},
+		},
+	}
+}
+
+// NewAuthorizationModelTupleToUsersetRewrite follows tuplesetRelation and then
+// computes computedRelation on each related resource.
+func NewAuthorizationModelTupleToUsersetRewrite(tuplesetRelation, computedRelation string) *AuthorizationModelRewrite {
+	return &AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_TupleToUserset{
+			TupleToUserset: &AuthorizationModelTupleToUserset{
+				TuplesetRelation: tuplesetRelation,
+				ComputedRelation: computedRelation,
+			},
+		},
+	}
+}
+
+// NewAuthorizationModelUnionRewrite unions multiple rewrite branches.
+func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *AuthorizationModelRewrite {
+	return &AuthorizationModelRewrite{
+		Kind: &proto.AuthorizationModelRewrite_Union{
+			Union: &AuthorizationModelRewriteUnion{Children: children},
+		},
 	}
 }
 
@@ -183,4 +339,17 @@ type AuthorizationProvider interface {
 	GetActiveModel(ctx context.Context) (*GetActiveModelResponse, error)
 	ListModels(ctx context.Context, req *ListModelsRequest) (*ListModelsResponse, error)
 	WriteModel(ctx context.Context, req *WriteModelRequest) (*AuthorizationModelRef, error)
+}
+
+// AuthorizationProviderEffectiveSearch is implemented by providers that can
+// search through computed usersets and inherited relationships.
+type AuthorizationProviderEffectiveSearch interface {
+	EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)
+	EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
+}
+
+// AuthorizationProviderExpansion is implemented by providers that can explain
+// the relationship targets contributing to one resource relation.
+type AuthorizationProviderExpansion interface {
+	Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error)
 }

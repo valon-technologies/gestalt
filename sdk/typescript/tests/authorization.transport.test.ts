@@ -12,6 +12,10 @@ import { expect, test } from "bun:test";
 import {
   AuthorizationMetadataSchema,
   AuthorizationProvider as AuthorizationProviderService,
+  EffectiveSubjectSearchResponseSchema,
+  ExpandResponseSchema,
+  ResourceSchema,
+  ResourceSearchResponseSchema,
   SubjectSchema,
   SubjectSearchResponseSchema,
 } from "../src/internal/gen/v1/authorization_pb.ts";
@@ -21,9 +25,11 @@ import {
   ENV_AUTHORIZATION_SOCKET,
   ENV_AUTHORIZATION_SOCKET_TOKEN,
   authorizationAction,
-  authorizationRelationship,
+  authorizationRelationshipWithTarget,
   authorizationResource,
+  authorizationResourceTarget,
   authorizationSubject,
+  authorizationSubjectSetTarget,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
@@ -54,9 +60,22 @@ test("Authorization() forwards authorization requests to the host socket", async
     subjectType: string;
     pageSize: number;
   }> = [];
-  const writeCalls: Array<{
-    subjectType: string;
+  const effectiveResourceCalls: Array<{
     subjectId: string;
+    actionName: string;
+    resourceType: string;
+  }> = [];
+  const effectiveSubjectCalls: Array<{
+    resourceId: string;
+    actionName: string;
+  }> = [];
+  const expandCalls: Array<{
+    resourceId: string;
+    relation: string;
+  }> = [];
+  const writeCalls: Array<{
+    targetResourceType: string;
+    targetRelation: string;
     relation: string;
     resourceType: string;
     resourceId: string;
@@ -92,6 +111,54 @@ test("Authorization() forwards authorization requests to the host socket", async
               modelId: "authz-model-1",
             });
           },
+          async effectiveSearchResources(input) {
+            effectiveResourceCalls.push({
+              subjectId: input.subject?.id ?? "",
+              actionName: input.action?.name ?? "",
+              resourceType: input.resourceType,
+            });
+            return create(ResourceSearchResponseSchema, {
+              resources: [
+                create(ResourceSchema, {
+                  type: "agent_session",
+                  id: "session-123",
+                }),
+              ],
+              modelId: "authz-model-1",
+            });
+          },
+          async effectiveSearchSubjects(input) {
+            effectiveSubjectCalls.push({
+              resourceId: input.resource?.id ?? "",
+              actionName: input.action?.name ?? "",
+            });
+            return create(EffectiveSubjectSearchResponseSchema, {
+              targets: [
+                authorizationSubjectSetTarget(
+                  authorizationResource("slack_channel", "C123"),
+                  "member",
+                ),
+              ],
+              modelId: "authz-model-1",
+              truncated: true,
+            });
+          },
+          async expand(input) {
+            expandCalls.push({
+              resourceId: input.resource?.id ?? "",
+              relation: input.relation,
+            });
+            return create(ExpandResponseSchema, {
+              root: {
+                target: authorizationResourceTarget(
+                  input.resource ?? authorizationResource("agent_session", ""),
+                ),
+                relation: input.relation,
+              },
+              modelId: "authz-model-1",
+              maxDepthReached: true,
+            });
+          },
           async getMetadata() {
             return create(AuthorizationMetadataSchema, {
               capabilities: ["search_subjects", "read_relationships"],
@@ -101,8 +168,14 @@ test("Authorization() forwards authorization requests to the host socket", async
           async writeRelationships(input) {
             for (const write of input.writes) {
               writeCalls.push({
-                subjectType: write.subject?.type ?? "",
-                subjectId: write.subject?.id ?? "",
+                targetResourceType:
+                  write.target?.kind.case === "subjectSet"
+                    ? write.target.kind.value.resource?.type ?? ""
+                    : "",
+                targetRelation:
+                  write.target?.kind.case === "subjectSet"
+                    ? write.target.kind.value.relation
+                    : "",
                 relation: write.relation,
                 resourceType: write.resource?.type ?? "",
                 resourceId: write.resource?.id ?? "",
@@ -161,10 +234,54 @@ test("Authorization() forwards authorization requests to the host socket", async
         pageSize: 1,
       },
     ]);
+    const resourceResponse = await Authorization().effectiveSearchResources({
+      subject: authorizationSubject("subject", "user:user-123"),
+      action: authorizationAction("edit"),
+      resourceType: "agent_session",
+    });
+    expect(resourceResponse.resources[0]?.id).toBe("session-123");
+    expect(effectiveResourceCalls).toEqual([
+      {
+        subjectId: "user:user-123",
+        actionName: "edit",
+        resourceType: "agent_session",
+      },
+    ]);
+
+    const targetResponse = await Authorization().effectiveSearchSubjects({
+      resource: authorizationResource("agent_session", "session-123"),
+      action: authorizationAction("edit"),
+    });
+    expect(targetResponse.truncated).toBe(true);
+    expect(targetResponse.targets[0]?.kind.case).toBe("subjectSet");
+    expect(effectiveSubjectCalls).toEqual([
+      {
+        resourceId: "session-123",
+        actionName: "edit",
+      },
+    ]);
+
+    const expandResponse = await Authorization().expand({
+      resource: authorizationResource("agent_session", "session-123"),
+      relation: "editor",
+      maxDepth: 1,
+    });
+    expect(expandResponse.maxDepthReached).toBe(true);
+    expect(expandResponse.root?.target?.kind.case).toBe("resource");
+    expect(expandCalls).toEqual([
+      {
+        resourceId: "session-123",
+        relation: "editor",
+      },
+    ]);
+
     await Authorization().writeRelationships({
       writes: [
-        authorizationRelationship(
-          authorizationSubject("subject", "user:user-123"),
+        authorizationRelationshipWithTarget(
+          authorizationSubjectSetTarget(
+            authorizationResource("slack_channel", "C123"),
+            "member",
+          ),
           "editor",
           authorizationResource("agent_session", "session-123"),
         ),
@@ -172,8 +289,8 @@ test("Authorization() forwards authorization requests to the host socket", async
     });
     expect(writeCalls).toEqual([
       {
-        subjectType: "subject",
-        subjectId: "user:user-123",
+        targetResourceType: "slack_channel",
+        targetRelation: "member",
         relation: "editor",
         resourceType: "agent_session",
         resourceId: "session-123",

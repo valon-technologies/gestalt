@@ -1520,6 +1520,35 @@ pub struct Resource {
     pub properties: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubjectSet {
+    #[prost(message, optional, tag = "1")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+}
+/// RelationshipTarget identifies the left side of an authorization relationship.
+///
+/// Subject preserves the existing user/group/service-principal tuple shape.
+/// Resource and SubjectSet allow Zanzibar-style usersets, for example:
+/// document:roadmap#viewer@group:eng#member.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RelationshipTarget {
+    #[prost(oneof = "relationship_target::Kind", tags = "1, 2, 3")]
+    pub kind: ::core::option::Option<relationship_target::Kind>,
+}
+/// Nested message and enum types in `RelationshipTarget`.
+pub mod relationship_target {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Subject(super::Subject),
+        #[prost(message, tag = "2")]
+        Resource(super::Resource),
+        #[prost(message, tag = "3")]
+        SubjectSet(super::SubjectSet),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Action {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -1605,6 +1634,30 @@ pub struct SubjectSearchResponse {
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EffectiveSubjectSearchRequest {
+    #[prost(message, optional, tag = "1")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "2")]
+    pub action: ::core::option::Option<Action>,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "4")]
+    pub page_size: i32,
+    #[prost(string, tag = "5")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EffectiveSubjectSearchResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub targets: ::prost::alloc::vec::Vec<RelationshipTarget>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub truncated: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ActionSearchRequest {
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<Subject>,
@@ -1635,6 +1688,8 @@ pub struct AuthorizationMetadata {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Relationship {
+    /// Deprecated for generalized Zanzibar tuples. Writers should prefer target.
+    /// Providers accepting both fields must reject mismatched subject and target values.
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<Subject>,
     #[prost(string, tag = "2")]
@@ -1643,18 +1698,27 @@ pub struct Relationship {
     pub resource: ::core::option::Option<Resource>,
     #[prost(message, optional, tag = "4")]
     pub properties: ::core::option::Option<::prost_types::Struct>,
+    /// Generalized tuple target. For compatibility, subject-only tuples may still
+    /// be written using subject without setting target.
+    #[prost(message, optional, tag = "5")]
+    pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RelationshipKey {
+    /// Deprecated for generalized Zanzibar tuples. Callers should prefer target.
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<Subject>,
     #[prost(string, tag = "2")]
     pub relation: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub resource: ::core::option::Option<Resource>,
+    #[prost(message, optional, tag = "4")]
+    pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadRelationshipsRequest {
+    /// Direct tuple filter only. This RPC does not expand computed usersets or
+    /// inheritance rewrites.
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<Subject>,
     #[prost(string, tag = "2")]
@@ -1667,6 +1731,8 @@ pub struct ReadRelationshipsRequest {
     pub page_token: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub model_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadRelationshipsResponse {
@@ -1702,19 +1768,87 @@ pub struct AuthorizationModelResourceType {
     #[prost(message, repeated, tag = "3")]
     pub actions: ::prost::alloc::vec::Vec<AuthorizationModelAction>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelRelation {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub subject_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "3")]
+    pub allowed_targets: ::prost::alloc::vec::Vec<AuthorizationModelAllowedTarget>,
+    #[prost(message, optional, tag = "4")]
+    pub rewrite: ::core::option::Option<AuthorizationModelRewrite>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelAction {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub relations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub rewrite: ::core::option::Option<AuthorizationModelRewrite>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelAllowedTarget {
+    #[prost(oneof = "authorization_model_allowed_target::Kind", tags = "1, 2, 3")]
+    pub kind: ::core::option::Option<authorization_model_allowed_target::Kind>,
+}
+/// Nested message and enum types in `AuthorizationModelAllowedTarget`.
+pub mod authorization_model_allowed_target {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(string, tag = "1")]
+        SubjectType(::prost::alloc::string::String),
+        #[prost(string, tag = "2")]
+        ResourceType(::prost::alloc::string::String),
+        #[prost(message, tag = "3")]
+        SubjectSet(super::AuthorizationModelSubjectSetTarget),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelSubjectSetTarget {
+    #[prost(string, tag = "1")]
+    pub resource_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizationModelRewrite {
+    #[prost(oneof = "authorization_model_rewrite::Kind", tags = "1, 2, 3, 4")]
+    pub kind: ::core::option::Option<authorization_model_rewrite::Kind>,
+}
+/// Nested message and enum types in `AuthorizationModelRewrite`.
+pub mod authorization_model_rewrite {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        This(super::AuthorizationModelRewriteThis),
+        #[prost(message, tag = "2")]
+        ComputedUserset(super::AuthorizationModelComputedUserset),
+        #[prost(message, tag = "3")]
+        TupleToUserset(super::AuthorizationModelTupleToUserset),
+        #[prost(message, tag = "4")]
+        Union(super::AuthorizationModelRewriteUnion),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelRewriteThis {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelComputedUserset {
+    #[prost(string, tag = "1")]
+    pub relation: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuthorizationModelTupleToUserset {
+    #[prost(string, tag = "1")]
+    pub tupleset_relation: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub computed_relation: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizationModelRewriteUnion {
+    #[prost(message, repeated, tag = "1")]
+    pub children: ::prost::alloc::vec::Vec<AuthorizationModelRewrite>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelRef {
@@ -1724,6 +1858,41 @@ pub struct AuthorizationModelRef {
     pub version: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExpandRequest {
+    #[prost(message, optional, tag = "1")]
+    pub resource: ::core::option::Option<Resource>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "4")]
+    pub max_depth: i32,
+    #[prost(string, tag = "5")]
+    pub model_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExpandNode {
+    #[prost(message, optional, tag = "1")]
+    pub target: ::core::option::Option<RelationshipTarget>,
+    #[prost(string, tag = "2")]
+    pub relation: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "3")]
+    pub children: ::prost::alloc::vec::Vec<ExpandNode>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExpandResponse {
+    #[prost(message, optional, tag = "1")]
+    pub root: ::core::option::Option<ExpandNode>,
+    #[prost(bool, tag = "2")]
+    pub truncated: bool,
+    #[prost(bool, tag = "3")]
+    pub cycle_detected: bool,
+    #[prost(bool, tag = "4")]
+    pub max_depth_reached: bool,
+    #[prost(string, tag = "5")]
+    pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetActiveModelResponse {

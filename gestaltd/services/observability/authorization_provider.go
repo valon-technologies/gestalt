@@ -14,16 +14,58 @@ type observedAuthorizationProvider struct {
 	delegate core.AuthorizationProvider
 }
 
+type observedAuthorizationProviderCarrier interface {
+	observedAuthorizationBase() *observedAuthorizationProvider
+}
+
+type observedAuthorizationProviderWithEffectiveSearch struct {
+	*observedAuthorizationProvider
+	effectiveSearch core.AuthorizationProviderEffectiveSearch
+}
+
+type observedAuthorizationProviderWithExpansion struct {
+	*observedAuthorizationProvider
+	expansion core.AuthorizationProviderExpansion
+}
+
+type observedAuthorizationProviderWithEffectiveSearchAndExpansion struct {
+	*observedAuthorizationProvider
+	effectiveSearch core.AuthorizationProviderEffectiveSearch
+	expansion       core.AuthorizationProviderExpansion
+}
+
 func InstrumentAuthorizationProvider(name string, provider core.AuthorizationProvider) core.AuthorizationProvider {
 	if provider == nil {
 		return nil
 	}
-	if _, ok := provider.(*observedAuthorizationProvider); ok {
+	if _, ok := provider.(observedAuthorizationProviderCarrier); ok {
 		return provider
 	}
-	return &observedAuthorizationProvider{
+	base := &observedAuthorizationProvider{
 		name:     strings.TrimSpace(name),
 		delegate: provider,
+	}
+	effectiveSearch, hasEffectiveSearch := provider.(core.AuthorizationProviderEffectiveSearch)
+	expansion, hasExpansion := provider.(core.AuthorizationProviderExpansion)
+	switch {
+	case hasEffectiveSearch && hasExpansion:
+		return &observedAuthorizationProviderWithEffectiveSearchAndExpansion{
+			observedAuthorizationProvider: base,
+			effectiveSearch:               effectiveSearch,
+			expansion:                     expansion,
+		}
+	case hasEffectiveSearch:
+		return &observedAuthorizationProviderWithEffectiveSearch{
+			observedAuthorizationProvider: base,
+			effectiveSearch:               effectiveSearch,
+		}
+	case hasExpansion:
+		return &observedAuthorizationProviderWithExpansion{
+			observedAuthorizationProvider: base,
+			expansion:                     expansion,
+		}
+	default:
+		return base
 	}
 }
 
@@ -31,10 +73,14 @@ func AuthorizationProviderMetricName(provider core.AuthorizationProvider) string
 	if provider == nil {
 		return ""
 	}
-	if observed, ok := provider.(*observedAuthorizationProvider); ok {
-		return observed.metricName()
+	if observed, ok := provider.(observedAuthorizationProviderCarrier); ok {
+		return observed.observedAuthorizationBase().metricName()
 	}
 	return strings.TrimSpace(provider.Name())
+}
+
+func (p *observedAuthorizationProvider) observedAuthorizationBase() *observedAuthorizationProvider {
+	return p
 }
 
 func (p *observedAuthorizationProvider) Name() string {
@@ -65,6 +111,30 @@ func (p *observedAuthorizationProvider) SearchSubjects(ctx context.Context, req 
 	return p.delegate.SearchSubjects(ctx, req)
 }
 
+func (p *observedAuthorizationProviderWithEffectiveSearch) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (resp *core.ResourceSearchResponse, err error) {
+	ctx, end := p.start(ctx, "effective_search_resources")
+	defer func() { end(err) }()
+	return p.effectiveSearch.EffectiveSearchResources(ctx, req)
+}
+
+func (p *observedAuthorizationProviderWithEffectiveSearch) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (resp *core.EffectiveSubjectSearchResponse, err error) {
+	ctx, end := p.start(ctx, "effective_search_subjects")
+	defer func() { end(err) }()
+	return p.effectiveSearch.EffectiveSearchSubjects(ctx, req)
+}
+
+func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchResources(ctx context.Context, req *core.ResourceSearchRequest) (resp *core.ResourceSearchResponse, err error) {
+	ctx, end := p.start(ctx, "effective_search_resources")
+	defer func() { end(err) }()
+	return p.effectiveSearch.EffectiveSearchResources(ctx, req)
+}
+
+func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) EffectiveSearchSubjects(ctx context.Context, req *core.EffectiveSubjectSearchRequest) (resp *core.EffectiveSubjectSearchResponse, err error) {
+	ctx, end := p.start(ctx, "effective_search_subjects")
+	defer func() { end(err) }()
+	return p.effectiveSearch.EffectiveSearchSubjects(ctx, req)
+}
+
 func (p *observedAuthorizationProvider) SearchActions(ctx context.Context, req *core.ActionSearchRequest) (resp *core.ActionSearchResponse, err error) {
 	ctx, end := p.start(ctx, "search_actions")
 	defer func() { end(err) }()
@@ -87,6 +157,18 @@ func (p *observedAuthorizationProvider) WriteRelationships(ctx context.Context, 
 	ctx, end := p.start(ctx, "write_relationships")
 	defer func() { end(err) }()
 	return p.delegate.WriteRelationships(ctx, req)
+}
+
+func (p *observedAuthorizationProviderWithExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (resp *core.ExpandResponse, err error) {
+	ctx, end := p.start(ctx, "expand")
+	defer func() { end(err) }()
+	return p.expansion.Expand(ctx, req)
+}
+
+func (p *observedAuthorizationProviderWithEffectiveSearchAndExpansion) Expand(ctx context.Context, req *core.ExpandRequest) (resp *core.ExpandResponse, err error) {
+	ctx, end := p.start(ctx, "expand")
+	defer func() { end(err) }()
+	return p.expansion.Expand(ctx, req)
 }
 
 func (p *observedAuthorizationProvider) GetActiveModel(ctx context.Context) (resp *core.GetActiveModelResponse, err error) {
