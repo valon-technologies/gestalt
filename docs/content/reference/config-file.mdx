@@ -1150,7 +1150,7 @@ plugins:
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the plugin manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the plugin manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
-| `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local plugin connection name; single-use platform or `none` connections may be declared inline. See [connections](#connections) below. |
+| `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local plugin connection name; simple single-use `none` connections may be declared inline. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `dev.attach.allowedRoles` | Roles from this plugin's `authorizationPolicy` that may create private remote provider-dev attachments for this plugin. This is denied when omitted, empty, or when the plugin has no `authorizationPolicy`. |
 | `runtime` | Optional runtime placement for executable plugins. Supports hosted runtime fields such as `provider`, `template`, `image`, `imagePullAuth`, and `metadata`. |
@@ -1394,13 +1394,9 @@ receiving secrets in static config:
 ```yaml
 connections:
   vertex-kimi:
-    mode: platform
+    mode: user
     auth:
-      type: oauth2
-      grantType: client_credentials
-      tokenUrl: https://oauth2.googleapis.com/token
-      clientId: ${VERTEX_CLIENT_ID}
-      clientSecret: ${VERTEX_CLIENT_SECRET}
+      type: bearer
     params:
       baseUrl: https://example.vertexai.goog/v1
 
@@ -1418,58 +1414,28 @@ providers:
             connection: model
 ```
 
-Platform OAuth2 connections can also use a deployer-owned refresh token when a
-real service mailbox or upstream account must be used instead of client
-credentials:
+For automation, provision the credential onto a managed subject such as a
+service account, then execute the workflow or agent turn with `runAs`. Gestalt
+does not support deployer-owned `mode: platform` connections or connection-level
+`exposure`; named slots such as Slack's `bot` connection remain normal
+subject-owned connections.
 
 ```yaml
 connections:
-  gmail-platform-mailbox:
-    mode: platform
+  gmail-service-mailbox:
+    mode: user
     auth:
       type: oauth2
-      grantType: refresh_token
       tokenUrl: https://oauth2.googleapis.com/token
-      clientId:
-        secret:
-          provider: secrets
-          name: google-oauth-client-id
-      clientSecret:
-        secret:
-          provider: secrets
-          name: google-oauth-client-secret
-      refreshToken:
-        secret:
-          provider: secrets
-          name: gmail-platform-mailbox-refresh-token
+      clientId: ${GOOGLE_OAUTH_CLIENT_ID}
+      clientSecret: ${GOOGLE_OAUTH_CLIENT_SECRET}
 
 plugins:
   gmail:
     source: ./plugins/gmail/manifest.yaml
     connections:
-      platform:
-        ref: gmail-platform-mailbox
-        exposure: internal
-```
-
-Use `exposure: internal` for deployer-owned accounts that only provider code
-should call. This is separate from `mode: platform`: `mode` decides who owns the
-credential, while `exposure` decides whether public callers can select the
-binding. The platform connection supplies the upstream token; the target
-provider should still enforce any domain-specific policy, such as the expected
-mailbox address and the operation allowlist.
-
-Internal callers select that binding when invoking the target plugin:
-
-```ts
-const invoker = new gestalt.PluginInvoker(request);
-
-await invoker.invoke(
-  "gmail",
-  "messages.list",
-  { q: "to:group@example.com newer_than:7d" },
-  { connection: "platform" },
-);
+      service:
+        ref: gmail-service-mailbox
 ```
 
 If the target provider deliberately manages its own upstream credentials, such
@@ -1485,14 +1451,19 @@ or operation connection is named, Gestalt uses `defaultConnection`, then a
 connection literally named `default`, then the only named connection when there
 is exactly one.
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, `platform` uses deployer-managed credential material, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no
+credentials, and `user` stores credentials for the caller's effective subject.
+For humans that is typically `user:<id>`; for non-human API token callers it can
+be `service_account:<id>` or another canonical non-system subject ID. Runtime
+surfaces can also supply system subjects such as
+`system:http_binding:<plugin>:<binding>` as the effective credential owner.
 
 Binding entries that use `ref` may set only binding metadata such as
-`displayName`, `exposure`, and `credentialRefresh`; they cannot override `mode`, `auth`, or `params`.
-Top-level connections cannot set `ref` or `exposure`. Inline connection bindings
-are available for simple single-use `none` or `platform` cases; user-owned
-connections that collect or exchange credentials must be declared at the top
-level and referenced by `ref`.
+`displayName` and `credentialRefresh`; they cannot override `mode`, `auth`, or
+`params`. Top-level connections cannot set `ref`. Inline connection bindings are
+available for simple single-use `none` cases; user-owned connections that
+collect or exchange credentials must be declared at the top level and referenced
+by `ref`.
 
 #### Credential Refresh
 
@@ -1532,8 +1503,8 @@ Every connection `auth` block uses the same shape. `type` selects the auth strat
 | Field | Default | Description |
 | --- | --- | --- |
 | `type` | | Authentication strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
-| `grantType` | | OAuth2 grant type. `client_credentials` and `refresh_token` are supported on `mode: platform` connections. |
-| `refreshToken` | | OAuth2 refresh token for `grantType: refresh_token` platform connections. Use a secret ref for production deployments. |
+| `grantType` | | Reserved. Declarative `client_credentials` and `refresh_token` provisioning is not supported; provision credentials onto a subject through the external credentials provider instead. |
+| `refreshToken` | | Reserved for provider/runtime credential transport. Do not configure deployer-owned refresh tokens in Gestalt config. |
 | `authorizationUrl` | | OAuth2 authorization endpoint. |
 | `tokenUrl` | | OAuth2 token endpoint. |
 | `clientId` | | OAuth2 client identifier. |

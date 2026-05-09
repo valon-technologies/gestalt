@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -262,9 +261,6 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
-		if config.ConnectionExposureForConnection(conn) == core.ConnectionExposureInternal {
-			continue
-		}
 		if name == config.PluginConnectionName {
 			conn = displayPluginConnectionDef(plugin, manifestSpec, conn)
 		}
@@ -308,9 +304,6 @@ func userFacingConnectionName(name string) string {
 
 func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Provider, instances []instanceInfo, p *principal.Principal) []string {
 	authTypes := userFacingAuthTypes(prov.AuthTypes())
-	if core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModePlatform {
-		authTypes = nil
-	}
 	defaultConnectionParams := connectionParamInfosFromProvider(prov)
 	defaultCredentialFields := credentialFieldInfosFromProvider(prov, authTypes)
 	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], instances, authTypes, defaultCredentialFields, defaultConnectionParams, p)
@@ -330,11 +323,8 @@ func shouldExposeProviderConnectionFallback(prov core.Provider, authTypes []stri
 	if prov == nil {
 		return false
 	}
-	switch core.NormalizeConnectionMode(prov.ConnectionMode()) {
-	case core.ConnectionModeNone:
+	if core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModeNone {
 		return false
-	case core.ConnectionModePlatform:
-		return true
 	}
 	return len(authTypes) > 0 || len(credentialFields) > 0 || len(connectionParams) > 0
 }
@@ -408,35 +398,12 @@ func (s *Server) providerConnectionInfo(integration string, prov core.Provider, 
 	return s.connectionInfoFromAuth(integration, config.PluginConnectionName, config.PluginConnectionAlias, "", conn, instances, integrationAuthTypes, defaultCredentialFields, defaultConnectionParams, true, p)
 }
 
-func (s *Server) connectionInfoFromAuth(integration, internalName, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, defaultConnectionParams map[string]connectionParamInfo, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(integration, _ string, name, instanceConnection string, conn config.ConnectionDef, instances []instanceInfo, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, defaultConnectionParams map[string]connectionParamInfo, includeWithoutAuth bool, p *principal.Principal) (connectionDefInfo, bool) {
 	mode := config.ConnectionModeForConnection(conn)
 	connectionInstances := groupInstancesForConnection(instances, instanceConnection)
 	connectionParams := connectionParamInfosFromConnection(conn)
 	if len(connectionParams) == 0 && config.ResolveConnectionAlias(name) == config.PluginConnectionName {
 		connectionParams = cloneConnectionParamInfos(defaultConnectionParams)
-	}
-	if mode == core.ConnectionModePlatform {
-		status := s.platformConnectionStatus(integration, internalName, conn)
-		return connectionDefInfo{
-			DisplayName:      connectionDisplayName(name, conn.DisplayName),
-			Name:             name,
-			Mode:             string(mode),
-			AuthTypes:        []string{},
-			ConnectionParams: connectionParams,
-			CredentialFields: []credentialFieldInfo{},
-			Status:           status.Status,
-			CredentialState:  status.CredentialState,
-			HealthState:      status.HealthState,
-			Actions:          status.Actions,
-			CredentialMode:   status.CredentialMode,
-			OwnerKind:        status.OwnerKind,
-			Instances:        []instanceInfo{},
-			StatusCode:       status.StatusCode,
-			StatusReason:     status.StatusReason,
-			connected:        status.Connected,
-			connectable:      false,
-			disconnectable:   status.Disconnectable,
-		}, true
 	}
 	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)
 	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
@@ -500,38 +467,6 @@ func cloneConnectionParamInfos(params map[string]connectionParamInfo) map[string
 		out[key] = value
 	}
 	return out
-}
-
-func (s *Server) hasConfiguredPlatformConnection(integration string) bool {
-	entry := s.pluginDefs[integration]
-	if entry == nil {
-		return false
-	}
-	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
-	if err != nil {
-		return false
-	}
-	if pluginConn := plan.PluginConnection(); config.ConnectionExposureForConnection(pluginConn) != core.ConnectionExposureInternal && platformConnectionConfiguredForName(integration, config.PluginConnectionName, pluginConn) {
-		return true
-	}
-	for _, name := range plan.NamedConnectionNames() {
-		conn, _ := plan.NamedConnectionDef(name)
-		if config.ConnectionExposureForConnection(conn) == core.ConnectionExposureInternal {
-			continue
-		}
-		if platformConnectionConfiguredForName(integration, name, conn) {
-			return true
-		}
-	}
-	return false
-}
-
-func platformConnectionConfiguredForName(integration, connection string, conn config.ConnectionDef) bool {
-	if config.ConnectionModeForConnection(conn) != core.ConnectionModePlatform {
-		return false
-	}
-	_, err := bootstrap.StaticConnectionRuntimeInfo(integration, connection, conn)
-	return err == nil
 }
 
 func (s *Server) invocationConnectionMode(prov core.Provider, integration, connection string) core.ConnectionMode {

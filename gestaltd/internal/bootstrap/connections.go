@@ -2,16 +2,10 @@ package bootstrap
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
-	"net/http"
-	"net/url"
 	"slices"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"golang.org/x/sync/singleflight"
 )
 
 type ConnectionMaps struct {
@@ -182,72 +175,19 @@ func StaticConnectionRuntimeInfo(integration, connection string, conn config.Con
 	return staticConnectionRuntimeInfo(integration, connection, conn, egress.Policy{DefaultAction: egress.PolicyAllow}, nil)
 }
 
-func staticConnectionRuntimeInfo(integration, connection string, conn config.ConnectionDef, _ egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
+func staticConnectionRuntimeInfo(_, _ string, conn config.ConnectionDef, _ egress.Policy, providerConfig map[string]any) (invocation.ConnectionRuntimeInfo, error) {
 	mode := config.ConnectionModeForConnection(conn)
 	authConfig := applyConnectionRuntimeAuthOverlay(ExternalCredentialAuthConfig(conn.Auth), providerConfig)
 	info := invocation.ConnectionRuntimeInfo{
 		ConnectionID:      conn.ConnectionID,
 		Mode:              mode,
-		Exposure:          config.ConnectionExposureForConnection(conn),
 		AuthType:          conn.Auth.Type,
 		AuthConfig:        authConfig,
 		AuthMapping:       config.CloneAuthMapping(conn.Auth.AuthMapping),
 		Params:            connectionParamDefaults(conn.ConnectionParams),
 		CredentialRefresh: cloneCredentialRefreshConfig(conn.CredentialRefresh),
 	}
-	if mode != core.ConnectionModePlatform {
-		return info, nil
-	}
-	if len(conn.Auth.Credentials) > 0 {
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform does not support user credential fields", integration, connection)
-	}
-	if len(conn.Auth.TokenExchangeDrivers) > 0 {
-		return info, nil
-	}
-	switch conn.Auth.Type {
-	case providermanifestv1.AuthTypeBearer:
-		if strings.TrimSpace(conn.Auth.Token) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.token in deployment config", integration, connection)
-		}
-		if conn.Auth.AuthMapping != nil {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform bearer auth does not support authMapping", integration, connection)
-		}
-		info.Token = strings.TrimSpace(conn.Auth.Token)
-		return info, nil
-	case providermanifestv1.AuthTypeManual:
-		token := strings.TrimSpace(conn.Auth.Token)
-		if token == "" {
-			if authMappingNeedsToken(conn.Auth.AuthMapping) {
-				return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform manual auth with credential refs requires auth.token in deployment config", integration, connection)
-			}
-			token = "{}"
-		}
-		info.Token = token
-		return info, nil
-	case providermanifestv1.AuthTypeOAuth2:
-		grantType := strings.TrimSpace(authConfig.GrantType)
-		if grantType != "client_credentials" && grantType != "refresh_token" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform oauth2 requires auth.grantType client_credentials or refresh_token", integration, connection)
-		}
-		if strings.TrimSpace(authConfig.TokenURL) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.tokenUrl is required", integration, connection, grantType)
-		}
-		if strings.TrimSpace(authConfig.ClientID) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.clientId is required", integration, connection, grantType)
-		}
-		if strings.TrimSpace(authConfig.ClientSecret) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.clientSecret is required", integration, connection, grantType)
-		}
-		if grantType == "refresh_token" && strings.TrimSpace(authConfig.RefreshToken) == "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 refresh_token: auth.refreshToken is required", integration, connection)
-		}
-		if grantType != "refresh_token" && strings.TrimSpace(authConfig.RefreshToken) != "" {
-			return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q oauth2 %s: auth.refreshToken is only supported for refresh_token", integration, connection, grantType)
-		}
-		return info, nil
-	default:
-		return invocation.ConnectionRuntimeInfo{}, fmt.Errorf("integration %q connection %q mode platform requires auth.type bearer, manual, or oauth2 client_credentials/refresh_token", integration, connection)
-	}
+	return info, nil
 }
 
 func applyConnectionRuntimeAuthOverlay(auth core.ExternalCredentialAuthConfig, providerConfig map[string]any) core.ExternalCredentialAuthConfig {
@@ -319,210 +259,6 @@ func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[st
 		return nil
 	}
 	return out
-}
-
-type clientCredentialsTokenSource struct {
-	auth         config.ConnectionAuthDef
-	httpClient   *http.Client
-	egressPolicy egress.Policy
-	now          func() time.Time
-	fetchTimeout time.Duration
-
-	mu     sync.Mutex
-	cached invocation.ConnectionRuntimeCredential
-	group  singleflight.Group
-}
-
-const clientCredentialsTokenFetchTimeout = 30 * time.Second
-
-func newClientCredentialsTokenSource(auth config.ConnectionAuthDef, policies ...egress.Policy) (*clientCredentialsTokenSource, error) {
-	if strings.TrimSpace(auth.TokenURL) == "" {
-		return nil, fmt.Errorf("auth.tokenUrl is required")
-	}
-	if strings.TrimSpace(auth.ClientID) == "" {
-		return nil, fmt.Errorf("auth.clientId is required")
-	}
-	if strings.TrimSpace(auth.ClientSecret) == "" {
-		return nil, fmt.Errorf("auth.clientSecret is required")
-	}
-	policy := egress.Policy{DefaultAction: egress.PolicyAllow}
-	if len(policies) > 0 {
-		policy = policies[0]
-	}
-	return &clientCredentialsTokenSource{
-		auth:         auth,
-		httpClient:   newClientCredentialsHTTPClient(policy),
-		egressPolicy: policy,
-		now:          time.Now,
-		fetchTimeout: clientCredentialsTokenFetchTimeout,
-	}, nil
-}
-
-func newClientCredentialsHTTPClient(policy egress.Policy) *http.Client {
-	transport := egress.CloneDefaultTransport()
-	return &http.Client{
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			if req == nil || req.URL == nil {
-				return nil
-			}
-			return policy.CheckHost(req.URL.Host)
-		},
-	}
-}
-
-func (s *clientCredentialsTokenSource) ResolveConnectionCredential(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
-	if s == nil {
-		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token source is not configured")
-	}
-	s.mu.Lock()
-	if cached, ok := s.cachedCredentialLocked(); ok {
-		s.mu.Unlock()
-		return cached, nil
-	}
-	s.mu.Unlock()
-
-	resultCh := s.group.DoChan("token", func() (any, error) {
-		s.mu.Lock()
-		if cached, ok := s.cachedCredentialLocked(); ok {
-			s.mu.Unlock()
-			return cached, nil
-		}
-		s.mu.Unlock()
-		timeout := s.fetchTimeout
-		if timeout <= 0 {
-			timeout = clientCredentialsTokenFetchTimeout
-		}
-		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
-		defer cancel()
-		credential, err := s.fetch(fetchCtx)
-		if err != nil {
-			return invocation.ConnectionRuntimeCredential{}, err
-		}
-		s.mu.Lock()
-		s.cached = credential
-		s.mu.Unlock()
-		return credential, nil
-	})
-	select {
-	case result := <-resultCh:
-		if result.Err != nil {
-			return invocation.ConnectionRuntimeCredential{}, result.Err
-		}
-		return result.Val.(invocation.ConnectionRuntimeCredential), nil
-	case <-ctx.Done():
-		return invocation.ConnectionRuntimeCredential{}, ctx.Err()
-	}
-}
-
-func (s *clientCredentialsTokenSource) cachedCredentialLocked() (invocation.ConnectionRuntimeCredential, bool) {
-	if s.cached.Token == "" {
-		return invocation.ConnectionRuntimeCredential{}, false
-	}
-	if s.cached.ExpiresAt == nil || s.now().Add(60*time.Second).Before(*s.cached.ExpiresAt) {
-		return s.cached, true
-	}
-	return invocation.ConnectionRuntimeCredential{}, false
-}
-
-func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (invocation.ConnectionRuntimeCredential, error) {
-	form := url.Values{}
-	form.Set("grant_type", "client_credentials")
-	clientID := strings.TrimSpace(s.auth.ClientID)
-	clientSecret := strings.TrimSpace(s.auth.ClientSecret)
-	clientAuth := strings.TrimSpace(s.auth.ClientAuth)
-	if clientAuth != "header" {
-		form.Set("client_id", clientID)
-		form.Set("client_secret", clientSecret)
-	}
-	if len(s.auth.Scopes) > 0 {
-		sep := strings.TrimSpace(s.auth.ScopeSeparator)
-		if sep == "" {
-			sep = " "
-		}
-		scopeParam := strings.TrimSpace(s.auth.ScopeParam)
-		if scopeParam == "" {
-			scopeParam = "scope"
-		}
-		form.Set(scopeParam, strings.Join(s.auth.Scopes, sep))
-	}
-	for k, v := range s.auth.TokenParams {
-		if strings.TrimSpace(k) != "" {
-			form.Set(k, v)
-		}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSpace(s.auth.TokenURL), strings.NewReader(form.Encode()))
-	if err != nil {
-		return invocation.ConnectionRuntimeCredential{}, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if s.auth.AcceptHeader != "" {
-		req.Header.Set("Accept", s.auth.AcceptHeader)
-	}
-	if clientAuth == "header" {
-		req.SetBasicAuth(clientID, clientSecret)
-	}
-	if err := s.egressPolicy.CheckHost(req.URL.Host); err != nil {
-		return invocation.ConnectionRuntimeCredential{}, err
-	}
-	client := s.httpClient
-	if client == nil {
-		client = newClientCredentialsHTTPClient(s.egressPolicy)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return invocation.ConnectionRuntimeCredential{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return invocation.ConnectionRuntimeCredential{}, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token endpoint returned %s", resp.Status)
-	}
-	var decoded struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int64  `json:"expires_in"`
-	}
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("decode token response: %w", err)
-	}
-	token := strings.TrimSpace(decoded.AccessToken)
-	if token == "" {
-		return invocation.ConnectionRuntimeCredential{}, fmt.Errorf("token response missing access_token")
-	}
-	var expiresAt *time.Time
-	if decoded.ExpiresIn > 0 {
-		t := s.now().Add(time.Duration(decoded.ExpiresIn) * time.Second)
-		expiresAt = &t
-	}
-	return invocation.ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
-}
-
-func authMappingNeedsToken(mapping *config.AuthMappingDef) bool {
-	if mapping == nil {
-		return true
-	}
-	hasMaterialization := len(mapping.Headers) > 0 || mapping.Basic != nil
-	if !hasMaterialization {
-		return true
-	}
-	for _, value := range mapping.Headers {
-		if authValueNeedsToken(value) {
-			return true
-		}
-	}
-	if mapping.Basic != nil {
-		if authValueNeedsToken(mapping.Basic.Username) || authValueNeedsToken(mapping.Basic.Password) {
-			return true
-		}
-	}
-	return false
-}
-
-func authValueNeedsToken(value config.AuthValueDef) bool {
-	return value.ValueFrom != nil
 }
 
 func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {

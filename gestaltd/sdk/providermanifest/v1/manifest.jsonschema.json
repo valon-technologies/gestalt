@@ -325,8 +325,7 @@
           "type": "string",
           "enum": [
             "none",
-            "user",
-            "platform"
+            "user"
           ]
         },
         "requestBody": {
@@ -376,15 +375,7 @@
           "type": "string",
           "enum": [
             "none",
-            "user",
-            "platform"
-          ]
-        },
-        "exposure": {
-          "type": "string",
-          "enum": [
-            "user",
-            "internal"
+            "user"
           ]
         },
         "auth": {

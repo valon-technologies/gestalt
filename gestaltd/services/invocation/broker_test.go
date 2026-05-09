@@ -159,128 +159,6 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	}
 }
 
-func TestBrokerResolveToken_AllowsInternalConnectionWhenContextAuthorized(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "slack",
-			ConnMode: core.ConnectionModeUser,
-		}),
-		svc.Users,
-		svc.ExternalCredentials,
-		WithConnectionRuntime(ConnectionRuntimeMap{
-			"slack": {
-				"bot": {
-					Mode:     core.ConnectionModePlatform,
-					Exposure: core.ConnectionExposureInternal,
-					Token:    "bot-token",
-				},
-			},
-		}.Resolve),
-	)
-	subject := &principal.Principal{
-		SubjectID: "service_account:workflow-config",
-		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
-	}
-
-	_, _, err := broker.ResolveToken(context.Background(), subject, "slack", "bot", "")
-	if err == nil {
-		t.Fatal("ResolveToken without internal connection access succeeded, want denial")
-	}
-
-	ctx, token, err := broker.ResolveToken(WithInternalConnectionAccess(context.Background()), subject, "slack", "bot", "")
-	if err != nil {
-		t.Fatalf("ResolveToken with internal connection access: %v", err)
-	}
-	if token != "bot-token" {
-		t.Fatalf("token = %q, want bot-token", token)
-	}
-	if cred := CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.Connection != "bot" {
-		t.Fatalf("credential context = %#v, want platform bot", cred)
-	}
-}
-
-func TestBrokerResolveToken_PlatformConnectionAppliesRuntimeParams(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "looker",
-			ConnMode: core.ConnectionModePlatform,
-		}),
-		svc.Users,
-		svc.ExternalCredentials,
-		WithConnectionRuntime(ConnectionRuntimeMap{
-			"looker": {
-				core.PluginConnectionName: {
-					Mode:  core.ConnectionModePlatform,
-					Token: "platform-token",
-					Params: map[string]string{
-						"host": "valon.cloud.looker.com",
-					},
-				},
-			},
-		}.Resolve),
-	)
-	subject := &principal.Principal{
-		SubjectID: "service_account:workflow-config",
-		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
-	}
-
-	ctx, token, err := broker.ResolveToken(context.Background(), subject, "looker", "", "")
-	if err != nil {
-		t.Fatalf("ResolveToken: %v", err)
-	}
-	if token != "platform-token" {
-		t.Fatalf("token = %q, want platform-token", token)
-	}
-	if got := core.ConnectionParams(ctx)["host"]; got != "valon.cloud.looker.com" {
-		t.Fatalf("connection param host = %q, want valon.cloud.looker.com", got)
-	}
-}
-
-func TestBrokerResolveToken_PlatformConnectionUsesStaticTokenWithoutExternalProvider(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "looker",
-			ConnMode: core.ConnectionModePlatform,
-		}),
-		svc.Users,
-		nil,
-		WithConnectionRuntime(ConnectionRuntimeMap{
-			"looker": {
-				core.PluginConnectionName: {
-					Mode:  core.ConnectionModePlatform,
-					Token: "static-platform-token",
-				},
-			},
-		}.Resolve),
-	)
-
-	ctx, token, err := broker.ResolveToken(context.Background(), &principal.Principal{
-		SubjectID: "service_account:workflow-config",
-		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
-	}, "looker", "", "")
-	if err != nil {
-		t.Fatalf("ResolveToken: %v", err)
-	}
-	if token != "static-platform-token" {
-		t.Fatalf("token = %q, want static-platform-token", token)
-	}
-	if cred := CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.SubjectID != platformSubjectID {
-		t.Fatalf("credential context = %#v, want platform static credential", cred)
-	}
-}
-
 func TestBrokerInvokeProviderOverrideResolvesOperationConnectionFromOverride(t *testing.T) {
 	t.Parallel()
 
@@ -391,7 +269,7 @@ func TestBrokerInvokeRejectsExplicitOperationConnectionOverride(t *testing.T) {
 	)
 
 	_, err := broker.Invoke(
-		WithConnection(context.Background(), "platform"),
+		WithConnection(context.Background(), "override"),
 		&principal.Principal{SubjectID: principal.UserSubjectID("u-gmail"), UserID: "u-gmail", Kind: principal.KindUser},
 		"gmail",
 		"",
@@ -472,65 +350,6 @@ func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testi
 	}
 	if !executed {
 		t.Fatal("Execute was not called")
-	}
-}
-
-func TestBrokerInvokeRejectsExplicitInternalConnectionOverride(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	cat := &catalog.Catalog{
-		Name: "gmail",
-		Operations: []catalog.CatalogOperation{{
-			ID:     "gmail.users.messages.modify",
-			Method: "POST",
-		}},
-	}
-	executed := false
-	provider := &brokerOperationConnectionProvider{
-		StubIntegration: &coretesting.StubIntegration{
-			N:          "gmail",
-			ConnMode:   core.ConnectionModeUser,
-			CatalogVal: cat,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				executed = true
-				return &core.OperationResult{Status: 200}, nil
-			},
-		},
-		operationConnections: map[string]string{"gmail.users.messages.modify": "default"},
-		allowOverride:        true,
-	}
-	broker := NewBroker(
-		testutil.NewProviderRegistry(t, provider),
-		svc.Users,
-		svc.ExternalCredentials,
-		WithConnectionRuntime(ConnectionRuntimeMap{
-			"gmail": {
-				"default":  {Mode: core.ConnectionModeUser},
-				"platform": {Mode: core.ConnectionModePlatform, Exposure: core.ConnectionExposureInternal},
-			},
-		}.Resolve),
-	)
-
-	_, err := broker.Invoke(
-		WithConnection(context.Background(), "platform"),
-		&principal.Principal{SubjectID: principal.UserSubjectID("u-gmail"), UserID: "u-gmail", Kind: principal.KindUser},
-		"gmail",
-		"",
-		"gmail.users.messages.modify",
-		nil,
-	)
-	if err == nil {
-		t.Fatal("Invoke succeeded, want internal connection override rejection")
-	}
-	if !errors.Is(err, ErrInvalidInvocation) {
-		t.Fatalf("Invoke error = %v, want ErrInvalidInvocation", err)
-	}
-	if !strings.Contains(err.Error(), `instead of "platform"`) {
-		t.Fatalf("Invoke error = %v, want explicit platform connection detail", err)
-	}
-	if executed {
-		t.Fatal("Execute was called after rejected internal connection override")
 	}
 }
 

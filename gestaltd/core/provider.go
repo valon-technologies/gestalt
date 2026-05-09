@@ -9,16 +9,8 @@ import (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone     ConnectionMode = "none"
-	ConnectionModeUser     ConnectionMode = "user"
-	ConnectionModePlatform ConnectionMode = "platform"
-)
-
-type ConnectionExposure string
-
-const (
-	ConnectionExposureUser     ConnectionExposure = "user"
-	ConnectionExposureInternal ConnectionExposure = "internal"
+	ConnectionModeNone ConnectionMode = "none"
+	ConnectionModeUser ConnectionMode = "user"
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
@@ -27,21 +19,8 @@ func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 		return ConnectionModeUser
 	case ConnectionModeNone:
 		return ConnectionModeNone
-	case ConnectionModePlatform:
-		return ConnectionModePlatform
 	default:
 		return mode
-	}
-}
-
-func NormalizeConnectionExposure(exposure ConnectionExposure) ConnectionExposure {
-	switch exposure {
-	case "", ConnectionExposureUser:
-		return ConnectionExposureUser
-	case ConnectionExposureInternal:
-		return ConnectionExposureInternal
-	default:
-		return exposure
 	}
 }
 

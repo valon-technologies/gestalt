@@ -36,8 +36,7 @@ import type { Schema } from "./schema.ts";
 export type ConnectionMode =
   | "unspecified"
   | "none"
-  | "user"
-  | "platform";
+  | "user";
 
 /**
  * Metadata for a single connection parameter exposed by a provider.
@@ -515,8 +514,6 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
       return 1;
     case "user":
       return 2;
-    case "platform":
-      return 5;
     case "unspecified":
     default:
       return 0;

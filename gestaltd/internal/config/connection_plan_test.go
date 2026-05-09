@@ -36,59 +36,26 @@ func TestBuildStaticConnectionPlan_PrefersNamedDefaultConnection(t *testing.T) {
 	}
 }
 
-func TestBuildStaticConnectionPlan_ConnectionExposureMergeContract(t *testing.T) {
-	t.Parallel()
-
-	manifest := &providermanifestv1.Spec{
-		Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-			"user": {
-				Mode:     providermanifestv1.ConnectionModePlatform,
-				Exposure: providermanifestv1.ConnectionExposureUser,
-			},
-			"internal": {
-				Mode:     providermanifestv1.ConnectionModePlatform,
-				Exposure: providermanifestv1.ConnectionExposureInternal,
-			},
-		},
-	}
-	plan, err := BuildStaticConnectionPlan(&ProviderEntry{
-		Connections: map[string]*ConnectionDef{
-			"user": {Exposure: providermanifestv1.ConnectionExposureInternal},
-		},
-	}, manifest)
-	if err != nil {
-		t.Fatalf("BuildStaticConnectionPlan() narrowing error = %v", err)
-	}
-	userConn, ok := plan.ResolvedNamedConnectionDef("user")
-	if !ok {
-		t.Fatal("resolved user connection missing")
-	}
-	if userConn.Exposure != providermanifestv1.ConnectionExposureInternal || !userConn.Source.NarrowedByDeploy {
-		t.Fatalf("resolved user connection = %+v, want deploy-narrowed internal exposure", userConn)
-	}
-
-	_, err = BuildStaticConnectionPlan(&ProviderEntry{
-		Connections: map[string]*ConnectionDef{
-			"internal": {Exposure: providermanifestv1.ConnectionExposureUser},
-		},
-	}, manifest)
-	if err == nil || !strings.Contains(err.Error(), "cannot widen") {
-		t.Fatalf("BuildStaticConnectionPlan() widening error = %v, want cannot widen", err)
-	}
-}
-
-func TestBuildStaticConnectionPlan_RejectsInternalUserConnection(t *testing.T) {
+func TestBuildStaticConnectionPlan_RejectsConnectionExposure(t *testing.T) {
 	t.Parallel()
 
 	_, err := BuildStaticConnectionPlan(&ProviderEntry{}, &providermanifestv1.Spec{
 		Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-			"default": {
-				Mode:     providermanifestv1.ConnectionModeUser,
-				Exposure: providermanifestv1.ConnectionExposureInternal,
-			},
+			"default": {Exposure: "internal"},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "not supported for user-owned connections") {
-		t.Fatalf("BuildStaticConnectionPlan() error = %v, want internal user rejection", err)
+	if err == nil || !strings.Contains(err.Error(), "manifest exposure is not supported") {
+		t.Fatalf("BuildStaticConnectionPlan() manifest exposure error = %v", err)
+	}
+
+	_, err = BuildStaticConnectionPlan(&ProviderEntry{
+		Connections: map[string]*ConnectionDef{
+			"default": {Exposure: "internal"},
+		},
+	}, &providermanifestv1.Spec{
+		Connections: map[string]*providermanifestv1.ManifestConnectionDef{"default": {}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "deploy exposure is not supported") {
+		t.Fatalf("BuildStaticConnectionPlan() deploy exposure error = %v", err)
 	}
 }

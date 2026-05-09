@@ -216,7 +216,7 @@ func buildProvidersAsync(
 
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
 	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModePlatform:
+	case core.ConnectionModeNone, core.ConnectionModeUser:
 		return nil
 	default:
 		return fmt.Errorf("unsupported connection mode %q for provider %q", mode, provider)

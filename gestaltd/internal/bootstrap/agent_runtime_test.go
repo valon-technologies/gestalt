@@ -216,7 +216,7 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 		"simple": {
 			"vertex": {
 				ConnectionID: "vertex-kimi-k2-6",
-				Mode:         core.ConnectionModePlatform,
+				Mode:         core.ConnectionModeUser,
 				AuthConfig:   core.ExternalCredentialAuthConfig{Type: "bearer", Token: "vertex-token"},
 				Params:       map[string]string{"endpoint": "https://vertex.example.invalid"},
 			},
@@ -225,6 +225,12 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	externalCredentials := coretesting.NewStubExternalCredentialProvider()
 	externalCredentials.ResolveCredentialFunc = func(_ context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
 		return &core.ResolveExternalCredentialResponse{
+			Credential: &core.ExternalCredential{
+				SubjectID:    req.CredentialSubjectID,
+				ConnectionID: req.ConnectionID,
+				Connection:   req.Connection,
+				AccessToken:  req.Auth.Token,
+			},
 			Token:     req.Auth.Token,
 			ExpiresAt: &expiresAt,
 		}, nil
@@ -253,8 +259,8 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	if got.Connection != "vertex" {
 		t.Fatalf("Connection = %q, want vertex", got.Connection)
 	}
-	if got.Mode != core.ConnectionModePlatform {
-		t.Fatalf("Mode = %q, want %q", got.Mode, core.ConnectionModePlatform)
+	if got.Mode != core.ConnectionModeUser {
+		t.Fatalf("Mode = %q, want %q", got.Mode, core.ConnectionModeUser)
 	}
 	if got.Headers["Authorization"] != core.BearerScheme+"vertex-token" {
 		t.Fatalf("Authorization header = %q, want bearer token", got.Headers["Authorization"])

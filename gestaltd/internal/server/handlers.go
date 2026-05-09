@@ -846,16 +846,6 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	case errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential):
-		if deploymentCredentialRequired(err) {
-			writeTypedError(
-				w,
-				http.StatusPreconditionFailed,
-				"admin_configuration_required",
-				providerName,
-				fmt.Sprintf("deployment/admin configuration is required for integration %q", providerName),
-			)
-			return
-		}
 		writeTypedError(
 			w,
 			http.StatusPreconditionFailed,
@@ -923,15 +913,6 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 		writeError(w, http.StatusBadGateway, "operation failed")
 	}
-}
-
-func deploymentCredentialRequired(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := err.Error()
-	return strings.Contains(message, "deployment credential configured") ||
-		strings.Contains(message, "deployment-managed connection")
 }
 
 func staticCatalogOperationVisibleByDefault(prov core.Provider, operation string) (bool, bool) {

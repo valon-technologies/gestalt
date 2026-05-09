@@ -233,7 +233,7 @@ func normalizeConnectionBindings(cfg *Config) error {
 			return fmt.Errorf("config validation: connections.%s.ref is not allowed on top-level connections", id)
 		}
 		if conn.Exposure != "" {
-			return fmt.Errorf("config validation: connections.%s.exposure is binding-only; set exposure where the connection is used", id)
+			return fmt.Errorf("config validation: connections.%s.exposure is not supported", id)
 		}
 		conn.ConnectionID = id
 		conn.BindingResolved = false
@@ -286,7 +286,9 @@ func normalizeConnectionBindings(cfg *Config) error {
 			if binding.DisplayName != "" {
 				resolved.DisplayName = binding.DisplayName
 			}
-			resolved.Exposure = binding.Exposure
+			if strings.TrimSpace(binding.Exposure) != "" {
+				return fmt.Errorf("config validation: %s.%s.connections.%s.exposure is not supported", kind, name, localName)
+			}
 			if binding.CredentialRefresh != nil {
 				resolved.CredentialRefresh = cloneCredentialRefreshDef(binding.CredentialRefresh)
 			}
@@ -596,7 +598,7 @@ func validateTopLevelConnections(cfg *Config) error {
 		}
 		mode := ConnectionModeForConnection(*conn)
 		switch mode {
-		case core.ConnectionModeNone, core.ConnectionModePlatform, core.ConnectionModeUser:
+		case core.ConnectionModeNone, core.ConnectionModeUser:
 		default:
 			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
 		}
@@ -604,54 +606,13 @@ func validateTopLevelConnections(cfg *Config) error {
 			return err
 		}
 		if len(conn.Auth.TokenExchangeDrivers) > 0 {
-			if mode != core.ConnectionModePlatform {
-				return fmt.Errorf("config validation: connections.%s tokenExchangeDrivers requires mode platform", id)
-			}
-			if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
-				return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
-			}
-			for i, driver := range conn.Auth.TokenExchangeDrivers {
-				if strings.TrimSpace(driver.Type) == "" {
-					return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers[%d].type is required", id, i)
-				}
-			}
-			continue
+			return fmt.Errorf("config validation: connections.%s auth.tokenExchangeDrivers is not supported; use managed-subject credentials", id)
 		}
 		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "client_credentials" {
-			if mode != core.ConnectionModePlatform {
-				return fmt.Errorf("config validation: connections.%s oauth2 client_credentials requires mode platform", id)
-			}
-			if strings.TrimSpace(conn.Auth.RefreshToken) != "" {
-				return fmt.Errorf("config validation: connections.%s auth.refreshToken is only supported for oauth2 refresh_token", id)
-			}
-			if strings.TrimSpace(conn.Auth.TokenURL) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.tokenUrl is required for oauth2 client_credentials", id)
-			}
-			if strings.TrimSpace(conn.Auth.ClientID) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.clientId is required for oauth2 client_credentials", id)
-			}
-			if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.clientSecret is required for oauth2 client_credentials", id)
-			}
-			continue
+			return fmt.Errorf("config validation: connections.%s oauth2 client_credentials is not supported; use managed-subject credentials", id)
 		}
 		if conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 && strings.TrimSpace(conn.Auth.GrantType) == "refresh_token" {
-			if mode != core.ConnectionModePlatform {
-				return fmt.Errorf("config validation: connections.%s oauth2 refresh_token requires mode platform", id)
-			}
-			if strings.TrimSpace(conn.Auth.TokenURL) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.tokenUrl is required for oauth2 refresh_token", id)
-			}
-			if strings.TrimSpace(conn.Auth.ClientID) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.clientId is required for oauth2 refresh_token", id)
-			}
-			if strings.TrimSpace(conn.Auth.ClientSecret) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.clientSecret is required for oauth2 refresh_token", id)
-			}
-			if strings.TrimSpace(conn.Auth.RefreshToken) == "" {
-				return fmt.Errorf("config validation: connections.%s auth.refreshToken is required for oauth2 refresh_token", id)
-			}
-			continue
+			return fmt.Errorf("config validation: connections.%s oauth2 refresh_token is not supported; use managed-subject credentials", id)
 		}
 		if strings.TrimSpace(conn.Auth.GrantType) != "" {
 			return fmt.Errorf("config validation: connections.%s auth.grantType is only supported for oauth2 client_credentials or refresh_token", id)

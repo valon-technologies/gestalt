@@ -399,7 +399,7 @@ type ManifestOperationOverride struct {
 type ManifestConnectionDef struct {
 	DisplayName       string                             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
 	Mode              ConnectionMode                     `json:"mode,omitempty" yaml:"mode,omitempty"`
-	Exposure          ConnectionExposure                 `json:"exposure,omitempty" yaml:"exposure,omitempty"`
+	Exposure          string                             `json:"exposure,omitempty" yaml:"exposure,omitempty"`
 	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Params            map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
 	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
@@ -463,16 +463,8 @@ const (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone     ConnectionMode = "none"
-	ConnectionModeUser     ConnectionMode = "user"
-	ConnectionModePlatform ConnectionMode = "platform"
-)
-
-type ConnectionExposure string
-
-const (
-	ConnectionExposureUser     ConnectionExposure = "user"
-	ConnectionExposureInternal ConnectionExposure = "internal"
+	ConnectionModeNone ConnectionMode = "none"
+	ConnectionModeUser ConnectionMode = "user"
 )
 
 type PaginationStyle string
