@@ -352,6 +352,10 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
         ]))
         .await
         .expect("write relationships");
+    authorization
+        .grant_agent_session_editor("user:user-123", "session-123")
+        .await
+        .expect("grant agent session editor");
 
     let searches = server.searches.lock().expect("searches lock").clone();
     assert_eq!(searches.len(), 1);
@@ -362,7 +366,7 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     assert_eq!(searches[0].action.as_ref().expect("action").name, "assume");
 
     let writes = server.writes.lock().expect("writes lock").clone();
-    assert_eq!(writes.len(), 1);
+    assert_eq!(writes.len(), 2);
     let write = writes[0].writes[0].clone();
     assert!(write.subject.is_none());
     let target = write.target.expect("target");
@@ -379,10 +383,34 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     );
     assert_eq!(write.resource.as_ref().expect("resource").id, "session-123");
 
+    let helper_write = writes[1].writes[0].clone();
+    let helper = Relationship::agent_session_editor("user:user-123", "session-123");
+    assert_eq!(helper_write.subject, None);
+    assert!(matches!(
+        helper.target,
+        Some(AuthorizationRelationshipTarget::Subject(subject))
+            if subject.r#type == "subject" && subject.id == "user:user-123"
+    ));
+    assert!(matches!(
+        helper_write.target.expect("target").kind,
+        Some(relationship_target::Kind::Subject(subject))
+            if subject.r#type == "subject" && subject.id == "user:user-123"
+    ));
+    assert_eq!(helper.relation, helper_write.relation);
+    assert_eq!(
+        helper.resource.r#type,
+        helper_write.resource.as_ref().expect("resource").r#type
+    );
+    assert_eq!(
+        helper.resource.id,
+        helper_write.resource.as_ref().expect("resource").id
+    );
+
     let tokens = server.seen_tokens.lock().expect("seen tokens lock").clone();
     assert_eq!(
         tokens,
         vec![
+            "relay-token-rust".to_string(),
             "relay-token-rust".to_string(),
             "relay-token-rust".to_string(),
             "relay-token-rust".to_string(),

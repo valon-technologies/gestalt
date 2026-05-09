@@ -109,6 +109,11 @@ that need the protobuf JSON form of `AgentMessage` can use
 `agent_message_to_proto_dict` and `agent_message_from_proto_dict` without
 importing `google.protobuf.json_format`.
 
+Use `Authorization().grant_agent_session_editor(subject_id, session_id)` when
+trusted provider code needs to share an agent session with another canonical
+Gestalt subject id. The helper writes the host-managed `agent_session#editor`
+relationship without requiring generated protobuf imports.
+
 ## Record provider telemetry
 
 `gestaltd` owns OpenTelemetry exporter configuration and passes standard

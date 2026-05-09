@@ -111,7 +111,7 @@ source-provider wrapper.
 The crate also exposes clients for provider code that needs to call
 Gestalt-managed sibling host services, including `Cache`, `IndexedDB`, `S3`,
 `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`,
-`PluginInvoker`, and `RuntimeLogHost`.
+`PluginInvoker`, `Authorization`, and `RuntimeLogHost`.
 
 `AgentHost` includes plain-input helpers named `list_tools_for_turn`,
 `execute_tool_for_turn`, and `resolve_connection_for_turn`. Use
@@ -121,6 +121,11 @@ system_time_from_timestamp}` for protobuf well-known type conversions,
 `gestalt::proto::v1` for generated protocol bindings in transport fixtures, and
 the JSON-named IndexedDB conversion helpers when asserting lower-level datastore
 wire shapes.
+
+Use `Authorization::grant_agent_session_editor` when trusted provider code
+needs to share an agent session with another canonical Gestalt subject id. The
+helper writes the host-managed `agent_session#editor` relationship without
+generated protobuf imports.
 
 ## Generated bindings
 
