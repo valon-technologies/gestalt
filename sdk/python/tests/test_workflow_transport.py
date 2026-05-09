@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import tempfile
 import unittest
 from concurrent import futures
-from typing import Any
+from typing import Any, TypedDict
 
 import grpc
 
@@ -29,6 +30,21 @@ _socket_path: str = ""
 _manager_socket_path: str = ""
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
+
+
+class _PluginTargetDict(TypedDict):
+    plugin_name: str
+    operation: str
+
+
+class _BoundTargetDict(TypedDict):
+    plugin: _PluginTargetDict
+
+
+@dataclasses.dataclass(slots=True)
+class _InvokeOperationRequestInput:
+    run_id: str
+    target: _BoundTargetDict
 
 
 class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
@@ -159,17 +175,12 @@ class WorkflowTransportTests(unittest.TestCase):
         _manager_relay_tokens.clear()
 
     def test_workflow_host_roundtrip(self) -> None:
+        target: _BoundTargetDict = {
+            "plugin": {"plugin_name": "demo", "operation": "sync"}
+        }
         with WorkflowHost() as host:
             response = host.invoke_operation(
-                workflow_pb2.InvokeWorkflowOperationRequest(
-                    run_id="run-42",
-                    target=workflow_pb2.BoundWorkflowTarget(
-                        plugin=workflow_pb2.BoundWorkflowPluginTarget(
-                            plugin_name="demo",
-                            operation="sync",
-                        ),
-                    ),
-                )
+                _InvokeOperationRequestInput(run_id="run-42", target=target)
             )
         self.assertEqual(response.status, 202)
         self.assertEqual(response.body, "run-42:sync")

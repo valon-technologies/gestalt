@@ -7,7 +7,6 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  InvokeWorkflowOperationRequestSchema,
   InvokeWorkflowOperationResponseSchema,
   WorkflowHost as WorkflowHostService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
@@ -82,11 +81,7 @@ test("WorkflowHost honors tcp target env and relay token env", async () => {
     process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN] = "relay-token-typescript";
 
     const host = new WorkflowHost();
-    const response = await host.invokeOperation(
-      create(InvokeWorkflowOperationRequestSchema, {
-        runId: "run-123",
-      }),
-    );
+    const response = await host.invokeOperation({ runId: "run-123" });
 
     expect(response.status).toBe(202);
     expect(response.body).toBe("run-123");

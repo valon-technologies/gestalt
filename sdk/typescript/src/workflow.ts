@@ -38,6 +38,7 @@ import {
   WorkflowEventTriggerInvocationSchema,
   WorkflowExecutionReferenceSchema,
   WorkflowHost as WorkflowHostService,
+  InvokeWorkflowOperationRequestSchema,
   WorkflowManualTriggerSchema,
   WorkflowOutputBindingSchema,
   WorkflowOutputDeliverySchema,
@@ -60,8 +61,6 @@ import {
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
-  type InvokeWorkflowOperationRequest,
-  type InvokeWorkflowOperationResponse,
   type ListWorkflowExecutionReferencesResponse,
   type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest,
@@ -136,8 +135,6 @@ export type {
   GetWorkflowProviderEventTriggerRequest,
   GetWorkflowProviderRunRequest,
   GetWorkflowProviderScheduleRequest,
-  InvokeWorkflowOperationRequest,
-  InvokeWorkflowOperationResponse,
   ListWorkflowExecutionReferencesResponse,
   ListWorkflowExecutionReferencesRequest,
   ListWorkflowProviderEventTriggersRequest,
@@ -355,6 +352,24 @@ export interface WorkflowExecutionReferenceInput {
   callerPluginName?: string | undefined;
   runAs?: WorkflowRunAsSubjectInput | WorkflowRunAsSubject | undefined;
   sourceDefinitionId?: string | undefined;
+}
+
+/** Native input for invoking a workflow operation through the host service. */
+export interface InvokeWorkflowOperationInput {
+  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  runId?: string | undefined;
+  trigger?: WorkflowRunTriggerInput | WorkflowRunTrigger | undefined;
+  input?: JsonObjectInput | undefined;
+  metadata?: JsonObjectInput | undefined;
+  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  executionRef?: string | undefined;
+  signals?: readonly (WorkflowSignalInput | WorkflowSignal)[] | undefined;
+}
+
+/** Native response returned after invoking a workflow operation. */
+export interface InvokeWorkflowOperationResponse {
+  status: number;
+  body: string;
 }
 
 /** Creates workflow actor metadata from native input. */
@@ -859,6 +874,19 @@ export function workflowRunTriggerInputFromTrigger(
 /** Returns a deep copy of a workflow run trigger. */
 export function workflowRunTriggerFromTrigger(input: WorkflowRunTrigger): WorkflowRunTrigger {
   return workflowRunTrigger(workflowRunTriggerInputFromTrigger(input) ?? {});
+}
+
+function invokeWorkflowOperationRequest(input: InvokeWorkflowOperationInput) {
+  return create(InvokeWorkflowOperationRequestSchema, {
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
+    runId: input.runId ?? "",
+    trigger: input.trigger === undefined ? undefined : workflowRunTrigger(input.trigger),
+    input: input.input === undefined ? undefined : structFromObject(input.input),
+    metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
+    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    executionRef: input.executionRef ?? "",
+    signals: (input.signals ?? []).map((signal) => workflowSignal(signal)),
+  });
 }
 
 /** Creates a workflow-provider run from native input. */
@@ -1394,9 +1422,10 @@ export class WorkflowHost {
 
   /** Invokes an operation through the workflow host service. */
   async invokeOperation(
-    request: InvokeWorkflowOperationRequest,
+    input: InvokeWorkflowOperationInput,
   ): Promise<InvokeWorkflowOperationResponse> {
-    return await this.client.invokeOperation(request);
+    const response = await this.client.invokeOperation(invokeWorkflowOperationRequest(input));
+    return { status: response.status, body: response.body };
   }
 }
 

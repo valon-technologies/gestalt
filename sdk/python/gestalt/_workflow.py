@@ -273,6 +273,28 @@ class WorkflowExecutionReferenceInput:
     source_definition_id: str = ""
 
 
+@_dataclasses.dataclass(slots=True)
+class InvokeWorkflowOperationInput:
+    """Native input for invoking a workflow operation through the host."""
+
+    target: Any | None = None
+    run_id: str = ""
+    trigger: Any | None = None
+    input: Any | None = None
+    metadata: Any | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+    signals: Sequence[Any] | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class InvokeWorkflowOperationResponse:
+    """Native response returned after invoking a workflow operation."""
+
+    status: int = 0
+    body: str = ""
+
+
 def _dataclass_mapping(value: Any) -> dict[str, Any] | None:
     if _dataclasses.is_dataclass(value) and not isinstance(value, type):
         return {field.name: getattr(value, field.name) for field in _dataclasses.fields(value)}
@@ -845,6 +867,27 @@ def workflow_run_trigger_from_trigger(value: Any | None) -> Any | None:
 
     data = workflow_run_trigger_input_from_trigger(value)
     return workflow_run_trigger(data) if data is not None else None
+
+
+def _invoke_workflow_operation_request(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow host InvokeOperation request from native input."""
+
+    if isinstance(value, pb.InvokeWorkflowOperationRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    trigger = data.get("trigger")
+    created_by = data.get("created_by")
+    return pb.InvokeWorkflowOperationRequest(
+        target=bound_workflow_target(target) if target is not None else None,
+        run_id=data.get("run_id", ""),
+        trigger=workflow_run_trigger(trigger) if trigger is not None else None,
+        input=_optional_struct(data.get("input")),
+        metadata=_optional_struct(data.get("metadata")),
+        created_by=workflow_actor(created_by) if created_by is not None else None,
+        execution_ref=data.get("execution_ref", ""),
+        signals=[workflow_signal(item) for item in (data.get("signals") or [])],
+    )
 
 
 def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1459,12 +1502,6 @@ def WorkflowManagerPublishEventRequest(*args: Any, **kwargs: Any) -> Any:
     return pb.WorkflowManagerPublishEventRequest(*args, **kwargs)
 
 
-def InvokeWorkflowOperationRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow host InvokeOperation request."""
-
-    return pb.InvokeWorkflowOperationRequest(*args, **kwargs)
-
-
 def workflow_run_status_name(status: int) -> str:
     """Return the protocol enum name for a workflow run status value."""
 
@@ -1497,10 +1534,19 @@ class WorkflowHost:
 
         self._channel.close()
 
-    def invoke_operation(self, request: Any) -> Any:
+    def invoke_operation(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> InvokeWorkflowOperationResponse:
         """Invoke an operation through the workflow host."""
 
-        return _grpc_call(self._stub.InvokeOperation, request)
+        response = _grpc_call(
+            self._stub.InvokeOperation,
+            _invoke_workflow_operation_request(request, **kwargs),
+        )
+        return InvokeWorkflowOperationResponse(
+            status=response.status,
+            body=response.body,
+        )
 
     def __enter__(self) -> WorkflowHost:
         """Return the client for ``with`` statements."""

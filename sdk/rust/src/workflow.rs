@@ -329,6 +329,40 @@ pub struct WorkflowExecutionReferenceInput {
     pub source_definition_id: String,
 }
 
+/// Native input for invoking a workflow operation through the host service.
+#[derive(Clone, Debug, Default)]
+pub struct InvokeWorkflowOperationInput {
+    pub target: Option<BoundWorkflowTargetInput>,
+    pub run_id: String,
+    pub trigger: Option<WorkflowRunTriggerInput>,
+    pub input: Option<serde_json::Value>,
+    pub metadata: Option<serde_json::Value>,
+    pub created_by: Option<WorkflowActorInput>,
+    pub execution_ref: String,
+    pub signals: Vec<WorkflowSignalInput>,
+}
+
+impl InvokeWorkflowOperationInput {
+    /// Sets operation input from any JSON-object-like serializable value.
+    pub fn with_input<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.input = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+
+    /// Sets workflow invocation metadata from any JSON-object-like serializable value.
+    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.metadata = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+}
+
+/// Native response returned after invoking a workflow operation.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InvokeWorkflowOperationResponse {
+    pub status: i32,
+    pub body: String,
+}
+
 /// Creates workflow actor metadata from native input.
 pub fn new_workflow_actor(input: WorkflowActorInput) -> pb::WorkflowActor {
     pb::WorkflowActor {
@@ -1079,6 +1113,34 @@ pub fn new_workflow_execution_reference_from_reference(
     new_workflow_execution_reference(workflow_execution_reference_input_from_reference(input)?)
 }
 
+fn invoke_workflow_operation_request_from_input(
+    input: InvokeWorkflowOperationInput,
+) -> ProviderResult<pb::InvokeWorkflowOperationRequest> {
+    Ok(pb::InvokeWorkflowOperationRequest {
+        target: input.target.map(new_bound_workflow_target).transpose()?,
+        run_id: input.run_id,
+        trigger: input.trigger.map(new_workflow_run_trigger).transpose()?,
+        input: input.input.map(protocol::struct_from_json).transpose()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+        created_by: input.created_by.map(new_workflow_actor),
+        execution_ref: input.execution_ref,
+        signals: input
+            .signals
+            .into_iter()
+            .map(new_workflow_signal)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+fn invoke_workflow_operation_response_from_proto(
+    response: pb::InvokeWorkflowOperationResponse,
+) -> InvokeWorkflowOperationResponse {
+    InvokeWorkflowOperationResponse {
+        status: response.status,
+        body: response.body,
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`WorkflowHost`].
 pub enum WorkflowHostError {
@@ -1088,6 +1150,9 @@ pub enum WorkflowHostError {
     /// The host-service RPC returned a gRPC status.
     #[error("{0}")]
     Status(#[from] tonic::Status),
+    /// The operation input could not be converted into the wire protocol.
+    #[error("{0}")]
+    Conversion(#[from] Error),
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
@@ -1130,9 +1195,11 @@ impl WorkflowHost {
     /// Invokes an operation through the workflow host service.
     pub async fn invoke_operation(
         &mut self,
-        request: pb::InvokeWorkflowOperationRequest,
-    ) -> std::result::Result<pb::InvokeWorkflowOperationResponse, WorkflowHostError> {
-        Ok(self.client.invoke_operation(request).await?.into_inner())
+        input: InvokeWorkflowOperationInput,
+    ) -> std::result::Result<InvokeWorkflowOperationResponse, WorkflowHostError> {
+        let request = invoke_workflow_operation_request_from_input(input)?;
+        let response = self.client.invoke_operation(request).await?.into_inner();
+        Ok(invoke_workflow_operation_response_from_proto(response))
     }
 }
 

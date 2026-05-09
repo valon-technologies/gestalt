@@ -412,14 +412,14 @@ invoke target plugin operations.
     }
     defer host.Close()
 
-    resp, err := host.InvokeOperation(ctx, &proto.InvokeWorkflowOperationRequest{
-        Target: &proto.BoundWorkflowTarget{
-            Plugin: &proto.BoundWorkflowPluginTarget{
+    resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
+        Target: &gestalt.BoundWorkflowTargetInput{
+            Plugin: &gestalt.BoundWorkflowPluginTargetInput{
                 PluginName: "roadmap",
                 Operation:  "sync_items",
             },
         },
-    	RunId: "run-1",
+        RunID: "run-1",
     })
     ```
   </Tabs.Tab>
@@ -427,9 +427,9 @@ invoke target plugin operations.
     ```python
     with gestalt.WorkflowHost() as host:
         resp = host.invoke_operation(
-            gestalt.InvokeWorkflowOperationRequest(
-                target=gestalt.BoundWorkflowTarget(
-                    plugin=gestalt.BoundWorkflowPluginTarget(
+            gestalt.InvokeWorkflowOperationInput(
+                target=gestalt.BoundWorkflowTargetInput(
+                    plugin=gestalt.BoundWorkflowPluginTargetInput(
                         plugin_name="roadmap",
                         operation="sync_items",
                     ),
@@ -443,15 +443,14 @@ invoke target plugin operations.
     ```rust
     let mut host = gestalt::WorkflowHost::connect().await?;
     let resp = host
-        .invoke_operation(proto::InvokeWorkflowOperationRequest {
-            target: Some(proto::BoundWorkflowTarget {
-                plugin: Some(proto::BoundWorkflowPluginTarget {
+        .invoke_operation(gestalt::InvokeWorkflowOperationInput {
+            target: Some(gestalt::BoundWorkflowTargetInput::Plugin(
+                gestalt::BoundWorkflowPluginTargetInput {
                     plugin_name: "roadmap".into(),
                     operation: "sync_items".into(),
                     ..Default::default()
-                }),
-                agent: None,
-            }),
+                },
+            )),
             run_id: "run-1".into(),
             ..Default::default()
         })
