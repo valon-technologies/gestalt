@@ -8,6 +8,7 @@ import math as _math
 from collections.abc import Mapping, Sequence
 from typing import Any, TypeAlias
 
+from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format as _json_format
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -17,6 +18,11 @@ _UTC = _dt.timezone.utc
 struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
 
+ProtoMessage: TypeAlias = _message.Message
+Empty: Any = getattr(_empty_pb2, "Empty")
+Struct: Any = getattr(_struct_pb2, "Struct")
+Value: Any = getattr(_struct_pb2, "Value")
+Timestamp: Any = getattr(_timestamp_pb2, "Timestamp")
 JsonPrimitive: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
@@ -84,6 +90,54 @@ def message_from_dict(value: Any, message: Any) -> Any:
     """Parse protobuf JSON data into ``message`` and return the same message."""
 
     _json_format.ParseDict(value, message)
+    return message
+
+
+def marshal_proto_deterministic(message: ProtoMessage | None) -> bytes:
+    """Serialize a protobuf message with deterministic map ordering."""
+
+    if message is None:
+        return b""
+    return message.SerializeToString(deterministic=True)
+
+
+def unmarshal_proto(data: bytes | bytearray | memoryview, message: ProtoMessage) -> ProtoMessage:
+    """Parse protobuf binary wire data into ``message`` and return it."""
+
+    message.ParseFromString(bytes(data))
+    return message
+
+
+def marshal_proto_json(
+    message: ProtoMessage,
+    *,
+    preserving_proto_field_name: bool = True,
+    always_print_fields_with_no_presence: bool = False,
+    sort_keys: bool = False,
+) -> str:
+    """Serialize a protobuf message to protobuf JSON text."""
+
+    return _json_format.MessageToJson(
+        message,
+        preserving_proto_field_name=preserving_proto_field_name,
+        always_print_fields_with_no_presence=always_print_fields_with_no_presence,
+        sort_keys=sort_keys,
+    )
+
+
+def unmarshal_proto_json(
+    data: str | bytes | bytearray | memoryview,
+    message: ProtoMessage,
+    *,
+    ignore_unknown_fields: bool = False,
+) -> ProtoMessage:
+    """Parse protobuf JSON text into ``message`` and return it."""
+
+    if isinstance(data, str):
+        text = data
+    else:
+        text = bytes(data).decode("utf-8")
+    _json_format.Parse(text, message, ignore_unknown_fields=ignore_unknown_fields)
     return message
 
 

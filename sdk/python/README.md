@@ -68,7 +68,10 @@ authorization, and authentication request payloads. Workflow helpers such as
 plain dictionaries, dataclass instances, and native `datetime` values for
 structured payloads and timestamp fields, then build the protocol messages used
 on the wire. The generated protobuf stubs are private runtime internals and are
-not part of the provider authoring API.
+not part of the provider authoring API. Boundary helpers such as
+`marshal_proto_deterministic`, `unmarshal_proto`, `marshal_proto_json`, and
+`unmarshal_proto_json` remain available for persistence keys, fixtures, and
+other interop code that must still serialize protocol-shaped values.
 
 ## Regenerating protobuf stubs
 

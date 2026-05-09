@@ -121,6 +121,7 @@ impl BoundWorkflowAgentTargetInput {
 
 /// Native input for a bound workflow target.
 #[derive(Clone, Debug, Default)]
+#[allow(clippy::large_enum_variant)]
 pub enum BoundWorkflowTargetInput {
     #[default]
     Empty,
