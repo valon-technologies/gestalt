@@ -10,17 +10,18 @@ import (
 )
 
 const (
-	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 6
-	providerLockMinSchemaVersion   = 5
-	providerLockRevision           = 0
-	providerLockKindWorkflow       = "workflow"
-	providerLockKindTelemetry      = "telemetry"
-	providerLockKindAudit          = "audit"
-	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
-	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
-	providerLockRuntimeUI          = providerReleaseRuntimeUI
-	providerLockRuntimeAssets      = providerLockRuntimeUI
+	providerLockSchemaName          = "gestaltd-provider-lock"
+	providerLockLegacySchemaVersion = 6
+	providerLockSchemaVersion       = 7
+	providerLockMinSchemaVersion    = 5
+	providerLockRevision            = 0
+	providerLockKindWorkflow        = "workflow"
+	providerLockKindTelemetry       = "telemetry"
+	providerLockKindAudit           = "audit"
+	providerLockRuntimeExecutable   = providerReleaseRuntimeExecutable
+	providerLockRuntimeDeclarative  = providerReleaseRuntimeDeclarative
+	providerLockRuntimeUI           = providerReleaseRuntimeUI
+	providerLockRuntimeAssets       = providerLockRuntimeUI
 )
 
 type providerLockfile struct {
@@ -53,6 +54,7 @@ type portableLockEntry struct {
 	Kind               string                       `json:"kind"`
 	Runtime            string                       `json:"runtime"`
 	Source             string                       `json:"source,omitempty"`
+	SourceRef          *LockSourceRef               `json:"sourceRef,omitempty"`
 	Version            string                       `json:"version,omitempty"`
 	Archives           map[string]LockArchive       `json:"archives,omitempty"`
 	Manifest           *providermanifestv1.Manifest `json:"manifest,omitempty"`
@@ -191,7 +193,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 	lock = normalizeLockfile(lock)
 	return &providerLockfile{
 		Schema:        providerLockSchemaName,
-		SchemaVersion: providerLockSchemaVersion,
+		SchemaVersion: providerLockSchemaVersionForLock(lock),
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
 			Plugin:              portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
@@ -265,6 +267,7 @@ func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) m
 			Kind:               lockEntryKind(entry, kind),
 			Runtime:            lockEntryRuntime(entry, kind),
 			Source:             source,
+			SourceRef:          cloneLockSourceRef(entry.SourceRef),
 			Version:            entry.Version,
 			Archives:           maps.Clone(entry.Archives),
 			Manifest:           entry.StaticManifest,
@@ -294,6 +297,7 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 			Kind:                     providermanifestv1.NormalizeKind(entry.Kind),
 			Runtime:                  entry.Runtime,
 			Source:                   source,
+			SourceRef:                cloneLockSourceRef(entry.SourceRef),
 			Version:                  entry.Version,
 			Archives:                 maps.Clone(entry.Archives),
 			StaticManifest:           entry.Manifest,
@@ -304,4 +308,24 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		}
 	}
 	return runtimeEntries
+}
+
+func providerLockSchemaVersionForLock(lock *Lockfile) int {
+	for _, kind := range providerLockKinds() {
+		entries := lockEntriesForProviderKind(lock, kind)
+		for idx := range entries {
+			if entries[idx].SourceRef != nil {
+				return providerLockSchemaVersion
+			}
+		}
+	}
+	return providerLockLegacySchemaVersion
+}
+
+func cloneLockSourceRef(src *LockSourceRef) *LockSourceRef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
 }

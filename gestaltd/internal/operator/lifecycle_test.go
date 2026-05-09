@@ -2326,7 +2326,7 @@ func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 		Source: config.NewMetadataSource(srv.URL + "/providers/auth-only/v" + version + "/provider-release.yaml"),
 	}
 
-	_, err := lc.lockProviderEntryForSource(context.Background(), paths, "example", plugin, map[string]any{})
+	_, err := lc.lockProviderEntryForSource(context.Background(), nil, paths, "example", plugin, map[string]any{})
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 		return

@@ -90,6 +90,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateProviderRepositories(cfg); err != nil {
 		return err
 	}
+	if err := validateProviderSnapshotRepositories(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -211,6 +214,46 @@ func validateProviderRepositories(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func validateProviderSnapshotRepositories(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for name, repo := range cfg.ProviderSnapshotRepositories {
+		if err := providerregistry.ValidateRepositoryName(name); err != nil {
+			return fmt.Errorf("config validation: providerSnapshotRepositories.%s: %w", name, err)
+		}
+		rawURL := strings.TrimSpace(repo.URL)
+		if rawURL == "" {
+			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url is required", name)
+		}
+		parsed, err := url.ParseRequestURI(rawURL)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.url must be an absolute http(s) URL", name)
+		}
+		if ref := strings.TrimSpace(repo.GestaltRef); ref != "" && !isFullGitSHA(ref) {
+			return fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef must be a 40-character commit SHA", name)
+		}
+	}
+	return nil
+}
+
+func isFullGitSHA(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 40 {
+		return false
+	}
+	for _, ch := range value {
+		switch {
+		case ch >= '0' && ch <= '9':
+		case ch >= 'a' && ch <= 'f':
+		case ch >= 'A' && ch <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeConnectionBindings(cfg *Config) error {
@@ -514,6 +557,9 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsGitHubRelease() {
 		modeCount++
 	}
+	if src.IsGit() {
+		modeCount++
+	}
 	if src.IsPackage() {
 		modeCount++
 	}
@@ -553,6 +599,55 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q source.githubRelease.repo must be owner/name", kind, name)
 		}
 	}
+	if src.IsGit() {
+		git := src.GitSource()
+		switch {
+		case git == nil:
+			return fmt.Errorf("config validation: %s %q source.git is required", kind, name)
+		case strings.TrimSpace(git.Repo) == "":
+			return fmt.Errorf("config validation: %s %q source.git.repo is required", kind, name)
+		case strings.TrimSpace(git.Ref) == "":
+			return fmt.Errorf("config validation: %s %q source.git.ref is required", kind, name)
+		case !isFullGitSHA(git.Ref):
+			return fmt.Errorf("config validation: %s %q source.git.ref must be a 40-character commit SHA", kind, name)
+		case strings.TrimSpace(git.Path) == "":
+			return fmt.Errorf("config validation: %s %q source.git.path is required", kind, name)
+		}
+		cleanPath := path.Clean(filepath.ToSlash(strings.TrimSpace(git.Path)))
+		if cleanPath == "." || cleanPath == ".." || strings.HasPrefix(cleanPath, "../") || path.IsAbs(cleanPath) {
+			return fmt.Errorf("config validation: %s %q source.git.path must be a clean relative path", kind, name)
+		}
+		if base := path.Base(cleanPath); base != "manifest.yaml" && base != "manifest.json" {
+			return fmt.Errorf("config validation: %s %q source.git.path must reference a provider manifest", kind, name)
+		}
+		parsedRepo, err := url.Parse(strings.TrimSpace(git.Repo))
+		if err != nil || parsedRepo.Scheme == "" {
+			return fmt.Errorf("config validation: %s %q source.git.repo must be an absolute URL", kind, name)
+		}
+		switch parsedRepo.Scheme {
+		case "http", "https", "file":
+		default:
+			return fmt.Errorf("config validation: %s %q source.git.repo must use http(s) or file URL", kind, name)
+		}
+		mode := strings.TrimSpace(git.ArtifactMode)
+		repoName := strings.TrimSpace(git.ArtifactRepository)
+		switch mode {
+		case "", "source", "prefer", "require":
+		default:
+			return fmt.Errorf("config validation: %s %q source.git.artifactMode must be source, prefer, or require", kind, name)
+		}
+		if repoName != "" && mode == "" {
+			return fmt.Errorf("config validation: %s %q source.git.artifactMode is required when artifactRepository is set", kind, name)
+		}
+		if (mode == "prefer" || mode == "require") && repoName == "" {
+			return fmt.Errorf("config validation: %s %q source.git.artifactRepository is required for artifactMode %q", kind, name, mode)
+		}
+		if repoName != "" {
+			if err := providerregistry.ValidateRepositoryName(repoName); err != nil {
+				return fmt.Errorf("config validation: %s %q source.git.artifactRepository: %w", kind, name, err)
+			}
+		}
+	}
 	if src.IsPackage() {
 		if err := providerregistry.ValidatePackageAddress(src.PackageAddress()); err != nil {
 			return fmt.Errorf("config validation: %s %q source.package: %w", kind, name, err)
@@ -564,7 +659,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		}
 	}
 	if auth != nil {
-		if !src.IsMetadataURL() && !src.IsGitHubRelease() && !src.IsLocalMetadataPath() && !src.IsPackage() {
+		if !src.IsMetadataURL() && !src.IsGitHubRelease() && !src.IsLocalMetadataPath() && !src.IsPackage() && !src.IsGit() {
 			return fmt.Errorf("config validation: %s %q auth is only valid with provider-release metadata sources", kind, name)
 		}
 		if strings.TrimSpace(auth.Token) == "" {
@@ -742,6 +837,7 @@ func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
 	return entry.Source.IsBuiltin() ||
 		entry.Source.IsMetadataURL() ||
 		entry.Source.IsGitHubRelease() ||
+		entry.Source.IsGit() ||
 		entry.Source.IsLocalMetadataPath() ||
 		entry.Source.IsLocal() ||
 		entry.Source.UnsupportedURL() != ""

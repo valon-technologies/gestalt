@@ -1663,6 +1663,46 @@ plugins:
 		}
 	})
 
+	t.Run("apiVersion normalizes git source locations", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v5
+providers:
+plugins:
+    custom_tool:
+      source:
+        git:
+          repo: HTTPS://GitHub.com/Valon-Technologies/Gestalt-Providers
+          ref: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          path: plugins//custom_tool/../custom_tool/manifest.yaml
+          artifactMode: source
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		wantLocation := "git+https://github.com/Valon-Technologies/Gestalt-Providers.git@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#plugins/custom_tool/manifest.yaml"
+		if got := entry.SourceRemoteLocation(); got != wantLocation {
+			t.Fatalf("SourceRemoteLocation = %q, want %q", got, wantLocation)
+		}
+		if got := entry.SourceReleaseLocation(); got != wantLocation {
+			t.Fatalf("SourceReleaseLocation = %q, want %q", got, wantLocation)
+		}
+		gitSource := entry.Source.GitSource()
+		if gitSource == nil {
+			t.Fatal("Source.GitSource() = nil")
+		}
+		repo, ref, manifestPath := gitSource.NormalizedLocationParts()
+		if repo != "https://github.com/Valon-Technologies/Gestalt-Providers.git" ||
+			ref != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ||
+			manifestPath != "plugins/custom_tool/manifest.yaml" {
+			t.Fatalf("NormalizedLocationParts = (%q, %q, %q)", repo, ref, manifestPath)
+		}
+	})
+
 	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
 		t.Parallel()
 
