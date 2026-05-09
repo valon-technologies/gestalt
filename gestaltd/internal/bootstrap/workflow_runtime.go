@@ -1132,7 +1132,29 @@ func compactWorkflowSignalPayload(payload map[string]any) map[string]any {
 	copyCompactPayloadField(out, payload, "payloadSha256")
 	copyCompactPayloadField(out, payload, "payload_omitted")
 	copyCompactPayloadField(out, payload, "payloadOmitted")
-	for _, key := range []string{"agent_request", "agentRequest", "installation", "repository", "sender", "pull_request", "pullRequest", "issue", "comment", "review", "ref"} {
+	for _, key := range []string{
+		"agent_request",
+		"agentRequest",
+		"installation",
+		"repository",
+		"sender",
+		"webhook_policy",
+		"webhookPolicy",
+		"pull_request",
+		"pullRequest",
+		"issue",
+		"comment",
+		"review",
+		"ref",
+		"check_run",
+		"checkRun",
+		"check_suite",
+		"checkSuite",
+		"workflow_run",
+		"workflowRun",
+		"review_check_run",
+		"reviewCheckRun",
+	} {
 		if value, ok := payload[key]; ok {
 			out[key] = compactWorkflowJSONValue(value, workflowSignalContextMaxDepth)
 		}
