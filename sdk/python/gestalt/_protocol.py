@@ -15,7 +15,6 @@ from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 _UTC = _dt.timezone.utc
-empty_pb2: Any = _empty_pb2
 struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
 
