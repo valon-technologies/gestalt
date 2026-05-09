@@ -1,6 +1,8 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use prost_types::{ListValue, Struct, Timestamp, Value, value::Kind};
+use prost::Message;
+use prost_types::{ListValue, value::Kind};
+pub use prost_types::{Struct, Timestamp, Value};
 use serde::Serialize;
 use serde::ser::{
     self, Impossible, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant,
@@ -10,6 +12,40 @@ use serde::ser::{
 use crate::{Error, Result};
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
+
+/// Alias for google.protobuf.Empty at protocol boundaries.
+pub type Empty = ();
+
+/// Common trait implemented by generated protobuf messages.
+pub trait ProtoMessage: Message {}
+
+impl<T: Message> ProtoMessage for T {}
+
+/// Serializes a protobuf message to binary wire bytes.
+///
+/// The SDK-generated Rust messages use ordered maps, so their map fields encode
+/// stably across process runs.
+pub fn marshal_proto_deterministic<M: ProtoMessage>(message: &M) -> Vec<u8> {
+    message.encode_to_vec()
+}
+
+/// Parses protobuf binary wire data into a new generated message.
+pub fn unmarshal_proto<M>(data: impl AsRef<[u8]>) -> Result<M>
+where
+    M: ProtoMessage + Default,
+{
+    M::decode(data.as_ref()).map_err(|err| Error::bad_request(format!("parse protobuf: {err}")))
+}
+
+/// Parses protobuf binary wire data into an existing generated message.
+pub fn unmarshal_proto_into<M>(data: impl AsRef<[u8]>, message: &mut M) -> Result<()>
+where
+    M: ProtoMessage,
+{
+    message
+        .merge(data.as_ref())
+        .map_err(|err| Error::bad_request(format!("parse protobuf: {err}")))
+}
 
 /// Converts a JSON object into a protobuf `Struct`.
 pub fn struct_from_json(value: serde_json::Value) -> Result<Struct> {

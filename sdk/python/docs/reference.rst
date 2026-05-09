@@ -136,10 +136,14 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
    struct_from_dict
    struct_to_dict
    json_from_native
+   marshal_proto_deterministic
+   marshal_proto_json
    value_from_json
    value_to_json
    message_to_dict
    message_from_dict
+   unmarshal_proto
+   unmarshal_proto_json
    timestamp_from_datetime
    datetime_from_timestamp
    has_field
@@ -151,6 +155,10 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 
 .. autofunction:: json_from_native
 
+.. autofunction:: marshal_proto_deterministic
+
+.. autofunction:: marshal_proto_json
+
 .. autofunction:: value_from_json
 
 .. autofunction:: value_to_json
@@ -158,6 +166,10 @@ rejected in generic JSON payloads and should use timestamp helpers instead.
 .. autofunction:: message_to_dict
 
 .. autofunction:: message_from_dict
+
+.. autofunction:: unmarshal_proto
+
+.. autofunction:: unmarshal_proto_json
 
 .. autofunction:: timestamp_from_datetime
 

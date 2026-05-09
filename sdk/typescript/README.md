@@ -96,7 +96,10 @@ Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
 and native `Date` values, then produce the generated protocol messages used by
 workflow providers. Copy helpers such as `boundWorkflowTargetFromTarget`
 preserve wire shape without requiring provider code to import generated schemas
-or hand-build protobuf oneofs.
+or hand-build protobuf oneofs. Boundary helpers such as
+`marshalProtoDeterministic`, `unmarshalProto`, `marshalProtoJson`, and
+`unmarshalProtoJson` remain available for persistence keys, fixtures, and other
+interop code that must still serialize protocol-shaped values.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.
