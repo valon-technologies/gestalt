@@ -132,6 +132,20 @@ func TimestampFromTimePtr(value *time.Time) *timestamppb.Timestamp {
 	return TimestampFromTime(*value)
 }
 
+// SetTime writes a native Go time into a generated protobuf timestamp field.
+//
+// Prefer native SDK constructors when creating new values. Use SetTime when
+// updating an existing generated message in place.
+func SetTime(target **timestamppb.Timestamp, value time.Time) {
+	*target = timestampFromNonZeroTime(value)
+}
+
+// SetOptionalTime writes an optional native Go time into a generated protobuf
+// timestamp field.
+func SetOptionalTime(target **timestamppb.Timestamp, value *time.Time) {
+	*target = timestampFromOptionalTime(value)
+}
+
 // TimeFromTimestamp converts a protobuf Timestamp into a Go time.
 func TimeFromTimestamp(value *timestamppb.Timestamp) time.Time {
 	if value == nil {

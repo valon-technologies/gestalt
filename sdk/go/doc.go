@@ -70,11 +70,13 @@
 // protobuf bindings. SDK constructors such as NewBoundWorkflowRun,
 // NewWorkflowSignal, and NewAuthorizationModelRef accept native time.Time
 // values and JSON-compatible maps or structs, so provider code can keep
-// protobuf timestamp and Struct conversion at the SDK boundary. StructFromMap,
-// StructFromAny, ValueFromAny, ValuesFromMap, TimestampFromTime,
-// TimestampFromTimePtr, and the IndexedDB codec helpers remain available for
-// lower-level interop and tests. StructFromAny accepts structs, string-keyed
-// map aliases, and pointers to either form; it rejects time.Time,
+// protobuf timestamp and Struct conversion at the SDK boundary. SetTime and
+// SetOptionalTime accept native time.Time values when provider code needs to
+// update existing generated messages in place. StructFromMap, StructFromAny,
+// ValueFromAny, ValuesFromMap, TimestampFromTime, TimestampFromTimePtr, and the
+// IndexedDB codec helpers remain available for lower-level interop and tests.
+// StructFromAny accepts structs, string-keyed map aliases, and pointers to
+// either form; it rejects time.Time,
 // json.Marshaler values, non-string map keys, cycles, and non-finite numbers in
 // generic Struct payloads. Embedded struct fields are not flattened like
 // encoding/json; anonymous embedded fields must have an explicit json tag name.
