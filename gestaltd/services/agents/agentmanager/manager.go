@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -1874,6 +1875,7 @@ func (m *Manager) searchWorkflowSystemTools(ctx context.Context, p *principal.Pr
 		return nil, err
 	}
 	for i := range tools {
+		tools[i] = projectResolvedAgentToolSchema(tools[i])
 		toolID, err := m.mintAgentToolID(tools[i].Target)
 		if err != nil {
 			return nil, err
@@ -1932,6 +1934,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		if err != nil {
 			return coreagent.Tool{}, err
 		}
+		tool = projectResolvedAgentToolSchema(tool)
 		toolID, err := m.mintAgentToolID(tool.Target)
 		if err != nil {
 			return coreagent.Tool{}, err
@@ -2756,10 +2759,7 @@ func sessionSortTime(session *coreagent.Session) *time.Time {
 }
 
 func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {
-	raw := agentToolInputSchema(op)
-	if len(raw) == 0 {
-		return nil, nil
-	}
+	raw := projectAgentToolInputSchema(agentToolInputSchema(op), op.Parameters)
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("decode %s input schema: %w", op.ID, err)
@@ -2814,18 +2814,11 @@ func agentToolInputSchema(op catalog.CatalogOperation) json.RawMessage {
 	if len(op.InputSchema) <= agentToolSchemaMaxBytes {
 		return op.InputSchema
 	}
-	if synthesized := integration.SynthesizeInputSchema(op.Parameters); len(synthesized) > 0 {
-		return synthesized
-	}
-	return json.RawMessage(`{"type":"object","additionalProperties":true}`)
+	return synthesizeAgentToolInputSchema(op.Parameters)
 }
 
 func agentToolInputSchemaJSON(op catalog.CatalogOperation) string {
-	raw := agentToolInputSchema(op)
-	if len(raw) == 0 {
-		return `{"type":"object","additionalProperties":true}`
-	}
-	return string(raw)
+	return string(projectAgentToolInputSchema(agentToolInputSchema(op), op.Parameters))
 }
 
 func agentToolOutputSchemaJSON(op catalog.CatalogOperation) string {
@@ -2837,13 +2830,378 @@ func agentToolOutputSchemaJSON(op catalog.CatalogOperation) string {
 
 func agentToolSchemaJSON(schema map[string]any) (string, error) {
 	if len(schema) == 0 {
-		return `{"type":"object","additionalProperties":true}`, nil
+		return string(agentToolPermissiveInputSchema()), nil
 	}
 	raw, err := json.Marshal(schema)
 	if err != nil {
 		return "", fmt.Errorf("marshal agent tool input schema: %w", err)
 	}
-	return string(raw), nil
+	if len(raw) > agentToolSchemaMaxBytes {
+		return string(agentToolPermissiveInputSchema()), nil
+	}
+	return string(projectAgentToolInputSchema(raw, nil)), nil
+}
+
+func projectResolvedAgentToolSchema(tool coreagent.Tool) coreagent.Tool {
+	raw, err := json.Marshal(tool.ParametersSchema)
+	if err != nil || len(raw) == 0 || len(raw) > agentToolSchemaMaxBytes {
+		tool.ParametersSchema = agentToolPermissiveInputSchemaMap()
+		return tool
+	}
+	projected := projectAgentToolInputSchema(raw, nil)
+	var out map[string]any
+	if err := json.Unmarshal(projected, &out); err != nil || len(out) == 0 {
+		tool.ParametersSchema = agentToolPermissiveInputSchemaMap()
+		return tool
+	}
+	tool.ParametersSchema = out
+	return tool
+}
+
+func projectAgentToolOperationForListing(op catalog.CatalogOperation) catalog.CatalogOperation {
+	out := op
+	out.ProviderID = ""
+	out.Path = ""
+	out.Parameters = publicAgentToolParameters(op.Parameters)
+	out.InputSchema = projectAgentToolInputSchema(agentToolInputSchema(op), op.Parameters)
+	return out
+}
+
+func projectAgentToolInputSchema(raw json.RawMessage, params []catalog.CatalogParameter) json.RawMessage {
+	if len(raw) == 0 || len(raw) > agentToolSchemaMaxBytes {
+		return synthesizeAgentToolInputSchema(params)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil || schema == nil {
+		return synthesizeAgentToolInputSchema(params)
+	}
+	projected, ok := projectAgentToolSchemaObject(schema, internalAgentToolSchemaFilter(params))
+	if !ok {
+		return synthesizeAgentToolInputSchema(params)
+	}
+	projectedRaw, err := json.Marshal(projected)
+	if err != nil || len(projectedRaw) > agentToolSchemaMaxBytes {
+		return synthesizeAgentToolInputSchema(params)
+	}
+	return projectedRaw
+}
+
+func synthesizeAgentToolInputSchema(params []catalog.CatalogParameter) json.RawMessage {
+	if synthesized := integration.SynthesizeInputSchema(publicAgentToolParameters(params)); len(synthesized) > 0 && len(synthesized) <= agentToolSchemaMaxBytes {
+		return synthesized
+	}
+	return agentToolPermissiveInputSchema()
+}
+
+func publicAgentToolParameters(params []catalog.CatalogParameter) []catalog.CatalogParameter {
+	if len(params) == 0 {
+		return nil
+	}
+	out := make([]catalog.CatalogParameter, 0, len(params))
+	for _, param := range params {
+		if param.Internal {
+			continue
+		}
+		out = append(out, param)
+	}
+	return out
+}
+
+type agentToolInternalSchemaFilter struct {
+	names   map[string]struct{}
+	phrases []string
+}
+
+func internalAgentToolSchemaFilter(params []catalog.CatalogParameter) agentToolInternalSchemaFilter {
+	var out agentToolInternalSchemaFilter
+	for _, param := range params {
+		if !param.Internal {
+			continue
+		}
+		out.addName(param.Name)
+		out.addName(param.WireName)
+		out.addPhrase(param.Description, 8)
+	}
+	return out
+}
+
+func (f *agentToolInternalSchemaFilter) addName(value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	if f.names == nil {
+		f.names = make(map[string]struct{}, 2)
+	}
+	f.names[value] = struct{}{}
+	f.addPhrase(value, 4)
+}
+
+func (f *agentToolInternalSchemaFilter) addPhrase(value string, minLength int) {
+	value = strings.TrimSpace(value)
+	if len(value) < minLength {
+		return
+	}
+	f.phrases = append(f.phrases, strings.ToLower(value))
+}
+
+func (f agentToolInternalSchemaFilter) internalName(value string) bool {
+	_, ok := f.names[strings.TrimSpace(value)]
+	return ok
+}
+
+func (f agentToolInternalSchemaFilter) mentionsInternal(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return false
+	}
+	for _, phrase := range f.phrases {
+		if phrase != "" && strings.Contains(value, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func agentToolPermissiveInputSchema() json.RawMessage {
+	return json.RawMessage(`{"type":"object","additionalProperties":true}`)
+}
+
+func agentToolPermissiveInputSchemaMap() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": true,
+	}
+}
+
+func projectAgentToolSchemaObject(schema map[string]any, filter agentToolInternalSchemaFilter) (map[string]any, bool) {
+	if !agentToolSchemaRootSupportsObject(schema) {
+		return nil, false
+	}
+	out := map[string]any{"type": "object"}
+	if additionalProperties, ok := schema["additionalProperties"].(bool); ok {
+		out["additionalProperties"] = additionalProperties
+	}
+	properties, ok := agentToolSchemaProperties(schema)
+	if !ok {
+		return nil, false
+	}
+	projectedProperties := make(map[string]any, len(properties))
+	rootPropertyNames := make(map[string]struct{}, len(properties))
+	for name, value := range properties {
+		if filter.internalName(name) || filter.mentionsInternal(name) {
+			continue
+		}
+		projectedValue, keep := projectAgentToolSchemaValue(value, filter)
+		if !keep {
+			continue
+		}
+		projectedProperties[name] = projectedValue
+		rootPropertyNames[name] = struct{}{}
+	}
+	required := map[string]struct{}{}
+	for _, spec := range []struct {
+		key           string
+		unionRequired bool
+	}{
+		{key: "allOf", unionRequired: true},
+		{key: "oneOf", unionRequired: false},
+		{key: "anyOf", unionRequired: false},
+	} {
+		if _, exists := schema[spec.key]; !exists {
+			continue
+		}
+		if !mergeAgentToolSchemaCombinator(schema[spec.key], projectedProperties, rootPropertyNames, required, filter, spec.unionRequired) {
+			return nil, false
+		}
+	}
+	for name := range agentToolSchemaRequiredSet(projectedProperties, filter, schema["required"]) {
+		required[name] = struct{}{}
+	}
+	if len(projectedProperties) > 0 {
+		out["properties"] = projectedProperties
+	}
+	if len(required) > 0 {
+		out["required"] = sortedAgentToolRequired(required)
+	}
+	return out, true
+}
+
+func projectAgentToolSchemaValue(value any, filter agentToolInternalSchemaFilter) (any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if agentToolUnsafeNestedSchemaKey(key) || filter.internalName(key) || filter.mentionsInternal(key) {
+				continue
+			}
+			projected, keep := projectAgentToolSchemaValue(item, filter)
+			if !keep {
+				continue
+			}
+			out[key] = projected
+		}
+		return out, true
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			projected, keep := projectAgentToolSchemaValue(item, filter)
+			if keep {
+				out = append(out, projected)
+			}
+		}
+		return out, true
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if filter.internalName(item) || filter.mentionsInternal(item) {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out, true
+	case string:
+		if filter.mentionsInternal(typed) {
+			return nil, false
+		}
+		return typed, true
+	default:
+		return value, true
+	}
+}
+
+func agentToolUnsafeNestedSchemaKey(key string) bool {
+	if strings.HasPrefix(key, "$") {
+		return true
+	}
+	switch key {
+	case "allOf", "anyOf", "oneOf", "not", "if", "then", "else", "dependentRequired", "dependentSchemas", "patternProperties", "definitions":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeAgentToolSchemaCombinator(value any, properties map[string]any, rootPropertyNames map[string]struct{}, required map[string]struct{}, filter agentToolInternalSchemaFilter, unionRequired bool) bool {
+	branches, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, branchValue := range branches {
+		branch, ok := branchValue.(map[string]any)
+		if !ok {
+			return false
+		}
+		projected, ok := projectAgentToolSchemaObject(branch, filter)
+		if !ok {
+			return false
+		}
+		branchProperties, ok := agentToolSchemaProperties(projected)
+		if !ok {
+			return false
+		}
+		for name, value := range branchProperties {
+			if _, rootProperty := rootPropertyNames[name]; rootProperty {
+				if existing, exists := properties[name]; !exists || !reflect.DeepEqual(existing, value) {
+					return false
+				}
+				continue
+			}
+			if existing, exists := properties[name]; exists && !reflect.DeepEqual(existing, value) {
+				return false
+			}
+			properties[name] = value
+		}
+		if unionRequired {
+			for name := range agentToolSchemaRequiredSet(properties, filter, projected["required"]) {
+				if _, ok := properties[name]; ok {
+					required[name] = struct{}{}
+				}
+			}
+		}
+	}
+	return true
+}
+
+func agentToolSchemaRootSupportsObject(schema map[string]any) bool {
+	value, exists := schema["type"]
+	if !exists {
+		return true
+	}
+	switch typed := value.(type) {
+	case string:
+		return typed == "object"
+	case []any:
+		for _, item := range typed {
+			if item == "object" {
+				return true
+			}
+		}
+	case []string:
+		for _, item := range typed {
+			if item == "object" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func agentToolSchemaProperties(schema map[string]any) (map[string]any, bool) {
+	value, exists := schema["properties"]
+	if !exists || value == nil {
+		return nil, true
+	}
+	properties, ok := value.(map[string]any)
+	return properties, ok
+}
+
+func agentToolSchemaRequiredSet(properties map[string]any, filter agentToolInternalSchemaFilter, values any) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, name := range agentToolSchemaRequired(values) {
+		if filter.internalName(name) || filter.mentionsInternal(name) {
+			continue
+		}
+		if _, exists := properties[name]; exists {
+			out[name] = struct{}{}
+		}
+	}
+	return out
+}
+
+func agentToolSchemaRequired(values any) []string {
+	switch typed := values.(type) {
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			name, ok := item.(string)
+			if !ok || name == "" {
+				continue
+			}
+			out = append(out, name)
+		}
+		return out
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, name := range typed {
+			if name == "" {
+				continue
+			}
+			out = append(out, name)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func sortedAgentToolRequired(required map[string]struct{}) []string {
+	out := make([]string, 0, len(required))
+	for name := range required {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
@@ -2864,6 +3222,9 @@ func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
 }
 
 func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandidate) (coreagent.ListedTool, error) {
+	projectedOperation := projectAgentToolOperationForListing(candidate.operation)
+	projectedCandidate := candidate
+	projectedCandidate.operation = projectedOperation
 	ref := candidate.ref
 	target := coreagent.ToolTarget{
 		Plugin:                strings.TrimSpace(ref.Plugin),
@@ -2880,14 +3241,14 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	}
 	name := strings.TrimSpace(ref.Title)
 	if name == "" {
-		name = strings.TrimSpace(candidate.operation.Title)
+		name = strings.TrimSpace(projectedOperation.Title)
 	}
 	if name == "" {
-		name = target.Plugin + "." + candidate.operation.ID
+		name = target.Plugin + "." + projectedOperation.ID
 	}
 	description := strings.TrimSpace(ref.Description)
 	if description == "" {
-		description = strings.TrimSpace(candidate.operation.Description)
+		description = strings.TrimSpace(projectedOperation.Description)
 	}
 	ref.Connection = target.Connection
 	ref.Instance = target.Instance
@@ -2898,14 +3259,14 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 		MCPName:          agentToolMCPName(target),
 		Title:            name,
 		Description:      description,
-		Tags:             append([]string(nil), candidate.operation.Tags...),
-		SearchText:       agentToolSearchMetadataText(candidate),
-		InputSchemaJSON:  agentToolInputSchemaJSON(candidate.operation),
-		OutputSchemaJSON: agentToolOutputSchemaJSON(candidate.operation),
-		Annotations:      capabilityAnnotationsFromCatalog(candidate.operation.Annotations),
+		Tags:             append([]string(nil), projectedOperation.Tags...),
+		SearchText:       agentToolSearchMetadataText(projectedCandidate),
+		InputSchemaJSON:  agentToolInputSchemaJSON(projectedOperation),
+		OutputSchemaJSON: agentToolOutputSchemaJSON(projectedOperation),
+		Annotations:      capabilityAnnotationsFromCatalog(projectedOperation.Annotations),
 		Ref:              ref,
 		Target:           target,
-		Hidden:           !catalog.OperationVisibleByDefault(candidate.operation),
+		Hidden:           !catalog.OperationVisibleByDefault(projectedOperation),
 	}, nil
 }
 
