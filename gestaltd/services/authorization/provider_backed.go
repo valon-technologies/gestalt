@@ -13,8 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/observability"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 type providerBackedRoleState struct {
@@ -538,35 +536,22 @@ func (a *ProviderBackedAuthorizer) resolveRoleVariants(ctx context.Context, subj
 
 	resource := &core.ResourceRef{Type: resourceType, Id: resourceID}
 	for _, subject := range subjects {
-		reqs := make([]*core.AccessEvaluationRequest, 0, len(roles))
 		for _, role := range roles {
-			reqs = append(reqs, &core.AccessEvaluationRequest{
+			resp, err := a.provider.ReadRelationships(ctx, &core.ReadRelationshipsRequest{
 				Subject:  subject,
-				Action:   &core.ActionRef{Name: role},
+				Relation: role,
 				Resource: resource,
+				PageSize: 1,
+				ModelId:  expectedModelID,
 			})
-		}
-		startedAt := time.Now()
-		attrs := []attribute.KeyValue{
-			observability.AttrAuthorizationProvider.String(observability.AuthorizationProviderMetricName(a.provider)),
-			observability.AttrAuthorizationScope.String(resourceType),
-		}
-		evalCtx, span := observability.StartSpan(ctx, "authorization.provider.evaluate", attrs...)
-		resp, err := a.provider.EvaluateMany(evalCtx, &core.AccessEvaluationsRequest{Requests: reqs})
-		observability.EndSpan(span, err)
-		observability.RecordAuthorizationProviderEvaluate(evalCtx, startedAt, err != nil, attrs...)
-		if err != nil {
-			return "", false, err
-		}
-		for i, decision := range resp.GetDecisions() {
-			if i >= len(roles) {
-				break
+			if err != nil {
+				return "", false, err
 			}
-			if decisionModelID := strings.TrimSpace(decision.GetModelId()); expectedModelID != "" && decisionModelID != "" && decisionModelID != expectedModelID {
-				return "", false, fmt.Errorf("authorization provider active model changed: expected %q, got %q", expectedModelID, decisionModelID)
+			if respModelID := strings.TrimSpace(resp.GetModelId()); expectedModelID != "" && respModelID != "" && respModelID != expectedModelID {
+				return "", false, fmt.Errorf("authorization provider active model changed: expected %q, got %q", expectedModelID, respModelID)
 			}
-			if decision != nil && decision.GetAllowed() {
-				return roles[i], true, nil
+			if len(resp.GetRelationships()) > 0 {
+				return role, true, nil
 			}
 		}
 	}
