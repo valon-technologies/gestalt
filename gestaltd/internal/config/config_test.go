@@ -45,7 +45,7 @@ func withDefaultConfigAPIVersion(content string) string {
 	return "\napiVersion: " + ConfigAPIVersion + "\n" + strings.TrimLeft(content, "\r\n")
 }
 
-func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
+func TestValidateStructureRejectsPlatformOAuth2RefreshToken(t *testing.T) {
 	t.Parallel()
 
 	baseAuth := ConnectionAuthDef{
@@ -62,29 +62,24 @@ func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "platform refresh_token accepted",
-			conn: ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: baseAuth},
-		},
-		{
-			name:    "non-platform refresh_token rejected",
+			name:    "refresh_token grant rejected",
 			conn:    ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: baseAuth},
-			wantErr: "oauth2 refresh_token requires mode platform",
+			wantErr: "oauth2 refresh_token is not supported; use managed-subject credentials",
 		},
 		{
-			name: "missing refresh token rejected",
+			name: "platform mode rejected before grant validation",
 			conn: func() ConnectionDef {
 				auth := baseAuth
-				auth.RefreshToken = ""
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionMode("platform"), Auth: auth}
 			}(),
-			wantErr: "auth.refreshToken is required for oauth2 refresh_token",
+			wantErr: `mode "platform" is not supported`,
 		},
 		{
 			name: "unsupported grant rejected",
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = "password"
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
 			}(),
 			wantErr: "auth.grantType is only supported for oauth2 client_credentials or refresh_token",
 		},
@@ -93,7 +88,7 @@ func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = ""
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
 			}(),
 			wantErr: "auth.refreshToken is only supported for oauth2 refresh_token",
 		},
@@ -102,9 +97,9 @@ func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
 			conn: func() ConnectionDef {
 				auth := baseAuth
 				auth.GrantType = "client_credentials"
-				return ConnectionDef{Mode: providermanifestv1.ConnectionModePlatform, Auth: auth}
+				return ConnectionDef{Mode: providermanifestv1.ConnectionModeUser, Auth: auth}
 			}(),
-			wantErr: "auth.refreshToken is only supported for oauth2 refresh_token",
+			wantErr: "oauth2 client_credentials is not supported; use managed-subject credentials",
 		},
 	}
 
@@ -123,8 +118,8 @@ func TestValidateStructurePlatformOAuth2RefreshToken(t *testing.T) {
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("ValidateStructure: %v", err)
+			if err == nil {
+				t.Fatal("ValidateStructure: expected error, got nil")
 			}
 		})
 	}
@@ -5701,7 +5696,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 						Source: ProviderSource{Path: "./manifest.yaml"},
 						Connections: map[string]*ConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModePlatform,
+								Mode: providermanifestv1.ConnectionModeNone,
 								Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
 							},
 						},
@@ -5742,7 +5737,7 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 		APIVersion: ConfigAPIVersion,
 		Connections: map[string]*ConnectionDef{
 			"shared": {
-				Mode: providermanifestv1.ConnectionModePlatform,
+				Mode: providermanifestv1.ConnectionModeNone,
 				Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeNone},
 			},
 		},
@@ -5751,8 +5746,7 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Connections: map[string]*ConnectionDef{
 					core.PluginConnectionAlias: {
-						Ref:      "shared",
-						Exposure: providermanifestv1.ConnectionExposureInternal,
+						Ref: "shared",
 					},
 				},
 			},
@@ -5772,9 +5766,6 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	}
 	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
 		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
-	}
-	if canonical.Exposure != providermanifestv1.ConnectionExposureInternal {
-		t.Fatalf("canonical Exposure = %q, want %q", canonical.Exposure, providermanifestv1.ConnectionExposureInternal)
 	}
 }
 
@@ -5929,8 +5920,8 @@ func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
 		Connections: map[string]*ConnectionDef{
-			"primary":  {Mode: providermanifestv1.ConnectionModePlatform},
-			"fallback": {Mode: providermanifestv1.ConnectionModePlatform},
+			"primary":  {Mode: providermanifestv1.ConnectionModeNone},
+			"fallback": {Mode: providermanifestv1.ConnectionModeNone},
 		},
 		Plugins: map[string]*ProviderEntry{
 			"sample": {

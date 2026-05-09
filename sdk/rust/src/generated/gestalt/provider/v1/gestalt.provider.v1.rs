@@ -445,7 +445,6 @@ pub enum ConnectionMode {
     Unspecified = 0,
     None = 1,
     User = 2,
-    Platform = 5,
 }
 impl ConnectionMode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -457,7 +456,6 @@ impl ConnectionMode {
             Self::Unspecified => "CONNECTION_MODE_UNSPECIFIED",
             Self::None => "CONNECTION_MODE_NONE",
             Self::User => "CONNECTION_MODE_USER",
-            Self::Platform => "CONNECTION_MODE_PLATFORM",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -466,7 +464,6 @@ impl ConnectionMode {
             "CONNECTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
             "CONNECTION_MODE_NONE" => Some(Self::None),
             "CONNECTION_MODE_USER" => Some(Self::User),
-            "CONNECTION_MODE_PLATFORM" => Some(Self::Platform),
             _ => None,
         }
     }

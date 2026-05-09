@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -38,14 +37,12 @@ const (
 	actionReconnect      = "reconnect"
 	actionAdminConfigure = "admin_configure"
 
-	credentialModeNone     = "none"
-	credentialModeSubject  = "subject"
-	credentialModePlatform = "platform"
+	credentialModeNone    = "none"
+	credentialModeSubject = "subject"
 
 	ownerKindNone           = "none"
 	ownerKindCurrentUser    = "current_user"
 	ownerKindServiceAccount = "service_account"
-	ownerKindPlatform       = "platform"
 	ownerKindUnknown        = "unknown"
 )
 
@@ -128,25 +125,6 @@ func (s *Server) implicitIntegrationStatus(integration string, prov core.Provide
 			Actions:         []string{},
 			Connected:       true,
 		}
-	case core.ConnectionModePlatform:
-		if s.hasConfiguredPlatformConnection(integration) {
-			return connectionStatusInfo{
-				Status:          connectionStatusReady,
-				CredentialState: credentialStateConfigured,
-				HealthState:     healthStateNotChecked,
-				Actions:         []string{},
-				Connected:       true,
-			}
-		}
-		return connectionStatusInfo{
-			Status:          connectionStatusNeedsAdminConfiguration,
-			CredentialState: credentialStateMissing,
-			HealthState:     healthStateUnknown,
-			Actions:         []string{actionAdminConfigure},
-			Connected:       false,
-			StatusCode:      "admin_configuration_required",
-			StatusReason:    "deployment/admin configuration is required",
-		}
 	default:
 		return subjectConnectionStatus(groupInstancesForConnection(instances, ""), len(authTypes) > 0, ownerKindForPrincipal(p))
 	}
@@ -198,22 +176,6 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 		conn := &connections[i]
 		if conn.Status == connectionStatusNeedsInstanceSelection {
 			return statusFromConnectionInfo(conn)
-		}
-	}
-	allPlatform := true
-	for i := range connections {
-		conn := &connections[i]
-		if conn.CredentialMode != credentialModePlatform {
-			allPlatform = false
-			break
-		}
-	}
-	if allPlatform {
-		for i := range connections {
-			conn := &connections[i]
-			if conn.Status == connectionStatusNeedsAdminConfiguration {
-				return statusFromConnectionInfo(conn)
-			}
 		}
 	}
 	allReady := true
@@ -312,31 +274,6 @@ func noAuthConnectionStatus() connectionStatusInfo {
 		Actions:         []string{},
 		CredentialMode:  credentialModeNone,
 		OwnerKind:       ownerKindNone,
-		Connected:       true,
-	}
-}
-
-func (s *Server) platformConnectionStatus(integration, connection string, conn config.ConnectionDef) connectionStatusInfo {
-	if _, err := bootstrap.StaticConnectionRuntimeInfo(integration, connection, conn); err != nil {
-		return connectionStatusInfo{
-			Status:          connectionStatusNeedsAdminConfiguration,
-			CredentialState: credentialStateMissing,
-			HealthState:     healthStateUnknown,
-			Actions:         []string{actionAdminConfigure},
-			CredentialMode:  credentialModePlatform,
-			OwnerKind:       ownerKindPlatform,
-			Connected:       false,
-			StatusCode:      "admin_configuration_required",
-			StatusReason:    err.Error(),
-		}
-	}
-	return connectionStatusInfo{
-		Status:          connectionStatusReady,
-		CredentialState: credentialStateConfigured,
-		HealthState:     healthStateNotChecked,
-		Actions:         []string{},
-		CredentialMode:  credentialModePlatform,
-		OwnerKind:       ownerKindPlatform,
 		Connected:       true,
 	}
 }

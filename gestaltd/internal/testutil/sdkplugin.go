@@ -607,9 +607,6 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
 	}
-	if req.GetMode() == "platform" {
-		return &gestalt.ResolveExternalCredentialResponse{Token: req.GetAuth().GetToken()}, nil
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var credential *gestalt.ExternalCredential

@@ -28,7 +28,6 @@ import (
 const (
 	tracerName         = "gestaltd"
 	graphQLOperationID = "graphql"
-	platformSubjectID  = "system:platform-config"
 
 	attrProvider       = metricutil.AttrProvider
 	attrOperation      = metricutil.AttrOperation
@@ -300,8 +299,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		explicitConnection := core.ResolveConnectionAlias(conn)
 		overrideAllowed := transport == catalog.TransportPlugin || OperationConnectionOverrideAllowed(execProv, opMeta.ID, params)
 		overrideDenied := !overrideAllowed
-		overrideTargetsInternal := b.connectionIsInternal(providerName, explicitConnection)
-		if operationConnection != "" && operationConnection != explicitConnection && (overrideDenied || overrideTargetsInternal) {
+		if operationConnection != "" && operationConnection != explicitConnection && overrideDenied {
 			return fail(fmt.Errorf(
 				"%w: operation %q on integration %q uses connection %q; omit the connection override or use that connection instead of %q",
 				ErrInvalidInvocation,
@@ -603,23 +601,6 @@ func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, 
 	return effectiveConnectionMode(ctx, prov)
 }
 
-func (b *Broker) resolveConnectionExposure(providerName, connection string) core.ConnectionExposure {
-	if b != nil && b.connectionRuntime != nil {
-		if info, ok := b.connectionRuntime(providerName, connection); ok && info.Exposure != "" {
-			return core.NormalizeConnectionExposure(info.Exposure)
-		}
-	}
-	return core.ConnectionExposureUser
-}
-
-func (b *Broker) connectionIsInternal(providerName, connection string) bool {
-	if b == nil || b.connectionRuntime == nil {
-		return false
-	}
-	info, ok := b.connectionRuntime(providerName, connection)
-	return ok && core.NormalizeConnectionExposure(info.Exposure) == core.ConnectionExposureInternal
-}
-
 func (b *Broker) connectionID(providerName, connection string) string {
 	providerName = strings.TrimSpace(providerName)
 	connection = strings.TrimSpace(connection)
@@ -632,13 +613,6 @@ func (b *Broker) connectionID(providerName, connection string) string {
 		}
 	}
 	return providerName + ":" + connection
-}
-
-func allowsInternalConnection(ctx context.Context) bool {
-	if InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTPBinding && HTTPBindingFromContext(ctx) != "" {
-		return true
-	}
-	return InternalConnectionAccessFromContext(ctx)
 }
 
 func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principal, providerName string, targets []CatalogResolutionTarget) ([]CatalogResolutionTarget, error) {
@@ -741,17 +715,11 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	}
 
 	mode := b.resolveConnectionMode(ctx, prov, providerName, connection)
-	if b.resolveConnectionExposure(providerName, connection) == core.ConnectionExposureInternal && !allowsInternalConnection(ctx) {
-		return ctx, "", fmt.Errorf("%w: integration %q connection %q is internal", ErrAuthorizationDenied, providerName, strings.TrimSpace(connection))
-	}
 	switch mode {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, "", nil
-
-	case core.ConnectionModePlatform:
-		return b.resolvePlatformCredential(ctx, providerName, connection, instance)
 
 	case core.ConnectionModeUser:
 		subjectID := principal.EffectiveCredentialSubjectID(p)
@@ -781,18 +749,11 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 	if !ok {
 		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: no runtime credential configured for provider %q connection %q", ErrNoCredential, providerName, connection)
 	}
-	if core.NormalizeConnectionExposure(info.Exposure) == core.ConnectionExposureInternal && !allowsInternalConnection(ctx) {
-		return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: provider %q connection %q is internal", ErrAuthorizationDenied, providerName, connection)
-	}
 	switch core.NormalizeConnectionMode(info.Mode) {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, ConnectionRuntimeCredential{}, info, nil
-
-	case core.ConnectionModePlatform:
-		resolvedCtx, credential, err := b.resolvePlatformRuntimeCredential(ctx, providerName, connection, instance, info)
-		return resolvedCtx, credential, info, err
 
 	case core.ConnectionModeUser:
 		if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -809,77 +770,6 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 	default:
 		return ctx, ConnectionRuntimeCredential{}, info, fmt.Errorf("%w: unknown connection mode %q", ErrInternal, info.Mode)
 	}
-}
-
-func (b *Broker) resolvePlatformCredential(ctx context.Context, providerName, connection, instance string) (context.Context, string, error) {
-	if b == nil || b.connectionRuntime == nil {
-		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q", ErrNoCredential, providerName)
-	}
-	instance = strings.TrimSpace(instance)
-	if instance != "" {
-		return ctx, "", fmt.Errorf("%w: deployment-managed connection for integration %q does not support instances", ErrNoCredential, providerName)
-	}
-	connection = strings.TrimSpace(connection)
-	if connection == "" {
-		connection = core.PluginConnectionName
-	}
-	info, ok := b.connectionRuntime(providerName, connection)
-	if !ok {
-		return ctx, "", fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
-	}
-	ctx, credential, err := b.resolvePlatformRuntimeCredential(ctx, providerName, connection, instance, info)
-	if err != nil {
-		return ctx, "", err
-	}
-	return ctx, credential.Token, nil
-}
-
-func (b *Broker) resolvePlatformRuntimeCredential(ctx context.Context, providerName, connection, instance string, info ConnectionRuntimeInfo) (context.Context, ConnectionRuntimeCredential, error) {
-	instance = strings.TrimSpace(instance)
-	if instance != "" {
-		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: deployment-managed connection for integration %q does not support instances", ErrNoCredential, providerName)
-	}
-	connection = strings.TrimSpace(connection)
-	if connection == "" {
-		connection = core.PluginConnectionName
-	}
-	token := strings.TrimSpace(info.Token)
-	var expiresAt *time.Time
-	if !core.ExternalCredentialProviderMissing(b.externalCreds) {
-		auth := info.AuthConfig
-		if auth.Token == "" && token != "" {
-			auth.Token = token
-		}
-		credential, err := b.externalCreds.ResolveCredential(ctx, &core.ResolveExternalCredentialRequest{
-			Provider:         providerName,
-			Connection:       connection,
-			ConnectionID:     info.ConnectionID,
-			Mode:             core.ConnectionModePlatform,
-			Instance:         instance,
-			Auth:             auth,
-			ConnectionParams: info.Params,
-		})
-		if err != nil {
-			return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: resolving deployment credential for integration %q connection %q: %v", ErrNoCredential, providerName, connection, err)
-		}
-		if credential != nil && strings.TrimSpace(credential.Token) != "" {
-			token = strings.TrimSpace(credential.Token)
-			expiresAt = credential.ExpiresAt
-		}
-	}
-	if token == "" {
-		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no deployment credential configured for integration %q connection %q", ErrNoCredential, providerName, connection)
-	}
-	SetCredentialAudit(ctx, core.ConnectionModePlatform, platformSubjectID, connection, "")
-	ctx = WithCredentialContext(ctx, CredentialContext{
-		Mode:       core.ConnectionModePlatform,
-		SubjectID:  platformSubjectID,
-		Connection: connection,
-	})
-	if len(info.Params) > 0 {
-		ctx = core.WithConnectionParams(ctx, info.Params)
-	}
-	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {

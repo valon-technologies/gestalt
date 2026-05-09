@@ -664,7 +664,7 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 	}
 	pluginName := strings.TrimSpace(target.PluginName)
 	switch mode {
-	case core.ConnectionModeNone, core.ConnectionModePlatform:
+	case core.ConnectionModeNone:
 		return nil
 	case core.ConnectionModeUser:
 		if hasRunAs {
@@ -749,21 +749,14 @@ func workflowConfigConnectionSelectorTargetConnection(selector core.OperationCon
 }
 
 func workflowConfigConnectionSelectorMode(plan config.StaticConnectionPlan, pluginName string, selector core.OperationConnectionSelector) (core.ConnectionMode, error) {
-	hasPlatform := false
 	for _, connectionName := range selector.Values {
 		mode, err := workflowConfigConnectionModeForName(plan, pluginName, connectionName)
 		if err != nil {
 			return core.ConnectionModeNone, err
 		}
-		switch mode {
-		case core.ConnectionModeUser:
+		if mode == core.ConnectionModeUser {
 			return core.ConnectionModeUser, nil
-		case core.ConnectionModePlatform:
-			hasPlatform = true
 		}
-	}
-	if hasPlatform {
-		return core.ConnectionModePlatform, nil
 	}
 	return core.ConnectionModeNone, nil
 }

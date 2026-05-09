@@ -61,11 +61,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		if mode := config.ConnectionModeForConnection(conn); mode != "" {
 			connectionMode = metricutil.NormalizeConnectionMode(mode)
 		}
-		if config.ConnectionModeForConnection(conn) == core.ConnectionModePlatform {
-			auditErr = errors.New("deployment-managed connection cannot be connected by users")
-			writeError(w, http.StatusBadRequest, "deployment-managed connections cannot start OAuth")
-			return
-		}
 	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)

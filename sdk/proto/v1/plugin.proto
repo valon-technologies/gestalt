@@ -61,9 +61,9 @@ enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
   CONNECTION_MODE_USER = 2;
-  CONNECTION_MODE_PLATFORM = 5;
-  reserved 3, 4;
+  reserved 3, 4, 5;
   reserved "CONNECTION_MODE_IDENTITY", "CONNECTION_MODE_EITHER";
+  reserved "CONNECTION_MODE_PLATFORM";
 }
 
 // ConnectionParamDef describes one provider-defined connection parameter.

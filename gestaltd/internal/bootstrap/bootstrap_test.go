@@ -4666,11 +4666,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModePlatform,
-		Auth: &config.ConnectionAuthDef{
-			Type:  providermanifestv1.AuthTypeBearer,
-			Token: "platform-token",
-		},
+		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -4814,11 +4810,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModePlatform,
-		Auth: &config.ConnectionAuthDef{
-			Type:  providermanifestv1.AuthTypeBearer,
-			Token: "platform-token",
-		},
+		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -4936,11 +4928,7 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModePlatform,
-		Auth: &config.ConnectionAuthDef{
-			Type:  providermanifestv1.AuthTypeBearer,
-			Token: "platform-token",
-		},
+		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -5238,18 +5226,14 @@ func TestBootstrapRejectsConfiguredWorkflowScheduleRunAsUserSubject(t *testing.T
 	}
 }
 
-func TestBootstrapAppliesConfiguredWorkflowSchedulesForPlatformConnectionOnUserDefaultPlugin(t *testing.T) {
+func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefaultPlugin(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	cfg.Plugins["roadmap"].Connections = map[string]*config.ConnectionDef{
 		"bot": {
-			Mode: providermanifestv1.ConnectionModePlatform,
-			Auth: config.ConnectionAuthDef{
-				Type:  providermanifestv1.AuthTypeBearer,
-				Token: "platform-token",
-			},
+			Mode: providermanifestv1.ConnectionModeUser,
 		},
 	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
@@ -5264,6 +5248,9 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForPlatformConnectionOnUserD
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Target.Plugin.Connection = "bot"
+	nightly.RunAs = &config.WorkflowRunAsConfig{
+		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
+	}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -6261,11 +6248,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
-		ConnectionMode: providermanifestv1.ConnectionModePlatform,
-		Auth: &config.ConnectionAuthDef{
-			Type:  providermanifestv1.AuthTypeBearer,
-			Token: "platform-token",
-		},
+		ConnectionMode: providermanifestv1.ConnectionModeNone,
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -8500,7 +8483,7 @@ func TestBootstrapAllowsPluginConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *
 		t.Fatalf("status result = %+v, want 200 with ok body", statusResult)
 	}
 
-	viewerResult, err := prov.Execute(context.Background(), "viewer", map[string]any{"team": "platform"}, "")
+	viewerResult, err := prov.Execute(context.Background(), "viewer", map[string]any{"team": "workspace"}, "")
 	if err != nil {
 		t.Fatalf("Execute(viewer): %v", err)
 	}

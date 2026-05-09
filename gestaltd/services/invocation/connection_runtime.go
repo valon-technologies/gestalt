@@ -18,15 +18,13 @@ type ConnectionRuntimeCredentialSource interface {
 	ResolveConnectionCredential(context.Context) (ConnectionRuntimeCredential, error)
 }
 
-// ConnectionRuntimeInfo describes deployment-owned connection material that is
-// resolved after an operation selects its concrete connection.
+// ConnectionRuntimeInfo describes connection material that is resolved after an
+// operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
 	ConnectionID      string
 	Mode              core.ConnectionMode
-	Exposure          core.ConnectionExposure
 	AuthType          providermanifestv1.AuthType
 	AuthConfig        core.ExternalCredentialAuthConfig
-	Token             string
 	TokenSource       ConnectionRuntimeCredentialSource
 	AuthMapping       *providermanifestv1.AuthMapping
 	Params            map[string]string

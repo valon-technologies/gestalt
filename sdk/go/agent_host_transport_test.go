@@ -72,7 +72,7 @@ func (h *agentHostTransportHarness) ResolveConnection(ctx context.Context, req *
 		ConnectionId: "vertex-ai",
 		Connection:   req.GetConnection(),
 		Instance:     req.GetInstance(),
-		Mode:         "platform",
+		Mode:         "user",
 		Headers:      map[string]string{"authorization": "Bearer token"},
 		Params:       map[string]string{"endpoint": "vertex-endpoint"},
 	}, nil
