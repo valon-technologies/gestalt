@@ -20,17 +20,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthorizationProvider_Evaluate_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/Evaluate"
-	AuthorizationProvider_EvaluateMany_FullMethodName       = "/gestalt.provider.v1.AuthorizationProvider/EvaluateMany"
-	AuthorizationProvider_SearchResources_FullMethodName    = "/gestalt.provider.v1.AuthorizationProvider/SearchResources"
-	AuthorizationProvider_SearchSubjects_FullMethodName     = "/gestalt.provider.v1.AuthorizationProvider/SearchSubjects"
-	AuthorizationProvider_SearchActions_FullMethodName      = "/gestalt.provider.v1.AuthorizationProvider/SearchActions"
-	AuthorizationProvider_GetMetadata_FullMethodName        = "/gestalt.provider.v1.AuthorizationProvider/GetMetadata"
-	AuthorizationProvider_ReadRelationships_FullMethodName  = "/gestalt.provider.v1.AuthorizationProvider/ReadRelationships"
-	AuthorizationProvider_WriteRelationships_FullMethodName = "/gestalt.provider.v1.AuthorizationProvider/WriteRelationships"
-	AuthorizationProvider_GetActiveModel_FullMethodName     = "/gestalt.provider.v1.AuthorizationProvider/GetActiveModel"
-	AuthorizationProvider_ListModels_FullMethodName         = "/gestalt.provider.v1.AuthorizationProvider/ListModels"
-	AuthorizationProvider_WriteModel_FullMethodName         = "/gestalt.provider.v1.AuthorizationProvider/WriteModel"
+	AuthorizationProvider_Evaluate_FullMethodName                 = "/gestalt.provider.v1.AuthorizationProvider/Evaluate"
+	AuthorizationProvider_EvaluateMany_FullMethodName             = "/gestalt.provider.v1.AuthorizationProvider/EvaluateMany"
+	AuthorizationProvider_SearchResources_FullMethodName          = "/gestalt.provider.v1.AuthorizationProvider/SearchResources"
+	AuthorizationProvider_SearchSubjects_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/SearchSubjects"
+	AuthorizationProvider_EffectiveSearchResources_FullMethodName = "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources"
+	AuthorizationProvider_EffectiveSearchSubjects_FullMethodName  = "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects"
+	AuthorizationProvider_SearchActions_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/SearchActions"
+	AuthorizationProvider_Expand_FullMethodName                   = "/gestalt.provider.v1.AuthorizationProvider/Expand"
+	AuthorizationProvider_GetMetadata_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/GetMetadata"
+	AuthorizationProvider_ReadRelationships_FullMethodName        = "/gestalt.provider.v1.AuthorizationProvider/ReadRelationships"
+	AuthorizationProvider_WriteRelationships_FullMethodName       = "/gestalt.provider.v1.AuthorizationProvider/WriteRelationships"
+	AuthorizationProvider_GetActiveModel_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/GetActiveModel"
+	AuthorizationProvider_ListModels_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/ListModels"
+	AuthorizationProvider_WriteModel_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/WriteModel"
 )
 
 // AuthorizationProviderClient is the client API for AuthorizationProvider service.
@@ -39,9 +42,20 @@ const (
 type AuthorizationProviderClient interface {
 	Evaluate(ctx context.Context, in *AccessEvaluationRequest, opts ...grpc.CallOption) (*AccessDecision, error)
 	EvaluateMany(ctx context.Context, in *AccessEvaluationsRequest, opts ...grpc.CallOption) (*AccessEvaluationsResponse, error)
+	// Direct search over stored relationships. Implementations must not expand
+	// inherited or computed permissions here.
 	SearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error)
+	// Direct search over stored relationships. Implementations must not expand
+	// inherited or computed permissions here.
 	SearchSubjects(ctx context.Context, in *SubjectSearchRequest, opts ...grpc.CallOption) (*SubjectSearchResponse, error)
+	// Effective search that evaluates rewrites and inherited relations.
+	EffectiveSearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error)
+	// Effective search that evaluates rewrites and inherited relations.
+	EffectiveSearchSubjects(ctx context.Context, in *EffectiveSubjectSearchRequest, opts ...grpc.CallOption) (*EffectiveSubjectSearchResponse, error)
 	SearchActions(ctx context.Context, in *ActionSearchRequest, opts ...grpc.CallOption) (*ActionSearchResponse, error)
+	// Expands one resource relation into the relationship targets that contribute
+	// to it. Responses may be partial when truncated or max_depth_reached is true.
+	Expand(ctx context.Context, in *ExpandRequest, opts ...grpc.CallOption) (*ExpandResponse, error)
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AuthorizationMetadata, error)
 	ReadRelationships(ctx context.Context, in *ReadRelationshipsRequest, opts ...grpc.CallOption) (*ReadRelationshipsResponse, error)
 	WriteRelationships(ctx context.Context, in *WriteRelationshipsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -98,10 +112,40 @@ func (c *authorizationProviderClient) SearchSubjects(ctx context.Context, in *Su
 	return out, nil
 }
 
+func (c *authorizationProviderClient) EffectiveSearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResourceSearchResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_EffectiveSearchResources_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationProviderClient) EffectiveSearchSubjects(ctx context.Context, in *EffectiveSubjectSearchRequest, opts ...grpc.CallOption) (*EffectiveSubjectSearchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EffectiveSubjectSearchResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_EffectiveSearchSubjects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *authorizationProviderClient) SearchActions(ctx context.Context, in *ActionSearchRequest, opts ...grpc.CallOption) (*ActionSearchResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ActionSearchResponse)
 	err := c.cc.Invoke(ctx, AuthorizationProvider_SearchActions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authorizationProviderClient) Expand(ctx context.Context, in *ExpandRequest, opts ...grpc.CallOption) (*ExpandResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExpandResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_Expand_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -174,9 +218,20 @@ func (c *authorizationProviderClient) WriteModel(ctx context.Context, in *WriteM
 type AuthorizationProviderServer interface {
 	Evaluate(context.Context, *AccessEvaluationRequest) (*AccessDecision, error)
 	EvaluateMany(context.Context, *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
+	// Direct search over stored relationships. Implementations must not expand
+	// inherited or computed permissions here.
 	SearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error)
+	// Direct search over stored relationships. Implementations must not expand
+	// inherited or computed permissions here.
 	SearchSubjects(context.Context, *SubjectSearchRequest) (*SubjectSearchResponse, error)
+	// Effective search that evaluates rewrites and inherited relations.
+	EffectiveSearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error)
+	// Effective search that evaluates rewrites and inherited relations.
+	EffectiveSearchSubjects(context.Context, *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
 	SearchActions(context.Context, *ActionSearchRequest) (*ActionSearchResponse, error)
+	// Expands one resource relation into the relationship targets that contribute
+	// to it. Responses may be partial when truncated or max_depth_reached is true.
+	Expand(context.Context, *ExpandRequest) (*ExpandResponse, error)
 	GetMetadata(context.Context, *emptypb.Empty) (*AuthorizationMetadata, error)
 	ReadRelationships(context.Context, *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error)
 	WriteRelationships(context.Context, *WriteRelationshipsRequest) (*emptypb.Empty, error)
@@ -205,8 +260,17 @@ func (UnimplementedAuthorizationProviderServer) SearchResources(context.Context,
 func (UnimplementedAuthorizationProviderServer) SearchSubjects(context.Context, *SubjectSearchRequest) (*SubjectSearchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SearchSubjects not implemented")
 }
+func (UnimplementedAuthorizationProviderServer) EffectiveSearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EffectiveSearchResources not implemented")
+}
+func (UnimplementedAuthorizationProviderServer) EffectiveSearchSubjects(context.Context, *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EffectiveSearchSubjects not implemented")
+}
 func (UnimplementedAuthorizationProviderServer) SearchActions(context.Context, *ActionSearchRequest) (*ActionSearchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SearchActions not implemented")
+}
+func (UnimplementedAuthorizationProviderServer) Expand(context.Context, *ExpandRequest) (*ExpandResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Expand not implemented")
 }
 func (UnimplementedAuthorizationProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*AuthorizationMetadata, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMetadata not implemented")
@@ -319,6 +383,42 @@ func _AuthorizationProvider_SearchSubjects_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthorizationProvider_EffectiveSearchResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResourceSearchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationProviderServer).EffectiveSearchResources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationProvider_EffectiveSearchResources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationProviderServer).EffectiveSearchResources(ctx, req.(*ResourceSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationProvider_EffectiveSearchSubjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EffectiveSubjectSearchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationProviderServer).EffectiveSearchSubjects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationProvider_EffectiveSearchSubjects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationProviderServer).EffectiveSearchSubjects(ctx, req.(*EffectiveSubjectSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AuthorizationProvider_SearchActions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ActionSearchRequest)
 	if err := dec(in); err != nil {
@@ -333,6 +433,24 @@ func _AuthorizationProvider_SearchActions_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AuthorizationProviderServer).SearchActions(ctx, req.(*ActionSearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthorizationProvider_Expand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExpandRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthorizationProviderServer).Expand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthorizationProvider_Expand_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthorizationProviderServer).Expand(ctx, req.(*ExpandRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -469,8 +587,20 @@ var AuthorizationProvider_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AuthorizationProvider_SearchSubjects_Handler,
 		},
 		{
+			MethodName: "EffectiveSearchResources",
+			Handler:    _AuthorizationProvider_EffectiveSearchResources_Handler,
+		},
+		{
+			MethodName: "EffectiveSearchSubjects",
+			Handler:    _AuthorizationProvider_EffectiveSearchSubjects_Handler,
+		},
+		{
 			MethodName: "SearchActions",
 			Handler:    _AuthorizationProvider_SearchActions_Handler,
+		},
+		{
+			MethodName: "Expand",
+			Handler:    _AuthorizationProvider_Expand_Handler,
 		},
 		{
 			MethodName: "GetMetadata",

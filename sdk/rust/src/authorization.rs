@@ -86,6 +86,42 @@ impl AuthorizationResource {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Subject set in the authorization graph.
+pub struct AuthorizationSubjectSet {
+    /// Resource that owns the relation.
+    pub resource: AuthorizationResource,
+    /// Relation on the resource.
+    pub relation: String,
+}
+
+impl AuthorizationSubjectSet {
+    /// Creates an authorization subject set.
+    pub fn new(resource: AuthorizationResource, relation: impl Into<String>) -> Self {
+        Self {
+            resource,
+            relation: relation.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// Target on the left side of an authorization relationship.
+pub enum AuthorizationRelationshipTarget {
+    /// Concrete subject target.
+    Subject(AuthorizationSubject),
+    /// Resource target.
+    Resource(AuthorizationResource),
+    /// Subject-set target.
+    SubjectSet(AuthorizationSubjectSet),
+}
+
+impl Default for AuthorizationRelationshipTarget {
+    fn default() -> Self {
+        Self::Subject(AuthorizationSubject::default())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Action requested against an authorization resource.
 pub struct AuthorizationAction {
     /// Action name, such as `view`, `edit`, or `assume`.
@@ -201,6 +237,34 @@ pub struct SubjectSearchResponse {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Request searching effective subjects or subject sets for a resource and action.
+pub struct EffectiveSubjectSearchRequest {
+    /// Resource used as the search anchor.
+    pub resource: AuthorizationResource,
+    /// Action to test against matching targets.
+    pub action: AuthorizationAction,
+    /// Optional JSON context for providers that support contextual searches.
+    pub context: serde_json::Map<String, serde_json::Value>,
+    /// Maximum number of targets to return.
+    pub page_size: i32,
+    /// Opaque page token returned by a previous search.
+    pub page_token: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Page of effective relationship targets returned by [`Authorization::effective_search_subjects`].
+pub struct EffectiveSubjectSearchResponse {
+    /// Matching subjects, resources, or subject sets.
+    pub targets: Vec<AuthorizationRelationshipTarget>,
+    /// Opaque token for the next result page.
+    pub next_page_token: String,
+    /// Authorization model id used for the search, when reported.
+    pub model_id: String,
+    /// Whether the provider truncated the target set.
+    pub truncated: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Request searching actions available between a subject and resource.
 pub struct ActionSearchRequest {
     /// Subject used as the search anchor.
@@ -243,6 +307,9 @@ pub struct AuthorizationMetadata {
 pub struct Relationship {
     /// Subject receiving the relation.
     pub subject: AuthorizationSubject,
+    /// Generalized relationship target. When set, providers should use this
+    /// instead of `subject`.
+    pub target: Option<AuthorizationRelationshipTarget>,
     /// Relation granted to the subject.
     pub relation: String,
     /// Resource on which the relation is granted.
@@ -260,6 +327,22 @@ impl Relationship {
     ) -> Self {
         Self {
             subject,
+            target: None,
+            relation: relation.into(),
+            resource,
+            properties: serde_json::Map::new(),
+        }
+    }
+
+    /// Creates a generalized authorization relationship without extra properties.
+    pub fn with_target(
+        target: AuthorizationRelationshipTarget,
+        relation: impl Into<String>,
+        resource: AuthorizationResource,
+    ) -> Self {
+        Self {
+            subject: AuthorizationSubject::default(),
+            target: Some(target),
             relation: relation.into(),
             resource,
             properties: serde_json::Map::new(),
@@ -272,6 +355,8 @@ impl Relationship {
 pub struct RelationshipKey {
     /// Subject on the relationship being deleted.
     pub subject: AuthorizationSubject,
+    /// Generalized target on the relationship being deleted.
+    pub target: Option<AuthorizationRelationshipTarget>,
     /// Relation on the relationship being deleted.
     pub relation: String,
     /// Resource on the relationship being deleted.
@@ -287,6 +372,21 @@ impl RelationshipKey {
     ) -> Self {
         Self {
             subject,
+            target: None,
+            relation: relation.into(),
+            resource,
+        }
+    }
+
+    /// Creates a generalized authorization relationship-delete key.
+    pub fn with_target(
+        target: AuthorizationRelationshipTarget,
+        relation: impl Into<String>,
+        resource: AuthorizationResource,
+    ) -> Self {
+        Self {
+            subject: AuthorizationSubject::default(),
+            target: Some(target),
             relation: relation.into(),
             resource,
         }
@@ -298,6 +398,8 @@ impl RelationshipKey {
 pub struct ReadRelationshipsRequest {
     /// Optional subject filter.
     pub subject: Option<AuthorizationSubject>,
+    /// Optional generalized target filter.
+    pub target: Option<AuthorizationRelationshipTarget>,
     /// Optional relation filter.
     pub relation: String,
     /// Optional resource filter.
@@ -344,6 +446,47 @@ impl WriteRelationshipsRequest {
             model_id: String::new(),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Request expanding one resource relation into contributing targets.
+pub struct ExpandRequest {
+    /// Resource used as the expansion root.
+    pub resource: AuthorizationResource,
+    /// Relation to expand.
+    pub relation: String,
+    /// Optional JSON context for providers that support contextual expansion.
+    pub context: serde_json::Map<String, serde_json::Value>,
+    /// Maximum expansion depth.
+    pub max_depth: i32,
+    /// Authorization model id to expand. Empty uses the provider default.
+    pub model_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Node in an expanded authorization relationship graph.
+pub struct ExpandNode {
+    /// Target represented by this node.
+    pub target: Option<AuthorizationRelationshipTarget>,
+    /// Relation used at this node.
+    pub relation: String,
+    /// Child expansion nodes.
+    pub children: Vec<ExpandNode>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Expanded authorization relationship graph.
+pub struct ExpandResponse {
+    /// Root expansion node.
+    pub root: Option<ExpandNode>,
+    /// Whether the provider truncated the response.
+    pub truncated: bool,
+    /// Whether the provider detected a graph cycle.
+    pub cycle_detected: bool,
+    /// Whether expansion stopped at `max_depth`.
+    pub max_depth_reached: bool,
+    /// Authorization model id used for expansion, when reported.
+    pub model_id: String,
 }
 
 /// Client for the host-configured authorization provider.
@@ -458,6 +601,32 @@ impl Authorization {
             .into())
     }
 
+    /// Searches resources visible to a subject through computed usersets and inherited relationships.
+    pub async fn effective_search_resources(
+        &mut self,
+        request: ResourceSearchRequest,
+    ) -> std::result::Result<ResourceSearchResponse, AuthorizationError> {
+        Ok(self
+            .client
+            .effective_search_resources(pb::ResourceSearchRequest::from(request))
+            .await?
+            .into_inner()
+            .into())
+    }
+
+    /// Searches effective subjects or subject sets related to a resource and action.
+    pub async fn effective_search_subjects(
+        &mut self,
+        request: EffectiveSubjectSearchRequest,
+    ) -> std::result::Result<EffectiveSubjectSearchResponse, AuthorizationError> {
+        Ok(self
+            .client
+            .effective_search_subjects(pb::EffectiveSubjectSearchRequest::from(request))
+            .await?
+            .into_inner()
+            .into())
+    }
+
     /// Searches actions available between a subject and resource.
     pub async fn search_actions(
         &mut self,
@@ -466,6 +635,19 @@ impl Authorization {
         Ok(self
             .client
             .search_actions(pb::ActionSearchRequest::from(request))
+            .await?
+            .into_inner()
+            .into())
+    }
+
+    /// Expands one resource relation into contributing relationship targets.
+    pub async fn expand(
+        &mut self,
+        request: ExpandRequest,
+    ) -> std::result::Result<ExpandResponse, AuthorizationError> {
+        Ok(self
+            .client
+            .expand(pb::ExpandRequest::from(request))
             .await?
             .into_inner()
             .into())
@@ -539,6 +721,56 @@ impl From<pb::Resource> for AuthorizationResource {
             r#type: value.r#type,
             id: value.id,
             properties: map_from_struct_option(value.properties),
+        }
+    }
+}
+
+impl From<AuthorizationSubjectSet> for pb::SubjectSet {
+    fn from(value: AuthorizationSubjectSet) -> Self {
+        Self {
+            resource: Some(value.resource.into()),
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<pb::SubjectSet> for AuthorizationSubjectSet {
+    fn from(value: pb::SubjectSet) -> Self {
+        Self {
+            resource: value.resource.map(Into::into).unwrap_or_default(),
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<AuthorizationRelationshipTarget> for pb::RelationshipTarget {
+    fn from(value: AuthorizationRelationshipTarget) -> Self {
+        let kind = match value {
+            AuthorizationRelationshipTarget::Subject(subject) => {
+                pb::relationship_target::Kind::Subject(subject.into())
+            }
+            AuthorizationRelationshipTarget::Resource(resource) => {
+                pb::relationship_target::Kind::Resource(resource.into())
+            }
+            AuthorizationRelationshipTarget::SubjectSet(subject_set) => {
+                pb::relationship_target::Kind::SubjectSet(subject_set.into())
+            }
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl From<pb::RelationshipTarget> for AuthorizationRelationshipTarget {
+    fn from(value: pb::RelationshipTarget) -> Self {
+        match value.kind {
+            Some(pb::relationship_target::Kind::Subject(subject)) => Self::Subject(subject.into()),
+            Some(pb::relationship_target::Kind::Resource(resource)) => {
+                Self::Resource(resource.into())
+            }
+            Some(pb::relationship_target::Kind::SubjectSet(subject_set)) => {
+                Self::SubjectSet(subject_set.into())
+            }
+            None => Self::default(),
         }
     }
 }
@@ -628,6 +860,29 @@ impl From<pb::SubjectSearchResponse> for SubjectSearchResponse {
     }
 }
 
+impl From<EffectiveSubjectSearchRequest> for pb::EffectiveSubjectSearchRequest {
+    fn from(value: EffectiveSubjectSearchRequest) -> Self {
+        Self {
+            resource: Some(value.resource.into()),
+            action: Some(value.action.into()),
+            context: struct_option_from_map(value.context),
+            page_size: value.page_size,
+            page_token: value.page_token,
+        }
+    }
+}
+
+impl From<pb::EffectiveSubjectSearchResponse> for EffectiveSubjectSearchResponse {
+    fn from(value: pb::EffectiveSubjectSearchResponse) -> Self {
+        Self {
+            targets: value.targets.into_iter().map(Into::into).collect(),
+            next_page_token: value.next_page_token,
+            model_id: value.model_id,
+            truncated: value.truncated,
+        }
+    }
+}
+
 impl From<ActionSearchRequest> for pb::ActionSearchRequest {
     fn from(value: ActionSearchRequest) -> Self {
         Self {
@@ -661,11 +916,18 @@ impl From<pb::AuthorizationMetadata> for AuthorizationMetadata {
 
 impl From<Relationship> for pb::Relationship {
     fn from(value: Relationship) -> Self {
+        let target = value.target.map(Into::into);
+        let subject = if target.is_some() && value.subject == AuthorizationSubject::default() {
+            None
+        } else {
+            Some(value.subject.into())
+        };
         Self {
-            subject: Some(value.subject.into()),
+            subject,
             relation: value.relation,
             resource: Some(value.resource.into()),
             properties: struct_option_from_map(value.properties),
+            target,
         }
     }
 }
@@ -674,6 +936,7 @@ impl From<pb::Relationship> for Relationship {
     fn from(value: pb::Relationship) -> Self {
         Self {
             subject: value.subject.map(Into::into).unwrap_or_default(),
+            target: value.target.map(Into::into),
             relation: value.relation,
             resource: value.resource.map(Into::into).unwrap_or_default(),
             properties: map_from_struct_option(value.properties),
@@ -683,10 +946,17 @@ impl From<pb::Relationship> for Relationship {
 
 impl From<RelationshipKey> for pb::RelationshipKey {
     fn from(value: RelationshipKey) -> Self {
+        let target = value.target.map(Into::into);
+        let subject = if target.is_some() && value.subject == AuthorizationSubject::default() {
+            None
+        } else {
+            Some(value.subject.into())
+        };
         Self {
-            subject: Some(value.subject.into()),
+            subject,
             relation: value.relation,
             resource: Some(value.resource.into()),
+            target,
         }
     }
 }
@@ -700,6 +970,7 @@ impl From<ReadRelationshipsRequest> for pb::ReadRelationshipsRequest {
             page_size: value.page_size,
             page_token: value.page_token,
             model_id: value.model_id,
+            target: value.target.map(Into::into),
         }
     }
 }
@@ -719,6 +990,40 @@ impl From<WriteRelationshipsRequest> for pb::WriteRelationshipsRequest {
         Self {
             writes: value.writes.into_iter().map(Into::into).collect(),
             deletes: value.deletes.into_iter().map(Into::into).collect(),
+            model_id: value.model_id,
+        }
+    }
+}
+
+impl From<ExpandRequest> for pb::ExpandRequest {
+    fn from(value: ExpandRequest) -> Self {
+        Self {
+            resource: Some(value.resource.into()),
+            relation: value.relation,
+            context: struct_option_from_map(value.context),
+            max_depth: value.max_depth,
+            model_id: value.model_id,
+        }
+    }
+}
+
+impl From<pb::ExpandNode> for ExpandNode {
+    fn from(value: pb::ExpandNode) -> Self {
+        Self {
+            target: value.target.map(Into::into),
+            relation: value.relation,
+            children: value.children.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<pb::ExpandResponse> for ExpandResponse {
+    fn from(value: pb::ExpandResponse) -> Self {
+        Self {
+            root: value.root.map(Into::into),
+            truncated: value.truncated,
+            cycle_detected: value.cycle_detected,
+            max_depth_reached: value.max_depth_reached,
             model_id: value.model_id,
         }
     }

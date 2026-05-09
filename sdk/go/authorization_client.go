@@ -238,6 +238,30 @@ func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSe
 	return c.client.SearchSubjects(ctx, req)
 }
 
+// EffectiveSearchResources searches resources visible to a subject through
+// computed usersets and inherited relationships.
+func (c *AuthorizationClient) EffectiveSearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.EffectiveSearchResources(ctx, req)
+}
+
+// EffectiveSearchSubjects searches effective subjects or subject sets related
+// to a resource and action.
+func (c *AuthorizationClient) EffectiveSearchSubjects(ctx context.Context, req *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.EffectiveSearchSubjects(ctx, req)
+}
+
 // SearchActions searches actions available between a subject and resource.
 func (c *AuthorizationClient) SearchActions(ctx context.Context, req *ActionSearchRequest) (*ActionSearchResponse, error) {
 	if c == nil || c.client == nil {
@@ -247,6 +271,17 @@ func (c *AuthorizationClient) SearchActions(ctx context.Context, req *ActionSear
 		return nil, fmt.Errorf("authorization: request is required")
 	}
 	return c.client.SearchActions(ctx, req)
+}
+
+// Expand explains the relationship targets contributing to one resource relation.
+func (c *AuthorizationClient) Expand(ctx context.Context, req *ExpandRequest) (*ExpandResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("authorization: client is not initialized")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("authorization: request is required")
+	}
+	return c.client.Expand(ctx, req)
 }
 
 // ReadRelationships reads authorization relationships matching a request.

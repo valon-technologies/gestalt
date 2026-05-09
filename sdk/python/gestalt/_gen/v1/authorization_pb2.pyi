@@ -31,6 +31,24 @@ class Resource(_message.Message):
     properties: _struct_pb2.Struct
     def __init__(self, type: _Optional[str] = ..., id: _Optional[str] = ..., properties: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
+class SubjectSet(_message.Message):
+    __slots__ = ()
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    RELATION_FIELD_NUMBER: _ClassVar[int]
+    resource: Resource
+    relation: str
+    def __init__(self, resource: _Optional[_Union[Resource, _Mapping]] = ..., relation: _Optional[str] = ...) -> None: ...
+
+class RelationshipTarget(_message.Message):
+    __slots__ = ()
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_SET_FIELD_NUMBER: _ClassVar[int]
+    subject: Subject
+    resource: Resource
+    subject_set: SubjectSet
+    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., subject_set: _Optional[_Union[SubjectSet, _Mapping]] = ...) -> None: ...
+
 class Action(_message.Message):
     __slots__ = ()
     NAME_FIELD_NUMBER: _ClassVar[int]
@@ -125,6 +143,32 @@ class SubjectSearchResponse(_message.Message):
     model_id: str
     def __init__(self, subjects: _Optional[_Iterable[_Union[Subject, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., model_id: _Optional[str] = ...) -> None: ...
 
+class EffectiveSubjectSearchRequest(_message.Message):
+    __slots__ = ()
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    ACTION_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    resource: Resource
+    action: Action
+    context: _struct_pb2.Struct
+    page_size: int
+    page_token: str
+    def __init__(self, resource: _Optional[_Union[Resource, _Mapping]] = ..., action: _Optional[_Union[Action, _Mapping]] = ..., context: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+
+class EffectiveSubjectSearchResponse(_message.Message):
+    __slots__ = ()
+    TARGETS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    targets: _containers.RepeatedCompositeFieldContainer[RelationshipTarget]
+    next_page_token: str
+    model_id: str
+    truncated: bool
+    def __init__(self, targets: _Optional[_Iterable[_Union[RelationshipTarget, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., model_id: _Optional[str] = ..., truncated: _Optional[bool] = ...) -> None: ...
+
 class ActionSearchRequest(_message.Message):
     __slots__ = ()
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -163,21 +207,25 @@ class Relationship(_message.Message):
     RELATION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_FIELD_NUMBER: _ClassVar[int]
     PROPERTIES_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
     subject: Subject
     relation: str
     resource: Resource
     properties: _struct_pb2.Struct
-    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., properties: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    target: RelationshipTarget
+    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., properties: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., target: _Optional[_Union[RelationshipTarget, _Mapping]] = ...) -> None: ...
 
 class RelationshipKey(_message.Message):
     __slots__ = ()
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     RELATION_FIELD_NUMBER: _ClassVar[int]
     RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
     subject: Subject
     relation: str
     resource: Resource
-    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ...) -> None: ...
+    target: RelationshipTarget
+    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., target: _Optional[_Union[RelationshipTarget, _Mapping]] = ...) -> None: ...
 
 class ReadRelationshipsRequest(_message.Message):
     __slots__ = ()
@@ -187,13 +235,15 @@ class ReadRelationshipsRequest(_message.Message):
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
     subject: Subject
     relation: str
     resource: Resource
     page_size: int
     page_token: str
     model_id: str
-    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., model_id: _Optional[str] = ...) -> None: ...
+    target: RelationshipTarget
+    def __init__(self, subject: _Optional[_Union[Subject, _Mapping]] = ..., relation: _Optional[str] = ..., resource: _Optional[_Union[Resource, _Mapping]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., model_id: _Optional[str] = ..., target: _Optional[_Union[RelationshipTarget, _Mapping]] = ...) -> None: ...
 
 class ReadRelationshipsResponse(_message.Message):
     __slots__ = ()
@@ -237,17 +287,77 @@ class AuthorizationModelRelation(_message.Message):
     __slots__ = ()
     NAME_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_TYPES_FIELD_NUMBER: _ClassVar[int]
+    ALLOWED_TARGETS_FIELD_NUMBER: _ClassVar[int]
+    REWRITE_FIELD_NUMBER: _ClassVar[int]
     name: str
     subject_types: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, name: _Optional[str] = ..., subject_types: _Optional[_Iterable[str]] = ...) -> None: ...
+    allowed_targets: _containers.RepeatedCompositeFieldContainer[AuthorizationModelAllowedTarget]
+    rewrite: AuthorizationModelRewrite
+    def __init__(self, name: _Optional[str] = ..., subject_types: _Optional[_Iterable[str]] = ..., allowed_targets: _Optional[_Iterable[_Union[AuthorizationModelAllowedTarget, _Mapping]]] = ..., rewrite: _Optional[_Union[AuthorizationModelRewrite, _Mapping]] = ...) -> None: ...
 
 class AuthorizationModelAction(_message.Message):
     __slots__ = ()
     NAME_FIELD_NUMBER: _ClassVar[int]
     RELATIONS_FIELD_NUMBER: _ClassVar[int]
+    REWRITE_FIELD_NUMBER: _ClassVar[int]
     name: str
     relations: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[str]] = ...) -> None: ...
+    rewrite: AuthorizationModelRewrite
+    def __init__(self, name: _Optional[str] = ..., relations: _Optional[_Iterable[str]] = ..., rewrite: _Optional[_Union[AuthorizationModelRewrite, _Mapping]] = ...) -> None: ...
+
+class AuthorizationModelAllowedTarget(_message.Message):
+    __slots__ = ()
+    SUBJECT_TYPE_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_SET_FIELD_NUMBER: _ClassVar[int]
+    subject_type: str
+    resource_type: str
+    subject_set: AuthorizationModelSubjectSetTarget
+    def __init__(self, subject_type: _Optional[str] = ..., resource_type: _Optional[str] = ..., subject_set: _Optional[_Union[AuthorizationModelSubjectSetTarget, _Mapping]] = ...) -> None: ...
+
+class AuthorizationModelSubjectSetTarget(_message.Message):
+    __slots__ = ()
+    RESOURCE_TYPE_FIELD_NUMBER: _ClassVar[int]
+    RELATION_FIELD_NUMBER: _ClassVar[int]
+    resource_type: str
+    relation: str
+    def __init__(self, resource_type: _Optional[str] = ..., relation: _Optional[str] = ...) -> None: ...
+
+class AuthorizationModelRewrite(_message.Message):
+    __slots__ = ()
+    THIS_FIELD_NUMBER: _ClassVar[int]
+    COMPUTED_USERSET_FIELD_NUMBER: _ClassVar[int]
+    TUPLE_TO_USERSET_FIELD_NUMBER: _ClassVar[int]
+    UNION_FIELD_NUMBER: _ClassVar[int]
+    this: AuthorizationModelRewriteThis
+    computed_userset: AuthorizationModelComputedUserset
+    tuple_to_userset: AuthorizationModelTupleToUserset
+    union: AuthorizationModelRewriteUnion
+    def __init__(self, this: _Optional[_Union[AuthorizationModelRewriteThis, _Mapping]] = ..., computed_userset: _Optional[_Union[AuthorizationModelComputedUserset, _Mapping]] = ..., tuple_to_userset: _Optional[_Union[AuthorizationModelTupleToUserset, _Mapping]] = ..., union: _Optional[_Union[AuthorizationModelRewriteUnion, _Mapping]] = ...) -> None: ...
+
+class AuthorizationModelRewriteThis(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class AuthorizationModelComputedUserset(_message.Message):
+    __slots__ = ()
+    RELATION_FIELD_NUMBER: _ClassVar[int]
+    relation: str
+    def __init__(self, relation: _Optional[str] = ...) -> None: ...
+
+class AuthorizationModelTupleToUserset(_message.Message):
+    __slots__ = ()
+    TUPLESET_RELATION_FIELD_NUMBER: _ClassVar[int]
+    COMPUTED_RELATION_FIELD_NUMBER: _ClassVar[int]
+    tupleset_relation: str
+    computed_relation: str
+    def __init__(self, tupleset_relation: _Optional[str] = ..., computed_relation: _Optional[str] = ...) -> None: ...
+
+class AuthorizationModelRewriteUnion(_message.Message):
+    __slots__ = ()
+    CHILDREN_FIELD_NUMBER: _ClassVar[int]
+    children: _containers.RepeatedCompositeFieldContainer[AuthorizationModelRewrite]
+    def __init__(self, children: _Optional[_Iterable[_Union[AuthorizationModelRewrite, _Mapping]]] = ...) -> None: ...
 
 class AuthorizationModelRef(_message.Message):
     __slots__ = ()
@@ -258,6 +368,44 @@ class AuthorizationModelRef(_message.Message):
     version: str
     created_at: _timestamp_pb2.Timestamp
     def __init__(self, id: _Optional[str] = ..., version: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class ExpandRequest(_message.Message):
+    __slots__ = ()
+    RESOURCE_FIELD_NUMBER: _ClassVar[int]
+    RELATION_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    MAX_DEPTH_FIELD_NUMBER: _ClassVar[int]
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    resource: Resource
+    relation: str
+    context: _struct_pb2.Struct
+    max_depth: int
+    model_id: str
+    def __init__(self, resource: _Optional[_Union[Resource, _Mapping]] = ..., relation: _Optional[str] = ..., context: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., max_depth: _Optional[int] = ..., model_id: _Optional[str] = ...) -> None: ...
+
+class ExpandNode(_message.Message):
+    __slots__ = ()
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    RELATION_FIELD_NUMBER: _ClassVar[int]
+    CHILDREN_FIELD_NUMBER: _ClassVar[int]
+    target: RelationshipTarget
+    relation: str
+    children: _containers.RepeatedCompositeFieldContainer[ExpandNode]
+    def __init__(self, target: _Optional[_Union[RelationshipTarget, _Mapping]] = ..., relation: _Optional[str] = ..., children: _Optional[_Iterable[_Union[ExpandNode, _Mapping]]] = ...) -> None: ...
+
+class ExpandResponse(_message.Message):
+    __slots__ = ()
+    ROOT_FIELD_NUMBER: _ClassVar[int]
+    TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+    CYCLE_DETECTED_FIELD_NUMBER: _ClassVar[int]
+    MAX_DEPTH_REACHED_FIELD_NUMBER: _ClassVar[int]
+    MODEL_ID_FIELD_NUMBER: _ClassVar[int]
+    root: ExpandNode
+    truncated: bool
+    cycle_detected: bool
+    max_depth_reached: bool
+    model_id: str
+    def __init__(self, root: _Optional[_Union[ExpandNode, _Mapping]] = ..., truncated: _Optional[bool] = ..., cycle_detected: _Optional[bool] = ..., max_depth_reached: _Optional[bool] = ..., model_id: _Optional[str] = ...) -> None: ...
 
 class GetActiveModelResponse(_message.Message):
     __slots__ = ()
