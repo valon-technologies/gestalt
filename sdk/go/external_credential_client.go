@@ -54,7 +54,11 @@ func (c *ExternalCredentialClient) UpsertCredential(ctx context.Context, req *Up
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	return c.client.UpsertCredential(ctx, req)
+	resp, err := c.client.UpsertCredential(ctx, upsertExternalCredentialRequestToProto(req))
+	if err != nil {
+		return nil, err
+	}
+	return externalCredentialFromProto(resp)
 }
 
 // GetCredential fetches one host-managed external credential.
@@ -65,7 +69,11 @@ func (c *ExternalCredentialClient) GetCredential(ctx context.Context, req *GetEx
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	return c.client.GetCredential(ctx, req)
+	resp, err := c.client.GetCredential(ctx, getExternalCredentialRequestToProto(req))
+	if err != nil {
+		return nil, err
+	}
+	return externalCredentialFromProto(resp)
 }
 
 // ListCredentials lists host-managed external credentials.
@@ -76,7 +84,11 @@ func (c *ExternalCredentialClient) ListCredentials(ctx context.Context, req *Lis
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	return c.client.ListCredentials(ctx, req)
+	resp, err := c.client.ListCredentials(ctx, listExternalCredentialsRequestToProto(req))
+	if err != nil {
+		return nil, err
+	}
+	return listExternalCredentialsResponseFromProto(resp)
 }
 
 // DeleteCredential deletes one host-managed external credential.
@@ -87,7 +99,7 @@ func (c *ExternalCredentialClient) DeleteCredential(ctx context.Context, req *De
 	if req == nil {
 		return fmt.Errorf("external credentials: request is required")
 	}
-	_, err := c.client.DeleteCredential(ctx, req)
+	_, err := c.client.DeleteCredential(ctx, deleteExternalCredentialRequestToProto(req))
 	return err
 }
 
@@ -98,7 +110,7 @@ func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context,
 	if req == nil {
 		return fmt.Errorf("external credentials: request is required")
 	}
-	_, err := c.client.ValidateCredentialConfig(ctx, req)
+	_, err := c.client.ValidateCredentialConfig(ctx, validateExternalCredentialConfigRequestToProto(req))
 	return err
 }
 
@@ -109,7 +121,11 @@ func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *R
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	return c.client.ResolveCredential(ctx, req)
+	resp, err := c.client.ResolveCredential(ctx, resolveExternalCredentialRequestToProto(req))
+	if err != nil {
+		return nil, err
+	}
+	return resolveExternalCredentialResponseFromProto(resp)
 }
 
 func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
@@ -119,5 +135,9 @@ func (c *ExternalCredentialClient) ExchangeCredential(ctx context.Context, req *
 	if req == nil {
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
-	return c.client.ExchangeCredential(ctx, req)
+	resp, err := c.client.ExchangeCredential(ctx, exchangeExternalCredentialRequestToProto(req))
+	if err != nil {
+		return nil, err
+	}
+	return exchangeExternalCredentialResponseFromProto(resp), nil
 }

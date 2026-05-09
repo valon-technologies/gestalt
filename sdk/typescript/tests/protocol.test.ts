@@ -3,7 +3,6 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { expect, test } from "bun:test";
 
 import {
-  EmptySchema,
   ValueSchema,
   dateFromTimestamp,
   jsonFromValue,
@@ -16,7 +15,6 @@ import {
   unmarshalProto,
   unmarshalProtoJson,
   valueFromJson,
-  type Empty,
 } from "../src/index.ts";
 import {
   WorkflowEventSchema,
@@ -63,9 +61,6 @@ test("protocol helpers produce generated workflow field shapes", () => {
 });
 
 test("protocol boundary helpers round-trip protobuf binary and JSON", () => {
-  const empty: Empty = create(EmptySchema);
-  expect(empty.$typeName).toBe("google.protobuf.Empty");
-
   const message = valueFromJson({ b: 2, a: 1 });
   const sameMessageDifferentOrder = valueFromJson({ a: 1, b: 2 });
   const first = marshalProtoDeterministic(ValueSchema, message);

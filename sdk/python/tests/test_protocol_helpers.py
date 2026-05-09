@@ -20,7 +20,6 @@ class ProtocolHelperTests(unittest.TestCase):
         self.assertEqual(gestalt.struct_to_dict(from_json), {"a": 1.0, "b": 2.0})
 
     def test_well_known_type_aliases_are_public(self) -> None:
-        self.assertIsInstance(gestalt.Empty(), gestalt.ProtoMessage)
         self.assertIsInstance(gestalt.Timestamp(), gestalt.ProtoMessage)
         self.assertIsInstance(gestalt.Value(), gestalt.ProtoMessage)
 

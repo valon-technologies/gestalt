@@ -8,7 +8,6 @@ import math as _math
 from collections.abc import Mapping, Sequence
 from typing import Any, TypeAlias
 
-from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format as _json_format
 from google.protobuf import message as _message
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -19,7 +18,6 @@ struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
 
 ProtoMessage: TypeAlias = _message.Message
-Empty: Any = getattr(_empty_pb2, "Empty")
 Struct: Any = getattr(_struct_pb2, "Struct")
 Value: Any = getattr(_struct_pb2, "Value")
 Timestamp: Any = getattr(_timestamp_pb2, "Timestamp")

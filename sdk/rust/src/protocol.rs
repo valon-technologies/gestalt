@@ -13,9 +13,6 @@ use crate::{Error, Result};
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
 
-/// Alias for google.protobuf.Empty at protocol boundaries.
-pub type Empty = ();
-
 /// Common trait implemented by generated protobuf messages.
 pub trait ProtoMessage: Message {}
 

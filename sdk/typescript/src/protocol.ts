@@ -18,11 +18,9 @@ import {
   type MessageShape,
 } from "@bufbuild/protobuf";
 import {
-  EmptySchema,
   StructSchema,
   TimestampSchema,
   ValueSchema,
-  type Empty,
   type Struct,
   type Timestamp,
   type Value,
@@ -41,8 +39,6 @@ export type JsonInput = JsonPrimitiveInput | readonly unknown[] | object;
 export type JsonObjectInput = object;
 /** Common shape implemented by generated protobuf messages. */
 export type ProtoMessage = Message;
-/** Alias for google.protobuf.Empty at protocol boundaries. */
-export type { Empty };
 /** Alias for google.protobuf.Struct at protocol boundaries. */
 export type { Struct };
 /** Alias for google.protobuf.Value at protocol boundaries. */
@@ -58,8 +54,6 @@ export type { JsonReadOptions };
 /** JSON serialize options accepted by marshalProtoJson. */
 export type { JsonWriteStringOptions };
 
-/** Schema for google.protobuf.Empty. */
-export { EmptySchema };
 /** Schema for google.protobuf.Struct. */
 export { StructSchema };
 /** Schema for google.protobuf.Value. */
