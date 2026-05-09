@@ -1,13 +1,34 @@
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+import datetime as _dt
 import os
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import grpc
+from google.protobuf import message as _message
 
+from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
+from ._protocol import (
+    datetime_from_timestamp,
+    has_field,
+    struct_from_dict,
+    struct_to_dict,
+    timestamp_from_datetime,
+    value_from_json,
+    value_to_json,
+    which_oneof,
+)
+from ._protocol import (
+    struct_pb2 as _struct_pb2,
+)
+from ._protocol import (
+    timestamp_pb2 as _timestamp_pb2,
+)
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
@@ -23,6 +44,1035 @@ WORKFLOW_RUN_STATUS_RUNNING = pb.WORKFLOW_RUN_STATUS_RUNNING
 WORKFLOW_RUN_STATUS_SUCCEEDED = pb.WORKFLOW_RUN_STATUS_SUCCEEDED
 WORKFLOW_RUN_STATUS_FAILED = pb.WORKFLOW_RUN_STATUS_FAILED
 WORKFLOW_RUN_STATUS_CANCELED = pb.WORKFLOW_RUN_STATUS_CANCELED
+
+
+_MISSING = object()
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowPluginTargetInput:
+    """Native input for a bound plugin workflow target."""
+
+    plugin_name: str = ""
+    operation: str = ""
+    input: Any | None = None
+    connection: str = ""
+    instance: str = ""
+    credential_mode: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowOutputValueSourceInput:
+    """Native input for a workflow output value source."""
+
+    agent_output: str | None = None
+    signal_payload: str | None = None
+    signal_metadata: str | None = None
+    literal: Any = _MISSING
+    agent_session: str | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowOutputBindingInput:
+    """Native input for one workflow output binding."""
+
+    input_field: str = ""
+    value: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowOutputDeliveryInput:
+    """Native input for a workflow output delivery."""
+
+    target: Any | None = None
+    input_bindings: Sequence[Any] | None = None
+    credential_mode: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowAgentTargetInput:
+    """Native input for a bound agent workflow target."""
+
+    provider_name: str = ""
+    model: str = ""
+    prompt: str = ""
+    messages: Sequence[Any] | None = None
+    tool_refs: Sequence[Any] | None = None
+    response_schema: Any | None = None
+    metadata: Any | None = None
+    timeout_seconds: int = 0
+    output_delivery: Any | None = None
+    model_options: Any | None = None
+    session_ready_delivery: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowTargetInput:
+    """Native input for a bound workflow target."""
+
+    plugin: Any | None = None
+    agent: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowActorInput:
+    """Native input for a workflow actor."""
+
+    subject_id: str = ""
+    subject_kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowEventInput:
+    """Native input for a workflow event."""
+
+    id: str = ""
+    source: str = ""
+    spec_version: str = ""
+    type: str = ""
+    subject: str = ""
+    time: _dt.datetime | Any | None = None
+    datacontenttype: str = ""
+    data: Any | None = None
+    extensions: Mapping[str, Any] | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowEventMatchInput:
+    """Native input for workflow event matching fields."""
+
+    type: str = ""
+    source: str = ""
+    subject: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowSignalInput:
+    """Native input for a workflow signal."""
+
+    id: str = ""
+    name: str = ""
+    payload: Any | None = None
+    metadata: Any | None = None
+    created_by: Any | None = None
+    created_at: _dt.datetime | Any | None = None
+    idempotency_key: str = ""
+    sequence: int = 0
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowScheduleTriggerInput:
+    """Native input for a schedule-triggered workflow run."""
+
+    schedule_id: str = ""
+    scheduled_for: _dt.datetime | Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowEventTriggerInvocationInput:
+    """Native input for an event-triggered workflow run."""
+
+    trigger_id: str = ""
+    event: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowRunTriggerInput:
+    """Native input for a workflow run trigger."""
+
+    manual: bool = False
+    schedule: Any | None = None
+    event: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowRunInput:
+    """Native input for a workflow-provider run."""
+
+    id: str = ""
+    status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
+    target: Any | None = None
+    trigger: Any | None = None
+    created_at: _dt.datetime | Any | None = None
+    started_at: _dt.datetime | Any | None = None
+    completed_at: _dt.datetime | Any | None = None
+    status_message: str = ""
+    result_body: str = ""
+    created_by: Any | None = None
+    execution_ref: str = ""
+    workflow_key: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowScheduleInput:
+    """Native input for a workflow-provider schedule."""
+
+    id: str = ""
+    cron: str = ""
+    timezone: str = ""
+    target: Any | None = None
+    paused: bool = False
+    created_at: _dt.datetime | Any | None = None
+    updated_at: _dt.datetime | Any | None = None
+    next_run_at: _dt.datetime | Any | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowEventTriggerInput:
+    """Native input for a workflow-provider event trigger."""
+
+    id: str = ""
+    match: Any | None = None
+    target: Any | None = None
+    paused: bool = False
+    created_at: _dt.datetime | Any | None = None
+    updated_at: _dt.datetime | Any | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowAccessPermissionInput:
+    """Native input for an execution-reference permission."""
+
+    plugin: str = ""
+    operations: Sequence[str] | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowRunAsSubjectInput:
+    """Native input for a workflow run-as subject."""
+
+    subject_id: str = ""
+    subject_kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowExecutionReferenceInput:
+    """Native input for a workflow execution reference."""
+
+    id: str = ""
+    provider_name: str = ""
+    target: Any | None = None
+    subject_id: str = ""
+    credential_subject_id: str = ""
+    permissions: Sequence[Any] | None = None
+    created_at: _dt.datetime | Any | None = None
+    revoked_at: _dt.datetime | Any | None = None
+    subject_kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+    caller_plugin_name: str = ""
+    run_as: Any | None = None
+    source_definition_id: str = ""
+
+
+def _dataclass_mapping(value: Any) -> dict[str, Any] | None:
+    if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {field.name: getattr(value, field.name) for field in _dataclasses.fields(value)}
+    return None
+
+
+def _data(value: Any | None, kwargs: dict[str, Any]) -> dict[str, Any]:
+    if value is None:
+        return dict(kwargs)
+    mapping = _dataclass_mapping(value)
+    if mapping is None:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"expected a mapping or dataclass, got {type(value).__name__}")
+        mapping = dict(value)
+    mapping.update(kwargs)
+    return mapping
+
+
+def _copy(value: Any) -> Any:
+    message = type(value)()
+    message.CopyFrom(value)
+    return message
+
+
+def _optional_struct(value: Any | None) -> Any | None:
+    if value is None:
+        return None
+    if isinstance(value, _struct_pb2.Struct):
+        return _copy(value)
+    return struct_from_dict(value)
+
+
+def _optional_value(value: Any | None) -> Any | None:
+    if value is None:
+        return None
+    return _value(value)
+
+
+def _value(value: Any) -> Any:
+    if isinstance(value, _struct_pb2.Value):
+        return _copy(value)
+    return value_from_json(value)
+
+
+def _optional_timestamp(value: _dt.datetime | Any | None) -> Any | None:
+    if value is None:
+        return None
+    if isinstance(value, _timestamp_pb2.Timestamp):
+        return _copy(value)
+    if isinstance(value, _dt.datetime):
+        return timestamp_from_datetime(value)
+    raise TypeError(f"expected datetime or Timestamp, got {type(value).__name__}")
+
+
+def _timestamp_to_datetime(value: Any, field: str) -> _dt.datetime | None:
+    return datetime_from_timestamp(getattr(value, field)) if has_field(value, field) else None
+
+
+def _message_list(values: Sequence[Any] | None, message_type: type[Any]) -> list[Any]:
+    if values is None:
+        return []
+    output = []
+    for item in values:
+        if isinstance(item, _message.Message):
+            output.append(_copy(item))
+        elif isinstance(item, Mapping):
+            output.append(message_type(**dict(item)))
+        else:
+            raise TypeError(f"expected protobuf message or mapping, got {type(item).__name__}")
+    return output
+
+
+def workflow_actor(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow actor from native input."""
+
+    if isinstance(value, pb.WorkflowActor):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowActor(
+        subject_id=data.get("subject_id", ""),
+        subject_kind=data.get("subject_kind", ""),
+        display_name=data.get("display_name", ""),
+        auth_source=data.get("auth_source", ""),
+    )
+
+
+def workflow_actor_input_from_actor(value: Any | None) -> WorkflowActorInput | None:
+    """Return native input copied from a workflow actor."""
+
+    if value is None:
+        return None
+    return WorkflowActorInput(
+        subject_id=value.subject_id,
+        subject_kind=value.subject_kind,
+        display_name=value.display_name,
+        auth_source=value.auth_source,
+    )
+
+
+def workflow_run_as_subject(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow run-as subject from native input."""
+
+    if isinstance(value, pb.WorkflowRunAsSubject):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowRunAsSubject(
+        subject_id=data.get("subject_id", ""),
+        subject_kind=data.get("subject_kind", ""),
+        display_name=data.get("display_name", ""),
+        auth_source=data.get("auth_source", ""),
+    )
+
+
+def workflow_run_as_subject_input_from_subject(value: Any | None) -> WorkflowRunAsSubjectInput | None:
+    """Return native input copied from a workflow run-as subject."""
+
+    if value is None:
+        return None
+    return WorkflowRunAsSubjectInput(
+        subject_id=value.subject_id,
+        subject_kind=value.subject_kind,
+        display_name=value.display_name,
+        auth_source=value.auth_source,
+    )
+
+
+def workflow_access_permission(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create an execution-reference permission from native input."""
+
+    if isinstance(value, pb.WorkflowAccessPermission):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowAccessPermission(
+        plugin=data.get("plugin", ""),
+        operations=list(data.get("operations") or []),
+    )
+
+
+def workflow_access_permission_input_from_permission(value: Any) -> WorkflowAccessPermissionInput:
+    """Return native input copied from an execution-reference permission."""
+
+    return WorkflowAccessPermissionInput(
+        plugin=value.plugin,
+        operations=list(value.operations),
+    )
+
+
+def workflow_event_match(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create workflow event-match fields from native input."""
+
+    if isinstance(value, pb.WorkflowEventMatch):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowEventMatch(
+        type=data.get("type", ""),
+        source=data.get("source", ""),
+        subject=data.get("subject", ""),
+    )
+
+
+def workflow_event_match_input_from_match(value: Any | None) -> WorkflowEventMatchInput | None:
+    """Return native input copied from workflow event-match fields."""
+
+    if value is None:
+        return None
+    return WorkflowEventMatchInput(type=value.type, source=value.source, subject=value.subject)
+
+
+def workflow_output_value_source(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow output value source from native input."""
+
+    if isinstance(value, pb.WorkflowOutputValueSource):
+        return _copy(value)
+    data = _data(value, kwargs)
+    literal = data.get("literal", _MISSING)
+    choices = [
+        ("agent_output", data.get("agent_output")),
+        ("signal_payload", data.get("signal_payload")),
+        ("signal_metadata", data.get("signal_metadata")),
+        ("agent_session", data.get("agent_session")),
+    ]
+    selected = [(name, item) for name, item in choices if item is not None]
+    if literal is not _MISSING:
+        selected.append(("literal", literal))
+    if not selected:
+        return pb.WorkflowOutputValueSource()
+    if len(selected) > 1:
+        raise ValueError("workflow output value source must set exactly one source")
+    name, item = selected[0]
+    if name == "literal":
+        return pb.WorkflowOutputValueSource(literal=_value(item))
+    return pb.WorkflowOutputValueSource(**{name: item})
+
+
+def workflow_output_value_source_input_from_source(value: Any | None) -> WorkflowOutputValueSourceInput | None:
+    """Return native input copied from a workflow output value source."""
+
+    if value is None:
+        return None
+    kind = which_oneof(value, "kind")
+    if kind == "agent_output":
+        return WorkflowOutputValueSourceInput(agent_output=value.agent_output)
+    if kind == "signal_payload":
+        return WorkflowOutputValueSourceInput(signal_payload=value.signal_payload)
+    if kind == "signal_metadata":
+        return WorkflowOutputValueSourceInput(signal_metadata=value.signal_metadata)
+    if kind == "agent_session":
+        return WorkflowOutputValueSourceInput(agent_session=value.agent_session)
+    if kind == "literal":
+        return WorkflowOutputValueSourceInput(literal=value_to_json(value.literal))
+    return WorkflowOutputValueSourceInput()
+
+
+def workflow_output_binding(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow output binding from native input."""
+
+    if isinstance(value, pb.WorkflowOutputBinding):
+        return _copy(value)
+    data = _data(value, kwargs)
+    source = data.get("value")
+    return pb.WorkflowOutputBinding(
+        input_field=data.get("input_field", ""),
+        value=workflow_output_value_source(source) if source is not None else None,
+    )
+
+
+def workflow_output_binding_input_from_binding(value: Any) -> WorkflowOutputBindingInput:
+    """Return native input copied from a workflow output binding."""
+
+    return WorkflowOutputBindingInput(
+        input_field=value.input_field,
+        value=workflow_output_value_source_input_from_source(value.value)
+        if has_field(value, "value")
+        else None,
+    )
+
+
+def workflow_output_delivery(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow output delivery from native input."""
+
+    if isinstance(value, pb.WorkflowOutputDelivery):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    return pb.WorkflowOutputDelivery(
+        target=bound_workflow_plugin_target(target) if target is not None else None,
+        input_bindings=[
+            workflow_output_binding(item) for item in (data.get("input_bindings") or [])
+        ],
+        credential_mode=data.get("credential_mode", ""),
+    )
+
+
+def workflow_output_delivery_input_from_delivery(value: Any | None) -> WorkflowOutputDeliveryInput | None:
+    """Return native input copied from a workflow output delivery."""
+
+    if value is None:
+        return None
+    return WorkflowOutputDeliveryInput(
+        target=bound_workflow_plugin_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        input_bindings=[
+            workflow_output_binding_input_from_binding(binding)
+            for binding in value.input_bindings
+        ],
+        credential_mode=value.credential_mode,
+    )
+
+
+def bound_workflow_plugin_target(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a bound plugin workflow target from native input."""
+
+    if isinstance(value, pb.BoundWorkflowPluginTarget):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.BoundWorkflowPluginTarget(
+        plugin_name=data.get("plugin_name", ""),
+        operation=data.get("operation", ""),
+        input=_optional_struct(data.get("input")),
+        connection=data.get("connection", ""),
+        instance=data.get("instance", ""),
+        credential_mode=data.get("credential_mode", ""),
+    )
+
+
+def bound_workflow_plugin_target_input_from_target(value: Any | None) -> BoundWorkflowPluginTargetInput | None:
+    """Return native input copied from a bound plugin workflow target."""
+
+    if value is None:
+        return None
+    return BoundWorkflowPluginTargetInput(
+        plugin_name=value.plugin_name,
+        operation=value.operation,
+        input=struct_to_dict(value.input) if has_field(value, "input") else None,
+        connection=value.connection,
+        instance=value.instance,
+        credential_mode=value.credential_mode,
+    )
+
+
+def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a bound agent workflow target from native input."""
+
+    if isinstance(value, pb.BoundWorkflowAgentTarget):
+        return _copy(value)
+    data = _data(value, kwargs)
+    output_delivery = data.get("output_delivery")
+    session_ready_delivery = data.get("session_ready_delivery")
+    return pb.BoundWorkflowAgentTarget(
+        provider_name=data.get("provider_name", ""),
+        model=data.get("model", ""),
+        prompt=data.get("prompt", ""),
+        messages=_message_list(data.get("messages"), _agent_pb.AgentMessage),
+        tool_refs=_message_list(data.get("tool_refs"), _agent_pb.AgentToolRef),
+        response_schema=_optional_struct(data.get("response_schema")),
+        metadata=_optional_struct(data.get("metadata")),
+        timeout_seconds=data.get("timeout_seconds", 0),
+        output_delivery=workflow_output_delivery(output_delivery)
+        if output_delivery is not None
+        else None,
+        model_options=_optional_struct(data.get("model_options")),
+        session_ready_delivery=workflow_output_delivery(session_ready_delivery)
+        if session_ready_delivery is not None
+        else None,
+    )
+
+
+def bound_workflow_agent_target_input_from_target(value: Any | None) -> BoundWorkflowAgentTargetInput | None:
+    """Return native input copied from a bound agent workflow target."""
+
+    if value is None:
+        return None
+    return BoundWorkflowAgentTargetInput(
+        provider_name=value.provider_name,
+        model=value.model,
+        prompt=value.prompt,
+        messages=_message_list(value.messages, _agent_pb.AgentMessage),
+        tool_refs=_message_list(value.tool_refs, _agent_pb.AgentToolRef),
+        response_schema=struct_to_dict(value.response_schema)
+        if has_field(value, "response_schema")
+        else None,
+        metadata=struct_to_dict(value.metadata) if has_field(value, "metadata") else None,
+        timeout_seconds=value.timeout_seconds,
+        output_delivery=workflow_output_delivery_input_from_delivery(value.output_delivery)
+        if has_field(value, "output_delivery")
+        else None,
+        model_options=struct_to_dict(value.model_options)
+        if has_field(value, "model_options")
+        else None,
+        session_ready_delivery=workflow_output_delivery_input_from_delivery(
+            value.session_ready_delivery
+        )
+        if has_field(value, "session_ready_delivery")
+        else None,
+    )
+
+
+def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a bound workflow target from native input."""
+
+    if isinstance(value, pb.BoundWorkflowTarget):
+        return _copy(value)
+    data = _data(value, kwargs)
+    plugin = data.get("plugin")
+    agent = data.get("agent")
+    if plugin is not None and agent is not None:
+        raise ValueError("bound workflow target must set either plugin or agent")
+    if plugin is not None:
+        return pb.BoundWorkflowTarget(plugin=bound_workflow_plugin_target(plugin))
+    if agent is not None:
+        return pb.BoundWorkflowTarget(agent=bound_workflow_agent_target(agent))
+    return pb.BoundWorkflowTarget()
+
+
+def bound_workflow_target_input_from_target(value: Any | None) -> BoundWorkflowTargetInput | None:
+    """Return native input copied from a bound workflow target."""
+
+    if value is None:
+        return None
+    kind = which_oneof(value, "kind")
+    if kind == "plugin":
+        return BoundWorkflowTargetInput(
+            plugin=bound_workflow_plugin_target_input_from_target(value.plugin)
+        )
+    if kind == "agent":
+        return BoundWorkflowTargetInput(
+            agent=bound_workflow_agent_target_input_from_target(value.agent)
+        )
+    return BoundWorkflowTargetInput()
+
+
+def bound_workflow_target_from_target(value: Any | None) -> Any | None:
+    """Return a deep copy of a bound workflow target."""
+
+    data = bound_workflow_target_input_from_target(value)
+    return bound_workflow_target(data) if data is not None else None
+
+
+def workflow_event(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow event from native input."""
+
+    if isinstance(value, pb.WorkflowEvent):
+        return _copy(value)
+    data = _data(value, kwargs)
+    event = pb.WorkflowEvent(
+        id=data.get("id", ""),
+        source=data.get("source", ""),
+        spec_version=data.get("spec_version", ""),
+        type=data.get("type", ""),
+        subject=data.get("subject", ""),
+        time=_optional_timestamp(data.get("time")),
+        datacontenttype=data.get("datacontenttype", ""),
+        data=_optional_struct(data.get("data")),
+    )
+    for key, item in (data.get("extensions") or {}).items():
+        event.extensions[key].CopyFrom(_value(item))
+    return event
+
+
+def workflow_event_input_from_event(value: Any | None) -> WorkflowEventInput | None:
+    """Return native input copied from a workflow event."""
+
+    if value is None:
+        return None
+    return WorkflowEventInput(
+        id=value.id,
+        source=value.source,
+        spec_version=value.spec_version,
+        type=value.type,
+        subject=value.subject,
+        time=_timestamp_to_datetime(value, "time"),
+        datacontenttype=value.datacontenttype,
+        data=struct_to_dict(value.data) if has_field(value, "data") else None,
+        extensions={key: value_to_json(item) for key, item in value.extensions.items()},
+    )
+
+
+def workflow_event_from_event(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow event."""
+
+    data = workflow_event_input_from_event(value)
+    return workflow_event(data) if data is not None else None
+
+
+def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow signal from native input."""
+
+    if isinstance(value, pb.WorkflowSignal):
+        return _copy(value)
+    data = _data(value, kwargs)
+    created_by = data.get("created_by")
+    return pb.WorkflowSignal(
+        id=data.get("id", ""),
+        name=data.get("name", ""),
+        payload=_optional_struct(data.get("payload")),
+        metadata=_optional_struct(data.get("metadata")),
+        created_by=workflow_actor(created_by) if created_by is not None else None,
+        created_at=_optional_timestamp(data.get("created_at")),
+        idempotency_key=data.get("idempotency_key", ""),
+        sequence=data.get("sequence", 0),
+    )
+
+
+def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignalInput | None:
+    """Return native input copied from a workflow signal."""
+
+    if value is None:
+        return None
+    return WorkflowSignalInput(
+        id=value.id,
+        name=value.name,
+        payload=struct_to_dict(value.payload) if has_field(value, "payload") else None,
+        metadata=struct_to_dict(value.metadata) if has_field(value, "metadata") else None,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        idempotency_key=value.idempotency_key,
+        sequence=value.sequence,
+    )
+
+
+def workflow_signal_from_signal(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow signal."""
+
+    data = workflow_signal_input_from_signal(value)
+    return workflow_signal(data) if data is not None else None
+
+
+def workflow_schedule_trigger(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow schedule trigger from native input."""
+
+    if isinstance(value, pb.WorkflowScheduleTrigger):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowScheduleTrigger(
+        schedule_id=data.get("schedule_id", ""),
+        scheduled_for=_optional_timestamp(data.get("scheduled_for")),
+    )
+
+
+def workflow_event_trigger_invocation(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow event-trigger invocation from native input."""
+
+    if isinstance(value, pb.WorkflowEventTriggerInvocation):
+        return _copy(value)
+    data = _data(value, kwargs)
+    event = data.get("event")
+    return pb.WorkflowEventTriggerInvocation(
+        trigger_id=data.get("trigger_id", ""),
+        event=workflow_event(event) if event is not None else None,
+    )
+
+
+def workflow_run_trigger(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow run trigger from native input."""
+
+    if isinstance(value, pb.WorkflowRunTrigger):
+        return workflow_run_trigger_from_trigger(value)
+    data = _data(value, kwargs)
+    selected: list[str] = []
+    if bool(data.get("manual")):
+        selected.append("manual")
+    if data.get("schedule") is not None:
+        selected.append("schedule")
+    if data.get("event") is not None:
+        selected.append("event")
+    if len(selected) > 1:
+        raise ValueError("workflow run trigger must set exactly one trigger kind")
+    if not selected:
+        return pb.WorkflowRunTrigger()
+    kind = selected[0]
+    if kind == "manual":
+        return pb.WorkflowRunTrigger(manual=pb.WorkflowManualTrigger())
+    if kind == "schedule":
+        return pb.WorkflowRunTrigger(schedule=workflow_schedule_trigger(data["schedule"]))
+    return pb.WorkflowRunTrigger(event=workflow_event_trigger_invocation(data["event"]))
+
+
+def workflow_run_trigger_input_from_trigger(value: Any | None) -> WorkflowRunTriggerInput | None:
+    """Return native input copied from a workflow run trigger."""
+
+    if value is None:
+        return None
+    kind = which_oneof(value, "kind")
+    if kind == "manual":
+        return WorkflowRunTriggerInput(manual=True)
+    if kind == "schedule":
+        return WorkflowRunTriggerInput(
+            schedule=WorkflowScheduleTriggerInput(
+                schedule_id=value.schedule.schedule_id,
+                scheduled_for=_timestamp_to_datetime(value.schedule, "scheduled_for"),
+            )
+        )
+    if kind == "event":
+        return WorkflowRunTriggerInput(
+            event=WorkflowEventTriggerInvocationInput(
+                trigger_id=value.event.trigger_id,
+                event=workflow_event_input_from_event(value.event.event)
+                if has_field(value.event, "event")
+                else None,
+            )
+        )
+    return WorkflowRunTriggerInput()
+
+
+def workflow_run_trigger_from_trigger(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow run trigger."""
+
+    data = workflow_run_trigger_input_from_trigger(value)
+    return workflow_run_trigger(data) if data is not None else None
+
+
+def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow-provider run from native input."""
+
+    if isinstance(value, pb.BoundWorkflowRun):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    trigger = data.get("trigger")
+    created_by = data.get("created_by")
+    return pb.BoundWorkflowRun(
+        id=data.get("id", ""),
+        status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
+        target=bound_workflow_target(target) if target is not None else None,
+        trigger=workflow_run_trigger(trigger) if trigger is not None else None,
+        created_at=_optional_timestamp(data.get("created_at")),
+        started_at=_optional_timestamp(data.get("started_at")),
+        completed_at=_optional_timestamp(data.get("completed_at")),
+        status_message=data.get("status_message", ""),
+        result_body=data.get("result_body", ""),
+        created_by=workflow_actor(created_by) if created_by is not None else None,
+        execution_ref=data.get("execution_ref", ""),
+        workflow_key=data.get("workflow_key", ""),
+    )
+
+
+def bound_workflow_run_input_from_run(value: Any | None) -> BoundWorkflowRunInput | None:
+    """Return native input copied from a workflow-provider run."""
+
+    if value is None:
+        return None
+    return BoundWorkflowRunInput(
+        id=value.id,
+        status=value.status,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        trigger=workflow_run_trigger_input_from_trigger(value.trigger)
+        if has_field(value, "trigger")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        started_at=_timestamp_to_datetime(value, "started_at"),
+        completed_at=_timestamp_to_datetime(value, "completed_at"),
+        status_message=value.status_message,
+        result_body=value.result_body,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+        workflow_key=value.workflow_key,
+    )
+
+
+def bound_workflow_run_from_run(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow-provider run."""
+
+    data = bound_workflow_run_input_from_run(value)
+    return bound_workflow_run(data) if data is not None else None
+
+
+def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow-provider schedule from native input."""
+
+    if isinstance(value, pb.BoundWorkflowSchedule):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    created_by = data.get("created_by")
+    return pb.BoundWorkflowSchedule(
+        id=data.get("id", ""),
+        cron=data.get("cron", ""),
+        timezone=data.get("timezone", ""),
+        target=bound_workflow_target(target) if target is not None else None,
+        paused=data.get("paused", False),
+        created_at=_optional_timestamp(data.get("created_at")),
+        updated_at=_optional_timestamp(data.get("updated_at")),
+        next_run_at=_optional_timestamp(data.get("next_run_at")),
+        created_by=workflow_actor(created_by) if created_by is not None else None,
+        execution_ref=data.get("execution_ref", ""),
+    )
+
+
+def bound_workflow_schedule_input_from_schedule(value: Any | None) -> BoundWorkflowScheduleInput | None:
+    """Return native input copied from a workflow-provider schedule."""
+
+    if value is None:
+        return None
+    return BoundWorkflowScheduleInput(
+        id=value.id,
+        cron=value.cron,
+        timezone=value.timezone,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        updated_at=_timestamp_to_datetime(value, "updated_at"),
+        next_run_at=_timestamp_to_datetime(value, "next_run_at"),
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def bound_workflow_schedule_from_schedule(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow-provider schedule."""
+
+    data = bound_workflow_schedule_input_from_schedule(value)
+    return bound_workflow_schedule(data) if data is not None else None
+
+
+def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow-provider event trigger from native input."""
+
+    if isinstance(value, pb.BoundWorkflowEventTrigger):
+        return _copy(value)
+    data = _data(value, kwargs)
+    match = data.get("match")
+    target = data.get("target")
+    created_by = data.get("created_by")
+    return pb.BoundWorkflowEventTrigger(
+        id=data.get("id", ""),
+        match=workflow_event_match(match) if match is not None else None,
+        target=bound_workflow_target(target) if target is not None else None,
+        paused=data.get("paused", False),
+        created_at=_optional_timestamp(data.get("created_at")),
+        updated_at=_optional_timestamp(data.get("updated_at")),
+        created_by=workflow_actor(created_by) if created_by is not None else None,
+        execution_ref=data.get("execution_ref", ""),
+    )
+
+
+def bound_workflow_event_trigger_input_from_trigger(value: Any | None) -> BoundWorkflowEventTriggerInput | None:
+    """Return native input copied from a workflow-provider event trigger."""
+
+    if value is None:
+        return None
+    return BoundWorkflowEventTriggerInput(
+        id=value.id,
+        match=workflow_event_match_input_from_match(value.match)
+        if has_field(value, "match")
+        else None,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        updated_at=_timestamp_to_datetime(value, "updated_at"),
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def bound_workflow_event_trigger_from_trigger(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow-provider event trigger."""
+
+    data = bound_workflow_event_trigger_input_from_trigger(value)
+    return bound_workflow_event_trigger(data) if data is not None else None
+
+
+def workflow_execution_reference(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow execution reference from native input."""
+
+    if isinstance(value, pb.WorkflowExecutionReference):
+        return _copy(value)
+    data = _data(value, kwargs)
+    target = data.get("target")
+    run_as = data.get("run_as")
+    return pb.WorkflowExecutionReference(
+        id=data.get("id", ""),
+        provider_name=data.get("provider_name", ""),
+        target=bound_workflow_target(target) if target is not None else None,
+        subject_id=data.get("subject_id", ""),
+        credential_subject_id=data.get("credential_subject_id", ""),
+        permissions=[
+            workflow_access_permission(item)
+            for item in (data.get("permissions") or [])
+        ],
+        created_at=_optional_timestamp(data.get("created_at")),
+        revoked_at=_optional_timestamp(data.get("revoked_at")),
+        subject_kind=data.get("subject_kind", ""),
+        display_name=data.get("display_name", ""),
+        auth_source=data.get("auth_source", ""),
+        caller_plugin_name=data.get("caller_plugin_name", ""),
+        run_as=workflow_run_as_subject(run_as) if run_as is not None else None,
+        source_definition_id=data.get("source_definition_id", ""),
+    )
+
+
+def workflow_execution_reference_input_from_reference(value: Any | None) -> WorkflowExecutionReferenceInput | None:
+    """Return native input copied from a workflow execution reference."""
+
+    if value is None:
+        return None
+    return WorkflowExecutionReferenceInput(
+        id=value.id,
+        provider_name=value.provider_name,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        subject_id=value.subject_id,
+        credential_subject_id=value.credential_subject_id,
+        permissions=[
+            workflow_access_permission_input_from_permission(item)
+            for item in value.permissions
+        ],
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        revoked_at=_timestamp_to_datetime(value, "revoked_at"),
+        subject_kind=value.subject_kind,
+        display_name=value.display_name,
+        auth_source=value.auth_source,
+        caller_plugin_name=value.caller_plugin_name,
+        run_as=workflow_run_as_subject_input_from_subject(value.run_as)
+        if has_field(value, "run_as")
+        else None,
+        source_definition_id=value.source_definition_id,
+    )
+
+
+def workflow_execution_reference_from_reference(value: Any | None) -> Any | None:
+    """Return a deep copy of a workflow execution reference."""
+
+    data = workflow_execution_reference_input_from_reference(value)
+    return workflow_execution_reference(data) if data is not None else None
 
 
 def BoundWorkflowTarget(*args: Any, **kwargs: Any) -> Any:

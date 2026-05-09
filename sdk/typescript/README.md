@@ -91,6 +91,12 @@ such as `structFromObject`, `structFromJsonObject`, `valueFromJson`, and
 agent payloads. Struct helpers accept plain JSON objects and reject unsupported
 values like `Date`, `Map`, class instances, `undefined`, `bigint`, and
 non-finite numbers instead of silently dropping or stringifying them.
+Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
+`boundWorkflowRun`, and `workflowExecutionReference` accept plain JSON objects
+and native `Date` values, then produce the generated protocol messages used by
+workflow providers. Copy helpers such as `boundWorkflowTargetFromTarget`
+preserve wire shape without requiring provider code to import generated schemas
+or hand-build protobuf oneofs.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.

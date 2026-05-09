@@ -127,8 +127,9 @@ pub use generated::v1::{
     WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
     WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest,
     WorkflowManualTrigger, WorkflowOutputBinding, WorkflowOutputDelivery,
-    WorkflowOutputValueSource, WorkflowRunStatus, WorkflowRunTrigger, WorkflowScheduleTrigger,
-    WorkflowSignal, bound_workflow_target, workflow_output_value_source, workflow_run_trigger,
+    WorkflowOutputValueSource, WorkflowRunAsSubject, WorkflowRunStatus, WorkflowRunTrigger,
+    WorkflowScheduleTrigger, WorkflowSignal, bound_workflow_target, workflow_output_value_source,
+    workflow_run_trigger,
 };
 pub use generated::v1::{
     CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
@@ -167,8 +168,34 @@ pub use s3::{S3ReadObjectStream, S3WriteObjectStream};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{
-    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_HOST_SOCKET_TOKEN, WorkflowHost, WorkflowHostError,
-    WorkflowProvider,
+    BoundWorkflowAgentTargetInput, BoundWorkflowEventTriggerInput, BoundWorkflowPluginTargetInput,
+    BoundWorkflowRunInput, BoundWorkflowScheduleInput, BoundWorkflowTargetInput,
+    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_HOST_SOCKET_TOKEN, WorkflowAccessPermissionInput,
+    WorkflowActorInput, WorkflowEventInput, WorkflowEventMatchInput,
+    WorkflowEventTriggerInvocationInput, WorkflowExecutionReferenceInput, WorkflowHost,
+    WorkflowHostError, WorkflowOutputBindingInput, WorkflowOutputDeliveryInput,
+    WorkflowOutputValueSourceInput, WorkflowProvider, WorkflowRunAsSubjectInput,
+    WorkflowRunTriggerInput, WorkflowScheduleTriggerInput, WorkflowSignalInput,
+    bound_workflow_agent_target_input_from_target, bound_workflow_event_trigger_input_from_trigger,
+    bound_workflow_plugin_target_input_from_target, bound_workflow_run_input_from_run,
+    bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
+    new_bound_workflow_agent_target, new_bound_workflow_event_trigger,
+    new_bound_workflow_event_trigger_from_trigger, new_bound_workflow_plugin_target,
+    new_bound_workflow_run, new_bound_workflow_run_from_run, new_bound_workflow_schedule,
+    new_bound_workflow_schedule_from_schedule, new_bound_workflow_target,
+    new_bound_workflow_target_from_target, new_workflow_access_permission, new_workflow_actor,
+    new_workflow_event, new_workflow_event_from_event, new_workflow_event_match,
+    new_workflow_event_trigger_invocation, new_workflow_execution_reference,
+    new_workflow_execution_reference_from_reference, new_workflow_output_binding,
+    new_workflow_output_delivery, new_workflow_output_value_source, new_workflow_run_as_subject,
+    new_workflow_run_trigger, new_workflow_run_trigger_from_trigger, new_workflow_schedule_trigger,
+    new_workflow_signal, new_workflow_signal_from_signal,
+    workflow_access_permission_input_from_permission, workflow_actor_input_from_actor,
+    workflow_event_input_from_event, workflow_event_match_input_from_match,
+    workflow_execution_reference_input_from_reference, workflow_output_binding_input_from_binding,
+    workflow_output_delivery_input_from_delivery, workflow_output_value_source_input_from_source,
+    workflow_run_as_subject_input_from_subject, workflow_run_trigger_input_from_trigger,
+    workflow_signal_input_from_signal,
 };
 pub use workflow_manager::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, WorkflowManager,

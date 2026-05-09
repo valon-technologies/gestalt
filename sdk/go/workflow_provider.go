@@ -172,6 +172,7 @@ type (
 	WorkflowOutputValueSourceSignalPayload    = proto.WorkflowOutputValueSource_SignalPayload
 	WorkflowOutputValueSourceSignalMetadata   = proto.WorkflowOutputValueSource_SignalMetadata
 	WorkflowOutputValueSourceLiteral          = proto.WorkflowOutputValueSource_Literal
+	WorkflowOutputValueSourceAgentSession     = proto.WorkflowOutputValueSource_AgentSession
 	WorkflowActor                             = proto.WorkflowActor
 	WorkflowRunAsSubject                      = proto.WorkflowRunAsSubject
 	WorkflowEvent                             = proto.WorkflowEvent

@@ -86,6 +86,13 @@ resolving connections during one turn. Use `gestalt::protocol` helpers such as
 `gestalt::proto::v1` when transport fixtures need generated messages or service
 traits. The IndexedDB module also exposes JSON-named conversion helpers for
 asserting datastore wire shapes.
+Workflow builders such as `new_bound_workflow_target`,
+`new_workflow_signal`, `new_bound_workflow_run`, and
+`new_workflow_execution_reference` accept SDK-owned input structs with
+`serde::Serialize` payload setters and native `SystemTime` fields, then produce
+the generated workflow protocol messages. Copy helpers such as
+`new_bound_workflow_target_from_target` preserve the wire shape without asking
+provider code to hand-build protobuf oneofs, `Struct`s, or `Timestamp`s.
 
 ## Codegen strategy
 
@@ -131,6 +138,9 @@ The crate keeps generated bindings behind a higher-level authoring API:
   structs can become protobuf `Struct` payloads without hand-building protos.
   Generic JSON payloads reject non-finite numbers, bytes, and non-string map
   keys instead of coercing them through `serde_json`.
+- Workflow builder inputs such as `BoundWorkflowPluginTargetInput`,
+  `WorkflowSignalInput`, and `BoundWorkflowRunInput` use the same protocol
+  conversions for provider-owned workflow state.
 
 ## Package layout
 
