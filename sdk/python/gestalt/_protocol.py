@@ -20,10 +20,10 @@ struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
 
 ProtoMessage: TypeAlias = _message.Message
-Empty: TypeAlias = _empty_pb2.Empty
-Struct: TypeAlias = _struct_pb2.Struct
-Value: TypeAlias = _struct_pb2.Value
-Timestamp: TypeAlias = _timestamp_pb2.Timestamp
+Empty: Any = getattr(_empty_pb2, "Empty")
+Struct: Any = getattr(_struct_pb2, "Struct")
+Value: Any = getattr(_struct_pb2, "Value")
+Timestamp: Any = getattr(_timestamp_pb2, "Timestamp")
 JsonPrimitive: TypeAlias = None | bool | int | float | str
 JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]

@@ -20,10 +20,11 @@ fn protocol_boundary_helpers_round_trip_binary() -> gestalt::Result<()> {
     );
 
     let empty: gestalt::protocol::Empty = ();
-    let decoded_empty: gestalt::protocol::Empty =
-        gestalt::protocol::unmarshal_proto(gestalt::protocol::marshal_proto_deterministic(&empty))?;
+    gestalt::protocol::unmarshal_proto::<gestalt::protocol::Empty>(
+        gestalt::protocol::marshal_proto_deterministic(&empty),
+    )?;
     assert_eq!(
-        gestalt::protocol::marshal_proto_deterministic(&decoded_empty),
+        gestalt::protocol::marshal_proto_deterministic(&empty),
         Vec::<u8>::new()
     );
 
