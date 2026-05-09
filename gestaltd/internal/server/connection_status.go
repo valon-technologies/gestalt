@@ -9,13 +9,12 @@ import (
 )
 
 const (
-	connectionStatusReady                   = "ready"
-	connectionStatusDegraded                = "degraded"
-	connectionStatusNeedsUserConnection     = "needs_user_connection"
-	connectionStatusNeedsInstanceSelection  = "needs_instance_selection"
-	connectionStatusNeedsAdminConfiguration = "needs_admin_configuration"
-	connectionStatusUnavailable             = "unavailable"
-	connectionStatusUnknown                 = "unknown"
+	connectionStatusReady                  = "ready"
+	connectionStatusDegraded               = "degraded"
+	connectionStatusNeedsUserConnection    = "needs_user_connection"
+	connectionStatusNeedsInstanceSelection = "needs_instance_selection"
+	connectionStatusUnavailable            = "unavailable"
+	connectionStatusUnknown                = "unknown"
 
 	credentialStateNotRequired = "not_required"
 	credentialStateConnected   = "connected"
@@ -35,7 +34,6 @@ const (
 	actionAddInstance    = "add_instance"
 	actionSelectInstance = "select_instance"
 	actionReconnect      = "reconnect"
-	actionAdminConfigure = "admin_configure"
 
 	credentialModeNone    = "none"
 	credentialModeSubject = "subject"
@@ -195,12 +193,6 @@ func summarizeConnectionStatuses(connections []connectionDefInfo) connectionStat
 	for i := range connections {
 		conn := &connections[i]
 		if conn.Status == connectionStatusNeedsUserConnection {
-			return statusFromConnectionInfo(conn)
-		}
-	}
-	for i := range connections {
-		conn := &connections[i]
-		if conn.Status == connectionStatusNeedsAdminConfiguration {
 			return statusFromConnectionInfo(conn)
 		}
 	}
