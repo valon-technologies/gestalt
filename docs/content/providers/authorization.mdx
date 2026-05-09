@@ -23,7 +23,7 @@ concepts it uses.
 
 A subject is the entity an authorization check is for. In Gestalt, subjects are
 canonical identifiers like `user:<id>`, `service_account:<id>`, or a system
-subject like `system:platform-config`. When a request arrives, Gestalt resolves
+subject used by a runtime surface. When a request arrives, Gestalt resolves
 the caller to a subject, then performs every subsequent check in terms of that
 subject.
 
@@ -111,7 +111,7 @@ There are four related layers involved in most runtime decisions:
 | Authentication | Who is calling? |
 | Operation scope | Which plugin operations may this principal call? |
 | Runtime authorization | Is this subject allowed under the deployment policy? |
-| Credentials | Which upstream token or platform credential should be used? |
+| Credentials | Which subject-owned upstream token should be used? |
 
 These layers are checked independently. Granting one does not imply the others.
 An execution can be authenticated, allowed by policy, and still fail if its
@@ -187,8 +187,9 @@ succeeds.
 
 #### Credential modes in nested calls
 
-By default, nested plugin calls use the same connection mode as the parent.
-You can declare a different mode per `invokes` entry:
+By default, nested plugin calls use the same credential subject as the parent.
+For automation, declare the managed subject with `runAs` and keep nested calls
+on normal user-mode connections:
 
 ```yaml
 plugins:
@@ -196,13 +197,13 @@ plugins:
     source: ./plugins/reporter/manifest.yaml
     invokes:
       - plugin: slack
-        credentialMode: platform
+        runAs:
+          subject:
+            id: service_account:reporter-bot
 ```
 
-This causes the nested call to use a platform-scoped credential instead of the
-calling user's credential. Platform-scoped credentials are useful when the
-caller is a batch job or an integration that should act on behalf of the
-deployment, not on behalf of a user.
+This causes the nested call to resolve Slack credentials for the
+`service_account:reporter-bot` subject instead of the calling user's credential.
 
 ### Service accounts for direct API calls
 
@@ -242,8 +243,7 @@ access and plugin runtime access:
 The API token authenticates the caller to Gestalt. It does not replace upstream
 credentials. The target operation still resolves credentials from its configured
 connection mode. For `user` connections, that means the managed subject's stored
-credential. For `platform` connections, that means the platform-scoped
-credential configured for the deployment.
+credential.
 
 Subject-owned API tokens cannot manage managed subjects. Use a browser session
 or an unscoped user-owned API token for managed-subject administration. See
@@ -297,9 +297,9 @@ config, and the target plugin must still declare compatible
 `plugins.<target>.invokes` entries for any nested calls it performs.
 
 Config-owned direct targets, agent tools, and output-delivery targets must
-resolve to non-user credentials unless the workflow declares `runAs`. Mixed
-plugins are still supported when the target explicitly selects a platform-backed
-connection.
+resolve to `none` connections unless the workflow declares `runAs`. Mixed
+plugins are still supported when the target explicitly selects a connection that
+has credentials provisioned for the `runAs` subject.
 
 ## UI routes
 

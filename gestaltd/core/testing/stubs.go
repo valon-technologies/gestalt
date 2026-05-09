@@ -86,11 +86,6 @@ func (p *StubExternalCredentialProvider) ResolveCredential(ctx context.Context, 
 	if req == nil {
 		return nil, core.ErrNotFound
 	}
-	if req.Mode == core.ConnectionModePlatform {
-		return &core.ResolveExternalCredentialResponse{
-			Token: req.Auth.Token,
-		}, nil
-	}
 	var credential *core.ExternalCredential
 	var err error
 	if req.Instance != "" {

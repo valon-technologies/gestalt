@@ -7,9 +7,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -87,94 +84,6 @@ func TestPluginInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.
 	}
 }
 
-func TestPluginInvokerServerInvokeUsesRequestedPlatformConnectionWithoutCredentialModeOverride(t *testing.T) {
-	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("plugin-invoker-platform-test-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "service_account:workflow-config",
-		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
-	})
-	ctx = invocation.WithInternalConnectionAccess(ctx)
-	rootToken, err := tokens.MintRootToken(ctx, "brain", InvocationGrants{
-		"gmail": {Operations: map[string]core.ConnectionMode{"messages.list": ""}},
-	})
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
-	externalCreds := coretesting.NewStubExternalCredentialProvider()
-	externalCreds.ResolveCredentialFunc = func(_ context.Context, req *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
-		if req.Mode != core.ConnectionModePlatform || req.Connection != "platform" {
-			t.Fatalf("ResolveCredential target = mode:%q connection:%q, want platform/platform", req.Mode, req.Connection)
-		}
-		if req.Auth.GrantType != "refresh_token" || req.Auth.RefreshToken != "refresh-token" {
-			t.Fatalf("ResolveCredential auth = %+v, want refresh_token with refresh token", req.Auth)
-		}
-		return &core.ResolveExternalCredentialResponse{Token: "platform-gmail-token"}, nil
-	}
-	gmail := &coretesting.StubIntegration{
-		N:        "gmail",
-		ConnMode: core.ConnectionModeUser,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID:     "messages.list",
-			Method: "GET",
-		}}},
-		ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-			if cred := invocation.CredentialContextFromContext(ctx); cred.Mode != core.ConnectionModePlatform || cred.Connection != "platform" {
-				t.Fatalf("credential context = %#v, want platform/platform", cred)
-			}
-			return &core.OperationResult{Status: 200, Body: token}, nil
-		},
-	}
-	broker := invocation.NewBroker(
-		testutil.NewProviderRegistry(t, gmail),
-		nil,
-		externalCreds,
-		invocation.WithConnectionRuntime(invocation.ConnectionRuntimeMap{
-			"gmail": {
-				"platform": {
-					Mode:     core.ConnectionModePlatform,
-					Exposure: core.ConnectionExposureInternal,
-					AuthConfig: core.ExternalCredentialAuthConfig{
-						Type:         "oauth2",
-						GrantType:    "refresh_token",
-						TokenURL:     "https://oauth2.googleapis.com/token",
-						ClientID:     "client-id",
-						ClientSecret: "client-secret",
-						RefreshToken: "refresh-token",
-					},
-				},
-			},
-		}.Resolve),
-	)
-	server := NewPluginInvokerServer(
-		"brain",
-		[]invocation.PluginInvocationDependency{{Plugin: "gmail", Operation: "messages.list"}},
-		broker,
-		tokens,
-	)
-	client := proto.NewPluginInvokerClient(newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterPluginInvokerServer(srv, server)
-	}))
-	resp, err := client.Invoke(context.Background(), &proto.PluginInvokeRequest{
-		InvocationToken: rootToken,
-		Plugin:          "gmail",
-		Operation:       "messages.list",
-		Connection:      "platform",
-	})
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.GetBody() != "platform-gmail-token" {
-		t.Fatalf("body = %q, want platform token", resp.GetBody())
-	}
-}
-
 func TestPluginInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing.T) {
 	t.Parallel()
 
@@ -207,7 +116,7 @@ func TestPluginInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *test
 		InvocationToken: rootToken,
 		Plugin:          "gmail",
 		Operation:       "gmail.users.messages.modify",
-		Connection:      "platform",
+		Connection:      "override",
 	})
 	if got := status.Code(err); got != codes.InvalidArgument {
 		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.InvalidArgument, err)

@@ -61,9 +61,8 @@ func (p *Provider) mcpConnectionMode() core.ConnectionMode {
 }
 
 var connectionModeRank = map[core.ConnectionMode]int{
-	core.ConnectionModeNone:     0,
-	core.ConnectionModePlatform: 1,
-	core.ConnectionModeUser:     2,
+	core.ConnectionModeNone: 0,
+	core.ConnectionModeUser: 1,
 }
 
 func stricterConnectionMode(a, b core.ConnectionMode) core.ConnectionMode {

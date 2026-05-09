@@ -220,10 +220,6 @@ fn rewrite_connect_error(
             plugin,
             connect_command,
         ),
-        Some(ConnectErrorKind::AdminConfigurationRequired) => anyhow::anyhow!(
-            "plugin {:?} requires deployment/admin configuration before it can be invoked",
-            plugin,
-        ),
         Some(ConnectErrorKind::InstanceSelectionRequired) => anyhow::anyhow!(
             "plugin {:?} has multiple connected instances. Pass --instance to choose one",
             plugin,
@@ -256,7 +252,6 @@ fn invoke_target(plugin: &str, operation: &str) -> String {
 enum ConnectErrorKind {
     NotConnected,
     ReconnectRequired,
-    AdminConfigurationRequired,
     InstanceSelectionRequired,
 }
 
@@ -266,9 +261,6 @@ fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
             match api_error.code() {
                 Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
                 Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
-                Some("admin_configuration_required") => {
-                    return Some(ConnectErrorKind::AdminConfigurationRequired);
-                }
                 Some("instance_selection_required") => {
                     return Some(ConnectErrorKind::InstanceSelectionRequired);
                 }
@@ -285,11 +277,6 @@ fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
         }
         if message.contains("expired or was revoked") {
             return Some(ConnectErrorKind::ReconnectRequired);
-        }
-        if message.contains("deployment/admin configuration")
-            || message.contains("deployment credential configured")
-        {
-            return Some(ConnectErrorKind::AdminConfigurationRequired);
         }
         if message.contains("specify which instance") || message.contains("Pass --instance") {
             return Some(ConnectErrorKind::InstanceSelectionRequired);

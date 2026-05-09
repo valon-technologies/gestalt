@@ -275,7 +275,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             connectionId: "vertex-ai",
             connection: input.connection,
             instance: input.instance,
-            mode: "platform",
+            mode: "user",
             headers: {
               authorization: "Bearer token",
             },

@@ -154,11 +154,9 @@ func (s *Server) operationConnectionProjection(integration string) (operationCon
 }
 
 func publicConnection(plan config.StaticConnectionPlan, connection string) bool {
-	resolved, ok := plan.LookupResolvedConnection(connection)
-	if !ok {
-		return true
-	}
-	return core.NormalizeConnectionExposure(core.ConnectionExposure(resolved.Exposure)) != core.ConnectionExposureInternal
+	_ = plan
+	_ = connection
+	return true
 }
 
 func catalogParameter(op catalog.CatalogOperation, name string) (catalog.CatalogParameter, bool) {

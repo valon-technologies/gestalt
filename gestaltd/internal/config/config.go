@@ -1770,7 +1770,7 @@ type ConnectionDef struct {
 	Ref               string                                  `yaml:"ref,omitempty"`
 	DisplayName       string                                  `yaml:"displayName,omitempty"`
 	Mode              providermanifestv1.ConnectionMode       `yaml:"mode"`
-	Exposure          providermanifestv1.ConnectionExposure   `yaml:"exposure,omitempty"`
+	Exposure          string                                  `yaml:"exposure,omitempty"`
 	Auth              ConnectionAuthDef                       `yaml:"auth"`
 	ConnectionParams  map[string]ConnectionParamDef           `yaml:"params"`
 	CredentialRefresh *CredentialRefreshDef                   `yaml:"credentialRefresh,omitempty"`

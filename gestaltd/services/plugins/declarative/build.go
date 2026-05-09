@@ -83,7 +83,7 @@ func Build(def *Definition, conn ConnectionDef, opts ...BuildOption) (core.Provi
 		connMode = providermanifestv1.ConnectionMode(def.ConnectionMode)
 	}
 	switch connMode {
-	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser, providermanifestv1.ConnectionModePlatform:
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
 		if connMode != "" {
 			base.ConnMode = core.NormalizeConnectionMode(core.ConnectionMode(connMode))
 		}

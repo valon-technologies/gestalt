@@ -90,39 +90,6 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
 }
 
 #[test]
-fn test_invoke_admin_configuration_error_uses_admin_copy() {
-    let mut server = Server::new();
-    let home = TempDir::new().unwrap();
-
-    let _catalog_mock = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/integrations/platform_svc/operations",
-        StatusCode::OK
-    )
-    .with_body(single_operation_catalog("run"))
-    .create();
-
-    let _invoke_mock = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/platform_svc/run",
-        StatusCode::PRECONDITION_FAILED
-    )
-    .with_body(r#"{"error":"deployment/admin configuration is required for integration \"platform_svc\"","code":"admin_configuration_required","integration":"platform_svc"}"#)
-    .create();
-
-    cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "platform_svc", "run"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "plugin \"platform_svc\" requires deployment/admin configuration before it can be invoked",
-        ))
-        .stderr(predicate::str::contains("gestalt plugin connect").not());
-}
-
-#[test]
 fn test_invoke_instance_selection_error_suggests_instance_flag() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();

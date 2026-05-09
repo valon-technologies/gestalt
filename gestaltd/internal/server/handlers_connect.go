@@ -73,11 +73,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	if hasConnectionDef {
 		mode := config.ConnectionModeForConnection(conn)
 		connectionMode = metricutil.NormalizeConnectionMode(mode)
-		if mode == core.ConnectionModePlatform {
-			auditErr = errors.New("deployment-managed connection cannot be connected by users")
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("connection %q is deployment-managed and cannot be connected by users", userFacingConnectionName(manualConnection)))
-			return
-		}
 	}
 	auth := conn.Auth
 	if !manualConnectionAllowed(prov, conn, hasConnectionDef) {
@@ -627,9 +622,6 @@ func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provide
 }
 
 func manualConnectionAllowed(prov core.Provider, conn config.ConnectionDef, hasConnectionDef bool) bool {
-	if hasConnectionDef && config.ConnectionModeForConnection(conn) == core.ConnectionModePlatform {
-		return false
-	}
 	if hasConnectionDef && authTypesContain(connectionAuthTypes(conn.Auth, nil), "manual") {
 		return true
 	}

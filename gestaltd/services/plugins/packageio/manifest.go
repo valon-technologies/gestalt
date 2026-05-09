@@ -562,20 +562,13 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 		if conn.Mode == "" {
 		} else {
 			switch conn.Mode {
-			case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser, providermanifestv1.ConnectionModePlatform:
+			case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
 			default:
 				return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 			}
 		}
 		if conn.Exposure != "" {
-			switch conn.Exposure {
-			case providermanifestv1.ConnectionExposureUser, providermanifestv1.ConnectionExposureInternal:
-			default:
-				return fmt.Errorf("unsupported provider.connections.%s.exposure %q", name, conn.Exposure)
-			}
-			if conn.Exposure == providermanifestv1.ConnectionExposureInternal && manifestConnectionMode(conn) == providermanifestv1.ConnectionModeUser {
-				return fmt.Errorf("provider.connections.%s exposure %q is not supported for user-owned connections", name, conn.Exposure)
-			}
+			return fmt.Errorf("provider.connections.%s.exposure is not supported", name)
 		}
 	}
 	if provider.DefaultConnection != "" {
@@ -657,19 +650,6 @@ func validateProviderPostConnect(path string, postConnect *providermanifestv1.Pr
 		}
 	}
 	return nil
-}
-
-func manifestConnectionMode(conn *providermanifestv1.ManifestConnectionDef) providermanifestv1.ConnectionMode {
-	if conn == nil {
-		return providermanifestv1.ConnectionModeNone
-	}
-	if conn.Mode != "" {
-		return conn.Mode
-	}
-	if conn.Auth == nil || conn.Auth.Type == "" || conn.Auth.Type == providermanifestv1.AuthTypeNone {
-		return providermanifestv1.ConnectionModeNone
-	}
-	return providermanifestv1.ConnectionModeUser
 }
 
 var validParamIn = map[string]bool{

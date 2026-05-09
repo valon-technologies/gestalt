@@ -19,8 +19,6 @@ struct IntegrationInfo {
     description: Option<String>,
     #[serde(default)]
     connections: Vec<ConnectionDefInfo>,
-    #[serde(default)]
-    status: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -35,8 +33,6 @@ struct ConnectionDefInfo {
     connection_params: BTreeMap<String, ConnectionParamDef>,
     #[serde(default)]
     credential_fields: Vec<CredentialFieldInfo>,
-    #[serde(default)]
-    status: Option<String>,
     #[serde(default)]
     credential_mode: Option<String>,
 }
@@ -509,33 +505,13 @@ fn validate_user_connectable(
     integration: &IntegrationInfo,
     connection: Option<&ResolvedConnection<'_>>,
 ) -> Result<()> {
-    if let Some(definition) = connection.and_then(|selected| selected.definition) {
-        match definition.credential_mode.as_deref() {
-            Some("none") => bail!(
-                "plugin '{}' connection '{}' does not require a user connection",
-                integration.name,
-                definition.display_name()
-            ),
-            Some("platform")
-                if definition.status.as_deref() == Some("needs_admin_configuration") =>
-            {
-                bail!(
-                    "plugin '{}' connection '{}' requires deployment/admin configuration",
-                    integration.name,
-                    definition.display_name()
-                )
-            }
-            Some("platform") => bail!(
-                "plugin '{}' connection '{}' is managed by deployment/admin configuration and cannot be connected by a user",
-                integration.name,
-                definition.display_name()
-            ),
-            _ => {}
-        }
-    } else if integration.status.as_deref() == Some("needs_admin_configuration") {
+    if let Some(definition) = connection.and_then(|selected| selected.definition)
+        && let Some("none") = definition.credential_mode.as_deref()
+    {
         bail!(
-            "plugin '{}' requires deployment/admin configuration before users can connect it",
-            integration.name
+            "plugin '{}' connection '{}' does not require a user connection",
+            integration.name,
+            definition.display_name()
         );
     }
     Ok(())
@@ -543,18 +519,12 @@ fn validate_user_connectable(
 
 fn rewrite_connect_api_error(err: anyhow::Error) -> anyhow::Error {
     for cause in err.chain() {
-        if let Some(api_error) = cause.downcast_ref::<ApiError>() {
-            match api_error.code() {
-                Some("admin_configuration_required") => {
-                    return anyhow::anyhow!("deployment/admin configuration is required");
-                }
-                Some("instance_selection_required") => {
-                    return anyhow::anyhow!(
-                        "multiple connected instances exist; pass --instance to choose one"
-                    );
-                }
-                _ => {}
-            }
+        if let Some(api_error) = cause.downcast_ref::<ApiError>()
+            && let Some("instance_selection_required") = api_error.code()
+        {
+            return anyhow::anyhow!(
+                "multiple connected instances exist; pass --instance to choose one"
+            );
         }
     }
     err
