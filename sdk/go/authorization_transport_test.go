@@ -279,6 +279,12 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	if !gproto.Equal(helperWrite, expectedHelperWrite) {
 		t.Fatalf("helper write = %#v, want %#v", helperWrite, expectedHelperWrite)
 	}
+	if helperWrite.GetSubject().GetType() != "subject" || helperWrite.GetSubject().GetId() != "user:user-123" {
+		t.Fatalf("helper write subject = %#v, want subject/user:user-123", helperWrite.GetSubject())
+	}
+	if helperWrite.GetTarget().GetSubject().GetType() != "subject" || helperWrite.GetTarget().GetSubject().GetId() != "user:user-123" {
+		t.Fatalf("helper write target subject = %#v, want subject/user:user-123", helperWrite.GetTarget().GetSubject())
+	}
 }
 
 type fullAuthorizationProvider struct {

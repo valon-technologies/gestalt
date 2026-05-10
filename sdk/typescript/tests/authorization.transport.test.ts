@@ -75,6 +75,7 @@ test("Authorization() forwards authorization requests to the host socket", async
     relation: string;
   }> = [];
   const writeCalls: Array<{
+    subjectId: string;
     targetSubjectId: string;
     targetResourceType: string;
     targetRelation: string;
@@ -170,6 +171,7 @@ test("Authorization() forwards authorization requests to the host socket", async
           async writeRelationships(input) {
             for (const write of input.writes) {
               writeCalls.push({
+                subjectId: write.subject?.id ?? "",
                 targetSubjectId:
                   write.target?.kind.case === "subject"
                     ? write.target.kind.value.id
@@ -297,6 +299,7 @@ test("Authorization() forwards authorization requests to the host socket", async
     expect(
       agentSessionEditorRelationship("user:user-123", "session-123"),
     ).toEqual({
+      subject: { type: "subject", id: "user:user-123" },
       target: {
         kind: {
           case: "subject",
@@ -308,6 +311,7 @@ test("Authorization() forwards authorization requests to the host socket", async
     });
     expect(writeCalls).toEqual([
       {
+        subjectId: "",
         targetSubjectId: "",
         targetResourceType: "slack_channel",
         targetRelation: "member",
@@ -316,6 +320,7 @@ test("Authorization() forwards authorization requests to the host socket", async
         resourceId: "session-123",
       },
       {
+        subjectId: "user:user-123",
         targetSubjectId: "user:user-123",
         targetResourceType: "",
         targetRelation: "",

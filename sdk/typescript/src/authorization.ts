@@ -346,18 +346,25 @@ export function authorizationRelationshipWithTarget(
 /**
  * Creates the relationship that shares an agent session with a canonical
  * Gestalt subject id such as `user:123`.
+ *
+ * The returned relationship mirrors the subject into both the legacy `subject`
+ * field and the generalized `target.subject` field so it remains compatible
+ * with mixed host/provider versions.
  */
 export function agentSessionEditorRelationship(
   subjectId: string,
   sessionId: string,
 ): AuthorizationRelationship {
-  return authorizationRelationshipWithTarget(
-    authorizationSubjectTarget(
-      authorizationSubject(AUTHORIZATION_SUBJECT_TYPE_SUBJECT, subjectId),
-    ),
-    AGENT_SESSION_RELATION_EDITOR,
-    agentSessionAuthorizationResource(sessionId),
+  const subject = authorizationSubject(
+    AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
+    subjectId,
   );
+  return {
+    subject,
+    target: authorizationSubjectTarget(subject),
+    relation: AGENT_SESSION_RELATION_EDITOR,
+    resource: agentSessionAuthorizationResource(sessionId),
+  };
 }
 
 /** Creates a relationship-write request that shares an agent session. */

@@ -368,19 +368,21 @@ impl Relationship {
     /// Gestalt subject id such as `user:123`.
     ///
     /// The editor relation grants both view and edit actions in the
-    /// host-managed authorization model.
+    /// host-managed authorization model. The returned relationship mirrors the
+    /// subject into both the legacy `subject` field and generalized `target`
+    /// field so it remains compatible with mixed host/provider versions.
     pub fn agent_session_editor(
         subject_id: impl Into<String>,
         session_id: impl Into<String>,
     ) -> Self {
-        Self::with_target(
-            AuthorizationRelationshipTarget::Subject(AuthorizationSubject::new(
-                AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-                subject_id,
-            )),
-            AGENT_SESSION_RELATION_EDITOR,
-            AuthorizationResource::agent_session(session_id),
-        )
+        let subject = AuthorizationSubject::new(AUTHORIZATION_SUBJECT_TYPE_SUBJECT, subject_id);
+        Self {
+            subject: subject.clone(),
+            target: Some(AuthorizationRelationshipTarget::Subject(subject)),
+            relation: AGENT_SESSION_RELATION_EDITOR.to_string(),
+            resource: AuthorizationResource::agent_session(session_id),
+            properties: serde_json::Map::new(),
+        }
     }
 }
 
