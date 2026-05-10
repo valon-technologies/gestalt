@@ -1,6 +1,7 @@
 # Gestalt
 
 [![Stability: Alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/valon-technologies/gestalt/issues)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/valon-technologies/gestalt)
 
 > Gestalt is under active development. APIs and configuration may change between releases. Feedback and bug reports are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 
