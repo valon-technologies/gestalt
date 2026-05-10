@@ -140,9 +140,9 @@ The crate keeps generated bindings behind a higher-level authoring API:
   Generic JSON payloads reject non-finite numbers, bytes, and non-string map
   keys instead of coercing them through `serde_json`.
 - Workflow builder inputs such as `BoundWorkflowPluginTargetInput`,
-  `BoundWorkflowAgentTargetInput`, `AgentMessageInput`, `WorkflowSignalInput`,
-  and `BoundWorkflowRunInput` use the same protocol conversions for
-  provider-owned workflow state.
+  `BoundWorkflowAgentTargetInput`, `WorkflowSignalInput`, and
+  `BoundWorkflowRunInput` use the same protocol conversions for provider-owned
+  workflow state.
 
 ## Package layout
 

@@ -135,15 +135,10 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 			ProviderName: "agent",
 			Model:        "gpt-5.5",
 			Prompt:       "Summarize",
-			Messages: []gestalt.AgentMessageInput{
-				{
-					Role: "user",
-					Parts: []gestalt.AgentMessagePartInput{
-						{Type: gestalt.AgentMessagePartTypeText, Text: "hello"},
-					},
-				},
+			Messages: []*gestalt.AgentMessage{
+				{Role: "user", Parts: []*gestalt.AgentMessagePart{{Type: gestalt.AgentMessagePartTypeText, Text: "hello"}}},
 			},
-			ToolRefs:       []gestalt.AgentToolRefInput{{Plugin: "search", Operation: "query"}},
+			ToolRefs:       []*gestalt.AgentToolRef{{Plugin: "search", Operation: "query"}},
 			ResponseSchema: map[string]any{"type": "object"},
 			Metadata:       map[string]any{"source": "test"},
 			TimeoutSeconds: 30,

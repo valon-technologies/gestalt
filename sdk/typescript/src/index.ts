@@ -497,8 +497,6 @@ export {
   workflowSignal,
   workflowSignalFromSignal,
   workflowSignalInputFromSignal,
-  type AgentMessageInput,
-  type AgentToolRefInput,
   type BoundWorkflowAgentTarget,
   type BoundWorkflowAgentTargetInput,
   type BoundWorkflowEventTrigger,

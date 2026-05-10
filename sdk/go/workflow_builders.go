@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -76,59 +77,6 @@ type WorkflowOutputBindingInput struct {
 	Value      *WorkflowOutputValueSourceInput
 }
 
-// AgentMessagePartToolCallInput contains native Go values for an agent tool
-// call message part.
-type AgentMessagePartToolCallInput struct {
-	ID        string
-	ToolID    string
-	Arguments any
-}
-
-// AgentMessagePartToolResultInput contains native Go values for an agent tool
-// result message part.
-type AgentMessagePartToolResultInput struct {
-	ToolCallID string
-	Status     int32
-	Content    string
-	Output     any
-}
-
-// AgentMessagePartImageRefInput contains native Go values for an agent image
-// reference message part.
-type AgentMessagePartImageRefInput struct {
-	URI      string
-	MimeType string
-}
-
-// AgentMessagePartInput contains native Go values for one agent message part.
-type AgentMessagePartInput struct {
-	Type       AgentMessagePartType
-	Text       string
-	JSON       any
-	ToolCall   *AgentMessagePartToolCallInput
-	ToolResult *AgentMessagePartToolResultInput
-	ImageRef   *AgentMessagePartImageRefInput
-}
-
-// AgentMessageInput contains native Go values for one agent message.
-type AgentMessageInput struct {
-	Role     string
-	Text     string
-	Parts    []AgentMessagePartInput
-	Metadata any
-}
-
-// AgentToolRefInput contains native Go values for one agent tool reference.
-type AgentToolRefInput struct {
-	Plugin      string
-	Operation   string
-	Connection  string
-	Instance    string
-	Title       string
-	Description string
-	System      string
-}
-
 // NewWorkflowOutputDelivery creates a workflow output delivery from native Go
 // values.
 func NewWorkflowOutputDelivery(input WorkflowOutputDeliveryInput) (*WorkflowOutputDelivery, error) {
@@ -175,8 +123,8 @@ type BoundWorkflowAgentTargetInput struct {
 	ProviderName         string
 	Model                string
 	Prompt               string
-	Messages             []AgentMessageInput
-	ToolRefs             []AgentToolRefInput
+	Messages             []*AgentMessage
+	ToolRefs             []*AgentToolRef
 	ResponseSchema       any
 	Metadata             any
 	TimeoutSeconds       int32
@@ -208,17 +156,12 @@ func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTargetInput) (*BoundWor
 	if err != nil {
 		return nil, err
 	}
-	messages, err := newAgentMessages(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	toolRefs := newAgentToolRefs(input.ToolRefs)
 	return &BoundWorkflowAgentTarget{
 		ProviderName:         input.ProviderName,
 		Model:                input.Model,
 		Prompt:               input.Prompt,
-		Messages:             messages,
-		ToolRefs:             toolRefs,
+		Messages:             copyAgentMessages(input.Messages),
+		ToolRefs:             copyAgentToolRefs(input.ToolRefs),
 		ResponseSchema:       responseSchema,
 		Metadata:             metadata,
 		TimeoutSeconds:       input.TimeoutSeconds,
@@ -238,8 +181,8 @@ func BoundWorkflowAgentTargetInputFromTarget(value *BoundWorkflowAgentTarget) Bo
 		ProviderName:         value.GetProviderName(),
 		Model:                value.GetModel(),
 		Prompt:               value.GetPrompt(),
-		Messages:             agentMessageInputsFromMessages(value.GetMessages()),
-		ToolRefs:             agentToolRefInputsFromRefs(value.GetToolRefs()),
+		Messages:             value.GetMessages(),
+		ToolRefs:             value.GetToolRefs(),
 		ResponseSchema:       MapFromStruct(value.GetResponseSchema()),
 		Metadata:             MapFromStruct(value.GetMetadata()),
 		TimeoutSeconds:       value.GetTimeoutSeconds(),
@@ -949,261 +892,30 @@ func workflowTargetInputPtrFromTarget(value *BoundWorkflowTarget) *BoundWorkflow
 	return &input
 }
 
-// NewAgentMessage creates an agent message from native Go values.
-func NewAgentMessage(input AgentMessageInput) (*AgentMessage, error) {
-	metadata, err := StructFromAny(input.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	parts, err := newAgentMessageParts(input.Parts)
-	if err != nil {
-		return nil, err
-	}
-	return &AgentMessage{
-		Role:     input.Role,
-		Text:     input.Text,
-		Parts:    parts,
-		Metadata: metadata,
-	}, nil
-}
-
-// AgentMessageInputFromMessage converts an existing protocol message into
-// native builder input.
-func AgentMessageInputFromMessage(value *AgentMessage) AgentMessageInput {
-	if value == nil {
-		return AgentMessageInput{}
-	}
-	return AgentMessageInput{
-		Role:     value.GetRole(),
-		Text:     value.GetText(),
-		Parts:    agentMessagePartInputsFromParts(value.GetParts()),
-		Metadata: MapFromStruct(value.GetMetadata()),
-	}
-}
-
-// NewAgentMessagePart creates an agent message part from native Go values.
-func NewAgentMessagePart(input AgentMessagePartInput) (*AgentMessagePart, error) {
-	jsonValue, err := StructFromAny(input.JSON)
-	if err != nil {
-		return nil, err
-	}
-	toolCall, err := newOptionalAgentMessagePartToolCall(input.ToolCall)
-	if err != nil {
-		return nil, err
-	}
-	toolResult, err := newOptionalAgentMessagePartToolResult(input.ToolResult)
-	if err != nil {
-		return nil, err
-	}
-	return &AgentMessagePart{
-		Type:       input.Type,
-		Text:       input.Text,
-		Json:       jsonValue,
-		ToolCall:   toolCall,
-		ToolResult: toolResult,
-		ImageRef:   newOptionalAgentMessagePartImageRef(input.ImageRef),
-	}, nil
-}
-
-// AgentMessagePartInputFromPart converts an existing protocol message part into
-// native builder input.
-func AgentMessagePartInputFromPart(value *AgentMessagePart) AgentMessagePartInput {
-	if value == nil {
-		return AgentMessagePartInput{}
-	}
-	return AgentMessagePartInput{
-		Type:       value.GetType(),
-		Text:       value.GetText(),
-		JSON:       MapFromStruct(value.GetJson()),
-		ToolCall:   agentMessagePartToolCallInputPtrFromCall(value.GetToolCall()),
-		ToolResult: agentMessagePartToolResultInputPtrFromResult(value.GetToolResult()),
-		ImageRef:   agentMessagePartImageRefInputPtrFromRef(value.GetImageRef()),
-	}
-}
-
-// NewAgentToolRef creates an agent tool reference from native Go values.
-func NewAgentToolRef(input AgentToolRefInput) *AgentToolRef {
-	return &AgentToolRef{
-		Plugin:      input.Plugin,
-		Operation:   input.Operation,
-		Connection:  input.Connection,
-		Instance:    input.Instance,
-		Title:       input.Title,
-		Description: input.Description,
-		System:      input.System,
-	}
-}
-
-// AgentToolRefInputFromRef converts an existing protocol tool reference into
-// native builder input.
-func AgentToolRefInputFromRef(value *AgentToolRef) AgentToolRefInput {
-	if value == nil {
-		return AgentToolRefInput{}
-	}
-	return AgentToolRefInput{
-		Plugin:      value.GetPlugin(),
-		Operation:   value.GetOperation(),
-		Connection:  value.GetConnection(),
-		Instance:    value.GetInstance(),
-		Title:       value.GetTitle(),
-		Description: value.GetDescription(),
-		System:      value.GetSystem(),
-	}
-}
-
-func newAgentMessages(values []AgentMessageInput) ([]*AgentMessage, error) {
+func copyAgentMessages(values []*AgentMessage) []*AgentMessage {
 	if len(values) == 0 {
-		return nil, nil
+		return nil
 	}
 	out := make([]*AgentMessage, 0, len(values))
 	for _, value := range values {
-		message, err := NewAgentMessage(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, message)
-	}
-	return out, nil
-}
-
-func agentMessageInputsFromMessages(values []*AgentMessage) []AgentMessageInput {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentMessageInput, 0, len(values))
-	for _, value := range values {
 		if value == nil {
 			continue
 		}
-		out = append(out, AgentMessageInputFromMessage(value))
+		out = append(out, gproto.Clone(value).(*AgentMessage))
 	}
 	return out
 }
 
-func newAgentMessageParts(values []AgentMessagePartInput) ([]*AgentMessagePart, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*AgentMessagePart, 0, len(values))
-	for _, value := range values {
-		part, err := NewAgentMessagePart(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, part)
-	}
-	return out, nil
-}
-
-func agentMessagePartInputsFromParts(values []*AgentMessagePart) []AgentMessagePartInput {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentMessagePartInput, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, AgentMessagePartInputFromPart(value))
-	}
-	return out
-}
-
-func newOptionalAgentMessagePartToolCall(input *AgentMessagePartToolCallInput) (*AgentMessagePartToolCall, error) {
-	if input == nil {
-		return nil, nil
-	}
-	arguments, err := StructFromAny(input.Arguments)
-	if err != nil {
-		return nil, err
-	}
-	return &AgentMessagePartToolCall{
-		Id:        input.ID,
-		ToolId:    input.ToolID,
-		Arguments: arguments,
-	}, nil
-}
-
-func agentMessagePartToolCallInputPtrFromCall(value *AgentMessagePartToolCall) *AgentMessagePartToolCallInput {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartToolCallInput{
-		ID:        value.GetId(),
-		ToolID:    value.GetToolId(),
-		Arguments: MapFromStruct(value.GetArguments()),
-	}
-}
-
-func newOptionalAgentMessagePartToolResult(input *AgentMessagePartToolResultInput) (*AgentMessagePartToolResult, error) {
-	if input == nil {
-		return nil, nil
-	}
-	output, err := StructFromAny(input.Output)
-	if err != nil {
-		return nil, err
-	}
-	return &AgentMessagePartToolResult{
-		ToolCallId: input.ToolCallID,
-		Status:     input.Status,
-		Content:    input.Content,
-		Output:     output,
-	}, nil
-}
-
-func agentMessagePartToolResultInputPtrFromResult(value *AgentMessagePartToolResult) *AgentMessagePartToolResultInput {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartToolResultInput{
-		ToolCallID: value.GetToolCallId(),
-		Status:     value.GetStatus(),
-		Content:    value.GetContent(),
-		Output:     MapFromStruct(value.GetOutput()),
-	}
-}
-
-func newOptionalAgentMessagePartImageRef(input *AgentMessagePartImageRefInput) *AgentMessagePartImageRef {
-	if input == nil {
-		return nil
-	}
-	return &AgentMessagePartImageRef{
-		Uri:      input.URI,
-		MimeType: input.MimeType,
-	}
-}
-
-func agentMessagePartImageRefInputPtrFromRef(value *AgentMessagePartImageRef) *AgentMessagePartImageRefInput {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartImageRefInput{
-		URI:      value.GetUri(),
-		MimeType: value.GetMimeType(),
-	}
-}
-
-func newAgentToolRefs(values []AgentToolRefInput) []*AgentToolRef {
+func copyAgentToolRefs(values []*AgentToolRef) []*AgentToolRef {
 	if len(values) == 0 {
 		return nil
 	}
 	out := make([]*AgentToolRef, 0, len(values))
 	for _, value := range values {
-		out = append(out, NewAgentToolRef(value))
-	}
-	return out
-}
-
-func agentToolRefInputsFromRefs(values []*AgentToolRef) []AgentToolRefInput {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentToolRefInput, 0, len(values))
-	for _, value := range values {
 		if value == nil {
 			continue
 		}
-		out = append(out, AgentToolRefInputFromRef(value))
+		out = append(out, gproto.Clone(value).(*AgentToolRef))
 	}
 	return out
 }
