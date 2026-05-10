@@ -140,6 +140,7 @@ type Server struct {
 	adminUI                http.Handler
 	routeProfile           RouteProfile
 	httpBindingReplayStore httpBindingReplayStore
+	tenantResolver         *config.TenantResolver
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -194,6 +195,7 @@ type Config struct {
 	BuiltinAdminUI        *BuiltinAdminUIOptions
 	RouteProfile          RouteProfile
 	MeterProvider         metric.MeterProvider
+	Tenants               map[string]*config.TenantConfig
 }
 
 func New(cfg Config) (*Server, error) {
@@ -279,6 +281,10 @@ func New(cfg Config) (*Server, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve admin ui: %w", err)
 		}
+	}
+	tenantResolver, err := config.NewTenantResolver(cfg.Tenants)
+	if err != nil {
+		return nil, fmt.Errorf("init tenant resolver: %w", err)
 	}
 
 	if cfg.Services == nil {
@@ -390,6 +396,7 @@ func New(cfg Config) (*Server, error) {
 		adminUI:                adminUI,
 		routeProfile:           cfg.RouteProfile,
 		httpBindingReplayStore: newMemoryHTTPBindingReplayStore(),
+		tenantResolver:         tenantResolver,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,

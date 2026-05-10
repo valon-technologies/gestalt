@@ -168,7 +168,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		return nil, fmt.Errorf("workflow provider: runtime is required")
 	}
 	name := launch.name
-	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindWorkflow, name, launch.runtimeConfig))
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(ctx, providermanifestv1.KindWorkflow, name, launch.runtimeConfig))
 	if err != nil {
 		if closeRuntime {
 			_ = runtimeProvider.Close()

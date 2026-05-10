@@ -13,6 +13,7 @@ import (
 func (s *Server) routes() {
 	r := s.router
 	r.Use(requestMetaMiddleware)
+	r.Use(s.tenantMiddleware)
 	r.Use(routePatternTelemetryMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.hostServiceRelayMiddleware)

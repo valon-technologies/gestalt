@@ -18,6 +18,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
@@ -973,7 +974,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	command = launch.command
 	args = launch.args
 	cleanup = launch.cleanup
-	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindPlugin, name, runtimeConfig))
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(ctx, providermanifestv1.KindPlugin, name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1247,7 +1248,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	name := launch.name
 
 	phaseStarted := time.Now()
-	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, launch.runtimeConfig))
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(ctx, providermanifestv1.KindAgent, name, launch.runtimeConfig))
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_start", phaseStarted, err)
 	if err != nil {
 		if closeRuntime {
@@ -1505,7 +1506,7 @@ func hostedRuntimeLabel(runtimeConfig config.EffectiveRuntimePlacement) string {
 	return "hosted runtime"
 }
 
-func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) pluginruntime.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(ctx context.Context, kind, name string, runtimeConfig config.EffectiveRuntimePlacement) pluginruntime.StartSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -1515,6 +1516,18 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	}
 	if name != "" {
 		metadata["provider_name"] = name
+	}
+	if scope, ok := gestalt.TenantScopeFromContext(ctx); ok {
+		metadata[gestalt.TenantIDMetadataKey] = scope.TenantID
+		if scope.Host != "" {
+			metadata[gestalt.TenantHostMetadataKey] = scope.Host
+		}
+		if scope.TenantBound {
+			metadata[gestalt.TenantBoundMetadataKey] = "true"
+		}
+		if scope.PrincipalID != "" {
+			metadata[gestalt.TenantPrincipalIDMetadataKey] = scope.PrincipalID
+		}
 	}
 	return pluginruntime.StartSessionRequest{
 		PluginName:    name,

@@ -58,6 +58,8 @@ type Config struct {
 	Runtime                      RuntimeConfig                               `yaml:"runtime,omitempty"`
 	Workflows                    WorkflowsConfig                             `yaml:"workflows,omitempty"`
 	Plugins                      map[string]*ProviderEntry                   `yaml:"plugins,omitempty"`
+	Tenants                      map[string]*TenantConfig                    `yaml:"tenants,omitempty"`
+	TenantPluginConfig           *TenantPluginStoreConfig                    `yaml:"tenantPluginConfig,omitempty"`
 }
 
 type ProviderRepositoryConfig struct {
@@ -86,6 +88,31 @@ type ProvidersConfig struct {
 
 type RuntimeConfig struct {
 	Providers map[string]*RuntimeProviderEntry `yaml:"providers,omitempty"`
+}
+
+type TenantConfig struct {
+	Hosts []string             `yaml:"hosts,omitempty"`
+	Auth  map[string]yaml.Node `yaml:"auth,omitempty"`
+}
+
+type TenantPluginStoreConfig struct {
+	IndexedDB   string `yaml:"indexeddb,omitempty"`
+	ObjectStore string `yaml:"objectStore,omitempty"`
+}
+
+type TenantSettingsConfig struct {
+	Source string `yaml:"source,omitempty"`
+}
+
+type TenantScopeConfig struct {
+	Source  string                    `yaml:"source,omitempty"`
+	Storage *TenantScopeStorageConfig `yaml:"storage,omitempty"`
+}
+
+type TenantScopeStorageConfig struct {
+	Strategy          string `yaml:"strategy,omitempty"`
+	Column            string `yaml:"column,omitempty"`
+	NamespaceTemplate string `yaml:"namespaceTemplate,omitempty"`
 }
 
 type RuntimeProviderDriver string
@@ -129,6 +156,7 @@ const (
 	HostProviderKindAudit               HostProviderKind = "audit"
 	HostProviderKindIndexedDB           HostProviderKind = "indexeddb"
 	HostProviderKindCache               HostProviderKind = "cache"
+	HostProviderKindS3                  HostProviderKind = "s3"
 	HostProviderKindWorkflow            HostProviderKind = "workflow"
 	HostProviderKindAgent               HostProviderKind = "agent"
 	HostProviderKindRuntime             HostProviderKind = "runtime"
@@ -3048,6 +3076,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
 	cfg.Providers.Agent = nonNilProviderEntryMap(cfg.Providers.Agent)
+	cfg.Tenants = nonNilTenantMap(cfg.Tenants)
 }
 
 func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
@@ -3223,6 +3252,13 @@ func looksLikeUnsupportedScalarSource(value string) bool {
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
 	if entries == nil {
 		return make(map[string]*ProviderEntry)
+	}
+	return entries
+}
+
+func nonNilTenantMap(entries map[string]*TenantConfig) map[string]*TenantConfig {
+	if entries == nil {
+		return make(map[string]*TenantConfig)
 	}
 	return entries
 }

@@ -26,6 +26,8 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return s.IndexedDB
 	case HostProviderKindCache:
 		return ""
+	case HostProviderKindS3:
+		return ""
 	case HostProviderKindWorkflow:
 		return ""
 	case HostProviderKindAgent:
@@ -56,6 +58,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return c.Providers.IndexedDB
 	case HostProviderKindCache:
 		return c.Providers.Cache
+	case HostProviderKindS3:
+		return c.Providers.S3
 	case HostProviderKindWorkflow:
 		return c.Providers.Workflow
 	case HostProviderKindAgent:

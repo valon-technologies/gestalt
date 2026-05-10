@@ -108,6 +108,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
 		AdminUIProvider: strings.TrimSpace(cfg.Server.Admin.UI),
+		Tenants:         cfg.Tenants,
 	}
 
 	if err := result.Start(ctx); err != nil {

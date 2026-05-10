@@ -217,6 +217,7 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 			}
 		}
 		ctx := principal.WithPrincipal(r.Context(), p)
+		ctx = tenantContextWithPrincipal(ctx, p)
 		next.ServeHTTP(w, r.WithContext(ctx))
 		return
 	}
@@ -231,6 +232,7 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 			slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
 		}
 		ctx := principal.WithPrincipal(r.Context(), p)
+		ctx = tenantContextWithPrincipal(ctx, p)
 		next.ServeHTTP(w, r.WithContext(ctx))
 		return
 	}

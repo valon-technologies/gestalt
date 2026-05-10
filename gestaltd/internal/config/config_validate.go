@@ -93,6 +93,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateProviderSnapshotRepositories(cfg); err != nil {
 		return err
 	}
+	if err := validateTenantDefinitions(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -141,6 +144,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 
 	// Validate indexeddbs
 	if err := validateDatastoreConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateTenantPluginConfig(cfg); err != nil {
 		return err
 	}
 	if err := validateCacheConfig(cfg); err != nil {
@@ -254,6 +260,73 @@ func isFullGitSHA(value string) bool {
 		}
 	}
 	return true
+}
+
+func validateTenantDefinitions(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if _, err := NewTenantResolver(cfg.Tenants); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateTenantPluginConfig(cfg *Config) error {
+	if cfg == nil || cfg.TenantPluginConfig == nil {
+		return nil
+	}
+	cfg.TenantPluginConfig.IndexedDB = strings.TrimSpace(cfg.TenantPluginConfig.IndexedDB)
+	cfg.TenantPluginConfig.ObjectStore = strings.TrimSpace(cfg.TenantPluginConfig.ObjectStore)
+	if cfg.TenantPluginConfig.IndexedDB == "" {
+		return fmt.Errorf("config validation: tenantPluginConfig.indexeddb is required")
+	}
+	if cfg.TenantPluginConfig.ObjectStore == "" {
+		return fmt.Errorf("config validation: tenantPluginConfig.objectStore is required")
+	}
+	if _, ok := cfg.Providers.IndexedDB[cfg.TenantPluginConfig.IndexedDB]; !ok {
+		return fmt.Errorf("config validation: tenantPluginConfig.indexeddb references unknown indexeddb %q", cfg.TenantPluginConfig.IndexedDB)
+	}
+	return nil
+}
+
+func validateProviderTenantConfig(kind HostProviderKind, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	if settings, ok, err := providerTenantSettings(kind, name, entry); err != nil {
+		return err
+	} else if ok {
+		switch settings.Source {
+		case TenantSettingsSourceConfig:
+		default:
+			return fmt.Errorf("config validation: providers.%s.%s.config.tenantSettings.source %q is not supported; use %q", kind, name, settings.Source, TenantSettingsSourceConfig)
+		}
+	}
+	if scope, ok, err := providerTenantScope(kind, name, entry); err != nil {
+		return err
+	} else if ok {
+		switch scope.Source {
+		case TenantScopeSourceRequestContext:
+		default:
+			return fmt.Errorf("config validation: providers.%s.%s.config.tenantScope.source %q is not supported; use %q", kind, name, scope.Source, TenantScopeSourceRequestContext)
+		}
+		if scope.Storage != nil {
+			switch scope.Storage.Strategy {
+			case TenantScopeStorageColumn:
+				if scope.Storage.Column == "" {
+					return fmt.Errorf("config validation: providers.%s.%s.config.tenantScope.storage.column is required when strategy is %q", kind, name, TenantScopeStorageColumn)
+				}
+			case TenantScopeStorageNamespace:
+				if scope.Storage.NamespaceTemplate == "" {
+					return fmt.Errorf("config validation: providers.%s.%s.config.tenantScope.storage.namespaceTemplate is required when strategy is %q", kind, name, TenantScopeStorageNamespace)
+				}
+			default:
+				return fmt.Errorf("config validation: providers.%s.%s.config.tenantScope.storage.strategy %q is not supported; use %q or %q", kind, name, scope.Storage.Strategy, TenantScopeStorageColumn, TenantScopeStorageNamespace)
+			}
+		}
+	}
+	return nil
 }
 
 func normalizeConnectionBindings(cfg *Config) error {
@@ -475,6 +548,9 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 					return err
 				}
 			}
+		}
+		if err := validateProviderTenantConfig(kind, name, entry); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1027,6 +1103,9 @@ func validateDatastoreConfig(cfg *Config) error {
 		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
 			return err
 		}
+		if err := validateProviderTenantConfig(HostProviderKindIndexedDB, name, entry); err != nil {
+			return err
+		}
 	}
 	if _, _, err := cfg.SelectedIndexedDBProvider(); err != nil {
 		return err
@@ -1048,6 +1127,9 @@ func validateCacheConfig(cfg *Config) error {
 		if err := validateProviderEntrySource("cache", name, entry); err != nil {
 			return err
 		}
+		if err := validateProviderTenantConfig(HostProviderKindCache, name, entry); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1061,6 +1143,9 @@ func validateS3Config(cfg *Config) error {
 			return err
 		}
 		if err := validateProviderEntrySource("s3", name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderTenantConfig(HostProviderKindS3, name, entry); err != nil {
 			return err
 		}
 	}
@@ -1087,6 +1172,9 @@ func validateWorkflowConfig(cfg *Config) error {
 			return err
 		}
 		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderTenantConfig(HostProviderKindWorkflow, name, entry); err != nil {
 			return err
 		}
 	}
@@ -1123,6 +1211,9 @@ func validateAgentConfig(cfg *Config) error {
 			return err
 		}
 		if err := validateProviderEntrySource("agent", name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderTenantConfig(HostProviderKindAgent, name, entry); err != nil {
 			return err
 		}
 	}
