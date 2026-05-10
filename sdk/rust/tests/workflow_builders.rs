@@ -5,6 +5,7 @@ use prost_types::value::Kind;
 use serde::Serialize;
 
 use gestalt::{
+    AgentMessageInput, AgentMessagePartInput, AgentToolRefInput, BoundWorkflowAgentTargetInput,
     BoundWorkflowPluginTargetInput, BoundWorkflowRunInput, BoundWorkflowTargetInput,
     WorkflowRunStatus, WorkflowRunTriggerInput, WorkflowSignalInput, new_bound_workflow_run,
     new_bound_workflow_target, new_bound_workflow_target_from_target, new_workflow_signal,
@@ -110,6 +111,40 @@ fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
             .and_then(|value| value.kind.as_ref()),
         Some(&Kind::StringValue("original".to_string()))
     );
+    Ok(())
+}
+
+#[test]
+fn workflow_agent_targets_accept_native_messages_and_tool_refs() -> gestalt::Result<()> {
+    let target = new_bound_workflow_target(BoundWorkflowTargetInput::Agent(
+        BoundWorkflowAgentTargetInput {
+            provider_name: "agent".to_string(),
+            model: "fast".to_string(),
+            prompt: "summarize".to_string(),
+            messages: vec![AgentMessageInput {
+                role: "user".to_string(),
+                parts: vec![AgentMessagePartInput {
+                    part_type: gestalt::AgentMessagePartType::Text,
+                    text: "hello".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            tool_refs: vec![AgentToolRefInput {
+                plugin: "search".to_string(),
+                operation: "query".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    ))?;
+
+    let agent = match target.kind.as_ref() {
+        Some(bound_workflow_target::Kind::Agent(agent)) => agent,
+        _ => panic!("agent target missing"),
+    };
+    assert_eq!(agent.messages[0].parts[0].text, "hello");
+    assert_eq!(agent.tool_refs[0].plugin, "search");
     Ok(())
 }
 

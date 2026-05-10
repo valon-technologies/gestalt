@@ -165,8 +165,8 @@ export type {
 export { WorkflowRunStatus };
 
 type TimestampInput = Date | Timestamp;
-type AgentMessageInput = AgentMessage | MessageInitShape<typeof AgentMessageSchema>;
-type AgentToolRefInput = AgentToolRef | MessageInitShape<typeof AgentToolRefSchema>;
+export type AgentMessageInput = AgentMessage | MessageInitShape<typeof AgentMessageSchema>;
+export type AgentToolRefInput = AgentToolRef | MessageInitShape<typeof AgentToolRefSchema>;
 
 /** Native input for a bound plugin workflow target. */
 export interface BoundWorkflowPluginTargetInput {

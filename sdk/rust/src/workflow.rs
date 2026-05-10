@@ -83,14 +83,91 @@ pub struct WorkflowOutputDeliveryInput {
     pub credential_mode: String,
 }
 
+/// Native input for an agent tool-call message part.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartToolCallInput {
+    pub id: String,
+    pub tool_id: String,
+    pub arguments: Option<serde_json::Value>,
+}
+
+/// Native input for an agent tool-result message part.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartToolResultInput {
+    pub tool_call_id: String,
+    pub status: i32,
+    pub content: String,
+    pub output: Option<serde_json::Value>,
+}
+
+/// Native input for an agent image-reference message part.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartImageRefInput {
+    pub uri: String,
+    pub mime_type: String,
+}
+
+/// Native input for one agent message part.
+#[derive(Clone, Debug)]
+pub struct AgentMessagePartInput {
+    pub part_type: pb::AgentMessagePartType,
+    pub text: String,
+    pub json: Option<serde_json::Value>,
+    pub tool_call: Option<AgentMessagePartToolCallInput>,
+    pub tool_result: Option<AgentMessagePartToolResultInput>,
+    pub image_ref: Option<AgentMessagePartImageRefInput>,
+}
+
+impl Default for AgentMessagePartInput {
+    fn default() -> Self {
+        Self {
+            part_type: pb::AgentMessagePartType::Unspecified,
+            text: String::new(),
+            json: None,
+            tool_call: None,
+            tool_result: None,
+            image_ref: None,
+        }
+    }
+}
+
+/// Native input for one agent message.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessageInput {
+    pub role: String,
+    pub text: String,
+    pub parts: Vec<AgentMessagePartInput>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl AgentMessageInput {
+    /// Sets metadata from any JSON-object-like serializable value.
+    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.metadata = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+}
+
+/// Native input for one agent tool reference.
+#[derive(Clone, Debug, Default)]
+pub struct AgentToolRefInput {
+    pub plugin: String,
+    pub operation: String,
+    pub connection: String,
+    pub instance: String,
+    pub title: String,
+    pub description: String,
+    pub system: String,
+}
+
 /// Native input for a bound agent workflow target.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowAgentTargetInput {
     pub provider_name: String,
     pub model: String,
     pub prompt: String,
-    pub messages: Vec<pb::AgentMessage>,
-    pub tool_refs: Vec<pb::AgentToolRef>,
+    pub messages: Vec<AgentMessageInput>,
+    pub tool_refs: Vec<AgentToolRefInput>,
     pub response_schema: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
     pub timeout_seconds: i32,
@@ -574,6 +651,169 @@ pub fn bound_workflow_plugin_target_input_from_target(
     })
 }
 
+/// Creates an agent message from native input.
+pub fn new_agent_message(input: AgentMessageInput) -> ProviderResult<pb::AgentMessage> {
+    Ok(pb::AgentMessage {
+        role: input.role,
+        text: input.text,
+        parts: input
+            .parts
+            .into_iter()
+            .map(new_agent_message_part)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+/// Returns native input copied from an agent message.
+pub fn agent_message_input_from_message(
+    input: &pb::AgentMessage,
+) -> ProviderResult<AgentMessageInput> {
+    Ok(AgentMessageInput {
+        role: input.role.clone(),
+        text: input.text.clone(),
+        parts: input
+            .parts
+            .iter()
+            .map(agent_message_part_input_from_part)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+    })
+}
+
+/// Creates an agent message part from native input.
+pub fn new_agent_message_part(
+    input: AgentMessagePartInput,
+) -> ProviderResult<pb::AgentMessagePart> {
+    Ok(pb::AgentMessagePart {
+        r#type: input.part_type as i32,
+        text: input.text,
+        json: input.json.map(protocol::struct_from_json).transpose()?,
+        tool_call: input
+            .tool_call
+            .map(new_agent_message_part_tool_call)
+            .transpose()?,
+        tool_result: input
+            .tool_result
+            .map(new_agent_message_part_tool_result)
+            .transpose()?,
+        image_ref: input.image_ref.map(new_agent_message_part_image_ref),
+    })
+}
+
+/// Returns native input copied from an agent message part.
+pub fn agent_message_part_input_from_part(
+    input: &pb::AgentMessagePart,
+) -> ProviderResult<AgentMessagePartInput> {
+    Ok(AgentMessagePartInput {
+        part_type: pb::AgentMessagePartType::try_from(input.r#type)
+            .unwrap_or(pb::AgentMessagePartType::Unspecified),
+        text: input.text.clone(),
+        json: input.json.as_ref().map(protocol::json_from_struct),
+        tool_call: input
+            .tool_call
+            .as_ref()
+            .map(agent_message_part_tool_call_input_from_call),
+        tool_result: input
+            .tool_result
+            .as_ref()
+            .map(agent_message_part_tool_result_input_from_result),
+        image_ref: input
+            .image_ref
+            .as_ref()
+            .map(agent_message_part_image_ref_input_from_ref),
+    })
+}
+
+fn new_agent_message_part_tool_call(
+    input: AgentMessagePartToolCallInput,
+) -> ProviderResult<pb::AgentMessagePartToolCall> {
+    Ok(pb::AgentMessagePartToolCall {
+        id: input.id,
+        tool_id: input.tool_id,
+        arguments: input
+            .arguments
+            .map(protocol::struct_from_json)
+            .transpose()?,
+    })
+}
+
+fn agent_message_part_tool_call_input_from_call(
+    input: &pb::AgentMessagePartToolCall,
+) -> AgentMessagePartToolCallInput {
+    AgentMessagePartToolCallInput {
+        id: input.id.clone(),
+        tool_id: input.tool_id.clone(),
+        arguments: input.arguments.as_ref().map(protocol::json_from_struct),
+    }
+}
+
+fn new_agent_message_part_tool_result(
+    input: AgentMessagePartToolResultInput,
+) -> ProviderResult<pb::AgentMessagePartToolResult> {
+    Ok(pb::AgentMessagePartToolResult {
+        tool_call_id: input.tool_call_id,
+        status: input.status,
+        content: input.content,
+        output: input.output.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+fn agent_message_part_tool_result_input_from_result(
+    input: &pb::AgentMessagePartToolResult,
+) -> AgentMessagePartToolResultInput {
+    AgentMessagePartToolResultInput {
+        tool_call_id: input.tool_call_id.clone(),
+        status: input.status,
+        content: input.content.clone(),
+        output: input.output.as_ref().map(protocol::json_from_struct),
+    }
+}
+
+fn new_agent_message_part_image_ref(
+    input: AgentMessagePartImageRefInput,
+) -> pb::AgentMessagePartImageRef {
+    pb::AgentMessagePartImageRef {
+        uri: input.uri,
+        mime_type: input.mime_type,
+    }
+}
+
+fn agent_message_part_image_ref_input_from_ref(
+    input: &pb::AgentMessagePartImageRef,
+) -> AgentMessagePartImageRefInput {
+    AgentMessagePartImageRefInput {
+        uri: input.uri.clone(),
+        mime_type: input.mime_type.clone(),
+    }
+}
+
+/// Creates an agent tool reference from native input.
+pub fn new_agent_tool_ref(input: AgentToolRefInput) -> pb::AgentToolRef {
+    pb::AgentToolRef {
+        plugin: input.plugin,
+        operation: input.operation,
+        connection: input.connection,
+        instance: input.instance,
+        title: input.title,
+        description: input.description,
+        system: input.system,
+    }
+}
+
+/// Returns native input copied from an agent tool reference.
+pub fn agent_tool_ref_input_from_ref(input: &pb::AgentToolRef) -> AgentToolRefInput {
+    AgentToolRefInput {
+        plugin: input.plugin.clone(),
+        operation: input.operation.clone(),
+        connection: input.connection.clone(),
+        instance: input.instance.clone(),
+        title: input.title.clone(),
+        description: input.description.clone(),
+        system: input.system.clone(),
+    }
+}
+
 /// Creates a bound agent workflow target from native input.
 pub fn new_bound_workflow_agent_target(
     input: BoundWorkflowAgentTargetInput,
@@ -582,8 +822,16 @@ pub fn new_bound_workflow_agent_target(
         provider_name: input.provider_name,
         model: input.model,
         prompt: input.prompt,
-        messages: input.messages,
-        tool_refs: input.tool_refs,
+        messages: input
+            .messages
+            .into_iter()
+            .map(new_agent_message)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(new_agent_tool_ref)
+            .collect(),
         response_schema: input
             .response_schema
             .map(protocol::struct_from_json)
@@ -613,8 +861,16 @@ pub fn bound_workflow_agent_target_input_from_target(
         provider_name: input.provider_name.clone(),
         model: input.model.clone(),
         prompt: input.prompt.clone(),
-        messages: input.messages.clone(),
-        tool_refs: input.tool_refs.clone(),
+        messages: input
+            .messages
+            .iter()
+            .map(agent_message_input_from_message)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tool_refs: input
+            .tool_refs
+            .iter()
+            .map(agent_tool_ref_input_from_ref)
+            .collect(),
         response_schema: input
             .response_schema
             .as_ref()
