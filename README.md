@@ -6,13 +6,13 @@
 
 Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the sum of its parts.
 
-Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and secure credential management built in.
+Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and secure credential management built in. Plugins can wrap REST/OpenAPI, GraphQL, MCP, or executable provider code while exposing the same operation model to callers.
 
 ## Why Gestalt
 
 Agents need tools. Tools need auth. Auth needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
 
-Gestalt handles this so individual agents and applications do not have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed.
+Gestalt handles this so individual agents and applications do not have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed, even when those tools come from different upstream API surfaces.
 
 ![Gestalt architecture diagram](./docs/public/images/architecture-diagram.png)
 
@@ -20,6 +20,7 @@ Gestalt handles this so individual agents and applications do not have to. A sin
 
 - Credentials and connection data are encrypted at rest, on infrastructure you control.
 - A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed.
+- REST/OpenAPI, GraphQL, MCP, and executable plugins share the same operation catalog, credential model, and invocation paths.
 - The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
 - Auth backends, [IndexedDB](https://www.w3.org/TR/IndexedDB/) storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
 - Deploy on infrastructure you control with Docker, Helm, or your own container platform.

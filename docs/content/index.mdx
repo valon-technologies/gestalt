@@ -7,7 +7,8 @@ Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the s
 
 Gestalt is a self-hostable, open source platform for managing agentic tools
 and services, with declarative configuration and secure credential management
-built in.
+built in. Plugins can wrap REST/OpenAPI, GraphQL, MCP, or executable provider
+code while exposing the same operation model to callers.
 
 <Callout type="warning">
   **Alpha.** Gestalt is under active development. APIs and configuration may
@@ -19,7 +20,7 @@ built in.
 
 Agents need tools. Tools need authentication. Authentication needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
 
-Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed. The platform takes care of the rest.
+Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed, even when those tools come from different upstream API surfaces. The platform takes care of the rest.
 
 <ArchitectureDiagram />
 
@@ -27,6 +28,7 @@ Gestalt handles this so individual agents and applications don't have to. A sing
 
 - Credentials and connection data are encrypted at rest, on infrastructure you control. See [Security](/security).
 - A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed. See [Configuration](/configuration).
+- REST/OpenAPI, GraphQL, MCP, and executable plugins share the same operation catalog, credential model, and invocation paths. See [Plugins](/providers/plugins).
 - The same operations are available over MCP, HTTP, CLI, and optional mounted UIs for cloud agents, local coding assistants, and human operators. See [HTTP API](/reference/http-api).
 - Authentication backends, datastores, secret managers, and the UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
 - Deploy on any infrastructure you control with Docker, Helm, or bare containers. See [Deploy](/deploy).
