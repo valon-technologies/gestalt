@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Runtime
 
 Runtime providers manage **where executable plugins, hosted agent providers, and hosted workflow providers run**.
@@ -166,10 +168,480 @@ the registry auth material used by Docker and Kubernetes image pull secrets.
 Keep the manifest release and image digest in sync; Gestalt does not inspect the
 image to prove that the manifest entrypoint exists inside it.
 
+## Building your own runtime provider
+
+This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
+
+### What a runtime provider does
+
+A runtime provider answers a small set of control-plane questions for
+`gestaltd`. Can this backend host executable plugins at all. How does Gestalt
+create and observe a runtime session there. How does a hosted plugin reach
+Gestalt-owned services. How is hostname-based egress preserved. How does the
+host dial the hosted plugin back once it starts.
+
+It does **not** replace the host-local authentication, authorization,
+IndexedDB, cache, S3, or secrets providers. Those remain on the `gestaltd`
+host. A runtime provider changes where executable plugin, agent, and workflow
+provider processes run and how the host reaches them.
+
+### Manifest
+
+A runtime provider manifest declares `kind: runtime`:
+
+```yaml
+kind: runtime
+source: github.com/your-org/runtime/example
+version: 0.0.1
+displayName: Example Runtime
+description: Hosted runtime backend for executable plugins.
+entrypoint:
+  artifactPath: ./bin/example-runtime
+spec:
+  configSchemaPath: ./schemas/config.schema.yaml
+```
+
+Like authentication, cache, IndexedDB, S3, secrets, and workflow providers,
+runtime providers use the common provider package model: manifest, executable
+entrypoint, optional config schema, and the normal `provider-release.yaml`
+packaging flow.
+
+### Deployment config
+
+Operators configure runtime providers under top-level `runtime.providers`, not
+under `plugins` or `providers.*`:
+
+```yaml
+runtime:
+  providers:
+    example:
+      source: ./runtime/example/manifest.yaml
+      default: true
+      config:
+        region: us-east-1
+        pool: default
+```
+
+Plugins and hosted providers then opt into that runtime with their own
+`runtime` block, for example `plugins.<name>.runtime`,
+`providers.agent.<name>.runtime`, or `providers.workflow.<name>.runtime`.
+They can select the backend explicitly with `runtime.provider`, or inherit the
+default runtime selected by `server.runtime.defaultProvider` or
+`runtime.providers.<name>.default`.
+
+### Provider interface
+
+The runtime surface is intentionally small but lifecycle-oriented:
+
+| Method | Purpose |
+| --- | --- |
+| `GetSupport` | Advertise grouped runtime support for this backend. |
+| `StartSession` | Create a hosted runtime session for the placed plugin, agent provider, or workflow provider. |
+| `GetSession` | Report session status so Gestalt can wait for readiness. |
+| `ListSessions` | Return sessions currently known to the runtime backend. |
+| `StopSession` | Tear a session down on shutdown or bootstrap failure. |
+| `PrepareWorkspace` | Optional. Prepare a per-agent workspace inside an existing runtime session before the hosted agent provider creates a session. |
+| `RemoveWorkspace` | Optional. Remove a per-agent workspace by runtime session and agent session ID. |
+| `StartPlugin` | Start the hosted provider process with the provided env and return a host-reachable dial target. The RPC name is retained for wire compatibility even when the placed provider is an agent or workflow provider. |
+
+In addition to the runtime-specific RPCs, the provider still implements the
+normal provider lifecycle surface, including `Configure`.
+
+Go, Rust, and TypeScript expose runtime-provider helpers. The examples below
+define provider exports for the source-provider flow, so they do not need a
+hand-written `main` function. Gestalt's build and local-source tooling wraps
+the exported provider for the selected language.
+
+### SDK examples
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleruntime
+
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(context.Context, string, map[string]any) error {
+        return nil
+    }
+
+    func (p *Provider) GetSupport(context.Context) (gestalt.PluginRuntimeSupport, error) {
+        return gestalt.PluginRuntimeSupport{
+            CanHostPlugins:           true,
+            EgressMode:               gestalt.PluginRuntimeEgressModeHostname,
+            SupportsPrepareWorkspace: true,
+        }, nil
+    }
+
+    func (p *Provider) StartSession(context.Context, gestalt.StartPluginRuntimeSessionRequest) (gestalt.PluginRuntimeSession, error) {
+        return gestalt.PluginRuntimeSession{
+            ID:    "session-1",
+            State: "ready",
+        }, nil
+    }
+
+    func (p *Provider) GetSession(context.Context, string) (gestalt.PluginRuntimeSession, error) {
+        return gestalt.PluginRuntimeSession{
+            ID:    "session-1",
+            State: "ready",
+        }, nil
+    }
+
+    func (p *Provider) ListSessions(context.Context) ([]gestalt.PluginRuntimeSession, error) {
+        return []gestalt.PluginRuntimeSession{{ID: "session-1", State: "ready"}}, nil
+    }
+
+    func (p *Provider) StopSession(context.Context, string) error {
+        return nil
+    }
+
+    func (p *Provider) PrepareWorkspace(context.Context, gestalt.PreparePluginRuntimeWorkspaceRequest) (gestalt.PreparePluginRuntimeWorkspaceResponse, error) {
+        return gestalt.PreparePluginRuntimeWorkspaceResponse{
+            Workspace: &gestalt.PreparedAgentWorkspace{
+                Root: "/sandboxes/runtime-session-1/workspaces/agent-session-1",
+                CWD:  "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo",
+            },
+        }, nil
+    }
+
+    func (p *Provider) RemoveWorkspace(context.Context, gestalt.RemovePluginRuntimeWorkspaceRequest) error {
+        return nil
+    }
+
+    func (p *Provider) StartPlugin(context.Context, req gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
+        return gestalt.HostedPlugin{
+            ID:         "plugin-1",
+            SessionID:  req.SessionID,
+            PluginName: req.PluginName,
+            DialTarget: "unix:///tmp/example-runtime/plugin.sock",
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The Python SDK exposes runtime-log host helpers for hosted runtimes. New
+    custom runtime-provider implementations should use the Go or TypeScript
+    authored provider surface until the Python server-side runtime adapter is
+    promoted to the same level.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::proto::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleRuntime;
+
+    #[gestalt::async_trait]
+    impl proto::plugin_runtime_provider_server::PluginRuntimeProvider for ExampleRuntime {
+        async fn get_support(
+            &self,
+            _request: Request<()>,
+        ) -> Result<Response<proto::PluginRuntimeSupport>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSupport {
+                can_host_plugins: true,
+                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
+                supports_prepare_workspace: true,
+            }))
+        }
+
+        async fn start_session(
+            &self,
+            _request: Request<proto::StartPluginRuntimeSessionRequest>,
+        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSession {
+                id: "session-1".into(),
+                state: "ready".into(),
+                ..Default::default()
+            }))
+        }
+
+        async fn get_session(
+            &self,
+            request: Request<proto::GetPluginRuntimeSessionRequest>,
+        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
+            Ok(Response::new(proto::PluginRuntimeSession {
+                id: request.into_inner().session_id,
+                state: "ready".into(),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_sessions(
+            &self,
+            _request: Request<proto::ListPluginRuntimeSessionsRequest>,
+        ) -> Result<Response<proto::ListPluginRuntimeSessionsResponse>, Status> {
+            Ok(Response::new(proto::ListPluginRuntimeSessionsResponse {
+                sessions: vec![proto::PluginRuntimeSession {
+                    id: "session-1".into(),
+                    state: "ready".into(),
+                    ..Default::default()
+                }],
+            }))
+        }
+
+        async fn stop_session(
+            &self,
+            _request: Request<proto::StopPluginRuntimeSessionRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+
+        async fn prepare_workspace(
+            &self,
+            _request: Request<proto::PreparePluginRuntimeWorkspaceRequest>,
+        ) -> Result<Response<proto::PreparePluginRuntimeWorkspaceResponse>, Status> {
+            Ok(Response::new(proto::PreparePluginRuntimeWorkspaceResponse {
+                workspace: Some(proto::PreparedAgentWorkspace {
+                    root: "/sandboxes/runtime-session-1/workspaces/agent-session-1".into(),
+                    cwd: "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo".into(),
+                }),
+            }))
+        }
+
+        async fn remove_workspace(
+            &self,
+            _request: Request<proto::RemovePluginRuntimeWorkspaceRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+
+        async fn start_plugin(
+            &self,
+            request: Request<proto::StartHostedPluginRequest>,
+        ) -> Result<Response<proto::HostedPlugin>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::HostedPlugin {
+                id: "plugin-1".into(),
+                session_id: req.session_id,
+                plugin_name: req.plugin_name,
+                dial_target: "unix:///tmp/example-runtime/plugin.sock".into(),
+            }))
+        }
+    }
+
+    #[gestalt::async_trait]
+    impl gestalt::PluginRuntimeProvider for ExampleRuntime {}
+
+    gestalt::export_plugin_runtime_provider!(constructor = ExampleRuntime::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+	    import {
+	      PluginRuntimeEgressMode,
+	      definePluginRuntimeProvider,
+	    } from "@valon-technologies/gestalt";
+
+    export const runtime = definePluginRuntimeProvider({
+      getSupport() {
+        return {
+          canHostPlugins: true,
+          egressMode: PluginRuntimeEgressMode.HOSTNAME,
+          supportsPrepareWorkspace: true,
+        };
+      },
+
+      startSession() {
+        return { id: "session-1", state: "ready" };
+      },
+
+      getSession(request) {
+        return { id: request.sessionId, state: "ready" };
+      },
+
+      listSessions() {
+        return [{ id: "session-1", state: "ready" }];
+      },
+
+      async stopSession() {},
+
+      prepareWorkspace() {
+        return {
+          workspace: {
+            root: "/sandboxes/runtime-session-1/workspaces/agent-session-1",
+            cwd: "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo",
+          },
+        };
+      },
+
+      async removeWorkspace() {},
+
+      startPlugin(request) {
+        return {
+          id: "plugin-1",
+          sessionId: request.sessionId,
+          pluginName: request.pluginName,
+          dialTarget: "unix:///tmp/example-runtime/plugin.sock",
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Support guidelines
+
+Advertise the smallest truthful grouped support surface you can.
+
+`can_host_plugins` should only be true when the backend can actually launch a
+host-reachable executable plugin session. If that is false, Gestalt will reject
+hosted execution for that runtime immediately instead of failing later during
+bootstrap.
+
+Gestalt derives effective host-service access from its own public relay
+configuration. Runtime providers do not advertise host-service access.
+
+`egress_mode` should be `hostname` only when the runtime can preserve
+Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
+it is not equivalent to hostname-based policy. If your backend can only express
+network controls at firewall or CIDR granularity, advertise `cidr`.
+
+`supports_prepare_workspace` should only be true when `PrepareWorkspace` creates
+the requested checkout inside the same runtime session that will run the hosted
+agent provider, returns absolute `root` and `cwd` paths, and can remove that
+workspace through `RemoveWorkspace`.
+Rust providers that implement the generated tonic trait directly must still add
+`prepare_workspace` and `remove_workspace` methods; return `Status::unimplemented`
+when the runtime does not advertise `supports_prepare_workspace`.
+
+Hosted runtime providers should run provider images rather than expect Gestalt
+to upload a provider bundle into the session. The `StartSession` request carries
+the selected image, template, metadata, and optional `imagePullAuth`
+configuration. `StartPlugin` then carries the manifest-derived `command`,
+`args`, environment variables, and egress policy to apply inside the image.
+Execute those values exactly as provided by the host.
+
+New providers should populate `support`. That grouped support shape is the
+runtime contract operators see in inspection.
+
+### Sessions and host services
+
+The critical design point is that `StartPlugin` is **not** the whole runtime
+API. Gestalt needs an explicit session lifecycle because it may need to create
+the session, wait until it is ready, register host-local services for public
+relay access, and only then start the plugin.
+
+Current Gestalt releases pass host-service relay configuration directly in the
+`StartPlugin` env map. For each configured host service, the socket env var
+contains a public `tls://host:port` relay target and the corresponding
+`<ENV>_TOKEN` var contains the scoped relay token. Runtime providers should pass
+those env vars through to the plugin process unchanged.
+
+Older SDKs exposed a `BindHostService` RPC, but current `gestaltd` does not call
+that method and current SDKs no longer include it in the runtime-provider
+surface. Upgrade `gestaltd` first before rebuilding a runtime provider against
+an SDK that has removed `BindHostService`; older servers still expect that RPC.
+
+### Dial targets
+
+`StartPlugin` returns a host-reachable `dial_target`, not a guest-local socket
+path. Gestalt currently supports `unix://...`, `tcp://host:port`, and
+`tls://host:port`.
+
+If your backend starts the plugin behind a guest-local listener, the runtime
+provider is responsible for bridging that listener back into one of the
+host-reachable forms above.
+
+### Runtime logs
+
+Runtime providers can stream provider-process logs back to Gestalt through the
+runtime log host service. The SDK environment exposes that service as
+`GESTALT_RUNTIME_LOG_SOCKET`; Go providers can use `gestalt.RuntimeLogHost()`.
+Use this for logs that originate in the runtime backend or in hosted provider
+processes before Gestalt has dialed the provider directly.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func recordRuntimeStartup(ctx context.Context) error {
+        logs, err := gestalt.RuntimeLogHost()
+        if err != nil {
+            return err
+        }
+        defer logs.Close()
+
+        return logs.Append(
+            ctx,
+            "started hosted provider process",
+            gestalt.WithRuntimeLogStream(gestalt.RuntimeLogStreamRuntime),
+        )
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def record_runtime_startup() -> None:
+        with gestalt.RuntimeLogHost() as logs:
+            logs.append(
+                "started hosted provider process",
+                stream="runtime",
+            )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn record_runtime_startup() -> Result<(), Box<dyn std::error::Error>> {
+        let mut logs = gestalt::RuntimeLogHost::connect().await?;
+        logs.append_current_runtime("started hosted provider process")
+            .await?;
+        Ok(())
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { RuntimeLogHost } from "@valon-technologies/gestalt";
+
+    export async function recordRuntimeStartup() {
+      const logs = new RuntimeLogHost();
+
+      await logs.append({
+        stream: "runtime",
+        message: "started hosted provider process",
+      });
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+`append` uses `GESTALT_RUNTIME_SESSION_ID` by default. Pass an explicit session
+ID only when the runtime backend is forwarding logs for a different hosted
+session. Python and TypeScript also expose writer helpers for redirecting
+standard streams.
+
+### Releasing
+
+Runtime providers use the same release flow as other executable providers:
+
+```sh
+gestaltd provider release --platform linux/amd64 --output ./dist
+```
+
+Then point `runtime.providers.<name>.source` at the resulting
+`provider-release.yaml`, or use a local manifest path during development.
+
 ## What to read next
 
 For the config fields, see [Configuration](/configuration) and
 [Config File](/reference/config-file#runtime). For plugin-side opt-in, see
 [Plugin](/providers/plugins). For the execution boundary, see
-[Security](/security). To build a runtime backend, see
-[Custom Providers > Runtime](/custom-providers/runtime).
+[Security](/security).

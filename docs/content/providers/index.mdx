@@ -2,6 +2,8 @@
 asIndexPage: true
 ---
 
+import { Tabs } from 'nextra/components'
+
 # Providers
 
 Gestalt loads most integration and platform surfaces as providers instead of
@@ -31,7 +33,7 @@ starts it with the permissions and request context it needs.
 
 ## How providers work
 
-- Use [Provider Packages](/providers/packages) for published providers that are
+- Use [provider packages](#provider-packages) for published providers that are
   listed in a provider repository. Package sources keep a package address and
   version constraint in config, so `gestaltd provider add`, `list`, `remove`,
   and `upgrade` can manage them directly.
@@ -73,7 +75,7 @@ The repository is organized by provider type:
 There is not yet a first-party agent provider published from
 `valon-technologies/gestalt-providers`. If you need one today, implement it as
 a custom provider with the neutral agent protocol described in
-[Custom Providers > Agent](/custom-providers/agent).
+[Agent](/providers/agent#building-your-own-agent-provider).
 
 ## Using providers
 
@@ -150,10 +152,680 @@ Run `gestaltd lock` when you want to resolve and pin published releases ahead
 of time, then `gestaltd sync --locked` to prepare artifacts before
 `gestaltd serve --locked` starts from that prepared state.
 
-## Building custom providers
 
-If you need a provider Gestalt does not already ship, the implementation and
-release workflow now lives under [Custom Providers](/custom-providers).
+## Building providers
+
+### What belongs here
+
+The provider pages here cover executable and declarative plugin providers, custom
+runtime providers for hosted execution, agent providers for session-and-turn
+reasoning backends, workflow providers, and the host providers that back
+authentication, authorization, cache, IndexedDB, S3, secrets, and UI bundles.
+They also cover local source testing with `source: ./manifest.yaml` and release
+packaging with `gestaltd provider release`.
+
+### Runtime model
+
+Custom providers use the same packaging and lifecycle model as first-party
+providers:
+
+- A provider package includes a manifest plus executable code or static assets.
+- `gestaltd` resolves the package from a local manifest path or a published
+  `provider-release.yaml` metadata URL.
+- Executable providers, including runtime providers themselves, start as child
+  processes and connect back to the host over gRPC on a temporary Unix socket.
+- Runtime providers may then launch hosted plugin processes in a separate
+  session or sandbox and bridge those plugins back to the host.
+- UI providers are static asset bundles served under configured public path
+  prefixes.
+- Published packages are locked with `gestaltd lock`, prepared with
+  `gestaltd sync --locked`, and referenced from `gestalt.lock.json`.
+
+Implementation details for each provider kind now live on the matching page under this Providers section. Start with the provider type you are building, then use the release guidance below when the package is ready to distribute.
+
+## Provider packages
+
+### Search for a Package
+
+The built-in `valon` repository points at the first-party provider index.
+
+```sh
+gestaltd provider search
+gestaltd provider search github
+gestaltd provider search github --repo valon
+```
+
+Search matches the package address, display name, and description. The output
+prints repository name, package address, and display name:
+
+```text
+valon  github.com/valon-technologies/gestalt-providers/plugins/github  GitHub
+```
+
+Use `provider info` to see the versions published for one package:
+
+```sh
+gestaltd provider info github.com/valon-technologies/gestalt-providers/plugins/github
+```
+
+### Add a Provider
+
+Add the package to one writable config file:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github \
+  --config ./gestalt.yaml \
+  --name github
+```
+
+Mutating provider commands accept one `--config` path. This keeps the command
+from guessing which file should be edited when your normal runtime uses layered
+config.
+
+Set a version constraint when you want future upgrades to stay inside a range:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc \
+  --config ./gestalt.yaml \
+  --kind authentication \
+  --name oidc \
+  --version '^1.4.0'
+```
+
+When no version is given, Gestalt chooses the newest non-yanked stable version.
+If a package has no stable versions, it chooses the newest non-yanked
+prerelease. Yanked versions are skipped unless you request an exact yanked
+version.
+
+`provider add` validates the changed config and lockfile in a scratch
+directory before writing either file.
+
+### Add Providers by Kind
+
+Gestalt usually infers the config location from the package metadata. Pass
+`--kind` when you need to override that location.
+
+| Kind | Config location | Notes |
+| --- | --- | --- |
+| `plugin` | `plugins.<name>` | Default location for plugin packages. |
+| `ui` | `providers.ui.<name>` | Requires `--set path=/mount` when adding a directly mounted UI. |
+| `authentication` | `providers.authentication.<name>` | Select with `server.providers.authentication` when more than one exists. |
+| `authorization` | `providers.authorization.<name>` | Select with `server.providers.authorization` when more than one exists. |
+| `external_credentials` | `providers.externalCredentials.<name>` | Select with `server.providers.externalCredentials` when more than one exists. |
+| `secrets` | `providers.secrets.<name>` | Select with `server.providers.secrets` when more than one exists. |
+| `indexeddb` | `providers.indexeddb.<name>` | Select with `server.providers.indexeddb`. |
+| `cache` | `providers.cache.<name>` | Bind from `plugins.<name>.cache`. |
+| `s3` | `providers.s3.<name>` | Bind from `plugins.<name>.s3`. |
+| `workflow` | `providers.workflow.<name>` | Bind from workflow schedules and triggers. |
+| `agent` | `providers.agent.<name>` | Used by agent sessions and turns. |
+| `runtime` | `runtime.providers.<name>` | Used by hosted executable providers. |
+
+`provider add` does not create telemetry or audit providers yet. Existing
+telemetry and audit entries can still appear in `provider list`, lockfiles, and
+package-source upgrades.
+
+Add a directly mounted UI with a path:
+
+```sh
+gestaltd provider add github.com/acme/gestalt-providers/ui/console \
+  --config ./gestalt.yaml \
+  --kind ui \
+  --name console \
+  --set path=/console
+```
+
+### List Providers
+
+`provider list` shows configured provider entries and how they relate to the
+lockfile:
+
+```sh
+gestaltd provider list --config ./gestalt.yaml
+gestaltd provider list --config ./gestalt.yaml --kind plugin
+```
+
+Output columns:
+
+| Column | Meaning |
+| --- | --- |
+| `KIND` | Provider kind and config collection. |
+| `NAME` | Config entry name. |
+| `SOURCE` | Source shape: `package`, `metadata`, `github`, `local`, `builtin`, or `unsupported`. |
+| `PACKAGE` | Package address for package sources. |
+| `VERSION` | Version constraint from config. |
+| `LOCKED` | Exact version recorded in the lockfile. |
+| `STATUS` | Lock status for the entry. |
+
+Status values:
+
+| Status | Meaning |
+| --- | --- |
+| `builtin` | Built into `gestaltd`; no release artifact is locked. |
+| `locked` | The lockfile matches the current source config. |
+| `unverified` | The config and lock agree on package and version, but this list operation did not re-resolve package metadata. |
+| `unlocked` | The source-backed entry has no matching lock entry. |
+| `drifted` | A lock entry exists, but it no longer matches the current source config. |
+
+Run `gestaltd lock --check --config ./gestalt.yaml` in CI when you need a
+strict lockfile check.
+
+### Upgrade Providers
+
+Refresh lock state for every configured package source:
+
+```sh
+gestaltd provider upgrade --config ./gestalt.yaml
+```
+
+This does not edit version constraints. It re-resolves package sources and
+writes the lockfile with the selected versions.
+
+Change one package source to a new constraint:
+
+```sh
+gestaltd provider upgrade github \
+  --config ./gestalt.yaml \
+  --kind plugin \
+  --version '^1.5.0'
+```
+
+The named entry must already be a package source. If the same name exists under
+more than one provider kind, pass `--kind`.
+
+### Remove a Provider
+
+Remove one entry from config and update the lockfile:
+
+```sh
+gestaltd provider remove github --config ./gestalt.yaml --kind plugin
+```
+
+Omit `--kind` only when the name is unique across provider kinds.
+
+### Use Provider Repositories
+
+A provider repository is a static YAML index. Gestalt fetches the index, picks a
+version, then fetches that version's `provider-release.yaml`. Normal package
+resolution does not call the GitHub Releases API.
+
+The default repository is named `valon`:
+
+```text
+https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml
+```
+
+List configured repositories:
+
+```sh
+gestaltd provider repo list
+gestaltd provider repo list --config ./gestalt.yaml
+```
+
+Add a repository to your user-level store:
+
+```sh
+gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml
+```
+
+Add a repository to project config:
+
+```sh
+gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml \
+  --config ./gestalt.yaml
+```
+
+The project form writes:
+
+```yaml
+providerRepositories:
+  acme:
+    url: https://artifacts.example.com/gestalt/provider-index.yaml
+```
+
+Project config overrides the repository URL for that project. A user-level
+repository with the same name can still supply a token for private indexes.
+
+Fetch repository indexes into the local cache:
+
+```sh
+gestaltd provider repo update
+gestaltd provider repo update --config ./gestalt.yaml
+```
+
+Remove a repository from the same place you added it:
+
+```sh
+gestaltd provider repo remove acme
+gestaltd provider repo remove acme --config ./gestalt.yaml
+```
+
+Use `source.repo` when the package should resolve from a non-default
+repository, or when the same package address exists in more than one repository:
+
+```yaml
+plugins:
+  support:
+    source:
+      repo: acme
+      package: github.com/acme/gestalt-providers/plugins/support
+      version: ^1.3.0
+```
+
+### Publish an Index
+
+A provider index is ordinary YAML:
+
+```yaml
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  github.com/acme/gestalt-providers/plugins/support:
+    displayName: Support
+    description: Internal support tools
+    versions:
+      1.3.0:
+        kind: plugin
+        runtime: go
+        metadata: ./plugins/support/1.3.0/provider-release.yaml
+        platforms:
+          - darwin/arm64
+          - linux/amd64
+```
+
+`metadata` may be an absolute `https://` or `file://` URL, or a relative path
+resolved from the index URL. Keep the index small enough to fetch often; Gestalt
+rejects indexes larger than 10 MiB.
+
+### Use Exact Sources
+
+Package sources are the default because they keep the package address and
+version constraint in config. Use exact sources when you need to pin something
+outside an index, such as a one-off metadata URL, a local release file, or a
+private GitHub Release asset.
+
+Write the resolved metadata URL instead of a package source:
+
+```sh
+gestaltd provider add github.com/acme/gestalt-providers/plugins/support \
+  --config ./gestalt.yaml \
+  --repo acme \
+  --exact-source
+```
+
+The resulting config looks like:
+
+```yaml
+plugins:
+  support:
+    source: https://artifacts.example.com/gestalt/plugins/support/1.3.0/provider-release.yaml
+```
+
+Exact sources do not retain repository or version-constraint data, so
+`provider upgrade NAME --version ...` cannot move them to a new package version.
+Edit the source manually or re-add the provider as a package source.
+
+For private metadata or archives, put fetch credentials under `source.auth`:
+
+```yaml
+plugins:
+  support:
+    source:
+      repo: acme
+      package: github.com/acme/gestalt-providers/plugins/support
+      version: ^1.3.0
+      auth:
+        token: ${GESTALT_PROVIDER_TOKEN}
+```
+
+Use `source.githubRelease` when the checked-in config should name a GitHub
+release asset logically:
+
+```yaml
+plugins:
+  support:
+    source:
+      githubRelease:
+        repo: acme/gestalt-provider-releases
+        tag: plugins/support/v1.3.0
+        asset: provider-release.yaml
+      auth:
+        token: ${GITHUB_TOKEN}
+```
+
+GitHub release sources use GitHub release asset lookup. Package sources use the
+static provider repository index instead.
+
+### Lock and Sync
+
+`provider add`, `provider remove`, and `provider upgrade NAME --version ...`
+update the lockfile by default. `provider add` and `provider remove` accept
+`--no-lock` when you need to edit config first and run `gestaltd lock` later.
+
+Materialize artifacts immediately after adding a provider:
+
+```sh
+gestaltd provider add github.com/valon-technologies/gestalt-providers/plugins/github \
+  --config ./gestalt.yaml \
+  --sync
+```
+
+For production deployments, keep the same three-step lifecycle:
+
+```sh
+gestaltd lock --config ./gestalt.yaml
+gestaltd sync --locked --config ./gestalt.yaml
+gestaltd serve --locked --config ./gestalt.yaml
+```
+
+## Releasing provider packages
+
+### What can be released
+
+Gestalt uses the same release system for executable provider packages, authentication and datastore component packages, and packaged UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+
+### Source manifests vs release manifests
+
+During local development and `gestaltd provider release`, source manifests can
+omit `artifacts` and executable `entrypoints`. Release packaging materializes
+those fields for you.
+
+#### Minimal executable source manifest
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/my-plugin
+version: 0.0.1-alpha.1
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+```
+
+Executable source packages stay language-native. Gestalt loads the provider
+from the package root or the language-specific target declaration, then
+synthesizes the runnable wrapper during local source execution and release
+packaging.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      go.mod
+      manifest.yaml
+      provider.go
+    ```
+
+    ```go
+    module github.com/acme/plugins/my-plugin
+
+    go 1.26
+
+    require github.com/valon-technologies/gestalt/sdk/go v0.0.1-alpha.14
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      pyproject.toml
+      manifest.yaml
+      provider.py
+    ```
+
+    ```toml
+    [project]
+    name = "my-plugin"
+    version = "0.0.1-alpha.1"
+    dependencies = ["gestalt-sdk"]
+
+    [tool.gestalt]
+    provider = "provider"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      Cargo.toml
+      manifest.yaml
+      src/
+        lib.rs
+    ```
+
+    ```toml
+    [package]
+    name = "my-plugin"
+    version = "0.0.1-alpha.1"
+    edition = "2024"
+
+    [dependencies]
+    gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
+    schemars = { version = "0.8", features = ["derive"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      package.json
+      manifest.yaml
+      provider.ts
+    ```
+
+    ```json
+    {
+      "name": "my-plugin",
+      "version": "0.0.1-alpha.1",
+      "type": "module",
+      "dependencies": {
+        "@valon-technologies/gestalt": "0.0.1-alpha.16"
+      },
+      "gestalt": {
+        "provider": {
+          "kind": "plugin",
+          "target": "./provider.ts#plugin"
+        }
+      }
+    }
+    ```
+
+    TypeScript authentication and datastore providers use `gestalt.provider` objects
+    such as `{ "kind": "authentication", "target": "./auth.ts#provider" }`.
+  </Tabs.Tab>
+</Tabs>
+
+#### Source release builds
+
+Source manifests may optionally define a `release.build` command. Gestalt runs
+it before source-manifest preparation, which lets UI packages generate
+static assets and lets provider/authentication/datastore packages generate support files
+such as config schemas before packaging.
+
+```yaml
+kind: ui
+source: github.com/acme/plugins/gestalt-ui
+version: 1.2.0
+release:
+  build:
+    workdir: ui
+    command:
+      - npm
+      - run
+      - build
+spec:
+  assetRoot: ui/out
+```
+
+#### Release manifest for an executable provider
+
+Released executable plugin providers add concrete `entrypoint` and
+`artifacts` entries:
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/my-plugin
+version: 0.0.1-alpha.1
+spec: {}
+entrypoint:
+  artifactPath: artifacts/linux/amd64/provider
+artifacts:
+  - os: linux
+    arch: amd64
+    libc: musl
+    path: artifacts/linux/amd64/provider
+    sha256: "..."
+```
+
+#### UI bundle manifest
+
+UI packages use the same manifest system:
+
+```yaml
+kind: ui
+source: github.com/acme/plugins/ui/default
+version: 1.2.0
+spec:
+  assetRoot: ui/out
+  configSchemaPath: schemas/ui-config.schema.json
+```
+
+`gestaltd lock` records the released UI in `gestalt.lock.json`, and `gestaltd sync --locked` prepares its assets. `gestaltd serve --locked` then serves the prepared asset root at whatever public path the deployment config binds for that UI bundle. Omit `providers.ui` to run headless with no public UI bundles. The built-in admin UI remains available at `/admin` regardless.
+
+### Build a release
+
+Use `gestaltd provider release` to build a provider release and produce release archives:
+
+```sh
+gestaltd provider release --version 0.0.1-alpha.1
+```
+
+Run this from the provider source directory. It produces release archives and writes a checksums file.
+
+Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
+
+For executable Go, Rust, Python, and TypeScript source providers,
+`provider release` materializes the executable catalog automatically and builds
+the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
+source packages use the same release flow without catalog generation. Pass
+`--platform` with a comma-separated list such as
+`--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
+full supported platform matrix for source builds.
+
+Executable source plugins declare hosted HTTP routes in the manifest with
+`spec.securitySchemes` and `spec.http`. During local source execution and
+`provider release`, Gestalt preserves those manifest blocks in the effective
+manifest and released archive:
+
+```yaml
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      security: signed
+      target: handle_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          status: accepted
+```
+
+For non-host Python targets, point Gestalt at a matching interpreter with
+`GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
+`.venv-<goos>-<goarch>/`.
+
+TypeScript source plugins require Bun for local source execution and
+packaging. The SDK uses Bun's compile flow to build standalone provider
+binaries during release.
+
+### Reference releases from config
+
+#### During development
+
+Use `source.path` to point at the source tree directly. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
+
+```yaml
+plugins:
+  my-plugin:
+    source: ./plugins/my-plugin/manifest.yaml
+```
+
+UI bundles work the same way:
+
+```yaml
+providers:
+  ui:
+    dashboard:
+      source: ./gestalt-ui/manifest.yaml
+      path: /dashboard
+```
+
+#### For production
+
+Reference a published release by metadata URL:
+
+```yaml
+plugins:
+  my-plugin:
+    source: https://artifacts.example.com/plugin/my-plugin/v0.0.1-alpha.1/provider-release.yaml
+```
+
+UI bundles use the same pattern under `providers.ui.<name>`:
+
+```yaml
+providers:
+  ui:
+    dashboard:
+      source: https://artifacts.example.com/ui/default/v1.2.0/provider-release.yaml
+      path: /dashboard
+      config:
+        brand_name: Acme
+```
+
+When a config references published releases, lock and sync them before locked runtime:
+
+```sh
+gestaltd lock --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml
+```
+
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After sync, `gestaltd serve --locked` starts the server from that prepared state without resolving or writing artifacts at runtime. See [Configuration](/configuration) for the full startup model.
+
+### Release archive layout
+
+A typical release archive contains:
+
+```
+manifest.yaml
+artifacts/
+  my-plugin-linux-amd64
+  my-plugin-darwin-arm64
+schemas/
+  config.schema.json
+assets/
+  icon.svg
+```
+
+The exact structure is determined by the manifest. `schemas/` is optional and
+used for provider config validation. `assets/` is optional and used for icons or
+other static files.
+
+Use [Provider Manifests](/reference/plugin-manifests) for the canonical manifest
+reference.
 
 ## What to read next
 
@@ -169,4 +841,3 @@ release workflow now lives under [Custom Providers](/custom-providers).
 - [Secret](/providers/secrets): built-in and external secret managers
 - [UI](/providers/ui): public UI bundles
 - [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
-- [Custom Providers](/custom-providers): advanced implementation and release docs

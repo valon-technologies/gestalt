@@ -884,8 +884,1062 @@ signals instead of creating duplicate runs.
   </Tabs.Tab>
 </Tabs>
 
+## Building your own agent provider
+
+This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
+
+### Manifest
+
+An agent provider manifest declares `kind: agent`:
+
+```yaml
+kind: agent
+source: github.com/your-org/agent/example
+version: 0.0.1
+displayName: Example Agent
+description: Minimal session-and-turn agent provider
+spec:
+  configSchemaPath: ./agent_config.json
+```
+
+Use `source: ./manifest.yaml` during development. For production, publish a
+provider release archive and reference the resulting metadata URL.
+
+### Provider interface
+
+The agent provider service now exposes the canonical lifecycle directly:
+
+| Method | Purpose |
+| --- | --- |
+| `CreateSession` | Create a new provider-owned session |
+| `GetSession` | Inspect one session by `session_id` |
+| `ListSessions` | Return sessions currently known to this provider |
+| `UpdateSession` | Update session state, metadata, or `client_ref` |
+| `CreateTurn` | Persist and start a new turn within a session |
+| `GetTurn` | Inspect one turn by `turn_id` |
+| `ListTurns` | List turns for a session |
+| `CancelTurn` | Request cancellation for one turn |
+| `ListTurnEvents` | Return stored events for a turn after a sequence cursor |
+| `GetInteraction` | Inspect one interaction |
+| `ListInteractions` | List interactions for a turn |
+| `ResolveInteraction` | Apply a caller-provided resolution to a pending interaction |
+| `GetCapabilities` | Advertise which optional agent features the provider supports |
+
+Providers can call back into Gestalt through the host service:
+
+| Host method | Purpose |
+| --- | --- |
+| `ListTools` | Page through MCP catalog tools available to the current turn |
+| `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a turn |
+| `ResolveConnection` | Resolve a connection bound to the current turn into headers, params, and expiry metadata |
+
+These callbacks work the same way when the provider runs directly on the
+`gestaltd` host or inside a hosted runtime.
+
+The host passes a `run_grant` to `CreateTurn` when tools or connection bindings
+are available. Pass that grant back to `ListTools`, `ExecuteTool`, or
+`ResolveConnection`; it is the scoped authority for resolving tools and
+connections during that turn.
+
+Providers that support limited or summary list requests must advertise bounded
+list hydration from `GetCapabilities`. When Gestalt asks for `limit` or
+`summary_only`, it expects the provider to apply those options before returning
+results instead of hydrating the full session or turn history in the daemon.
+
+Providers that support deployer-defined session setup must advertise
+`supports_session_start` from `GetCapabilities`. Gestalt then forwards
+`CreateSession.session_start` only to providers with that capability.
+
+```go
+return &proto.AgentProviderCapabilities{
+  SupportsSessionStart: true,
+}
+```
+
+`session_start.hooks` currently contains command hooks only. Providers should
+run each argv with the supplied absolute `cwd`, a sanitized environment plus the
+explicit hook `env`, and fail `CreateSession` when any hook fails. First-party
+providers preserve only `HOME`, `PATH`, `SHELL`, `TMPDIR`, `USER`, `LOGNAME`,
+`LANG`, and `LC_ALL` by default. Persist hook results in session metadata under
+`__gestalt.lifecycle.sessionStart.results.<hookId>` and preserve that reserved
+namespace across later `UpdateSession` calls. If a hook has
+`output.additional_context`, prepend stdout as provider-owned context to future
+turn prompts for that session.
+
+Providers that can launch a vendor harness from a pre-existing directory should
+advertise `supports_prepared_workspace`. They do not receive the caller's raw
+checkout request; Gestalt and the runtime provider turn that request into a
+prepared `root` and `cwd` first.
+
+```go
+func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+  return &proto.AgentProviderCapabilities{
+    SupportsPreparedWorkspace: true,
+  }, nil
+}
+
+func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+  prepared := req.GetPreparedWorkspace()
+  if prepared != nil {
+    // Launch the vendor harness with prepared.GetCwd() as its working directory.
+  }
+
+  return &proto.AgentSession{Id: req.GetSessionId()}, nil
+}
+```
+
+In TypeScript, the same fields are exposed as `supportsPreparedWorkspace` and
+`request.preparedWorkspace`:
+
+```ts
+export const provider = defineAgentProvider({
+  getCapabilities() {
+    return { supportsPreparedWorkspace: true };
+  },
+
+  async createSession(request) {
+    const cwd = request.preparedWorkspace?.cwd;
+    // Launch the vendor harness from cwd when it is present.
+    return {
+      id: request.sessionId,
+      providerName: "example",
+      state: AgentSessionState.ACTIVE,
+    };
+  },
+});
+```
+
+### MCP Catalog Tools
+
+Agent providers opt in to Gestalt integration tools by advertising
+`mcp_catalog` in `GetCapabilities`:
+
+```go
+return &proto.AgentProviderCapabilities{
+  ToolCalls: true,
+  SupportedToolSources: []proto.AgentToolSourceMode{
+    proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+  },
+}
+```
+
+When a turn uses `tool_source: mcp_catalog`, Gestalt passes the provider:
+
+- `tool_refs`: the requested catalog scope, such as one operation, one plugin,
+  or a broad catalog grant.
+- `run_grant`: the scoped authority the provider must pass back when it calls
+  the `AgentHost` list-tools, execute-tool, or resolve-connection helpers.
+
+`mcp_catalog` means the provider can accept catalog grants. It does not require
+a single discovery strategy. Providers should choose the strategy that matches
+their runtime:
+
+- Native deferred MCP search: mount the Gestalt MCP surface and let the runtime
+  search/load tool schemas on demand.
+- Provider catalog proxy: expose a small provider-owned search/schema/call tool
+  surface, then call the `AgentHost` list and execute helpers behind it.
+- Eager exact-list hydration: list and expose the granted tools directly when
+  the grant is known to be small.
+
+Keep provider-specific discovery inside the provider. `gestaltd` authorizes the
+catalog scope, mints the run grant, pages tools, and executes selected tools; it
+does not rank tools for a model or add integration-specific aliases.
+
+### Agent host
+
+Agent providers call back into Gestalt through `AgentHost` while handling a
+turn. Use it to list the tools covered by the current `run_grant`, execute the
+tool selected by the model, or resolve a configured model connection for
+provider-owned inference.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+      "context"
+      "fmt"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    func executeGrantedTool(ctx context.Context, turn *proto.CreateAgentProviderTurnRequest) (string, error) {
+      host, err := gestalt.AgentHost()
+      if err != nil {
+        return "", err
+      }
+      defer host.Close()
+
+      listed, err := host.ListToolsForTurn(ctx, gestalt.AgentHostListToolsInput{
+        SessionID: turn.GetSessionId(),
+        TurnID:    turn.GetTurnId(),
+        RunGrant:  turn.GetRunGrant(),
+        PageSize:  25,
+        Query:     "issue",
+      })
+      if err != nil {
+        return "", err
+      }
+      if len(listed.GetTools()) == 0 {
+        return "", fmt.Errorf("no granted tools matched the query")
+      }
+
+      result, err := host.ExecuteToolForTurn(ctx, gestalt.AgentHostExecuteToolInput{
+        SessionID:      turn.GetSessionId(),
+        TurnID:         turn.GetTurnId(),
+        ToolCallID:     "call-1",
+        ToolID:         listed.GetTools()[0].GetId(),
+        RunGrant:       turn.GetRunGrant(),
+        IdempotencyKey: turn.GetIdempotencyKey() + ":call-1",
+        Arguments:      map[string]any{"query": "AIT-231"},
+      })
+      if err != nil {
+        return "", err
+      }
+
+      connection, err := host.ResolveConnectionForTurn(ctx, gestalt.AgentHostResolveConnectionInput{
+        SessionID:  turn.GetSessionId(),
+        TurnID:     turn.GetTurnId(),
+        Connection: "model",
+        Instance:   "default",
+        RunGrant:   turn.GetRunGrant(),
+      })
+      if err != nil {
+        return "", err
+      }
+
+      _ = connection.GetHeaders()
+      return result.GetBody(), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    def execute_granted_tool(turn) -> str | None:
+        with gestalt.AgentHost() as host:
+            listed = host.list_tools_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                run_grant=turn.run_grant,
+                page_size=25,
+                query="issue",
+            )
+            if not listed.tools:
+                return None
+
+            result = host.execute_tool_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                tool_call_id="call-1",
+                tool_id=listed.tools[0].id,
+                run_grant=turn.run_grant,
+                idempotency_key=f"{turn.idempotency_key}:call-1",
+                arguments={"query": "AIT-231"},
+            )
+
+            connection = host.resolve_connection_for_turn(
+                turn.session_id,
+                turn.turn_id,
+                connection="model",
+                instance="default",
+                run_grant=turn.run_grant,
+            )
+
+        _ = connection.headers
+        return result.body
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::proto::v1 as proto;
+
+    async fn execute_granted_tool(
+        turn: &proto::CreateAgentProviderTurnRequest,
+    ) -> Result<Option<String>, gestalt::AgentHostError> {
+        let mut host = gestalt::AgentHost::connect().await?;
+
+        let listed = host
+            .list_tools_for_turn(gestalt::AgentHostListToolsInput {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                run_grant: turn.run_grant.clone(),
+                page_size: 25,
+                query: "issue".to_string(),
+                ..Default::default()
+            })
+            .await?;
+
+        let Some(tool) = listed.tools.first() else {
+            return Ok(None);
+        };
+
+        let result = host
+            .execute_tool_for_turn(gestalt::AgentHostExecuteToolInput {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                tool_call_id: "call-1".to_string(),
+                tool_id: tool.id.clone(),
+                run_grant: turn.run_grant.clone(),
+                idempotency_key: format!("{}:call-1", turn.idempotency_key),
+                arguments: Some(serde_json::json!({"query": "AIT-231"})),
+            })
+            .await?;
+
+        let connection = host
+            .resolve_connection_for_turn(gestalt::AgentHostResolveConnectionInput {
+                session_id: turn.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+                connection: "model".to_string(),
+                instance: "default".to_string(),
+                run_grant: turn.run_grant.clone(),
+            })
+            .await?;
+
+        let _headers = connection.headers;
+        Ok(Some(result.body))
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      AgentHost,
+      type CreateAgentProviderTurnRequest,
+    } from "@valon-technologies/gestalt";
+
+    export async function executeGrantedTool(
+      turn: CreateAgentProviderTurnRequest,
+    ): Promise<string | null> {
+      const host = new AgentHost();
+
+      const listed = await host.listToolsForTurn({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        runGrant: turn.runGrant,
+        pageSize: 25,
+        query: "issue",
+      });
+
+      const tool = listed.tools[0];
+      if (!tool) {
+        return null;
+      }
+
+      const result = await host.executeToolForTurn({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        toolCallId: "call-1",
+        toolId: tool.id,
+        runGrant: turn.runGrant,
+        idempotencyKey: `${turn.idempotencyKey}:call-1`,
+        arguments: { query: "AIT-231" },
+      });
+
+      const connection = await host.resolveConnectionForTurn({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        connection: "model",
+        instance: "default",
+        runGrant: turn.runGrant,
+      });
+
+      void connection.headers;
+      return result.body;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Observability
+
+Provider authors do not need to emit the baseline `gestaltd` agent metrics.
+`gestaltd` wraps the configured provider interface and records
+`gestaltd.agent.provider.operation.*` for every provider method. The public
+agent facade records `gestaltd.agent.operation.*`, and tool resolution records
+`gestaltd.agent.tool.resolve.*`.
+
+When OTLP tracing is enabled, the `context.Context` passed into provider
+methods carries the active trace. Preserve that context when calling back into
+`AgentHost` tool execution helpers or starting provider-owned work that should
+remain part of the same trace tree.
+
+### Canonical objects
+
+Provider methods exchange canonical objects rather than vendor-native payloads:
+
+- `AgentSession`
+- `AgentTurn`
+- `AgentInteraction`
+- `AgentTurnEvent`
+
+Key fields:
+
+- sessions carry `id`, `provider_name`, `model`, `client_ref`, `state`, and timestamps
+- turns carry `id`, `session_id`, `status`, `messages`, `output_text`, optional `structured_output`, and timestamps
+- interactions carry `id`, `turn_id`, `session_id`, `type`, `state`, `request`, and `resolution`
+- turn events carry `turn_id`, monotonically increasing `seq`, canonical `type`, `source`, `visibility`, structured `data`, and optional `display`
+
+Providers should return canonical IDs exactly as persisted. Gestalt does not
+rewrite session or turn IDs on the provider's behalf.
+
+#### Turn event display
+
+`AgentTurnEvent.display` is an optional, provider-neutral projection for CLIs and
+other clients. It does not replace the raw `type` and `data` fields; clients can
+fall back to raw events when `display` is absent or malformed.
+
+The initial `display.kind` values are `text`, `reasoning`, `tool`,
+`interaction`, `status`, and `error`. The initial `display.phase` values are
+`delta`, `completed`, `started`, `progress`, `failed`, `requested`, `resolved`,
+and `canceled`. `display.ref` is a stable correlation ID scoped to the turn,
+most commonly a tool call ID.
+
+Gestalt synthesizes `display` for a small set of known raw event types when a
+provider omits it, but never overwrites provider-supplied display. Tool input
+and output are synthesized from the tool payload keys Gestalt clients already
+render (`arguments`, `input`, `request`, `output`, `result`, and `body`) plus
+explicit preview aliases. `display` is not a privacy boundary: clients must
+still honor the event's `visibility`. Gestalt may synthesize display for known
+private events to preserve existing CLI behavior, but unknown private events are
+not normalized. Host tool execution does not emit turn lifecycle events by
+itself; providers should still persist tool events or set `display` on their
+own events.
+
+### SDK examples
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleagent
+
+    import (
+      "context"
+
+      proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+      "google.golang.org/protobuf/types/known/timestamppb"
+    )
+
+    type Provider struct {
+      proto.UnimplementedAgentProviderServer
+    }
+
+    func New() *Provider { return &Provider{} }
+
+    func actorFromSubject(subject *proto.AgentSubjectContext) *proto.AgentActor {
+      if subject == nil {
+        return nil
+      }
+      return &proto.AgentActor{
+        SubjectId:   subject.GetSubjectId(),
+        SubjectKind: subject.GetSubjectKind(),
+        DisplayName: subject.GetDisplayName(),
+        AuthSource:  subject.GetAuthSource(),
+      }
+    }
+
+    func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        Model:        req.GetModel(),
+        ClientRef:    req.GetClientRef(),
+        State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+        CreatedBy:    req.GetCreatedBy(),
+        CreatedAt:    timestamppb.Now(),
+        UpdatedAt:    timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *Provider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+        CreatedBy:    actorFromSubject(req.GetSubject()),
+      }, nil
+    }
+
+    func (p *Provider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
+      return &proto.ListAgentProviderSessionsResponse{}, nil
+    }
+
+    func (p *Provider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        ClientRef:    req.GetClientRef(),
+        State:        req.GetState(),
+        CreatedBy:    actorFromSubject(req.GetSubject()),
+        UpdatedAt:    timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *Provider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:           req.GetTurnId(),
+        SessionId:    req.GetSessionId(),
+        ProviderName: "example",
+        Model:        req.GetModel(),
+        Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+        Messages:     req.GetMessages(),
+        CreatedBy:    req.GetCreatedBy(),
+        CreatedAt:    timestamppb.Now(),
+        StartedAt:    timestamppb.Now(),
+        ExecutionRef: req.GetExecutionRef(),
+      }, nil
+    }
+
+    func (p *Provider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:           req.GetTurnId(),
+        SessionId:    "session-1",
+        ProviderName: "example",
+        Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
+        OutputText:   "done",
+        CreatedBy:    actorFromSubject(req.GetSubject()),
+        CompletedAt:  timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *Provider) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
+      return &proto.ListAgentProviderTurnsResponse{}, nil
+    }
+
+    func (p *Provider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:            req.GetTurnId(),
+        SessionId:     "session-1",
+        ProviderName:  "example",
+        Status:        proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED,
+        StatusMessage: "operator requested",
+        CreatedBy:     actorFromSubject(req.GetSubject()),
+        CompletedAt:   timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *Provider) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
+      return &proto.ListAgentProviderTurnEventsResponse{}, nil
+    }
+
+    func (p *Provider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+      return &proto.AgentInteraction{Id: req.GetInteractionId()}, nil
+    }
+
+    func (p *Provider) ListInteractions(context.Context, *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
+      return &proto.ListAgentProviderInteractionsResponse{}, nil
+    }
+
+    func (p *Provider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+      return &proto.AgentInteraction{
+        Id:         req.GetInteractionId(),
+        State:      proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED,
+        Resolution: req.GetResolution(),
+        ResolvedAt: timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+      return &proto.AgentProviderCapabilities{
+        StreamingText:        true,
+        ToolCalls:            true,
+        StructuredOutput:     true,
+        Interactions:         true,
+        ResumableTurns:       true,
+        BoundedListHydration: true,
+        SupportsPreparedWorkspace: true,
+      }, nil
+    }
+
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    def actor_from_subject(subject):
+        if subject is None:
+            return None
+        return gestalt.AgentActor(
+            subject_id=subject.subject_id,
+            subject_kind=subject.subject_kind,
+            display_name=subject.display_name,
+            auth_source=subject.auth_source,
+        )
+
+
+    class ExampleAgent(gestalt.AgentProvider):
+        def CreateSession(self, request, context):
+            return gestalt.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                model=request.model,
+                client_ref=request.client_ref,
+                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+                created_by=request.created_by,
+            )
+
+        def GetSession(self, request, context):
+            return gestalt.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListSessions(self, request, context):
+            return gestalt.ListAgentProviderSessionsResponse()
+
+        def UpdateSession(self, request, context):
+            return gestalt.AgentSession(
+                id=request.session_id,
+                provider_name="example",
+                client_ref=request.client_ref,
+                state=request.state,
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def CreateTurn(self, request, context):
+            return gestalt.AgentTurn(
+                id=request.turn_id,
+                session_id=request.session_id,
+                provider_name="example",
+                model=request.model,
+                status=gestalt.AGENT_EXECUTION_STATUS_RUNNING,
+                messages=request.messages,
+                created_by=request.created_by,
+                execution_ref=request.execution_ref,
+            )
+
+        def GetTurn(self, request, context):
+            return gestalt.AgentTurn(
+                id=request.turn_id,
+                session_id="session-1",
+                provider_name="example",
+                status=gestalt.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                output_text="done",
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListTurns(self, request, context):
+            return gestalt.ListAgentProviderTurnsResponse()
+
+        def CancelTurn(self, request, context):
+            return gestalt.AgentTurn(
+                id=request.turn_id,
+                session_id="session-1",
+                provider_name="example",
+                status=gestalt.AGENT_EXECUTION_STATUS_CANCELED,
+                status_message="operator requested",
+                created_by=actor_from_subject(request.subject),
+            )
+
+        def ListTurnEvents(self, request, context):
+            return gestalt.ListAgentProviderTurnEventsResponse()
+
+        def GetInteraction(self, request, context):
+            return gestalt.AgentInteraction(
+                id=request.interaction_id,
+                state=gestalt.AGENT_INTERACTION_STATE_PENDING,
+            )
+
+        def ListInteractions(self, request, context):
+            return gestalt.ListAgentProviderInteractionsResponse()
+
+        def ResolveInteraction(self, request, context):
+            return gestalt.AgentInteraction(
+                id=request.interaction_id,
+                state=gestalt.AGENT_INTERACTION_STATE_RESOLVED,
+                resolution=request.resolution,
+            )
+
+        def GetCapabilities(self, request, context):
+            return gestalt.AgentProviderCapabilities(
+                streaming_text=True,
+                tool_calls=True,
+                structured_output=True,
+                interactions=True,
+                resumable_turns=True,
+                bounded_list_hydration=True,
+                supports_prepared_workspace=True,
+            )
+
+
+    provider = ExampleAgent()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::proto::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleAgent;
+
+    fn actor_from_subject(subject: Option<proto::AgentSubjectContext>) -> Option<proto::AgentActor> {
+        subject.map(|subject| proto::AgentActor {
+            subject_id: subject.subject_id,
+            subject_kind: subject.subject_kind,
+            display_name: subject.display_name,
+            auth_source: subject.auth_source,
+        })
+    }
+
+    #[gestalt::async_trait]
+    impl proto::agent_provider_server::AgentProvider for ExampleAgent {
+        async fn create_session(
+            &self,
+            request: Request<proto::CreateAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                model: req.model,
+                client_ref: req.client_ref,
+                state: proto::AgentSessionState::Active as i32,
+                created_by: req.created_by,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_session(
+            &self,
+            request: Request<proto::GetAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                state: proto::AgentSessionState::Active as i32,
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_sessions(
+            &self,
+            _request: Request<proto::ListAgentProviderSessionsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderSessionsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderSessionsResponse::default()))
+        }
+
+        async fn update_session(
+            &self,
+            request: Request<proto::UpdateAgentProviderSessionRequest>,
+        ) -> Result<Response<proto::AgentSession>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentSession {
+                id: req.session_id,
+                provider_name: "example".into(),
+                client_ref: req.client_ref,
+                state: req.state,
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn create_turn(
+            &self,
+            request: Request<proto::CreateAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: req.session_id,
+                provider_name: "example".into(),
+                model: req.model,
+                status: proto::AgentExecutionStatus::Running as i32,
+                messages: req.messages,
+                created_by: req.created_by,
+                execution_ref: req.execution_ref,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_turn(
+            &self,
+            request: Request<proto::GetAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: "session-1".into(),
+                provider_name: "example".into(),
+                status: proto::AgentExecutionStatus::Succeeded as i32,
+                output_text: "done".into(),
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_turns(
+            &self,
+            _request: Request<proto::ListAgentProviderTurnsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderTurnsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderTurnsResponse::default()))
+        }
+
+        async fn cancel_turn(
+            &self,
+            request: Request<proto::CancelAgentProviderTurnRequest>,
+        ) -> Result<Response<proto::AgentTurn>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentTurn {
+                id: req.turn_id,
+                session_id: "session-1".into(),
+                provider_name: "example".into(),
+                status: proto::AgentExecutionStatus::Canceled as i32,
+                status_message: "operator requested".into(),
+                created_by: actor_from_subject(req.subject),
+                ..Default::default()
+            }))
+        }
+
+        async fn list_turn_events(
+            &self,
+            _request: Request<proto::ListAgentProviderTurnEventsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderTurnEventsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderTurnEventsResponse::default()))
+        }
+
+        async fn get_interaction(
+            &self,
+            request: Request<proto::GetAgentProviderInteractionRequest>,
+        ) -> Result<Response<proto::AgentInteraction>, Status> {
+            Ok(Response::new(proto::AgentInteraction {
+                id: request.into_inner().interaction_id,
+                state: proto::AgentInteractionState::Pending as i32,
+                ..Default::default()
+            }))
+        }
+
+        async fn list_interactions(
+            &self,
+            _request: Request<proto::ListAgentProviderInteractionsRequest>,
+        ) -> Result<Response<proto::ListAgentProviderInteractionsResponse>, Status> {
+            Ok(Response::new(proto::ListAgentProviderInteractionsResponse::default()))
+        }
+
+        async fn resolve_interaction(
+            &self,
+            request: Request<proto::ResolveAgentProviderInteractionRequest>,
+        ) -> Result<Response<proto::AgentInteraction>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::AgentInteraction {
+                id: req.interaction_id,
+                state: proto::AgentInteractionState::Resolved as i32,
+                resolution: req.resolution,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_capabilities(
+            &self,
+            _request: Request<proto::GetAgentProviderCapabilitiesRequest>,
+        ) -> Result<Response<proto::AgentProviderCapabilities>, Status> {
+            Ok(Response::new(proto::AgentProviderCapabilities {
+                streaming_text: true,
+                tool_calls: true,
+                structured_output: true,
+                interactions: true,
+                resumable_turns: true,
+                bounded_list_hydration: true,
+                supports_prepared_workspace: true,
+                ..Default::default()
+            }))
+        }
+    }
+
+    #[gestalt::async_trait]
+    impl gestalt::AgentProvider for ExampleAgent {}
+
+    gestalt::export_agent_provider!(constructor = ExampleAgent::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      AgentExecutionStatus,
+      AgentHost,
+      AgentInteractionState,
+      AgentSessionState,
+      defineAgentProvider,
+    } from "@valon-technologies/gestalt";
+
+    const host = new AgentHost();
+    const turns = new Map();
+
+    const actorFromSubject = (subject) =>
+      subject
+        ? {
+            subjectId: subject.subjectId,
+            subjectKind: subject.subjectKind,
+            displayName: subject.displayName,
+            authSource: subject.authSource,
+          }
+        : undefined;
+
+    export const provider = defineAgentProvider({
+      displayName: "Example Agent",
+      description: "Minimal session-and-turn agent provider",
+
+      async createSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          model: request.model,
+          clientRef: request.clientRef,
+          state: AgentSessionState.ACTIVE,
+          createdBy: request.createdBy,
+        };
+      },
+
+      async getSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          state: AgentSessionState.ACTIVE,
+          createdBy: actorFromSubject(request.subject),
+        };
+      },
+
+      async listSessions() {
+        return [];
+      },
+
+      async updateSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          clientRef: request.clientRef,
+          state: request.state,
+          createdBy: actorFromSubject(request.subject),
+        };
+      },
+
+      async createTurn(request) {
+        const runningTurn = {
+          id: request.turnId,
+          sessionId: request.sessionId,
+          providerName: "example",
+          model: request.model,
+          status: AgentExecutionStatus.RUNNING,
+          messages: request.messages,
+          createdBy: request.createdBy,
+          executionRef: request.executionRef,
+        };
+        turns.set(request.turnId, runningTurn);
+
+        let outputText = "";
+        if (request.tools.length > 0) {
+          const response = await host.executeToolForTurn({
+            sessionId: request.sessionId,
+            turnId: request.turnId,
+            toolCallId: "call-1",
+            toolId: request.tools[0].id,
+            runGrant: request.runGrant,
+            arguments: { taskId: "task-123" },
+          });
+          outputText = response.body;
+        }
+
+        const completedTurn = {
+          ...runningTurn,
+          status: AgentExecutionStatus.SUCCEEDED,
+          outputText,
+        };
+        turns.set(request.turnId, completedTurn);
+        return completedTurn;
+      },
+
+      async getTurn(request) {
+        const turn = turns.get(request.turnId);
+        if (!turn) throw new Error(`unknown turn ${request.turnId}`);
+        return turn;
+      },
+
+      async listTurns(request) {
+        return [...turns.values()].filter(
+          (turn) => turn.sessionId === request.sessionId,
+        );
+      },
+
+      async cancelTurn(request) {
+        const existing = turns.get(request.turnId);
+        const canceledTurn = {
+          ...existing,
+          id: request.turnId,
+          sessionId: existing?.sessionId ?? "session-1",
+          providerName: "example",
+          status: AgentExecutionStatus.CANCELED,
+          statusMessage: "operator requested",
+          createdBy: actorFromSubject(request.subject),
+        };
+        turns.set(request.turnId, canceledTurn);
+        return canceledTurn;
+      },
+
+      async listTurnEvents() {
+        return [];
+      },
+
+      async getInteraction(request) {
+        return {
+          id: request.interactionId,
+          state: AgentInteractionState.PENDING,
+        };
+      },
+
+      async listInteractions() {
+        return [];
+      },
+
+      async resolveInteraction(request) {
+        return {
+          id: request.interactionId,
+          state: AgentInteractionState.RESOLVED,
+          resolution: request.resolution,
+        };
+      },
+
+      async getCapabilities() {
+        return {
+          streamingText: true,
+          toolCalls: true,
+          structuredOutput: true,
+          interactions: true,
+          resumableTurns: true,
+          boundedListHydration: true,
+          supportsPreparedWorkspace: true,
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Execution model
+
+`CreateTurn` should persist the turn and return quickly, usually in
+`RUNNING` or `PENDING`. Long-running model/tool work should continue in the
+background. Callers then use `GetTurn`, `ListTurnEvents`, and
+`ListInteractions` to observe progress or resolve pending human input.
+
+If your provider needs durable state, configure `providers.agent.<name>.indexeddb`
+and store your canonical records there. Gestalt does not persist session or
+turn content for you.
+
+When an agent emits turn events, set monotonically increasing `seq` values per
+turn. The optional `display` projection gives CLIs and UIs a provider-neutral
+rendering hint, while the raw `type`, `visibility`, and `data` fields remain
+the canonical event payload.
+
 ## What to read next
 
-- [Custom Providers > Agent](/custom-providers/agent): implementing your own agent backend
+- [Agent](/providers/agent#building-your-own-agent-provider): implementing your own agent backend
 - [HTTP API](/reference/http-api): session, turn, interaction, and event routes
 - [CLI](/client/cli): `gestalt agent`, `gestalt agent sessions`, and `gestalt agent turns`

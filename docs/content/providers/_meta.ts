@@ -1,5 +1,4 @@
 export default {
-  packages: "Provider Packages",
   agent: "Agent",
   authentication: "Authentication",
   authorization: "Authorization",
@@ -12,7 +11,4 @@ export default {
   secrets: "Secret",
   ui: "UI",
   workflow: "Workflow",
-  releasing: {
-    display: "hidden",
-  },
 };
