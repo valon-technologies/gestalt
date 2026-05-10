@@ -146,15 +146,19 @@ def agent_session_editor_relationship(subject_id: str, session_id: str) -> Any:
 
     The ``editor`` relation grants both ``view`` and ``edit`` actions in the
     host-managed authorization model. ``subject_id`` should be the canonical
-    Gestalt subject id, for example ``user:123``.
+    Gestalt subject id, for example ``user:123``. The returned relationship
+    fills both the legacy ``subject`` field and the generalized
+    ``target.subject`` field so it works across mixed host/provider versions.
     """
 
+    subject = AuthorizationSubject(
+        type=AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
+        id=subject_id,
+    )
     return Relationship(
+        subject=subject,
         target=AuthorizationRelationshipTarget(
-            subject=AuthorizationSubject(
-                type=AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-                id=subject_id,
-            ),
+            subject=subject,
         ),
         relation=AGENT_SESSION_RELATION_EDITOR,
         resource=agent_session_resource(session_id),

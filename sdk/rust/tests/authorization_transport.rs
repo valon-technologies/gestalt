@@ -385,7 +385,11 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
 
     let helper_write = writes[1].writes[0].clone();
     let helper = Relationship::agent_session_editor("user:user-123", "session-123");
-    assert_eq!(helper_write.subject, None);
+    assert_eq!(helper.subject.r#type, "subject");
+    assert_eq!(helper.subject.id, "user:user-123");
+    let helper_write_subject = helper_write.subject.as_ref().expect("subject");
+    assert_eq!(helper_write_subject.r#type, "subject");
+    assert_eq!(helper_write_subject.id, "user:user-123");
     assert!(matches!(
         helper.target,
         Some(AuthorizationRelationshipTarget::Subject(subject))

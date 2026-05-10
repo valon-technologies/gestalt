@@ -190,6 +190,10 @@ class AuthorizationTransportTest(unittest.TestCase):
         self.assertEqual(
             agent_session_editor_relationship("user:shared", "session-1"),
             authorization_pb2.Relationship(
+                subject=authorization_pb2.Subject(
+                    type="subject",
+                    id="user:shared",
+                ),
                 target=authorization_pb2.RelationshipTarget(
                     subject=authorization_pb2.Subject(
                         type="subject",
