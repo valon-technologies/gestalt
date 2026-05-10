@@ -231,8 +231,6 @@ directly.
 
 ## Building your own IndexedDB provider
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
-
 ### Manifest
 
 An IndexedDB provider manifest declares `kind: indexeddb`:
@@ -433,239 +431,30 @@ You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-inte
   </Tabs.Tab>
 </Tabs>
 
-### Plugin SDK
+### Plugin access, scoping, and deployment
 
-Plugins access the IndexedDB provider through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
-
-When a plugin binds a datastore through `plugins.<name>.indexeddb`, the host
-rebuilds that provider with plugin-scoped storage before exposing it over the
-SDK socket. Plugins still use plain store names like `tasks` or `snapshots`;
-the host applies isolation outside the plugin by rebuilding the selected
-provider with plugin-scoped config. For schema-capable RelationalDB bindings,
-that means a plugin-specific schema. SQLite-backed RelationalDB bindings use
-`<db>_` table prefixes because SQLite has no schema support. First-party
-MongoDB and DynamoDB bindings use the configured database or table namespace.
-Gestalt does not rewrite object-store names at the transport layer.
-`plugins.<name>.indexeddb.objectStores` can also allowlist logical stores so
-the host rejects stores outside that set.
-
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    import (
-        "context"
-        "log"
-
-        gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    )
-
-    db, err := gestalt.IndexedDB()
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
-
-    // Create an object store with indexes
-    db.CreateObjectStore(ctx, "tasks", gestalt.ObjectStoreSchema{
-        Indexes: []gestalt.IndexSchema{
-            {Name: "by_user", KeyPath: []string{"user_id"}},
-            {Name: "by_status", KeyPath: []string{"status"}},
-        },
-    })
-
-    // CRUD by primary key
-    tasks := db.ObjectStore("tasks")
-    tasks.Add(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "pending"})
-    task, err := tasks.Get(ctx, "t1")
-    tasks.Put(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "done"})
-    tasks.Delete(ctx, "t1")
-
-    // Query by named index
-    pending, err := tasks.Index("by_status").GetAll(ctx, nil, "pending")
-    userTasks, err := tasks.Index("by_user").GetAll(ctx, nil, "u1")
-
-    // Atomic delete by index
-    deleted, err := tasks.Index("by_user").Delete(ctx, "u1")
-
-    // Key range queries
-    recent, err := tasks.GetAll(ctx, gestalt.LowerBound("2024-01-01", false))
-
-    // Atomic read-modify-write
-    tx, err := db.Transaction(ctx, []string{"tasks"}, gestalt.TransactionReadwrite, gestalt.TransactionOptions{})
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer tx.Abort(ctx)
-
-    txTasks := tx.ObjectStore("tasks")
-    task, err = txTasks.Get(ctx, "t1")
-    task["status"] = "done"
-    err = txTasks.Put(ctx, task)
-    if err == nil {
-        err = tx.Commit(ctx)
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    import gestalt
-
-    db = gestalt.IndexedDB()
-
-    # Create an object store with indexes
-    db.create_object_store("tasks", gestalt.ObjectStoreSchema(
-        indexes=[
-            gestalt.IndexSchema(name="by_user", key_path=["user_id"]),
-            gestalt.IndexSchema(name="by_status", key_path=["status"]),
-        ]
-    ))
-
-    # CRUD by primary key
-    tasks = db.object_store("tasks")
-    tasks.add({"id": "t1", "user_id": "u1", "status": "pending"})
-    task = tasks.get("t1")
-    tasks.put({"id": "t1", "user_id": "u1", "status": "done"})
-    tasks.delete("t1")
-
-    # Query by named index
-    pending = tasks.index("by_status").get_all("pending")
-    user_tasks = tasks.index("by_user").get_all("u1")
-
-    # Atomic delete by index
-    deleted = tasks.index("by_user").delete("u1")
-
-    # Atomic read-modify-write
-    with db.transaction(["tasks"], "readwrite") as tx:
-        tx_tasks = tx.object_store("tasks")
-        task = tx_tasks.get("t1")
-        task["status"] = "done"
-        tx_tasks.put(task)
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    use gestalt_plugin_sdk as gestalt;
-    use serde_json::json;
-
-    let mut db = gestalt::IndexedDB::connect().await?;
-
-    // Create an object store with indexes
-    db.create_object_store("tasks", gestalt::indexeddb::ObjectStoreSchema {
-        indexes: vec![
-            gestalt::indexeddb::IndexSchema { name: "by_user".into(), key_path: vec!["user_id".into()], unique: false },
-            gestalt::indexeddb::IndexSchema { name: "by_status".into(), key_path: vec!["status".into()], unique: false },
-        ],
-    }).await?;
-
-    // CRUD by primary key
-    let mut tasks = db.object_store("tasks");
-    tasks.add(record).await?;
-    let task = tasks.get("t1").await?;
-    tasks.delete("t1").await?;
-
-    // Query by named index
-    let mut idx = tasks.index("by_user");
-    let user_tasks = idx.get_all(&[json!("u1")]).await?;
-    let deleted = idx.delete(&[json!("u1")]).await?;
-
-    // Atomic read-modify-write
-    let mut tx = db.transaction(&["tasks"], gestalt::TransactionMode::Readwrite, gestalt::TransactionOptions::default()).await?;
-    {
-        let mut tx_tasks = tx.object_store("tasks");
-        let mut task = tx_tasks.get("t1").await?;
-        task.insert("status".into(), json!("done"));
-        tx_tasks.put(task).await?;
-    }
-    tx.commit().await?;
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { ColumnType, IndexedDB } from "@valon-technologies/gestalt";
-
-    const db = new IndexedDB();
-
-    // Create an object store with a SQL-friendly schema and indexes.
-    await db.createObjectStore("tasks", {
-      columns: [
-        { name: "id", type: ColumnType.String, primaryKey: true, notNull: true },
-        { name: "user_id", type: ColumnType.String, notNull: true },
-        { name: "status", type: ColumnType.String, notNull: true },
-        { name: "metadata", type: ColumnType.JSON },
-      ],
-      indexes: [
-        { name: "by_user", keyPath: ["user_id"] },
-        { name: "by_status", keyPath: ["status"] },
-      ],
-    });
-
-    // CRUD by primary key
-    const tasks = db.objectStore("tasks");
-    await tasks.add({ id: "t1", user_id: "u1", status: "pending" });
-    const task = await tasks.get("t1");
-    await tasks.put({ id: "t1", user_id: "u1", status: "done" });
-    await tasks.delete("t1");
-
-    // Query by named index
-    const pending = await tasks.index("by_status").getAll(undefined, "pending");
-    const userTasks = await tasks.index("by_user").getAll(undefined, "u1");
-
-    // Atomic delete by index
-    const deleted = await tasks.index("by_user").delete("u1");
-
-    // Atomic read-modify-write
-    const tx = await db.transaction(["tasks"], "readwrite");
-    const txTasks = tx.objectStore("tasks");
-    const current = await txTasks.get("t1");
-    await txTasks.put({ ...current, status: "done" });
-    await tx.commit();
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-For SQL-backed providers such as `indexeddb/relationaldb`, declare `columns`
-when creating an object store so the backend can materialize a concrete table
-schema. Document-style providers may ignore `columns`, but keeping the schema in
-the SDK call makes the store portable across both styles of backend.
-
-### Config reference
-
-Reference an IndexedDB provider in the `providers.indexeddb` section, and set `server.providers.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
-
-```yaml
-server:
-  providers:
-    indexeddb: main
-
-providers:
-  indexeddb:
-    main:
-      source: ./relationaldb/manifest.yaml
-      config:
-        dsn: sqlite://gestalt.db
-```
-
-For production, use a published `provider-release.yaml` metadata URL:
-
-```yaml
-providers:
-  indexeddb:
-    main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
-      config:
-        dsn: ${DATABASE_URL}
-```
-
-`DATABASE_URL` is a connection string for your database. The RelationalDB provider accepts `postgres://`, `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
+Plugin-side IndexedDB usage is documented in
+[Using IndexedDB from a plugin](/providers/indexeddb#using-indexeddb-from-a-plugin).
+Provider authors should still support logical store names: when a plugin binds a
+datastore with `plugins.<name>.indexeddb`, Gestalt rebuilds the selected provider
+with plugin-scoped config before exposing it over the SDK socket.
 
 Object store names remain logical inside plugins. The host scopes plugin data
 by rebuilding providers with provider-native namespace config instead of
 rewriting object-store names at the SDK transport layer.
 
+For SQL-backed providers such as `indexeddb/relationaldb`, honor `columns` on
+`CreateObjectStore` so the backend can materialize concrete table schemas.
+Document-style providers may ignore `columns`, but preserving the schema in the
+SDK contract keeps stores portable across backend styles.
+
+Configure IndexedDB providers with the shape shown in
+[Configuring storage](/providers/indexeddb#configuring-storage). For package
+publishing, lock/sync, and release behavior, see
+[Releasing provider packages](/providers#releasing-provider-packages).
+
 ## What to read next
 
 For the broader server and provider config model, continue to
 [Configuration](/configuration). For the catalog of first-party packages, see
-[Built-in Providers](/reference/built-in-providers). If you want to implement
-the contract yourself, read
-[IndexedDB](/providers/indexeddb#building-your-own-indexeddb-provider).
+[Built-in Providers](/reference/built-in-providers).

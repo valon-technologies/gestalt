@@ -746,9 +746,9 @@ Run responses include `id`, `provider`, `status`, `target`, `trigger`,
 `createdBy`, `createdAt`, `startedAt`, `completedAt`, `statusMessage`, and
 `resultBody`. The `trigger.kind` value is `schedule`, `event`, or `manual`.
 
-If you are implementing a provider or another event producer, see
-[Workflow](/providers/workflow#building-your-own-workflow-provider) for the
-`PublishEvent` interface and the provider-side contract.
+If you are implementing a provider or another event producer, the
+[Building your own workflow provider](#building-your-own-workflow-provider)
+section covers the `PublishEvent` interface and provider-side contract.
 
 ## How execution works
 
@@ -762,14 +762,7 @@ execute as `runAs.subject.id` when `runAs` is declared, otherwise as
 `system:config`. User-owned schedules and triggers execute as the creating
 subject.
 
-
-Implementation details for the workflow runtime surface, host callbacks, and
-release flow live under
-[Workflow](/providers/workflow#building-your-own-workflow-provider).
-
 ## Building your own workflow provider
-
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
 
 ### Manifest
 
@@ -1230,50 +1223,19 @@ invoke target plugin operations.
   </Tabs.Tab>
 </Tabs>
 
-### Config reference
+### Deploying the provider
 
-To use a workflow provider in a deployment, configure it under
-`providers.workflow`, then reference it from top-level `workflows:` or the
-global workflow API/CLI:
-
-```yaml
-providers:
-  indexeddb:
-    workflow_state:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
-      config:
-        dsn: ${DATABASE_URL}
-
-  workflow:
-    local:
-      source: ./workflow/manifest.yaml
-      indexeddb:
-        provider: workflow_state
-        db: workflow
-      config:
-        pollInterval: 1s
-
-workflows:
-  schedules:
-    nightly_sync:
-      provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        plugin:
-          name: roadmap
-          operation: sync_items
-```
-
-`providers.workflow.<name>.indexeddb` is optional. When present, Gestalt
-exposes a host IndexedDB binding to the workflow provider over the usual
-IndexedDB SDK socket.
+Configure workflow providers with the same `providers.workflow`, optional
+`providers.workflow.<name>.indexeddb`, and top-level `workflows:` shape shown in
+[Configuring `providers.workflow`](/providers/workflow#configuring-providersworkflow)
+and [Defining config-managed workflows](/providers/workflow#defining-config-managed-workflows).
+For package publishing, lock/sync, and release behavior, see
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
 If you want the surrounding config model, read [Configuration](/configuration)
 and the full [Config File](/reference/config-file) reference. For route and
 command details, see [HTTP API](/reference/http-api) and [CLI](/client/cli).
-If you need provider implementation details, continue to
-[Workflow](/providers/workflow#building-your-own-workflow-provider) or the
-[Built-in Providers](/reference/built-in-providers) reference.
+The [Built-in Providers](/reference/built-in-providers) reference lists
+first-party workflow provider packages.

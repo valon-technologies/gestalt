@@ -170,20 +170,9 @@ image to prove that the manifest entrypoint exists inside it.
 
 ## Building your own runtime provider
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
-
-### What a runtime provider does
-
-A runtime provider answers a small set of control-plane questions for
-`gestaltd`. Can this backend host executable plugins at all. How does Gestalt
-create and observe a runtime session there. How does a hosted plugin reach
-Gestalt-owned services. How is hostname-based egress preserved. How does the
-host dial the hosted plugin back once it starts.
-
-It does **not** replace the host-local authentication, authorization,
-IndexedDB, cache, S3, or secrets providers. Those remain on the `gestaltd`
-host. A runtime provider changes where executable plugin, agent, and workflow
-provider processes run and how the host reaches them.
+The [scope](/providers/runtime#scope) and
+[mental model](/providers/runtime#mental-model) sections define what runtime
+providers do. This section focuses on the provider manifest and RPC contract.
 
 ### Manifest
 
@@ -208,26 +197,10 @@ packaging flow.
 
 ### Deployment config
 
-Operators configure runtime providers under top-level `runtime.providers`, not
-under `plugins` or `providers.*`:
-
-```yaml
-runtime:
-  providers:
-    example:
-      source: ./runtime/example/manifest.yaml
-      default: true
-      config:
-        region: us-east-1
-        pool: default
-```
-
-Plugins and hosted providers then opt into that runtime with their own
-`runtime` block, for example `plugins.<name>.runtime`,
-`providers.agent.<name>.runtime`, or `providers.workflow.<name>.runtime`.
-They can select the backend explicitly with `runtime.provider`, or inherit the
-default runtime selected by `server.runtime.defaultProvider` or
-`runtime.providers.<name>.default`.
+Operators configure runtime providers under top-level `runtime.providers`, and
+plugins, agent providers, or workflow providers opt into hosted execution with
+their own `runtime` blocks. The canonical config example lives in
+[Configuring a runtime provider](/providers/runtime#configuring-a-runtime-provider).
 
 ### Provider interface
 
@@ -628,16 +601,12 @@ ID only when the runtime backend is forwarding logs for a different hosted
 session. Python and TypeScript also expose writer helpers for redirecting
 standard streams.
 
-### Releasing
+### Publishing the provider
 
-Runtime providers use the same release flow as other executable providers:
-
-```sh
-gestaltd provider release --platform linux/amd64 --output ./dist
-```
-
-Then point `runtime.providers.<name>.source` at the resulting
-`provider-release.yaml`, or use a local manifest path during development.
+Runtime providers use the same package publishing flow as other executable
+providers. See [Releasing provider packages](/providers#releasing-provider-packages)
+for release commands, archive layout, and published `provider-release.yaml`
+metadata URLs.
 
 ## What to read next
 

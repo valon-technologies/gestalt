@@ -491,6 +491,15 @@ workflows:
             bucket: workspace-review-reports
 ```
 
+This example intentionally shows the complete application wiring in one place.
+Use the provider pages as the source of truth for each block:
+[Authentication](/providers/authentication),
+[Authorization](/providers/authorization),
+[IndexedDB](/providers/indexeddb),
+[S3](/providers/s3),
+[Workflow](/providers/workflow), and
+[UI](/providers/ui).
+
 In TypeScript plugin code, open host services from the request context. The
 plugin does not know database DSNs, S3 credentials, or workflow storage details;
 those come from the deployment bindings above.
@@ -644,7 +653,10 @@ hostname-based egress controls.
 
 ## Building your own plugin
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
+Use this section for the plugin manifest and SDK implementation surface. For the
+shared package model, provider search/add commands, and release mechanics, see
+[Provider packages](/providers#provider-packages) and
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ### Manifest
 

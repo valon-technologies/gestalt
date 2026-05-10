@@ -78,8 +78,6 @@ providers:
 
 ## Building your own authentication provider
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
-
 ### Manifest
 
 An authentication provider manifest declares `kind: authentication`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
@@ -455,28 +453,14 @@ Session TTL controls how long Gestalt persists a successful browser login. If yo
   </Tabs.Tab>
 </Tabs>
 
-### Config Reference
+### Deploying the provider
 
-To use a Google authentication provider in a Gestalt deployment, reference it as a named entry in `providers.authentication`:
-
-```yaml
-providers:
-  authentication:
-    google:
-      source: ./google-authentication/manifest.yaml
-      config:
-        clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret:
-          secret:
-            provider: default
-            name: google-client-secret
-        allowedDomains:
-          - example.com
-```
-
-`source: ./manifest.yaml` points at the authentication provider's `manifest.yaml` during development. For production, use a published `provider-release.yaml` metadata URL. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
-
-Structured secret refs like `clientSecret.secret.provider: default` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
+Configure a custom authentication provider through the same
+`providers.authentication` block shown in
+[Configuring `providers.authentication`](/providers/authentication#configuring-providersauthentication).
+That section is the source of truth for local manifest paths, published provider
+release URLs, and structured secret refs. For packaging and release mechanics,
+see [Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What To Read Next
 

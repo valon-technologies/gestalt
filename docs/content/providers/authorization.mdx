@@ -530,8 +530,6 @@ provider. Static policy members still take precedence over dynamic grants.
 
 ## Building your own authorization provider
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
-
 ### Manifest
 
 An authorization provider manifest declares `kind: authorization`:
@@ -550,16 +548,11 @@ spec:
 
 Authorization provider authoring is currently exposed through the Go SDK.
 
-The contract has three parts:
-
-| Area | Methods |
-| --- | --- |
-| Decision plane | `Evaluate`, `EvaluateMany`, `SearchResources`, `SearchSubjects`, `SearchActions`, `GetMetadata` |
-| Relationship control plane | `ReadRelationships`, `WriteRelationships` |
-| Model lifecycle | `GetActiveModel`, `ListModels`, `WriteModel` |
-
-The example below shows the shape of a minimal in-memory provider. The
-remaining methods follow the same request/response pattern.
+The provider contract uses the decision plane, relationship control plane, and
+model lifecycle surfaces described in
+[Authorization provider architecture](/providers/authorization#authorization-provider-architecture).
+The example below shows the shape of a minimal in-memory provider; the remaining
+methods follow the same request/response pattern.
 
 ### Observability
 
@@ -669,34 +662,13 @@ func (p *Provider) WriteModel(_ context.Context, req *gestalt.WriteModelRequest)
 
 ```
 
-### Config reference
+### Deploying the provider
 
-To use a custom authorization provider in a deployment, reference it as a named
-entry in `providers.authorization`:
-
-```yaml
-server:
-  providers:
-    indexeddb: main
-    authorization: example
-
-providers:
-  indexeddb:
-    main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
-      config:
-        dsn: ${DATABASE_URL}
-
-  authorization:
-    example:
-      source: ./authorization/manifest.yaml
-      config:
-        modelId: default
-```
-
-Use `source: ./manifest.yaml` during development. For production, publish a
-release and point `source` at the resulting `provider-release.yaml` metadata
-URL.
+Configure a custom authorization provider through the same
+`providers.authorization` and `server.providers.authorization` blocks shown in
+[Configuring `providers.authorization`](/providers/authorization#configuring-providersauthorization).
+For package publishing, use the common flow in
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
@@ -707,5 +679,3 @@ see how these semantics apply to concrete surfaces, read
 [Plugin](/providers/plugins), [Workflow](/providers/workflow), and
 [UI](/providers/ui). For the relationship between authorization and
 credentials, read [External Credentials](/providers/external-credentials).
-For provider implementation details, see
-[Authorization](/providers/authorization#building-your-own-authorization-provider).

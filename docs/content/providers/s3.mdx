@@ -214,8 +214,6 @@ providers.
 
 ## Building your own S3 provider
 
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
-
 ### Manifest
 
 An S3 provider manifest declares `kind: s3`:
@@ -479,36 +477,12 @@ interface to the underlying gRPC service:
 `gestalt.S3Provider` adds runtime lifecycle wiring and a `serve()` helper for
 languages that expose the server-side S3 provider surface.
 
-### Plugin SDK
+### Plugin access
 
-Plugins consume S3 providers through the SDK, not by speaking gRPC directly.
-Each SDK exposes a client plus object-handle helpers:
-
-```go
-s3, err := gestalt.S3()
-if err != nil {
-  return err
-}
-defer s3.Close()
-
-obj := s3.Object("artifacts", "jobs/123/output.json")
-if _, err := obj.WriteJSON(ctx, map[string]any{"ok": true}, nil); err != nil {
-  return err
-}
-body, err := obj.JSON(ctx, nil)
-if err != nil {
-  return err
-}
-_ = body
-```
-
-The same contract exists across Go, Python, Rust, and TypeScript:
-
-- connect to the default binding with `S3()` / `new S3()` /
-  `S3::connect().await`
-- connect to a named binding with `S3("archive")` or its language equivalent
-- operate on object handles with `stat`, `bytes` / `text` / `json`, `write`,
-  `delete`, and `presign`
+Plugin-side S3 usage is documented in
+[Using `S3` from a plugin](/providers/s3#using-s3-from-a-plugin). Provider
+authors implement the S3 service surface; Gestalt handles configured plugin
+bindings, SDK sockets, and host-mediated object access URLs.
 
 ### Deploying the provider
 
@@ -529,6 +503,11 @@ plugins:
     s3:
       - assets
 ```
+
+For the first-party config shape and binding model, see
+[Configuring the first-party S3 provider](/providers/s3#configuring-the-first-party-s3-provider).
+For packaging and published release URLs, see
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ### Implementation notes
 

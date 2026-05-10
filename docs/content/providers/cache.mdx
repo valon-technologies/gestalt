@@ -151,13 +151,7 @@ selection model. The exact `config` block depends on the selected provider
 package. For the first-party `cache/valkey` provider, that usually means an
 address plus any backend-specific connection settings.
 
-
-For manifests, SDK authoring surfaces, and release flow, see
-[Cache](/providers/cache#building-your-own-cache-provider).
-
 ## Building your own cache provider
-
-This section covers provider authoring details: manifest shape, SDK interfaces, local source configuration, implementation notes, and release considerations.
 
 ### Manifest
 
@@ -320,77 +314,21 @@ Python, Rust, and TypeScript cache providers inherit default implementations
 for `GetMany`, `SetMany`, and `DeleteMany`. Override the batch helpers only
 when the backing cache can do better than repeated single-key calls.
 
-### Plugin SDK
+### Plugin access and release flow
 
-Plugins consume bound caches through the language SDK. The host exposes a Unix
-socket for each requested cache binding.
+Plugin-side cache usage is documented in
+[Using `Cache` from a plugin](/providers/cache#using-cache-from-a-plugin).
+Provider authors only implement the cache service; Gestalt resolves configured
+bindings and exposes the matching SDK sockets to plugins.
 
-When a plugin binds exactly one cache, the host sets both:
-
-- `GESTALT_CACHE_SOCKET`
-- `GESTALT_CACHE_SOCKET_<NAME>`
-
-When a plugin binds multiple caches, only the named env vars are set.
-
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    cache, err := gestalt.Cache("")
-    if err != nil {
-        panic(err)
-    }
-    defer cache.Close()
-
-    if err := cache.Set(ctx, "session", []byte("alpha"), gestalt.CacheSetOptions{}); err != nil {
-        panic(err)
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    import datetime as dt
-    import gestalt
-
-    cache = gestalt.Cache("session")
-    cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
-    value = cache.get("user:1")
-    cache.close()
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    let mut cache = gestalt::Cache::connect_named("session").await?;
-    cache
-        .set(
-            "user:1",
-            b"alpha",
-            gestalt::CacheSetOptions {
-                ttl: Some(std::time::Duration::from_secs(300)),
-            },
-        )
-        .await?;
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { Cache } from "@valon-technologies/gestalt";
-
-    const cache = new Cache("session");
-    await cache.set("user:1", new TextEncoder().encode("alpha"), { ttlMs: 300_000 });
-    const value = await cache.get("user:1");
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-### Release flow
-
-Managed cache providers follow the same `gestaltd lock` /
-`gestaltd sync --locked` / release flow as other source-backed provider kinds.
-Point a manifest at a published source ref, run `gestaltd lock`, sync locked
-artifacts, and package releases with `gestaltd provider release`.
+Configure cache providers with the same `providers.cache` and
+`plugins.<name>.cache` shape shown in
+[Configuring `providers.cache`](/providers/cache#configuring-providerscache).
+For packaging, lock/sync, and release behavior, see
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
 If you want the full config reference, read
 [Config File](/reference/config-file#providerscache). For plugin-side binding
-behavior in the broader config model, see [Configuration](/configuration)..
+behavior in the broader config model, see [Configuration](/configuration).
