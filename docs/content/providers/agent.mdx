@@ -948,11 +948,45 @@ Providers that support deployer-defined session setup must advertise
 `supports_session_start` from `GetCapabilities`. Gestalt then forwards
 `CreateSession.session_start` only to providers with that capability.
 
-```go
-return &proto.AgentProviderCapabilities{
-  SupportsSessionStart: true,
-}
-```
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    return &proto.AgentProviderCapabilities{
+        SupportsSessionStart: true,
+    }, nil
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    def GetCapabilities(self, request, context):
+        return gestalt.AgentProviderCapabilities(
+            supports_session_start=True,
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn get_capabilities(
+        &self,
+        _request: pb::GetAgentProviderCapabilitiesRequest,
+    ) -> gestalt::Result<pb::AgentProviderCapabilities> {
+        Ok(pb::AgentProviderCapabilities {
+            supports_session_start: true,
+            ..Default::default()
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    export const provider = defineAgentProvider({
+      async getCapabilities() {
+        return { supportsSessionStart: true };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 `session_start.hooks` currently contains command hooks only. Providers should
 run each argv with the supplied absolute `cwd`, a sanitized environment plus the
@@ -969,57 +1003,155 @@ advertise `supports_prepared_workspace`. They do not receive the caller's raw
 checkout request; Gestalt and the runtime provider turn that request into a
 prepared `root` and `cwd` first.
 
-```go
-func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
-  return &proto.AgentProviderCapabilities{
-    SupportsPreparedWorkspace: true,
-  }, nil
-}
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    func (p *Provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+        return &proto.AgentProviderCapabilities{
+            SupportsPreparedWorkspace: true,
+        }, nil
+    }
 
-func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-  prepared := req.GetPreparedWorkspace()
-  if prepared != nil {
-    // Launch the vendor harness with prepared.GetCwd() as its working directory.
-  }
+    func (p *Provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+        prepared := req.GetPreparedWorkspace()
+        if prepared != nil {
+            // Launch the vendor harness with prepared.GetCwd() as its working directory.
+        }
 
-  return &proto.AgentSession{Id: req.GetSessionId()}, nil
-}
-```
+        return &proto.AgentSession{Id: req.GetSessionId()}, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    def GetCapabilities(self, request, context):
+        return gestalt.AgentProviderCapabilities(
+            supports_prepared_workspace=True,
+        )
 
-In TypeScript, the same fields are exposed as `supportsPreparedWorkspace` and
-`request.preparedWorkspace`:
 
-```ts
-export const provider = defineAgentProvider({
-  getCapabilities() {
-    return { supportsPreparedWorkspace: true };
-  },
+    def CreateSession(self, request, context):
+        prepared = (
+            request.prepared_workspace
+            if request.HasField("prepared_workspace")
+            else None
+        )
+        if prepared:
+            cwd = prepared.cwd
+            # Launch the vendor harness with cwd as its working directory.
 
-  async createSession(request) {
-    const cwd = request.preparedWorkspace?.cwd;
-    // Launch the vendor harness from cwd when it is present.
-    return {
-      id: request.sessionId,
-      providerName: "example",
-      state: AgentSessionState.ACTIVE,
-    };
-  },
-});
-```
+        return gestalt.AgentSession(
+            id=request.session_id,
+            provider_name="example",
+            state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn get_capabilities(
+        &self,
+        _request: pb::GetAgentProviderCapabilitiesRequest,
+    ) -> gestalt::Result<pb::AgentProviderCapabilities> {
+        Ok(pb::AgentProviderCapabilities {
+            supports_prepared_workspace: true,
+            ..Default::default()
+        })
+    }
+
+    async fn create_session(
+        &self,
+        request: pb::CreateAgentProviderSessionRequest,
+    ) -> gestalt::Result<pb::AgentSession> {
+        if let Some(prepared) = request.prepared_workspace.as_ref() {
+            let cwd = &prepared.cwd;
+            // Launch the vendor harness with cwd as its working directory.
+        }
+
+        Ok(pb::AgentSession {
+            id: request.session_id,
+            provider_name: "example".to_string(),
+            state: pb::AgentSessionState::Active as i32,
+            ..Default::default()
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    export const provider = defineAgentProvider({
+      getCapabilities() {
+        return { supportsPreparedWorkspace: true };
+      },
+
+      async createSession(request) {
+        const cwd = request.preparedWorkspace?.cwd;
+        // Launch the vendor harness from cwd when it is present.
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          state: AgentSessionState.ACTIVE,
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ### MCP Catalog Tools
 
 Agent providers opt in to Gestalt integration tools by advertising
 `mcp_catalog` in `GetCapabilities`:
 
-```go
-return &proto.AgentProviderCapabilities{
-  ToolCalls: true,
-  SupportedToolSources: []proto.AgentToolSourceMode{
-    proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
-  },
-}
-```
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    return &proto.AgentProviderCapabilities{
+        ToolCalls: true,
+        SupportedToolSources: []proto.AgentToolSourceMode{
+            proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+        },
+    }, nil
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    def GetCapabilities(self, request, context):
+        return gestalt.AgentProviderCapabilities(
+            tool_calls=True,
+            supported_tool_sources=[
+                gestalt.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+            ],
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    async fn get_capabilities(
+        &self,
+        _request: pb::GetAgentProviderCapabilitiesRequest,
+    ) -> gestalt::Result<pb::AgentProviderCapabilities> {
+        Ok(pb::AgentProviderCapabilities {
+            tool_calls: true,
+            supported_tool_sources: vec![pb::AgentToolSourceMode::McpCatalog as i32],
+            ..Default::default()
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    export const provider = defineAgentProvider({
+      async getCapabilities() {
+        return {
+          toolCalls: true,
+          supportedToolSources: [AgentToolSourceMode.MCP_CATALOG],
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 When a turn uses `tool_source: mcp_catalog`, Gestalt passes the provider:
 

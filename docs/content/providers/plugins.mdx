@@ -500,95 +500,433 @@ Use the provider pages as the source of truth for each block:
 [Workflow](/providers/workflow), and
 [UI](/providers/ui).
 
-In TypeScript plugin code, open host services from the request context. The
-plugin does not know database DSNs, S3 credentials, or workflow storage details;
-those come from the deployment bindings above.
+In plugin code, open host services from the request context or language SDK.
+The plugin does not know database DSNs, S3 credentials, or workflow storage
+details; those come from the deployment bindings above.
 
-```ts
-import {
-  IndexedDB,
-  PresignMethod,
-  S3,
-  WorkflowManager,
-  definePlugin,
-  ok,
-  operation,
-  s,
-} from "@valon-technologies/gestalt";
+<Tabs items={['Python', 'Rust', 'TypeScript', 'Go']}>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+    import json
 
-export const plugin = definePlugin({
-  operations: [
-    operation({
-      id: "items.save",
-      method: "POST",
-      description: "Save one review item",
-      input: s.object({
-        id: s.string(),
-        title: s.string(),
-        status: s.string(),
-      }),
-      output: s.object({ ok: s.boolean() }),
-      async handler(input) {
-        const db = new IndexedDB();
-        const items = db.objectStore("items");
-        await items.put({
-          id: input.id,
-          title: input.title,
-          status: input.status,
-          updatedAt: new Date().toISOString(),
-        });
-        return ok({ ok: true });
-      },
-    }),
-    operation({
-      id: "reports.generateNightly",
-      method: "POST",
-      description: "Generate the nightly review report",
-      input: s.object({
-        bucket: s.string(),
-      }),
-      output: s.object({
-        reportUrl: s.string(),
-      }),
-      async handler(input, request) {
-        const db = new IndexedDB();
-        const reports = db.objectStore("reports");
+    import gestalt
 
-        const body = new TextEncoder().encode(
-          JSON.stringify({ generatedAt: new Date().toISOString() }),
-        );
 
-        const s3 = new S3("reports");
-        const object = s3.object(input.bucket, `nightly/${request.idempotencyKey}.json`);
-        await object.write(body, { contentType: "application/json" });
-        const access = await object.createAccessUrl({
-          method: PresignMethod.Get,
-          expiresSeconds: 900,
-        });
+    plugin = gestalt.Plugin("workspace_review")
 
-        await reports.put({
-          id: request.idempotencyKey,
-          url: access.url,
-          createdAt: new Date().toISOString(),
-        });
 
-        const workflows = new WorkflowManager(request);
-        await workflows.publishEvent({
-          event: {
-            type: "workspace_review.report.generated",
-            source: "workspace_review",
-            subject: "nightly",
-            datacontenttype: "application/json",
-            data: { reportUrl: access.url },
+    class SaveItemInput(gestalt.Model):
+        id: str
+        title: str
+        status: str
+
+
+    @plugin.operation(id="items.save", method="POST")
+    def save_item(input: SaveItemInput) -> dict[str, bool]:
+        db = gestalt.IndexedDB()
+        db.object_store("items").put(
+            {
+                "id": input.id,
+                "title": input.title,
+                "status": input.status,
+                "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+        )
+        db.close()
+        return {"ok": True}
+
+
+    class NightlyReportInput(gestalt.Model):
+        bucket: str
+
+
+    @plugin.operation(id="reports.generateNightly", method="POST")
+    def generate_nightly(
+        input: NightlyReportInput, request: gestalt.Request
+    ) -> dict[str, str]:
+        db = gestalt.IndexedDB()
+        s3 = gestalt.S3("reports")
+
+        object_key = f"nightly/{request.idempotency_key}.json"
+        report = s3.object(input.bucket, object_key)
+        report.write_bytes(
+            json.dumps({"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat()}).encode(),
+            gestalt.WriteOptions(content_type="application/json"),
+        )
+        access = report.create_access_url(
+            gestalt.PresignOptions(
+                method=gestalt.PresignMethod.GET,
+                expires=dt.timedelta(seconds=900),
+            )
+        )
+
+        db.object_store("reports").put(
+            {
+                "id": request.idempotency_key,
+                "url": access.url,
+                "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+        )
+
+        event = gestalt.WorkflowEvent(
+            type="workspace_review.report.generated",
+            source="workspace_review",
+            subject="nightly",
+            datacontenttype="application/json",
+        )
+        event.data.update({"reportUrl": access.url})
+        with request.workflow_manager() as workflows:
+            workflows.publish_event(
+                gestalt.WorkflowManagerPublishEventRequest(event=event)
+            )
+
+        db.close()
+        s3.close()
+        return {"reportUrl": access.url}
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::collections::BTreeMap;
+
+    use gestalt::{
+        proto::v1::{WorkflowEvent, WorkflowManagerPublishEventRequest},
+        IndexedDB, PresignMethod, PresignOptions, S3,
+    };
+    use prost_types::{value::Kind, Struct, Value};
+    use serde::{Deserialize, Serialize};
+    use serde_json::json;
+
+    #[derive(Deserialize)]
+    struct SaveItemInput {
+        id: String,
+        title: String,
+        status: String,
+    }
+
+    #[derive(Serialize)]
+    struct SaveItemOutput {
+        ok: bool,
+    }
+
+    async fn save_item(input: SaveItemInput) -> Result<SaveItemOutput, Box<dyn std::error::Error>> {
+        let db = IndexedDB::connect().await?;
+        let mut items = db.object_store("items");
+        let updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .to_string();
+
+        items
+            .put(BTreeMap::from([
+                ("id".to_string(), json!(input.id)),
+                ("title".to_string(), json!(input.title)),
+                ("status".to_string(), json!(input.status)),
+                ("updatedAt".to_string(), json!(updated_at)),
+            ]))
+            .await?;
+
+        Ok(SaveItemOutput { ok: true })
+    }
+
+    #[derive(Deserialize)]
+    struct NightlyReportInput {
+        bucket: String,
+    }
+
+    #[derive(Serialize)]
+    struct NightlyReportOutput {
+        report_url: String,
+    }
+
+    async fn generate_nightly(
+        request: &gestalt::Request,
+        input: NightlyReportInput,
+    ) -> Result<NightlyReportOutput, Box<dyn std::error::Error>> {
+        let db = IndexedDB::connect().await?;
+        let mut reports = db.object_store("reports");
+        let generated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .to_string();
+
+        let s3 = S3::connect_named("reports").await?;
+        let key = format!("nightly/{}.json", request.idempotency_key);
+        let mut report = s3.object(&input.bucket, &key);
+        report
+            .write_json(&json!({ "generatedAt": generated_at.clone() }), None)
+            .await?;
+        let access = report
+            .create_access_url(Some(PresignOptions {
+                method: PresignMethod::Get,
+                expires: std::time::Duration::from_secs(900),
+                ..PresignOptions::default()
+            }))
+            .await?;
+
+        reports
+            .put(BTreeMap::from([
+                ("id".to_string(), json!(request.idempotency_key)),
+                ("url".to_string(), json!(access.url.clone())),
+                ("createdAt".to_string(), json!(generated_at)),
+            ]))
+            .await?;
+
+        let mut workflows = request.workflow_manager().await?;
+        workflows
+            .publish_event(WorkflowManagerPublishEventRequest {
+                event: Some(WorkflowEvent {
+                    r#type: "workspace_review.report.generated".to_string(),
+                    source: "workspace_review".to_string(),
+                    subject: "nightly".to_string(),
+                    datacontenttype: "application/json".to_string(),
+                    data: Some(Struct {
+                        fields: BTreeMap::from([(
+                            "reportUrl".to_string(),
+                            Value {
+                                kind: Some(Kind::StringValue(access.url.clone())),
+                            },
+                        )]),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(NightlyReportOutput {
+            report_url: access.url,
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      IndexedDB,
+      PresignMethod,
+      S3,
+      WorkflowManager,
+      definePlugin,
+      ok,
+      operation,
+      s,
+    } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      operations: [
+        operation({
+          id: "items.save",
+          method: "POST",
+          input: s.object({
+            id: s.string(),
+            title: s.string(),
+            status: s.string(),
+          }),
+          output: s.object({ ok: s.boolean() }),
+          async handler(input) {
+            const db = new IndexedDB();
+            await db.objectStore("items").put({
+              id: input.id,
+              title: input.title,
+              status: input.status,
+              updatedAt: new Date().toISOString(),
+            });
+            return ok({ ok: true });
           },
-        });
+        }),
+        operation({
+          id: "reports.generateNightly",
+          method: "POST",
+          input: s.object({ bucket: s.string() }),
+          output: s.object({ reportUrl: s.string() }),
+          async handler(input, request) {
+            const db = new IndexedDB();
+            const s3 = new S3("reports");
+            const object = s3.object(
+              input.bucket,
+              `nightly/${request.idempotencyKey}.json`,
+            );
 
-        return ok({ reportUrl: access.url });
-      },
-    }),
-  ],
-});
-```
+            await object.write(
+              new TextEncoder().encode(
+                JSON.stringify({ generatedAt: new Date().toISOString() }),
+              ),
+              { contentType: "application/json" },
+            );
+            const access = await object.createAccessUrl({
+              method: PresignMethod.Get,
+              expiresSeconds: 900,
+            });
+
+            await db.objectStore("reports").put({
+              id: request.idempotencyKey,
+              url: access.url,
+              createdAt: new Date().toISOString(),
+            });
+
+            const workflows = new WorkflowManager(request);
+            await workflows.publishEvent({
+              event: {
+                type: "workspace_review.report.generated",
+                source: "workspace_review",
+                subject: "nightly",
+                datacontenttype: "application/json",
+                data: { reportUrl: access.url },
+              },
+            });
+
+            return ok({ reportUrl: access.url });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "encoding/json"
+      "net/http"
+      "time"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      "google.golang.org/protobuf/types/known/structpb"
+    )
+
+    type Provider struct{}
+
+    type SaveItemInput struct {
+      ID     string `json:"id" required:"true"`
+      Title  string `json:"title" required:"true"`
+      Status string `json:"status" required:"true"`
+    }
+
+    type SaveItemOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    func (p *Provider) saveItem(
+      ctx context.Context,
+      input SaveItemInput,
+      _ gestalt.Request,
+    ) (gestalt.Response[SaveItemOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      defer db.Close()
+
+      items := db.ObjectStore("items")
+      if err := items.Put(ctx, gestalt.Record{
+        "id":        input.ID,
+        "title":     input.Title,
+        "status":    input.Status,
+        "updatedAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      return gestalt.OK(SaveItemOutput{OK: true}), nil
+    }
+
+    type NightlyReportInput struct {
+      Bucket string `json:"bucket" required:"true"`
+    }
+
+    type NightlyReportOutput struct {
+      ReportURL string `json:"reportUrl"`
+    }
+
+    func (p *Provider) generateNightly(
+      ctx context.Context,
+      input NightlyReportInput,
+      req gestalt.Request,
+    ) (gestalt.Response[NightlyReportOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer db.Close()
+
+      s3, err := gestalt.S3("reports")
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer s3.Close()
+
+      body, err := json.Marshal(map[string]string{
+        "generatedAt": time.Now().UTC().Format(time.RFC3339),
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
+      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteOptions{
+        ContentType: "application/json",
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      access, err := obj.CreateAccessUrl(ctx, &gestalt.ObjectAccessURLOptions{
+        Method:  gestalt.PresignMethodGet,
+        Expires: 15 * time.Minute,
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      if err := db.ObjectStore("reports").Put(ctx, gestalt.Record{
+        "id":        req.IdempotencyKey,
+        "url":       access.URL,
+        "createdAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      workflows, err := req.WorkflowManager()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      data, err := structpb.NewStruct(map[string]any{"reportUrl": access.URL})
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
+        Event: &gestalt.WorkflowEvent{
+          Type:            "workspace_review.report.generated",
+          Source:          "workspace_review",
+          Subject:         "nightly",
+          Datacontenttype: "application/json",
+          Data:            data,
+        },
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      return gestalt.OK(NightlyReportOutput{ReportURL: access.URL}), nil
+    }
+
+    var Router = gestalt.MustRouter(
+      gestalt.Register(
+        gestalt.Operation[SaveItemInput, SaveItemOutput]{
+          ID: "items.save", Method: http.MethodPost,
+        },
+        (*Provider).saveItem,
+      ),
+      gestalt.Register(
+        gestalt.Operation[NightlyReportInput, NightlyReportOutput]{
+          ID: "reports.generateNightly", Method: http.MethodPost,
+        },
+        (*Provider).generateNightly,
+      ),
+    )
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 The frontend can stay small because Gestalt already handles sessions and static
 asset serving. A mounted UI calls the plugin operations on the same origin:
@@ -1118,40 +1456,41 @@ or `http` verification. The binding then targets an operation ID. Gestalt
 verifies the request, decodes query/body parameters, optionally resolves a more
 specific subject, and invokes the target operation.
 
-<Tabs items={['Manifest', 'Go Handler', 'Python Handler', 'TypeScript Handler']}>
-  <Tabs.Tab>
-    ```yaml
-    kind: plugin
-    source: github.com/your-org/plugins/slack
-    version: 0.0.1
-    spec:
-      securitySchemes:
-        slack_signed:
-          type: hmac
-          secret:
-            env: SLACK_SIGNING_SECRET
-          signatureHeader: X-Slack-Signature
-          signaturePrefix: v0=
-          payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}"
-          timestampHeader: X-Slack-Request-Timestamp
-          maxAgeSeconds: 300
-      http:
-        support_command:
-          path: /commands/support
-          method: POST
-          credentialMode: none
-          security: slack_signed
-          target: handle_support_command
-          requestBody:
-            required: true
-            content:
-              application/x-www-form-urlencoded: {}
-          ack:
-            status: 200
-            body:
-              status: accepted
-    ```
-  </Tabs.Tab>
+```yaml
+kind: plugin
+source: github.com/your-org/plugins/slack
+version: 0.0.1
+spec:
+  securitySchemes:
+    slack_signed:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signatureHeader: X-Slack-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Slack-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    support_command:
+      path: /commands/support
+      method: POST
+      credentialMode: none
+      security: slack_signed
+      target: handle_support_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          status: accepted
+```
+
+Implement the target operation in the plugin SDK:
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     package provider
@@ -1256,6 +1595,48 @@ specific subject, and invokes the target operation.
             display_name=user_id,
             auth_source="slack",
         )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The Rust high-level plugin SDK can serve the webhook target operation. It
+    does not currently expose an HTTP subject hook, so use Go, Python, or
+    TypeScript when the webhook must derive a custom subject.
+
+    ```rust
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    pub struct Provider;
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct SlackCommandInput {
+        team_id: String,
+        user_id: String,
+        channel_id: String,
+        #[serde(default)]
+        text: String,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct SlackCommandOutput {
+        ok: bool,
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<SlackCommandInput, SlackCommandOutput>::new(
+                "handle_support_command",
+            )
+            .method("POST"),
+            |_provider: Arc<Provider>, input: SlackCommandInput, request: gestalt::Request| async move {
+                // Run the Slack command workflow. The host already verified the signature.
+                let _ = (input, request);
+                Ok(gestalt::ok(SlackCommandOutput { ok: true }))
+            },
+        )
+    }
+
+    gestalt::export_provider!(constructor = Provider, router = router);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -1504,7 +1885,7 @@ contains workspace, tenant, or account identifiers that should be stored with
 the connection and reused by later operation requests. Return only non-secret
 metadata; Gestalt already stores access and refresh tokens separately.
 
-<Tabs items={['Go', 'Python', 'TypeScript']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     Implement the `PostConnectCapable` interface on your provider:
 
@@ -1549,6 +1930,11 @@ metadata; Gestalt already stores access and refresh tokens separately.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
+    The Rust high-level plugin SDK currently exposes dynamic session catalogs
+    but does not expose a post-connect hook. Use Go, Python, or TypeScript when
+    your provider needs to derive connection metadata during the connect flow.
+  </Tabs.Tab>
+  <Tabs.Tab>
     Provide a `postConnect` handler in the plugin definition:
 
     ```typescript
@@ -1568,10 +1954,6 @@ metadata; Gestalt already stores access and refresh tokens separately.
     ```
   </Tabs.Tab>
 </Tabs>
-
-The Rust high-level plugin SDK currently exposes dynamic session catalogs but
-does not expose a post-connect hook. Use Go, Python, or TypeScript when your
-provider needs to derive connection metadata during the connect flow.
 
 ### Testing locally
 
