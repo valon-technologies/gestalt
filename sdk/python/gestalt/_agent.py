@@ -102,6 +102,7 @@ class AgentTurnEventInput(TypedDict, total=False):
     visibility: str
     data: JsonObjectInput | None
     created_at: TimestampInput
+    display: Any
 
 
 def AgentMessage(*args: Any, **kwargs: Any) -> Any:
