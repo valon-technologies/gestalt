@@ -13,6 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
+use crate::agent::{AgentMessageInput, AgentToolRefInput, new_agent_messages, new_agent_tool_refs};
 use crate::api::RuntimeMetadata;
 use crate::error::Error;
 use crate::error::Result as ProviderResult;
@@ -30,7 +31,7 @@ pub const ENV_WORKFLOW_HOST_SOCKET: &str = "GESTALT_WORKFLOW_HOST_SOCKET";
 pub const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN";
 const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
-/// Native input for a bound plugin workflow target.
+/// Input for a bound plugin workflow target.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowPluginTargetInput {
     pub plugin_name: String,
@@ -49,7 +50,7 @@ impl BoundWorkflowPluginTargetInput {
     }
 }
 
-/// Native input for a workflow output value source.
+/// Input for a workflow output value source.
 #[derive(Clone, Debug, Default)]
 pub enum WorkflowOutputValueSourceInput {
     #[default]
@@ -68,14 +69,14 @@ impl WorkflowOutputValueSourceInput {
     }
 }
 
-/// Native input for one workflow output binding.
+/// Input for one workflow output binding.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowOutputBindingInput {
     pub input_field: String,
     pub value: Option<WorkflowOutputValueSourceInput>,
 }
 
-/// Native input for a workflow output delivery.
+/// Input for a workflow output delivery.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowOutputDeliveryInput {
     pub target: Option<BoundWorkflowPluginTargetInput>,
@@ -83,14 +84,16 @@ pub struct WorkflowOutputDeliveryInput {
     pub credential_mode: String,
 }
 
-/// Native input for a bound agent workflow target.
+/// Input for a bound agent workflow target.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowAgentTargetInput {
     pub provider_name: String,
     pub model: String,
     pub prompt: String,
     pub messages: Vec<pb::AgentMessage>,
+    pub message_inputs: Vec<AgentMessageInput>,
     pub tool_refs: Vec<pb::AgentToolRef>,
+    pub tool_ref_inputs: Vec<AgentToolRefInput>,
     pub response_schema: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
     pub timeout_seconds: i32,
@@ -119,7 +122,7 @@ impl BoundWorkflowAgentTargetInput {
     }
 }
 
-/// Native input for a bound workflow target.
+/// Input for a bound workflow target.
 #[derive(Clone, Debug, Default)]
 #[allow(clippy::large_enum_variant)]
 pub enum BoundWorkflowTargetInput {
@@ -129,7 +132,7 @@ pub enum BoundWorkflowTargetInput {
     Agent(BoundWorkflowAgentTargetInput),
 }
 
-/// Native input for workflow actor metadata.
+/// Input for workflow actor metadata.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowActorInput {
     pub subject_id: String,
@@ -138,7 +141,7 @@ pub struct WorkflowActorInput {
     pub auth_source: String,
 }
 
-/// Native input for workflow run-as metadata.
+/// Input for workflow run-as metadata.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowRunAsSubjectInput {
     pub subject_id: String,
@@ -147,14 +150,14 @@ pub struct WorkflowRunAsSubjectInput {
     pub auth_source: String,
 }
 
-/// Native input for an execution-reference permission.
+/// Input for an execution-reference permission.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowAccessPermissionInput {
     pub plugin: String,
     pub operations: Vec<String>,
 }
 
-/// Native input for a workflow event.
+/// Input for a workflow event.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowEventInput {
     pub id: String,
@@ -187,7 +190,7 @@ impl WorkflowEventInput {
     }
 }
 
-/// Native input for workflow event matching fields.
+/// Input for workflow event matching fields.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowEventMatchInput {
     pub event_type: String,
@@ -195,7 +198,7 @@ pub struct WorkflowEventMatchInput {
     pub subject: String,
 }
 
-/// Native input for a workflow signal.
+/// Input for a workflow signal.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowSignalInput {
     pub id: String,
@@ -222,21 +225,21 @@ impl WorkflowSignalInput {
     }
 }
 
-/// Native input for a schedule-triggered workflow run.
+/// Input for a schedule-triggered workflow run.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowScheduleTriggerInput {
     pub schedule_id: String,
     pub scheduled_for: Option<SystemTime>,
 }
 
-/// Native input for an event-triggered workflow run.
+/// Input for an event-triggered workflow run.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowEventTriggerInvocationInput {
     pub trigger_id: String,
     pub event: Option<WorkflowEventInput>,
 }
 
-/// Native input for a workflow run trigger.
+/// Input for a workflow run trigger.
 #[derive(Clone, Debug, Default)]
 pub enum WorkflowRunTriggerInput {
     #[default]
@@ -246,7 +249,7 @@ pub enum WorkflowRunTriggerInput {
     Event(WorkflowEventTriggerInvocationInput),
 }
 
-/// Native input for a workflow-provider run.
+/// Input for a workflow-provider run.
 #[derive(Clone, Debug)]
 pub struct BoundWorkflowRunInput {
     pub id: String,
@@ -282,7 +285,7 @@ impl Default for BoundWorkflowRunInput {
     }
 }
 
-/// Native input for a workflow-provider schedule.
+/// Input for a workflow-provider schedule.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowScheduleInput {
     pub id: String,
@@ -297,7 +300,7 @@ pub struct BoundWorkflowScheduleInput {
     pub execution_ref: String,
 }
 
-/// Native input for a workflow-provider event trigger.
+/// Input for a workflow-provider event trigger.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowEventTriggerInput {
     pub id: String,
@@ -310,7 +313,7 @@ pub struct BoundWorkflowEventTriggerInput {
     pub execution_ref: String,
 }
 
-/// Native input for a workflow execution reference.
+/// Input for a workflow execution reference.
 #[derive(Clone, Debug, Default)]
 pub struct WorkflowExecutionReferenceInput {
     pub id: String,
@@ -329,7 +332,7 @@ pub struct WorkflowExecutionReferenceInput {
     pub source_definition_id: String,
 }
 
-/// Native input for invoking a workflow operation through the host service.
+/// Input for invoking a workflow operation through the host service.
 #[derive(Clone, Debug, Default)]
 pub struct InvokeWorkflowOperationInput {
     pub target: Option<BoundWorkflowTargetInput>,
@@ -363,7 +366,7 @@ pub struct InvokeWorkflowOperationResponse {
     pub body: String,
 }
 
-/// Creates workflow actor metadata from native input.
+/// Creates workflow actor metadata.
 pub fn new_workflow_actor(input: WorkflowActorInput) -> pb::WorkflowActor {
     pb::WorkflowActor {
         subject_id: input.subject_id,
@@ -373,7 +376,7 @@ pub fn new_workflow_actor(input: WorkflowActorInput) -> pb::WorkflowActor {
     }
 }
 
-/// Returns native input copied from workflow actor metadata.
+/// Returns input copied from workflow actor metadata.
 pub fn workflow_actor_input_from_actor(input: &pb::WorkflowActor) -> WorkflowActorInput {
     WorkflowActorInput {
         subject_id: input.subject_id.clone(),
@@ -383,7 +386,7 @@ pub fn workflow_actor_input_from_actor(input: &pb::WorkflowActor) -> WorkflowAct
     }
 }
 
-/// Creates workflow run-as metadata from native input.
+/// Creates workflow run-as metadata.
 pub fn new_workflow_run_as_subject(input: WorkflowRunAsSubjectInput) -> pb::WorkflowRunAsSubject {
     pb::WorkflowRunAsSubject {
         subject_id: input.subject_id,
@@ -393,7 +396,7 @@ pub fn new_workflow_run_as_subject(input: WorkflowRunAsSubjectInput) -> pb::Work
     }
 }
 
-/// Returns native input copied from workflow run-as metadata.
+/// Returns input copied from workflow run-as metadata.
 pub fn workflow_run_as_subject_input_from_subject(
     input: &pb::WorkflowRunAsSubject,
 ) -> WorkflowRunAsSubjectInput {
@@ -405,7 +408,7 @@ pub fn workflow_run_as_subject_input_from_subject(
     }
 }
 
-/// Creates an execution-reference permission from native input.
+/// Creates an execution-reference permission.
 pub fn new_workflow_access_permission(
     input: WorkflowAccessPermissionInput,
 ) -> pb::WorkflowAccessPermission {
@@ -415,7 +418,7 @@ pub fn new_workflow_access_permission(
     }
 }
 
-/// Returns native input copied from an execution-reference permission.
+/// Returns input copied from an execution-reference permission.
 pub fn workflow_access_permission_input_from_permission(
     input: &pb::WorkflowAccessPermission,
 ) -> WorkflowAccessPermissionInput {
@@ -425,7 +428,7 @@ pub fn workflow_access_permission_input_from_permission(
     }
 }
 
-/// Creates workflow event-match fields from native input.
+/// Creates workflow event-match fields.
 pub fn new_workflow_event_match(input: WorkflowEventMatchInput) -> pb::WorkflowEventMatch {
     pb::WorkflowEventMatch {
         r#type: input.event_type,
@@ -434,7 +437,7 @@ pub fn new_workflow_event_match(input: WorkflowEventMatchInput) -> pb::WorkflowE
     }
 }
 
-/// Returns native input copied from workflow event-match fields.
+/// Returns input copied from workflow event-match fields.
 pub fn workflow_event_match_input_from_match(
     input: &pb::WorkflowEventMatch,
 ) -> WorkflowEventMatchInput {
@@ -445,7 +448,7 @@ pub fn workflow_event_match_input_from_match(
     }
 }
 
-/// Creates a workflow output value source from native input.
+/// Creates a workflow output value source.
 pub fn new_workflow_output_value_source(
     input: WorkflowOutputValueSourceInput,
 ) -> pb::WorkflowOutputValueSource {
@@ -463,7 +466,7 @@ pub fn new_workflow_output_value_source(
     pb::WorkflowOutputValueSource { kind }
 }
 
-/// Returns native input copied from a workflow output value source.
+/// Returns input copied from a workflow output value source.
 pub fn workflow_output_value_source_input_from_source(
     input: &pb::WorkflowOutputValueSource,
 ) -> WorkflowOutputValueSourceInput {
@@ -488,7 +491,7 @@ pub fn workflow_output_value_source_input_from_source(
     }
 }
 
-/// Creates a workflow output binding from native input.
+/// Creates a workflow output binding.
 pub fn new_workflow_output_binding(input: WorkflowOutputBindingInput) -> pb::WorkflowOutputBinding {
     pb::WorkflowOutputBinding {
         input_field: input.input_field,
@@ -496,7 +499,7 @@ pub fn new_workflow_output_binding(input: WorkflowOutputBindingInput) -> pb::Wor
     }
 }
 
-/// Returns native input copied from a workflow output binding.
+/// Returns input copied from a workflow output binding.
 pub fn workflow_output_binding_input_from_binding(
     input: &pb::WorkflowOutputBinding,
 ) -> WorkflowOutputBindingInput {
@@ -509,7 +512,7 @@ pub fn workflow_output_binding_input_from_binding(
     }
 }
 
-/// Creates a workflow output delivery from native input.
+/// Creates a workflow output delivery.
 pub fn new_workflow_output_delivery(
     input: WorkflowOutputDeliveryInput,
 ) -> ProviderResult<pb::WorkflowOutputDelivery> {
@@ -527,7 +530,7 @@ pub fn new_workflow_output_delivery(
     })
 }
 
-/// Returns native input copied from a workflow output delivery.
+/// Returns input copied from a workflow output delivery.
 pub fn workflow_output_delivery_input_from_delivery(
     input: &pb::WorkflowOutputDelivery,
 ) -> ProviderResult<WorkflowOutputDeliveryInput> {
@@ -546,7 +549,7 @@ pub fn workflow_output_delivery_input_from_delivery(
     })
 }
 
-/// Creates a bound plugin workflow target from native input.
+/// Creates a bound plugin workflow target.
 pub fn new_bound_workflow_plugin_target(
     input: BoundWorkflowPluginTargetInput,
 ) -> ProviderResult<pb::BoundWorkflowPluginTarget> {
@@ -560,7 +563,7 @@ pub fn new_bound_workflow_plugin_target(
     })
 }
 
-/// Returns native input copied from a bound plugin workflow target.
+/// Returns input copied from a bound plugin workflow target.
 pub fn bound_workflow_plugin_target_input_from_target(
     input: &pb::BoundWorkflowPluginTarget,
 ) -> ProviderResult<BoundWorkflowPluginTargetInput> {
@@ -574,16 +577,20 @@ pub fn bound_workflow_plugin_target_input_from_target(
     })
 }
 
-/// Creates a bound agent workflow target from native input.
+/// Creates a bound agent workflow target.
 pub fn new_bound_workflow_agent_target(
     input: BoundWorkflowAgentTargetInput,
 ) -> ProviderResult<pb::BoundWorkflowAgentTarget> {
+    let mut messages = input.messages;
+    messages.extend(new_agent_messages(input.message_inputs)?);
+    let mut tool_refs = input.tool_refs;
+    tool_refs.extend(new_agent_tool_refs(input.tool_ref_inputs));
     Ok(pb::BoundWorkflowAgentTarget {
         provider_name: input.provider_name,
         model: input.model,
         prompt: input.prompt,
-        messages: input.messages,
-        tool_refs: input.tool_refs,
+        messages,
+        tool_refs,
         response_schema: input
             .response_schema
             .map(protocol::struct_from_json)
@@ -605,7 +612,7 @@ pub fn new_bound_workflow_agent_target(
     })
 }
 
-/// Returns native input copied from a bound agent workflow target.
+/// Returns input copied from a bound agent workflow target.
 pub fn bound_workflow_agent_target_input_from_target(
     input: &pb::BoundWorkflowAgentTarget,
 ) -> ProviderResult<BoundWorkflowAgentTargetInput> {
@@ -614,7 +621,9 @@ pub fn bound_workflow_agent_target_input_from_target(
         model: input.model.clone(),
         prompt: input.prompt.clone(),
         messages: input.messages.clone(),
+        message_inputs: Vec::new(),
         tool_refs: input.tool_refs.clone(),
+        tool_ref_inputs: Vec::new(),
         response_schema: input
             .response_schema
             .as_ref()
@@ -635,7 +644,7 @@ pub fn bound_workflow_agent_target_input_from_target(
     })
 }
 
-/// Creates a bound workflow target from native input.
+/// Creates a bound workflow target.
 pub fn new_bound_workflow_target(
     input: BoundWorkflowTargetInput,
 ) -> ProviderResult<pb::BoundWorkflowTarget> {
@@ -652,7 +661,7 @@ pub fn new_bound_workflow_target(
     Ok(pb::BoundWorkflowTarget { kind })
 }
 
-/// Returns native input copied from a bound workflow target.
+/// Returns input copied from a bound workflow target.
 pub fn bound_workflow_target_input_from_target(
     input: &pb::BoundWorkflowTarget,
 ) -> ProviderResult<BoundWorkflowTargetInput> {
@@ -675,7 +684,7 @@ pub fn new_bound_workflow_target_from_target(
     new_bound_workflow_target(bound_workflow_target_input_from_target(input)?)
 }
 
-/// Creates a workflow event from native input.
+/// Creates a workflow event.
 pub fn new_workflow_event(input: WorkflowEventInput) -> ProviderResult<pb::WorkflowEvent> {
     Ok(pb::WorkflowEvent {
         id: input.id,
@@ -694,7 +703,7 @@ pub fn new_workflow_event(input: WorkflowEventInput) -> ProviderResult<pb::Workf
     })
 }
 
-/// Returns native input copied from a workflow event.
+/// Returns input copied from a workflow event.
 pub fn workflow_event_input_from_event(
     input: &pb::WorkflowEvent,
 ) -> ProviderResult<WorkflowEventInput> {
@@ -726,7 +735,7 @@ pub fn new_workflow_event_from_event(
     new_workflow_event(workflow_event_input_from_event(input)?)
 }
 
-/// Creates a workflow signal from native input.
+/// Creates a workflow signal.
 pub fn new_workflow_signal(input: WorkflowSignalInput) -> ProviderResult<pb::WorkflowSignal> {
     Ok(pb::WorkflowSignal {
         id: input.id,
@@ -740,7 +749,7 @@ pub fn new_workflow_signal(input: WorkflowSignalInput) -> ProviderResult<pb::Wor
     })
 }
 
-/// Returns native input copied from a workflow signal.
+/// Returns input copied from a workflow signal.
 pub fn workflow_signal_input_from_signal(
     input: &pb::WorkflowSignal,
 ) -> ProviderResult<WorkflowSignalInput> {
@@ -770,7 +779,7 @@ pub fn new_workflow_signal_from_signal(
     new_workflow_signal(workflow_signal_input_from_signal(input)?)
 }
 
-/// Creates a workflow schedule trigger from native input.
+/// Creates a workflow schedule trigger.
 pub fn new_workflow_schedule_trigger(
     input: WorkflowScheduleTriggerInput,
 ) -> pb::WorkflowScheduleTrigger {
@@ -782,7 +791,7 @@ pub fn new_workflow_schedule_trigger(
     }
 }
 
-/// Creates a workflow event-trigger invocation from native input.
+/// Creates a workflow event-trigger invocation.
 pub fn new_workflow_event_trigger_invocation(
     input: WorkflowEventTriggerInvocationInput,
 ) -> ProviderResult<pb::WorkflowEventTriggerInvocation> {
@@ -792,7 +801,7 @@ pub fn new_workflow_event_trigger_invocation(
     })
 }
 
-/// Creates a workflow run trigger from native input.
+/// Creates a workflow run trigger.
 pub fn new_workflow_run_trigger(
     input: WorkflowRunTriggerInput,
 ) -> ProviderResult<pb::WorkflowRunTrigger> {
@@ -810,7 +819,7 @@ pub fn new_workflow_run_trigger(
     Ok(pb::WorkflowRunTrigger { kind })
 }
 
-/// Returns native input copied from a workflow run trigger.
+/// Returns input copied from a workflow run trigger.
 pub fn workflow_run_trigger_input_from_trigger(
     input: &pb::WorkflowRunTrigger,
 ) -> ProviderResult<WorkflowRunTriggerInput> {
@@ -848,7 +857,7 @@ pub fn new_workflow_run_trigger_from_trigger(
     new_workflow_run_trigger(workflow_run_trigger_input_from_trigger(input)?)
 }
 
-/// Creates a workflow-provider run from native input.
+/// Creates a workflow-provider run.
 pub fn new_bound_workflow_run(
     input: BoundWorkflowRunInput,
 ) -> ProviderResult<pb::BoundWorkflowRun> {
@@ -868,7 +877,7 @@ pub fn new_bound_workflow_run(
     })
 }
 
-/// Returns native input copied from a workflow-provider run.
+/// Returns input copied from a workflow-provider run.
 pub fn bound_workflow_run_input_from_run(
     input: &pb::BoundWorkflowRun,
 ) -> ProviderResult<BoundWorkflowRunInput> {
@@ -920,7 +929,7 @@ pub fn new_bound_workflow_run_from_run(
     new_bound_workflow_run(bound_workflow_run_input_from_run(input)?)
 }
 
-/// Creates a workflow-provider schedule from native input.
+/// Creates a workflow-provider schedule.
 pub fn new_bound_workflow_schedule(
     input: BoundWorkflowScheduleInput,
 ) -> ProviderResult<pb::BoundWorkflowSchedule> {
@@ -938,7 +947,7 @@ pub fn new_bound_workflow_schedule(
     })
 }
 
-/// Returns native input copied from a workflow-provider schedule.
+/// Returns input copied from a workflow-provider schedule.
 pub fn bound_workflow_schedule_input_from_schedule(
     input: &pb::BoundWorkflowSchedule,
 ) -> ProviderResult<BoundWorkflowScheduleInput> {
@@ -982,7 +991,7 @@ pub fn new_bound_workflow_schedule_from_schedule(
     new_bound_workflow_schedule(bound_workflow_schedule_input_from_schedule(input)?)
 }
 
-/// Creates a workflow-provider event trigger from native input.
+/// Creates a workflow-provider event trigger.
 pub fn new_bound_workflow_event_trigger(
     input: BoundWorkflowEventTriggerInput,
 ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
@@ -998,7 +1007,7 @@ pub fn new_bound_workflow_event_trigger(
     })
 }
 
-/// Returns native input copied from a workflow-provider event trigger.
+/// Returns input copied from a workflow-provider event trigger.
 pub fn bound_workflow_event_trigger_input_from_trigger(
     input: &pb::BoundWorkflowEventTrigger,
 ) -> ProviderResult<BoundWorkflowEventTriggerInput> {
@@ -1039,7 +1048,7 @@ pub fn new_bound_workflow_event_trigger_from_trigger(
     new_bound_workflow_event_trigger(bound_workflow_event_trigger_input_from_trigger(input)?)
 }
 
-/// Creates a workflow execution reference from native input.
+/// Creates a workflow execution reference.
 pub fn new_workflow_execution_reference(
     input: WorkflowExecutionReferenceInput,
 ) -> ProviderResult<pb::WorkflowExecutionReference> {
@@ -1065,7 +1074,7 @@ pub fn new_workflow_execution_reference(
     })
 }
 
-/// Returns native input copied from a workflow execution reference.
+/// Returns input copied from a workflow execution reference.
 pub fn workflow_execution_reference_input_from_reference(
     input: &pb::WorkflowExecutionReference,
 ) -> ProviderResult<WorkflowExecutionReferenceInput> {

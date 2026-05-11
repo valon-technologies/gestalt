@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import dataclasses as _dataclasses
 import datetime as _dt
 import os
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, TypeAlias
 
 import grpc
@@ -18,6 +19,15 @@ from ._protocol import (
     message_to_dict,
     struct_from_dict,
     struct_to_dict,
+)
+from ._protocol import (
+    copy_message as _copy,
+)
+from ._protocol import (
+    dataclass_mapping as _dataclass_mapping,
+)
+from ._protocol import (
+    input_data as _data,
 )
 
 pb: Any = _pb
@@ -61,6 +71,151 @@ AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = pb.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 
 TimestampInput: TypeAlias = _dt.datetime | Mapping[str, Any] | None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentMessageInput:
+    role: str = ""
+    text: str = ""
+    parts: Sequence[Any] | None = None
+    metadata: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentMessagePartInput:
+    type: int = AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
+    text: str = ""
+    json: Any | None = None
+    tool_call: Any | None = None
+    tool_result: Any | None = None
+    image_ref: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentMessagePartToolCallInput:
+    id: str = ""
+    tool_id: str = ""
+    arguments: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentMessagePartToolResultInput:
+    tool_call_id: str = ""
+    status: int = 0
+    content: str = ""
+    output: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentMessagePartImageRefInput:
+    uri: str = ""
+    mime_type: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentToolRefInput:
+    plugin: str = ""
+    operation: str = ""
+    connection: str = ""
+    instance: str = ""
+    title: str = ""
+    description: str = ""
+    system: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentWorkspaceGitCheckoutInput:
+    url: str = ""
+    ref: str = ""
+    path: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentWorkspaceInput:
+    checkouts: Sequence[Any] | None = None
+    cwd: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerCreateSessionInput:
+    provider_name: str = ""
+    model: str = ""
+    client_ref: str = ""
+    metadata: Any | None = None
+    idempotency_key: str = ""
+    workspace: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerGetSessionInput:
+    session_id: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerListSessionsInput:
+    provider_name: str = ""
+    state: int = AGENT_SESSION_STATE_UNSPECIFIED
+    limit: int = 0
+    summary_only: bool = False
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerUpdateSessionInput:
+    session_id: str = ""
+    client_ref: str = ""
+    state: int = AGENT_SESSION_STATE_UNSPECIFIED
+    metadata: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerCreateTurnInput:
+    session_id: str = ""
+    model: str = ""
+    messages: Sequence[Any] | None = None
+    tool_refs: Sequence[Any] | None = None
+    tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+    response_schema: Any | None = None
+    metadata: Any | None = None
+    idempotency_key: str = ""
+    model_options: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerGetTurnInput:
+    turn_id: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerListTurnsInput:
+    session_id: str = ""
+    status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
+    limit: int = 0
+    summary_only: bool = False
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerCancelTurnInput:
+    turn_id: str = ""
+    reason: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerListTurnEventsInput:
+    turn_id: str = ""
+    after_seq: int = 0
+    limit: int = 0
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerListInteractionsInput:
+    turn_id: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class AgentManagerResolveInteractionInput:
+    turn_id: str = ""
+    interaction_id: str = ""
+    resolution: Any | None = None
 
 
 class AgentSessionInput(TypedDict, total=False):
@@ -504,10 +659,10 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
     )
 
 
-def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
+def agent_tool_ref_from_dict(value: Any | None) -> Any:
     """Create an ``AgentToolRef`` protocol value from a dictionary."""
 
-    data = dict(value or {})
+    data = dict(_mapping_value(value, "tool_ref")) if value is not None else {}
     return pb.AgentToolRef(
         plugin=data.get("plugin", ""),
         operation=data.get("operation", ""),
@@ -536,13 +691,14 @@ def agent_message_part_to_dict(part: Any) -> dict[str, Any]:
     return value
 
 
-def agent_message_part_from_dict(value: Mapping[str, Any]) -> Any:
+def agent_message_part_from_dict(value: Any) -> Any:
     """Create an ``AgentMessagePart`` from a lower-snake-case dictionary."""
 
-    data = dict(value)
-    part = pb.AgentMessagePart(
-        type=data.get("type", pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED)
-    )
+    data = dict(_mapping_value(value, "part"))
+    part_type = data.get("type", pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED)
+    if part_type == pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
+        part_type = _agent_message_part_type(data)
+    part = pb.AgentMessagePart(type=part_type)
     if "text" in data:
         part.text = str(data["text"])
     if data.get("json") is not None:
@@ -554,6 +710,20 @@ def agent_message_part_from_dict(value: Mapping[str, Any]) -> Any:
     if data.get("image_ref") is not None:
         part.image_ref.CopyFrom(_image_ref_from_dict(data["image_ref"]))
     return part
+
+
+def _agent_message_part_type(data: Mapping[str, Any]) -> int:
+    if data.get("tool_call") is not None:
+        return pb.AGENT_MESSAGE_PART_TYPE_TOOL_CALL
+    if data.get("tool_result") is not None:
+        return pb.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
+    if data.get("image_ref") is not None:
+        return pb.AGENT_MESSAGE_PART_TYPE_IMAGE_REF
+    if data.get("json") is not None:
+        return pb.AGENT_MESSAGE_PART_TYPE_JSON
+    if data.get("text"):
+        return pb.AGENT_MESSAGE_PART_TYPE_TEXT
+    return pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
 
 
 def agent_message_to_dict(message: Any) -> dict[str, Any]:
@@ -573,10 +743,10 @@ def agent_messages_to_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
     return [agent_message_to_dict(message) for message in messages]
 
 
-def agent_message_from_dict(value: Mapping[str, Any]) -> Any:
+def agent_message_from_dict(value: Any) -> Any:
     """Create an ``AgentMessage`` protocol value from a dictionary."""
 
-    data = dict(value)
+    data = dict(_mapping_value(value, "message"))
     message = pb.AgentMessage(
         role=data.get("role", ""),
         text=data.get("text", ""),
@@ -739,6 +909,181 @@ class AgentHost:
         self.close()
 
 
+def _agent_message_value(value: Any) -> Any:
+    if isinstance(value, pb.AgentMessage):
+        return _copy(value)
+    return agent_message_from_dict(_mapping_value(value, "messages[]"))
+
+
+def _agent_tool_ref_value(value: Any) -> Any:
+    if isinstance(value, pb.AgentToolRef):
+        return _copy(value)
+    return agent_tool_ref_from_dict(_mapping_value(value, "tool_refs[]"))
+
+
+def _agent_workspace_value(value: Any | None) -> Any | None:
+    if value is None:
+        return None
+    if isinstance(value, pb.AgentWorkspace):
+        return _copy(value)
+    data = _data(value, {})
+    return pb.AgentWorkspace(
+        checkouts=[
+            pb.AgentWorkspaceGitCheckout(
+                url=dict(_mapping_value(item, "checkouts[]")).get("url", ""),
+                ref=dict(_mapping_value(item, "checkouts[]")).get("ref", ""),
+                path=dict(_mapping_value(item, "checkouts[]")).get("path", ""),
+            )
+            for item in (data.get("checkouts") or [])
+        ],
+        cwd=data.get("cwd", ""),
+    )
+
+
+def _agent_manager_create_session_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerCreateSessionRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    request = pb.AgentManagerCreateSessionRequest(
+        provider_name=data.get("provider_name", ""),
+        model=data.get("model", ""),
+        client_ref=data.get("client_ref", ""),
+        idempotency_key=data.get("idempotency_key", ""),
+        workspace=_agent_workspace_value(data.get("workspace")),
+    )
+    if data.get("metadata") is not None:
+        request.metadata.CopyFrom(struct_from_dict(data["metadata"]))
+    return request
+
+
+def _agent_manager_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.AgentManagerGetSessionRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerGetSessionRequest(session_id=data.get("session_id", ""))
+
+
+def _agent_manager_list_sessions_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerListSessionsRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerListSessionsRequest(
+        provider_name=data.get("provider_name", ""),
+        state=data.get("state", AGENT_SESSION_STATE_UNSPECIFIED),
+        limit=data.get("limit", 0),
+        summary_only=data.get("summary_only", False),
+    )
+
+
+def _agent_manager_update_session_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerUpdateSessionRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    request = pb.AgentManagerUpdateSessionRequest(
+        session_id=data.get("session_id", ""),
+        client_ref=data.get("client_ref", ""),
+        state=data.get("state", AGENT_SESSION_STATE_UNSPECIFIED),
+    )
+    if data.get("metadata") is not None:
+        request.metadata.CopyFrom(struct_from_dict(data["metadata"]))
+    return request
+
+
+def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.AgentManagerCreateTurnRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    request = pb.AgentManagerCreateTurnRequest(
+        session_id=data.get("session_id", ""),
+        model=data.get("model", ""),
+        messages=[_agent_message_value(item) for item in (data.get("messages") or [])],
+        tool_refs=[
+            _agent_tool_ref_value(item) for item in (data.get("tool_refs") or [])
+        ],
+        tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
+        idempotency_key=data.get("idempotency_key", ""),
+    )
+    if data.get("response_schema") is not None:
+        request.response_schema.CopyFrom(struct_from_dict(data["response_schema"]))
+    if data.get("metadata") is not None:
+        request.metadata.CopyFrom(struct_from_dict(data["metadata"]))
+    if data.get("model_options") is not None:
+        request.model_options.CopyFrom(struct_from_dict(data["model_options"]))
+    return request
+
+
+def _agent_manager_get_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.AgentManagerGetTurnRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerGetTurnRequest(turn_id=data.get("turn_id", ""))
+
+
+def _agent_manager_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.AgentManagerListTurnsRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerListTurnsRequest(
+        session_id=data.get("session_id", ""),
+        status=data.get("status", AGENT_EXECUTION_STATUS_UNSPECIFIED),
+        limit=data.get("limit", 0),
+        summary_only=data.get("summary_only", False),
+    )
+
+
+def _agent_manager_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.AgentManagerCancelTurnRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerCancelTurnRequest(
+        turn_id=data.get("turn_id", ""),
+        reason=data.get("reason", ""),
+    )
+
+
+def _agent_manager_list_turn_events_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerListTurnEventsRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerListTurnEventsRequest(
+        turn_id=data.get("turn_id", ""),
+        after_seq=data.get("after_seq", 0),
+        limit=data.get("limit", 0),
+    )
+
+
+def _agent_manager_list_interactions_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerListInteractionsRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.AgentManagerListInteractionsRequest(turn_id=data.get("turn_id", ""))
+
+
+def _agent_manager_resolve_interaction_request(
+    value: Any | None = None, **kwargs: Any
+) -> Any:
+    if isinstance(value, pb.AgentManagerResolveInteractionRequest):
+        return _copy(value)
+    data = _data(value, kwargs)
+    request = pb.AgentManagerResolveInteractionRequest(
+        turn_id=data.get("turn_id", ""),
+        interaction_id=data.get("interaction_id", ""),
+    )
+    if data.get("resolution") is not None:
+        request.resolution.CopyFrom(struct_from_dict(data["resolution"]))
+    return request
+
+
 class AgentManager:
     """Client for managing agent sessions, turns, events, and interactions.
 
@@ -766,69 +1111,80 @@ class AgentManager:
 
         self._channel.close()
 
-    def create_session(self, request: Any) -> Any:
+    def create_session(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Create an agent session."""
 
+        request = _agent_manager_create_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.CreateSession, request)
 
-    def get_session(self, request: Any) -> Any:
+    def get_session(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Fetch one agent session."""
 
+        request = _agent_manager_get_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.GetSession, request)
 
-    def list_sessions(self, request: Any) -> Any:
+    def list_sessions(self, request: Any | None = None, **kwargs: Any) -> Any:
         """List agent sessions visible to the invocation token."""
 
+        request = _agent_manager_list_sessions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.ListSessions, request)
 
-    def update_session(self, request: Any) -> Any:
+    def update_session(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Update mutable fields on an agent session."""
 
+        request = _agent_manager_update_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.UpdateSession, request)
 
-    def create_turn(self, request: Any) -> Any:
+    def create_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Create an agent turn."""
 
+        request = _agent_manager_create_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.CreateTurn, request)
 
-    def get_turn(self, request: Any) -> Any:
+    def get_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Fetch one agent turn."""
 
+        request = _agent_manager_get_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.GetTurn, request)
 
-    def list_turns(self, request: Any) -> Any:
+    def list_turns(self, request: Any | None = None, **kwargs: Any) -> Any:
         """List turns for an agent session."""
 
+        request = _agent_manager_list_turns_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.ListTurns, request)
 
-    def cancel_turn(self, request: Any) -> Any:
+    def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Cancel an in-progress agent turn."""
 
+        request = _agent_manager_cancel_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.CancelTurn, request)
 
-    def list_turn_events(self, request: Any) -> Any:
+    def list_turn_events(self, request: Any | None = None, **kwargs: Any) -> Any:
         """List events emitted for an agent turn."""
 
+        request = _agent_manager_list_turn_events_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.ListTurnEvents, request)
 
-    def list_interactions(self, request: Any) -> Any:
+    def list_interactions(self, request: Any | None = None, **kwargs: Any) -> Any:
         """List pending or completed agent interactions."""
 
+        request = _agent_manager_list_interactions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.ListInteractions, request)
 
-    def resolve_interaction(self, request: Any) -> Any:
+    def resolve_interaction(self, request: Any | None = None, **kwargs: Any) -> Any:
         """Resolve an agent interaction with a host response."""
 
+        request = _agent_manager_resolve_interaction_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         return _grpc_call(self._stub.ResolveInteraction, request)
 
@@ -860,6 +1216,9 @@ def _message_fields(message: Any, fields: tuple[str, ...]) -> dict[str, Any]:
 
 
 def _mapping_value(value: Any, field: str) -> Mapping[str, Any]:
+    mapping = _dataclass_mapping(value)
+    if mapping is not None:
+        return mapping
     if not isinstance(value, Mapping):
         raise TypeError(f"{field} must be a mapping")
     return value

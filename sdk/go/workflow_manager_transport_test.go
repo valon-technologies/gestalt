@@ -237,3 +237,75 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 		t.Fatal("invalid timestamp CheckValid() = nil, want error")
 	}
 }
+
+func TestTransport_WorkflowManagerSignalOrStartRunWithInput(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &workflowManagerTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterWorkflowManagerHostServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvWorkflowManagerSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvWorkflowManagerSocketToken, "relay-token-go")
+
+	client, err := gestalt.WorkflowManager("parent-token")
+	if err != nil {
+		t.Fatalf("WorkflowManager: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	createdAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+	resp, err := client.SignalOrStartRunWithInput(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
+		ProviderName: "local",
+		WorkflowKey:  "slack:T123:C123:1700000000.000001",
+		Target: &gestalt.BoundWorkflowTargetInput{Agent: &gestalt.BoundWorkflowAgentTargetInput{
+			ProviderName: "simple",
+			Model:        "gpt-5.5",
+			MessageInputs: []gestalt.AgentMessageInput{{
+				Role: "user",
+				Text: "Respond in thread.",
+			}},
+		}},
+		IdempotencyKey: "slack-event-123",
+		Signal: &gestalt.WorkflowSignalInput{
+			Name:           "slack.message",
+			IdempotencyKey: "slack-event-123",
+			Payload:        map[string]any{"ok": true},
+			CreatedAt:      createdAt,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRunWithInput: %v", err)
+	}
+	if resp.GetProviderName() != "local" || resp.GetRun().GetId() != "run-1" || !resp.GetStartedRun() {
+		t.Fatalf("response = %#v", resp)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.signals) != 1 {
+		t.Fatalf("signal requests len = %d, want 1", len(harness.signals))
+	}
+	got := harness.signals[0]
+	if got.GetInvocationToken() != "parent-token" {
+		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
+	}
+	if got.GetTarget().GetAgent().GetMessages()[0].GetText() != "Respond in thread." {
+		t.Fatalf("agent messages = %#v", got.GetTarget().GetAgent().GetMessages())
+	}
+	if payload := gestalt.MapFromStruct(got.GetSignal().GetPayload()); payload["ok"] != true {
+		t.Fatalf("signal payload = %#v", payload)
+	}
+	if !got.GetSignal().GetCreatedAt().AsTime().Equal(createdAt) {
+		t.Fatalf("created_at = %v, want %v", got.GetSignal().GetCreatedAt().AsTime(), createdAt)
+	}
+}

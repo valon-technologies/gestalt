@@ -8,10 +8,10 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowPluginTarget,
-    BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget, ManagedWorkflowDefinition,
-    ManagedWorkflowEventTrigger, ManagedWorkflowRun, ManagedWorkflowRunSignal,
-    ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
+    AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger,
+    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
+    ManagedWorkflowDefinition, ManagedWorkflowEventTrigger, ManagedWorkflowRun,
+    ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
     WorkflowManagerCreateDefinitionRequest, WorkflowManagerCreateEventTriggerRequest,
     WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteDefinitionRequest,
     WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
@@ -25,7 +25,9 @@ use gestalt::proto::v1::{
     bound_workflow_target,
 };
 use gestalt::{
-    ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowManager,
+    AgentMessageInput, AgentMessagePartInput, BoundWorkflowAgentTargetInput,
+    BoundWorkflowTargetInput, ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
+    Request, WorkflowManager, WorkflowManagerSignalOrStartRunInput, WorkflowSignalInput,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -47,6 +49,7 @@ struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
     idempotency_keys: Arc<Mutex<Vec<String>>>,
+    signal_or_start_requests: Arc<Mutex<Vec<WorkflowManagerSignalOrStartRunRequest>>>,
 }
 
 fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
@@ -123,6 +126,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         request: GrpcRequest<WorkflowManagerSignalOrStartRunRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
         let request = request.into_inner();
+        self.signal_or_start_requests
+            .lock()
+            .expect("lock signal or start requests")
+            .push(request.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "signal-or-start-run".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -1011,6 +1018,99 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
             },
         ]
     );
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn workflow_manager_native_signal_or_start_input_reaches_host() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("g-rust-wm-native.sock");
+    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+
+    let server = TestWorkflowManagerServer::default();
+    let serve_server = server.clone();
+    let serve_socket = socket.clone();
+    let serve_task = tokio::spawn(async move {
+        serve_workflow_manager(serve_server, &serve_socket)
+            .await
+            .expect("serve workflow manager");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let mut manager =
+        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
+            .await
+            .expect("connect workflow manager");
+    let signaled = manager
+        .signal_or_start_run_input(WorkflowManagerSignalOrStartRunInput {
+            provider_name: "basic".to_string(),
+            workflow_key: "workflow-key-1".to_string(),
+            idempotency_key: "signal-request-key".to_string(),
+            target: Some(BoundWorkflowTargetInput::Agent(
+                BoundWorkflowAgentTargetInput {
+                    provider_name: "openai".to_string(),
+                    model: "gpt-5.1".to_string(),
+                    message_inputs: vec![AgentMessageInput {
+                        role: "user".to_string(),
+                        text: "Respond in thread.".to_string(),
+                        parts: vec![AgentMessagePartInput {
+                            text: "Respond in thread.".to_string(),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            )),
+            signal: Some(WorkflowSignalInput {
+                name: "slack.event".to_string(),
+                payload: Some(serde_json::json!({ "channel": "C123" })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("signal or start run");
+
+    assert!(signaled.started_run);
+
+    let requests = server
+        .signal_or_start_requests
+        .lock()
+        .expect("lock signal or start requests")
+        .clone();
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.invocation_token, "token-123");
+    assert_eq!(request.provider_name, "basic");
+    assert_eq!(request.workflow_key, "workflow-key-1");
+    assert_eq!(request.idempotency_key, "signal-request-key");
+    let signal = request.signal.as_ref().expect("signal");
+    assert_eq!(signal.name, "slack.event");
+    assert_eq!(
+        gestalt::protocol::json_from_struct(signal.payload.as_ref().unwrap()),
+        serde_json::json!({ "channel": "C123" })
+    );
+
+    let target = request.target.as_ref().expect("target");
+    let agent = match target.kind.as_ref().expect("target kind") {
+        bound_workflow_target::Kind::Agent(agent) => agent,
+        _ => panic!("expected agent target"),
+    };
+    assert_eq!(agent.provider_name, "openai");
+    assert_eq!(agent.model, "gpt-5.1");
+    assert_eq!(agent.messages.len(), 1);
+    assert_eq!(agent.messages[0].role, "user");
+    assert_eq!(agent.messages[0].text, "Respond in thread.");
+    assert_eq!(agent.messages[0].parts.len(), 1);
+    assert_eq!(
+        agent.messages[0].parts[0].r#type,
+        AgentMessagePartType::Text as i32
+    );
+    assert_eq!(agent.messages[0].parts[0].text, "Respond in thread.");
 
     serve_task.abort();
     let _ = serve_task.await;
