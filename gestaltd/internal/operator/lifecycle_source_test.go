@@ -68,7 +68,7 @@ plugins:
         repo: file://%s
         ref: %s
         path: plugins/alpha/manifest.yaml
-        artifactMode: source
+        materialization: source
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir), filepath.ToSlash(repoDir), ref)
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -83,8 +83,8 @@ plugins:
 	if entry.SourceRef == nil {
 		t.Fatal("sourceRef missing")
 	}
-	if entry.SourceRef.ResolvedMode != gitResolvedModeSource {
-		t.Fatalf("sourceRef.resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSource)
+	if entry.SourceRef.Materialization != gitMaterializationSource {
+		t.Fatalf("sourceRef materialization = %q", entry.SourceRef.Materialization)
 	}
 	if entry.SourceRef.Ref != ref {
 		t.Fatalf("sourceRef.ref = %q, want %q", entry.SourceRef.Ref, ref)
@@ -186,7 +186,7 @@ plugins:
         ref: %s
         path: plugins/alpha/manifest.yaml
         artifactRepository: valon
-        artifactMode: require
+        materialization: snapshot
 `, srv.URL, gestaltRef, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "snapshot.db")), filepath.ToSlash(artifactsDir), ref)
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -200,8 +200,8 @@ plugins:
 	if entry.SourceRef == nil {
 		t.Fatal("sourceRef missing")
 	}
-	if entry.SourceRef.ResolvedMode != gitResolvedModeSnapshot {
-		t.Fatalf("resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSnapshot)
+	if entry.SourceRef.Materialization != gitMaterializationSnapshot {
+		t.Fatalf("sourceRef materialization = %q", entry.SourceRef.Materialization)
 	}
 	if entry.SourceRef.ResolvedGestaltRef != gestaltRef {
 		t.Fatalf("resolvedGestaltRef = %q, want %q", entry.SourceRef.ResolvedGestaltRef, gestaltRef)
@@ -305,7 +305,7 @@ providers:
           ref: %s
           path: secrets/google/manifest.yaml
           artifactRepository: valon
-          artifactMode: require
+          materialization: snapshot
 `, srv.URL, gestaltRef, filepath.ToSlash(artifactsDir), filepath.ToSlash(indexedDBManifestPath), filepath.Join(dir, "secrets.db"), ref)
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -319,8 +319,8 @@ providers:
 	if entry.SourceRef == nil {
 		t.Fatal("secrets sourceRef missing")
 	}
-	if entry.SourceRef.ResolvedMode != gitResolvedModeSnapshot {
-		t.Fatalf("secrets resolvedMode = %q, want %q", entry.SourceRef.ResolvedMode, gitResolvedModeSnapshot)
+	if entry.SourceRef.Materialization != gitMaterializationSnapshot {
+		t.Fatalf("secrets materialization = %q", entry.SourceRef.Materialization)
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata count = %d, want 1", got)

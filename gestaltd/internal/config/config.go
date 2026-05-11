@@ -196,7 +196,7 @@ type GitSourceDef struct {
 	Ref                string `yaml:"ref,omitempty"`
 	Path               string `yaml:"path,omitempty"`
 	ArtifactRepository string `yaml:"artifactRepository,omitempty"`
-	ArtifactMode       string `yaml:"artifactMode,omitempty"`
+	Materialization    string `yaml:"materialization,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
@@ -417,7 +417,7 @@ func cloneGitSourceDef(src *GitSourceDef) *GitSourceDef {
 	cloned.Ref = strings.TrimSpace(cloned.Ref)
 	cloned.Path = strings.TrimSpace(cloned.Path)
 	cloned.ArtifactRepository = strings.TrimSpace(cloned.ArtifactRepository)
-	cloned.ArtifactMode = strings.TrimSpace(cloned.ArtifactMode)
+	cloned.Materialization = strings.TrimSpace(cloned.Materialization)
 	return &cloned
 }
 

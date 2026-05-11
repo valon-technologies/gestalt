@@ -629,18 +629,21 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		default:
 			return fmt.Errorf("config validation: %s %q source.git.repo must use http(s) or file URL", kind, name)
 		}
-		mode := strings.TrimSpace(git.ArtifactMode)
+		materialization := strings.TrimSpace(git.Materialization)
 		repoName := strings.TrimSpace(git.ArtifactRepository)
-		switch mode {
-		case "", "source", "prefer", "require":
+		switch materialization {
+		case "":
+			materialization = "source"
+		case "source", "snapshot":
 		default:
-			return fmt.Errorf("config validation: %s %q source.git.artifactMode must be source, prefer, or require", kind, name)
+			return fmt.Errorf("config validation: %s %q source.git.materialization must be source or snapshot", kind, name)
 		}
-		if repoName != "" && mode == "" {
-			return fmt.Errorf("config validation: %s %q source.git.artifactMode is required when artifactRepository is set", kind, name)
-		}
-		if (mode == "prefer" || mode == "require") && repoName == "" {
-			return fmt.Errorf("config validation: %s %q source.git.artifactRepository is required for artifactMode %q", kind, name, mode)
+		if materialization == "snapshot" {
+			if repoName == "" {
+				return fmt.Errorf("config validation: %s %q source.git.artifactRepository is required for materialization %q", kind, name, materialization)
+			}
+		} else if repoName != "" {
+			return fmt.Errorf("config validation: %s %q source.git.artifactRepository is only supported for materialization \"snapshot\"", kind, name)
 		}
 		if repoName != "" {
 			if err := providerregistry.ValidateRepositoryName(repoName); err != nil {
