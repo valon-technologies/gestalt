@@ -1,5 +1,6 @@
 export default {
   sdk: "SDKs",
+  configuration: "Configuration",
   "config-file": "Config File",
   "plugin-manifests": "Provider Manifests",
   "http-api": "HTTP API",

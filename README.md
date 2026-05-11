@@ -5,32 +5,36 @@
 
 > Gestalt is under active development. APIs and configuration may change between releases. Feedback and bug reports are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 
-Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the sum of its parts.
+> Gestalt (/ɡəˈʃtält/) refers to the idea that the whole is greater than the sum of its parts.
 
-Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and secure credential management built in. Plugins can wrap REST/OpenAPI, GraphQL, MCP, or executable provider code while exposing the same operation model to callers.
+Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and primitives for authentication and authorization. External REST/OpenAPI, GraphQL, MCP and executable custom-defined code are all supported, while exposing the same operation model to callers.
 
 ## Why Gestalt
 
-Agents need tools. Tools need auth. Auth needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
+Gestalt is intentionally lightweight and technology-agnostic. Run it on a laptop or productionize it on a VM or container without buying into a specific cloud, database, or programming language. Tools can be external APIs, MCP servers, GraphQL, or executable code, and callers still get one operation model.
 
-Gestalt handles this so individual agents and applications do not have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed, even when those tools come from different upstream API surfaces.
+Add only what you need. Local deployments can run without external services or provider-backed dependencies: no authentication/authorization, no hosted runtime, and no mounted UI unless you configure them.
+
+When you need production controls, add them through the [provider](https://gestaltd.ai/providers) ecosystem.
 
 ![Gestalt architecture diagram](./docs/public/images/architecture-diagram.png)
 
 ### What Gestalt provides
 
-- Credentials and connection data are encrypted at rest, on infrastructure you control.
-- A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed.
-- REST/OpenAPI, GraphQL, MCP, and executable plugins share the same operation catalog, credential model, and invocation paths.
-- The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
-- Auth backends, [IndexedDB](https://www.w3.org/TR/IndexedDB/) storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
-- Deploy on infrastructure you control with Docker, Helm, or your own container platform.
+- **Plug-and-play [providers](https://gestaltd.ai/providers).** Inspired by [Terraform providers](https://developer.hashicorp.com/terraform/language/providers), so you add only what you need.
+- **A unified tool surface for agents.** The same operations are exposed over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators.
+- **Authentication and Authorization as primitives.** Credential storage, encryption at rest, token refresh, and RBAC run on infrastructure you control.
+- **Declarative configuration.** A single YAML config defines tools, auth flows, connections, agents, workflows, and schedules.
+- **Observability and audit logging.** [OpenTelemetry](https://opentelemetry.io/) compatible [observability](https://gestaltd.ai/observability) and [audit logging](https://gestaltd.ai/audit-logging).
+- **Workflows and scheduled agents.** Run agentic work on triggers, cron schedules, or delegated invocations, with durable state and retries.*
+
+\* Workflows and agents are both alpha features, and not yet stable.
 
 ## What Gestalt Is Not
 
 Gestalt is not a SaaS platform. It is open source and self-hostable on infrastructure you control, so you keep ownership of your data, credentials, and deployment.
 
-Gestalt also does not replace your existing APIs. It sits between agents and upstream services, handling auth and credential lifecycle while your APIs stay where they are.
+Gestalt is not a mono-repo with hundreds or thousands of integrations built out-of-the-box. You configure exactly what you need. Gestalt is not an agent harness, but it provides first-class support for Claude Code, Codex, and Cursor.
 
 ## Quick Start
 

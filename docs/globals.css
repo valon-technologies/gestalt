@@ -471,6 +471,29 @@ article.nextra-content main::before {
   margin-top: 1.5rem !important;
 }
 
+.gestalt-footnote-ref {
+  margin-left: 0.08em;
+  color: var(--valon-gold);
+  font-size: 0.78em;
+  font-weight: 700;
+  line-height: 0;
+}
+
+article .gestalt-footnote {
+  max-width: var(--valon-content-width);
+  margin-top: 2rem !important;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--valon-line);
+  color: var(--valon-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+article .gestalt-footnote sup {
+  color: var(--valon-gold);
+  font-weight: 700;
+}
+
 .nextra-breadcrumb {
   font-size: 0.7rem !important;
   letter-spacing: 0.18em;

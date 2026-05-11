@@ -1,0 +1,279 @@
+# Configuration
+
+Gestalt is configured from one or more YAML files. This page covers the
+cross-cutting config model: file structure, loading, layering, environment
+expansion, secret resolution, validation, and complete examples.
+
+For provider-specific setup, use the [Providers](/providers) pages. For every
+field and validation rule, use the [Config File](/reference/config-file)
+reference.
+
+## File Structure
+
+A Gestalt config has six top-level areas:
+
+| Key | Purpose |
+| --- | --- |
+| `server` | Host settings, listener configuration, encryption key, runtime defaults, and selected host providers. |
+| `providers` | Named host-scoped providers for authentication, authorization, storage, secrets, telemetry, audit, UI, workflow, and agent backends. |
+| `plugins` | Tool providers exposed over HTTP, MCP, and CLI, plus optional plugin-backed UI mounts. |
+| `authorization` | Static subject access policies shared by the host and provider-backed authorization. |
+| `runtime` | Named runtime placement backends for providers that opt into hosted execution. |
+| `workflows` | Config-managed schedules and event triggers. |
+
+```yaml
+server:
+  baseUrl: ...
+  encryptionKey: ...
+  providers:
+    indexeddb: ...
+    authentication: ...
+    authorization: ...
+
+providers:
+  indexeddb:
+    <name>: ...
+  authentication:
+    <name>: ...
+  authorization:
+    <name>: ...
+  externalCredentials:
+    <name>: ...
+  secrets:
+    <name>: ...
+  workflow:
+    <name>: ...
+  agent:
+    <name>: ...
+  ui:
+    <name>: ...
+
+plugins:
+  <name>: ...
+
+authorization:
+  policies: ...
+
+runtime:
+  providers:
+    <name>: ...
+
+workflows:
+  schedules: {}
+  eventTriggers: {}
+```
+
+Provider-backed entries accept `source`, provider-specific `config`,
+`egress.allowedHosts`, and optional metadata fields. Plugin entries also
+support plugin-specific fields such as `connections`, `allowedOperations`,
+`ui.path`, `ui.bundle`, and `runtime`.
+
+## Where Setup Lives
+
+Configuration is intentionally split between this page, provider guides, and
+the field reference:
+
+| Need | Read |
+| --- | --- |
+| Plugin setup, operation filtering, connections, and plugin-backed UIs | [Plugin](/providers/plugins) |
+| Platform login | [Authentication](/providers/authentication) |
+| RBAC, policies, service accounts, and dynamic grants | [Authorization](/providers/authorization) |
+| Credential storage and upstream credentials | [External Credentials](/providers/external-credentials) |
+| Persistent state providers | [IndexedDB](/providers/indexeddb) |
+| Secret manager providers | [Secrets](/providers/secrets) |
+| Workflow provider setup | [Workflow](/providers/workflow) |
+| Agent provider setup | [Agent](/providers/agent) |
+| Public UI bundles and plugin-backed UIs | [UI](/providers/ui) |
+| Runtime placement | [Runtime](/providers/runtime) |
+| Exact YAML fields | [Config File](/reference/config-file) |
+
+## Loading And Layering
+
+When `--config` is not supplied, `gestaltd` looks for a config file in this
+order:
+
+1. `GESTALT_CONFIG` environment variable
+2. `./config.yaml` in the working directory
+3. `~/.gestaltd/config.yaml`
+
+If nothing is found, `gestaltd` generates a default config at
+`~/.gestaltd/config.yaml` with SQLite storage, no authentication, a random
+encryption key, and an HTTPBin test plugin.
+
+When `--config` is repeated, Gestalt loads the files left-to-right and merges
+them with these rules:
+
+- Maps deep-merge.
+- Later scalar values win.
+- Later lists replace inherited lists.
+- `null` deletes inherited keys.
+
+Relative paths resolve from the file that declared them. By default, lockfiles
+and prepared-artifact paths stay rooted at the leftmost config file.
+`--lockfile` overrides only the lockfile path and resolves like a normal CLI
+path.
+
+## Environment And Secrets
+
+Gestalt expands `${ENV_VAR}` placeholders before YAML decoding. When a
+referenced variable is unset, Gestalt checks for a corresponding
+`ENV_VAR_FILE` variable and reads that file path instead. If neither is set,
+config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is
+intentional.
+
+Structured secret refs are resolved through the named secret manager during
+bootstrap, not during YAML parsing. This lets you reference secrets from files,
+Vault, AWS Secrets Manager, Google Secret Manager, or Azure Key Vault without
+embedding them in the config file.
+
+```yaml
+server:
+  encryptionKey:
+    secret:
+      provider: default
+      name: gestalt-encryption-key
+
+providers:
+  secrets:
+    default:
+      source: file
+      config:
+        dir: /etc/gestalt-secrets
+```
+
+## Validation And Defaults
+
+Unknown YAML fields are rejected at load time. Validate config without starting
+the server:
+
+```sh
+gestaltd validate --config ./config.yaml
+gestaltd validate --config ./deploy/base.yaml --config ./deploy/overrides/local.yaml
+```
+
+Gestalt defaults `server.public.port` to `8080`, the runtime secrets manager to
+built-in `env` when `providers.secrets` is omitted,
+`providers.telemetry.default` to `stdout`, and `providers.audit.default` to
+`inherit`.
+
+The required fields at `serve` time are `providers.indexeddb`,
+`server.providers.indexeddb`, and `server.encryptionKey`. Platform
+authentication is optional.
+
+`server.encryptionKey` is the root deployment secret. Gestalt derives token
+encryption and session material from it. Changing this key invalidates existing
+sessions and tokens, so treat it as a deployment event.
+
+## Lock, Sync, And Serve
+
+For deterministic production deployments:
+
+1. Run `gestaltd lock --config ./config.yaml` to resolve provider packages and
+   write `gestalt.lock.json`.
+2. Run `gestaltd sync --locked --config ./config.yaml` to prepare provider
+   artifacts.
+3. Run `gestaltd serve --locked --config ./config.yaml` at runtime.
+
+See [Deploy](/deploy), [Docker](/deploy/docker), [Helm](/deploy/helm), and the
+[Server CLI](/reference/cli) for deployment-specific workflows.
+
+## Minimal Config
+
+```yaml
+server:
+  public:
+    port: 8080
+  baseUrl: http://localhost:8080
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: sqlite://./gestalt.db
+```
+
+Set `GESTALT_ENCRYPTION_KEY` once with `openssl rand -hex 32` before starting
+Gestalt. Do not use a shared placeholder value in a real deployment.
+
+## Full Example
+
+A production deployment with OIDC auth, external credential storage, a GitHub
+plugin with per-user connections, and MCP enabled:
+
+```yaml
+server:
+  baseUrl: https://gestalt.example.com
+  encryptionKey:
+    secret:
+      provider: default
+      name: gestalt-encryption-key
+  providers:
+    authentication: oidc
+    indexeddb: main
+    externalCredentials: main
+    secrets: default
+
+providers:
+  secrets:
+    default:
+      source: file
+      config:
+        dir: /etc/gestalt-secrets
+
+  indexeddb:
+    main:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: sqlite://./gestalt.db
+
+  externalCredentials:
+    main:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/external_credentials/default
+        version: 0.0.1-alpha.1
+      config:
+        indexeddb: main
+
+  authentication:
+    oidc:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
+
+plugins:
+  github:
+    displayName: GitHub
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
+    surfaces:
+      openapi:
+        baseUrl: https://api.github.com
+    connections:
+      api:
+        mode: user
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: Personal Access Token
+      mcp:
+        mode: user
+        auth:
+          type: mcp_oauth
+```

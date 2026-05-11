@@ -3,7 +3,6 @@ export default {
   install: "Install",
   "getting-started": "Getting Started",
   "-- server": { type: "separator", title: "Server" },
-  configuration: "Configuration",
   providers: "Providers",
   applications: "Applications",
   security: "Security",

@@ -1,4 +1,4 @@
-import { Tabs } from 'nextra/components'
+import { Callout, Tabs } from 'nextra/components'
 
 # Runtime
 
@@ -9,6 +9,12 @@ host provider like authentication, IndexedDB, or workflow. Instead, it is a
 control-plane backend that lets `gestaltd` create a runtime session, prepare
 relay-backed host-service environment variables, start the provider process
 there, and dial the provider back over gRPC.
+
+<Callout type="warning">
+  **Alpha.** Gestalt is under active development. APIs and configuration may
+  change between releases. Feedback and bug reports are welcome via [GitHub
+  Issues](https://github.com/valon-technologies/gestalt/issues).
+</Callout>
 
 ## Scope
 
@@ -604,7 +610,7 @@ metadata URLs.
 
 ## What to read next
 
-For the config fields, see [Configuration](/configuration) and
+For the config fields, see [Configuration](/reference/configuration) and
 [Config File](/reference/config-file#runtime). For plugin-side opt-in, see
 [Plugin](/providers/plugins). For the execution boundary, see
 [Security](/security).
