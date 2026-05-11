@@ -76,8 +76,7 @@ type LockSourceRef struct {
 	Ref                string `json:"ref,omitempty"`
 	Path               string `json:"path,omitempty"`
 	ArtifactRepository string `json:"artifactRepository,omitempty"`
-	ArtifactMode       string `json:"artifactMode,omitempty"`
-	ResolvedMode       string `json:"resolvedMode,omitempty"`
+	Materialization    string `json:"materialization,omitempty"`
 	ResolvedGestaltRef string `json:"resolvedGestaltRef,omitempty"`
 }
 

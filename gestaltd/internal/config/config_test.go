@@ -1676,7 +1676,7 @@ plugins:
           repo: HTTPS://GitHub.com/Valon-Technologies/Gestalt-Providers
           ref: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           path: plugins//custom_tool/../custom_tool/manifest.yaml
-          artifactMode: source
+          materialization: source
 `)
 
 		cfg, err := Load(path)

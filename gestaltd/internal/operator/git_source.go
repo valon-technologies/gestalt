@@ -18,12 +18,9 @@ import (
 )
 
 const (
-	gitSourceRefType        = "git"
-	gitArtifactModeSource   = "source"
-	gitArtifactModePrefer   = "prefer"
-	gitArtifactModeRequire  = "require"
-	gitResolvedModeSource   = "source"
-	gitResolvedModeSnapshot = "snapshot"
+	gitSourceRefType           = "git"
+	gitMaterializationSource   = "source"
+	gitMaterializationSnapshot = "snapshot"
 )
 
 type gitSnapshotSource struct {
@@ -38,18 +35,17 @@ func gitSourceDef(entry *config.ProviderEntry) *config.GitSourceDef {
 	return entry.Source.GitSource()
 }
 
-func gitSourceArtifactMode(git *config.GitSourceDef) string {
+func gitSourceMaterialization(git *config.GitSourceDef) string {
 	if git == nil {
 		return ""
 	}
-	mode := strings.TrimSpace(git.ArtifactMode)
-	if mode == "" {
-		return gitArtifactModeSource
+	if materialization := strings.TrimSpace(git.Materialization); materialization != "" {
+		return materialization
 	}
-	return mode
+	return gitMaterializationSource
 }
 
-func gitSourceLockRef(entry *config.ProviderEntry, resolvedMode, resolvedGestaltRef string) *LockSourceRef {
+func gitSourceLockRef(entry *config.ProviderEntry, resolvedGestaltRef string) *LockSourceRef {
 	git := gitSourceDef(entry)
 	if git == nil {
 		return nil
@@ -61,14 +57,13 @@ func gitSourceLockRef(entry *config.ProviderEntry, resolvedMode, resolvedGestalt
 		Ref:                ref,
 		Path:               manifestPath,
 		ArtifactRepository: strings.TrimSpace(git.ArtifactRepository),
-		ArtifactMode:       gitSourceArtifactMode(git),
-		ResolvedMode:       strings.TrimSpace(resolvedMode),
+		Materialization:    gitSourceMaterialization(git),
 		ResolvedGestaltRef: strings.TrimSpace(resolvedGestaltRef),
 	}
 }
 
 func gitSourceFingerprintLocation(entry *config.ProviderEntry) string {
-	ref := gitSourceLockRef(entry, "", "")
+	ref := gitSourceLockRef(entry, "")
 	if ref == nil {
 		return ""
 	}
@@ -78,31 +73,21 @@ func gitSourceFingerprintLocation(entry *config.ProviderEntry) string {
 		ref.Ref,
 		ref.Path,
 		ref.ArtifactRepository,
-		ref.ArtifactMode,
+		ref.Materialization,
 	}, "\x00")
 }
 
 func gitSourceMatchesLockRef(entry *config.ProviderEntry, lockRef *LockSourceRef) bool {
-	expected := gitSourceLockRef(entry, "", "")
+	expected := gitSourceLockRef(entry, "")
 	if expected == nil || lockRef == nil {
 		return false
 	}
-	if lockRef.Type != gitSourceRefType ||
-		lockRef.Repo != expected.Repo ||
-		!strings.EqualFold(lockRef.Ref, expected.Ref) ||
-		lockRef.Path != expected.Path ||
-		lockRef.ArtifactRepository != expected.ArtifactRepository ||
-		lockRef.ArtifactMode != expected.ArtifactMode {
-		return false
-	}
-	switch expected.ArtifactMode {
-	case gitArtifactModeRequire:
-		return lockRef.ResolvedMode == gitResolvedModeSnapshot
-	case gitArtifactModeSource:
-		return lockRef.ResolvedMode == gitResolvedModeSource
-	default:
-		return lockRef.ResolvedMode == gitResolvedModeSnapshot || lockRef.ResolvedMode == gitResolvedModeSource
-	}
+	return lockRef.Type == gitSourceRefType &&
+		lockRef.Repo == expected.Repo &&
+		strings.EqualFold(lockRef.Ref, expected.Ref) &&
+		lockRef.Path == expected.Path &&
+		lockRef.ArtifactRepository == expected.ArtifactRepository &&
+		lockRef.Materialization == expected.Materialization
 }
 
 func canonicalGitSourceLocation(entry *config.ProviderEntry) string {
@@ -187,7 +172,8 @@ func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePa
 
 func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	destDir := providerDestDir(paths, name)
-	if entry, installed, ok, err := l.tryLockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin); ok || err != nil {
+	if gitSourceMaterialization(gitSourceDef(plugin)) == gitMaterializationSnapshot {
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -209,7 +195,8 @@ func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *conf
 
 func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	subject := fmt.Sprintf("%s %q", kind, name)
-	if entry, installed, ok, err := l.tryLockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, plugin); ok || err != nil {
+	if gitSourceMaterialization(gitSourceDef(plugin)) == gitMaterializationSnapshot {
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, plugin)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -230,7 +217,8 @@ func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *con
 }
 
 func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir, subject string, configMap map[string]any) (LockEntry, error) {
-	if entry, installed, ok, err := l.tryLockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, plugin); ok || err != nil {
+	if gitSourceMaterialization(gitSourceDef(plugin)) == gitMaterializationSnapshot {
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, plugin)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -250,38 +238,24 @@ func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Con
 	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindUI, "ui:"+name, plugin, install, true)
 }
 
-func (l *Lifecycle) tryLockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry) (LockEntry, *installedPackage, bool, error) {
-	git := gitSourceDef(plugin)
-	mode := gitSourceArtifactMode(git)
-	if mode == gitArtifactModeSource {
-		return LockEntry{}, nil, false, nil
-	}
+func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry) (LockEntry, *installedPackage, error) {
 	if cfg == nil {
-		if mode == gitArtifactModeRequire {
-			return LockEntry{}, nil, false, fmt.Errorf("%s source.git snapshot resolution requires loaded config", subject)
-		}
-		return LockEntry{}, nil, false, nil
+		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot resolution requires loaded config", subject)
 	}
 	snapshot, err := resolveGitSnapshotSource(cfg, plugin)
 	if err != nil {
-		if mode == gitArtifactModeRequire {
-			return LockEntry{}, nil, false, fmt.Errorf("%s resolve source.git snapshot: %w", subject, err)
-		}
-		return LockEntry{}, nil, false, nil
+		return LockEntry{}, nil, fmt.Errorf("%s resolve source.git snapshot: %w", subject, err)
 	}
 	metadataProvider := *plugin
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
 	metadataProvider.Source.Auth = plugin.Source.Auth
 	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir)
 	if err != nil {
-		if mode == gitArtifactModeRequire {
-			return LockEntry{}, nil, false, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
-		}
-		return LockEntry{}, nil, false, nil
+		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
 	}
 	entry.Source = snapshot.MetadataURL
-	entry.SourceRef = gitSourceLockRef(plugin, gitResolvedModeSnapshot, snapshot.GestaltRef)
-	return entry, installed, true, nil
+	entry.SourceRef = gitSourceLockRef(plugin, snapshot.GestaltRef)
+	return entry, installed, nil
 }
 
 func (l *Lifecycle) prepareGitSourceInstall(ctx context.Context, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry) (*preparedInstall, error) {
@@ -319,7 +293,7 @@ func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprin
 		return LockEntry{}, err
 	}
 	entry.Source = canonicalGitSourceLocation(plugin)
-	entry.SourceRef = gitSourceLockRef(plugin, gitResolvedModeSource, "")
+	entry.SourceRef = gitSourceLockRef(plugin, "")
 	entry.Package = install.manifest.Source
 	entry.Kind = install.manifest.Kind
 	entry.Runtime = releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind))
