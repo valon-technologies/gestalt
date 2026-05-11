@@ -90,6 +90,41 @@ def message_from_dict(value: Any, message: Any) -> Any:
     return message
 
 
+def dataclass_mapping(value: Any) -> dict[str, Any] | None:
+    """Return a shallow mapping of dataclass field names to values."""
+
+    if _dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: getattr(value, field.name)
+            for field in _dataclasses.fields(value)
+        }
+    return None
+
+
+def input_data(value: Any | None, kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a dataclass or mapping input and overlay keyword arguments."""
+
+    if value is None:
+        return dict(kwargs)
+    mapping = dataclass_mapping(value)
+    if mapping is None:
+        if not isinstance(value, Mapping):
+            raise TypeError(
+                f"expected a mapping or dataclass, got {type(value).__name__}"
+            )
+        mapping = dict(value)
+    mapping.update(kwargs)
+    return mapping
+
+
+def copy_message(value: Any) -> Any:
+    """Return a protobuf message copy preserving the concrete message type."""
+
+    message = type(value)()
+    message.CopyFrom(value)
+    return message
+
+
 def json_from_native(value: JsonInput, *, path: str = "value") -> JsonValue:
     """Return a JSON-compatible Python value from native SDK input.
 

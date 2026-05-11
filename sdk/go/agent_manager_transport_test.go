@@ -140,3 +140,79 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("turn tool source = %s, want unspecified", harness.turnRequests[0].GetToolSource())
 	}
 }
+
+func TestTransport_AgentManagerCreateTurnWithInput(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &agentManagerTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterAgentManagerHostServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvAgentManagerSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvAgentManagerSocketToken, "relay-token-go")
+
+	client, err := gestalt.AgentManager("parent-token")
+	if err != nil {
+		t.Fatalf("AgentManager: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	turn, err := client.CreateTurnWithInput(context.Background(), gestalt.AgentManagerCreateTurnInput{
+		SessionID: "session-1",
+		Model:     "gpt-test",
+		Messages: []gestalt.AgentMessageInput{{
+			Role: "user",
+			Text: "Summarize",
+			Parts: []gestalt.AgentMessagePartInput{{
+				Text: "Summarize",
+			}},
+			Metadata: map[string]any{"source": "native"},
+		}},
+		ToolRefs: []gestalt.AgentToolRefInput{{
+			Plugin:     "github",
+			Operation:  "issues.get",
+			Connection: "default",
+		}},
+		ToolSource:     gestalt.AgentToolSourceModeMCPCatalog,
+		ResponseSchema: map[string]any{"type": "object"},
+		Metadata:       map[string]any{"request": "native"},
+		ModelOptions:   map[string]any{"temperature": 0},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurnWithInput: %v", err)
+	}
+	if turn.GetId() != "turn-1" {
+		t.Fatalf("turn id = %q, want turn-1", turn.GetId())
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.turnRequests) != 1 {
+		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
+	}
+	got := harness.turnRequests[0]
+	if got.GetInvocationToken() != "parent-token" {
+		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
+	}
+	if got.GetMessages()[0].GetParts()[0].GetType() != gestalt.AgentMessagePartTypeText {
+		t.Fatalf("message part type = %s, want text", got.GetMessages()[0].GetParts()[0].GetType())
+	}
+	if metadata := gestalt.MapFromStruct(got.GetMessages()[0].GetMetadata()); metadata["source"] != "native" {
+		t.Fatalf("message metadata = %#v", metadata)
+	}
+	if got.GetToolRefs()[0].GetPlugin() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
+		t.Fatalf("tool refs = %#v", got.GetToolRefs())
+	}
+	if schema := gestalt.MapFromStruct(got.GetResponseSchema()); schema["type"] != "object" {
+		t.Fatalf("response schema = %#v", schema)
+	}
+}

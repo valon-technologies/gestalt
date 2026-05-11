@@ -42,11 +42,25 @@ pub mod proto {
 
 pub use agent::{
     AgentHost, AgentHostError, AgentHostExecuteToolInput, AgentHostListToolsInput,
-    AgentHostResolveConnectionInput, AgentProvider, ENV_AGENT_HOST_SOCKET,
-    ENV_AGENT_HOST_SOCKET_TOKEN,
+    AgentHostResolveConnectionInput, AgentMessageInput, AgentMessagePartImageRefInput,
+    AgentMessagePartInput, AgentMessagePartToolCallInput, AgentMessagePartToolResultInput,
+    AgentProvider, AgentToolRefInput, AgentWorkspaceGitCheckoutInput, AgentWorkspaceInput,
+    ENV_AGENT_HOST_SOCKET, ENV_AGENT_HOST_SOCKET_TOKEN, new_agent_image_ref, new_agent_message,
+    new_agent_message_part, new_agent_tool_call, new_agent_tool_ref, new_agent_tool_result,
+    new_agent_workspace,
 };
 pub use agent_manager::{
-    AgentManager, AgentManagerError, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN,
+    AgentManager, AgentManagerCancelTurnInput, AgentManagerCreateSessionInput,
+    AgentManagerCreateTurnInput, AgentManagerError, AgentManagerGetSessionInput,
+    AgentManagerGetTurnInput, AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
+    AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
+    AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, ENV_AGENT_MANAGER_SOCKET,
+    ENV_AGENT_MANAGER_SOCKET_TOKEN, new_agent_manager_cancel_turn_request,
+    new_agent_manager_create_session_request, new_agent_manager_create_turn_request,
+    new_agent_manager_get_session_request, new_agent_manager_get_turn_request,
+    new_agent_manager_list_interactions_request, new_agent_manager_list_sessions_request,
+    new_agent_manager_list_turn_events_request, new_agent_manager_list_turns_request,
+    new_agent_manager_resolve_interaction_request, new_agent_manager_update_session_request,
 };
 pub use api::{
     Access, Credential, ExternalIdentity, Host, Provider, Request, Response, RuntimeMetadata,
@@ -203,7 +217,29 @@ pub use workflow::{
 };
 pub use workflow_manager::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, WorkflowManager,
-    WorkflowManagerError,
+    WorkflowManagerCreateDefinitionInput, WorkflowManagerCreateEventTriggerInput,
+    WorkflowManagerCreateScheduleInput, WorkflowManagerDeleteDefinitionInput,
+    WorkflowManagerDeleteEventTriggerInput, WorkflowManagerDeleteScheduleInput,
+    WorkflowManagerError, WorkflowManagerGetDefinitionInput, WorkflowManagerGetEventTriggerInput,
+    WorkflowManagerGetScheduleInput, WorkflowManagerPauseEventTriggerInput,
+    WorkflowManagerPauseScheduleInput, WorkflowManagerPublishEventInput,
+    WorkflowManagerResumeEventTriggerInput, WorkflowManagerResumeScheduleInput,
+    WorkflowManagerSignalOrStartRunInput, WorkflowManagerSignalRunInput,
+    WorkflowManagerStartRunInput, WorkflowManagerUpdateDefinitionInput,
+    WorkflowManagerUpdateEventTriggerInput, WorkflowManagerUpdateScheduleInput,
+    new_workflow_manager_create_definition_request,
+    new_workflow_manager_create_event_trigger_request,
+    new_workflow_manager_create_schedule_request, new_workflow_manager_delete_definition_request,
+    new_workflow_manager_delete_event_trigger_request,
+    new_workflow_manager_delete_schedule_request, new_workflow_manager_get_definition_request,
+    new_workflow_manager_get_event_trigger_request, new_workflow_manager_get_schedule_request,
+    new_workflow_manager_pause_event_trigger_request, new_workflow_manager_pause_schedule_request,
+    new_workflow_manager_publish_event_request, new_workflow_manager_resume_event_trigger_request,
+    new_workflow_manager_resume_schedule_request, new_workflow_manager_signal_or_start_run_request,
+    new_workflow_manager_signal_run_request, new_workflow_manager_start_run_request,
+    new_workflow_manager_update_definition_request,
+    new_workflow_manager_update_event_trigger_request,
+    new_workflow_manager_update_schedule_request,
 };
 
 #[doc(hidden)]

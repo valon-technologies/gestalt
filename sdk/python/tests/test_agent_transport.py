@@ -23,9 +23,17 @@ from gestalt import (
     ENV_AGENT_MANAGER_SOCKET_TOKEN,
     AgentHost,
     AgentManager,
+    AgentManagerCreateTurnInput,
+    AgentManagerResolveInteractionInput,
     AgentMessage,
+    AgentMessageInput,
+    AgentMessagePartImageRefInput,
+    AgentMessagePartInput,
+    AgentMessagePartToolCallInput,
+    AgentMessagePartToolResultInput,
     AgentProvider,
     AgentSession,
+    AgentToolRefInput,
     AgentTurn,
     AgentTurnEvent,
     MetadataProvider,
@@ -36,6 +44,7 @@ from gestalt import (
     _runtime,
     agent_message_from_dict,
     agent_message_from_proto_dict,
+    agent_message_part_from_dict,
     agent_message_to_dict,
     agent_message_to_proto_dict,
     message_from_dict,
@@ -786,6 +795,65 @@ class AgentTransportTests(unittest.TestCase):
             },
         )
 
+    def test_agent_message_dict_helpers_accept_nested_dataclass_inputs(self) -> None:
+        message = agent_message_from_dict(
+            AgentMessageInput(
+                role="assistant",
+                parts=[
+                    AgentMessagePartInput(
+                        tool_call=AgentMessagePartToolCallInput(
+                            id="call-1",
+                            tool_id="tool-1",
+                            arguments={"ok": True},
+                        )
+                    ),
+                    AgentMessagePartInput(
+                        tool_result=AgentMessagePartToolResultInput(
+                            tool_call_id="call-1",
+                            status=0,
+                            output={"accepted": True},
+                        )
+                    ),
+                    AgentMessagePartInput(
+                        image_ref=AgentMessagePartImageRefInput(
+                            uri="s3://bucket/image.png",
+                            mime_type="image/png",
+                        )
+                    ),
+                ],
+            )
+        )
+
+        self.assertEqual(
+            message.parts[0].type,
+            agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_CALL,
+        )
+        self.assertEqual(message.parts[0].tool_call.id, "call-1")
+        self.assertTrue(message.parts[0].tool_call.arguments.fields["ok"].bool_value)
+        self.assertEqual(
+            message.parts[1].type,
+            agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT,
+        )
+        self.assertEqual(message.parts[1].tool_result.tool_call_id, "call-1")
+        self.assertTrue(
+            message.parts[1].tool_result.output.fields["accepted"].bool_value
+        )
+        self.assertEqual(
+            message.parts[2].type,
+            agent_pb2.AGENT_MESSAGE_PART_TYPE_IMAGE_REF,
+        )
+        self.assertEqual(message.parts[2].image_ref.mime_type, "image/png")
+
+        direct_part = agent_message_part_from_dict(
+            AgentMessagePartInput(
+                tool_call=AgentMessagePartToolCallInput(
+                    id="call-2",
+                    tool_id="tool-2",
+                )
+            )
+        )
+        self.assertEqual(direct_part.tool_call.id, "call-2")
+
     def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(
         self,
     ) -> None:
@@ -1260,6 +1328,55 @@ class AgentTransportTests(unittest.TestCase):
                     "reason": "",
                 }
             ],
+        )
+
+    def test_agent_manager_accepts_native_inputs(self) -> None:
+        with AgentManager("token-123") as manager:
+            created_turn = manager.create_turn(
+                AgentManagerCreateTurnInput(
+                    session_id="session-managed-1",
+                    model="gpt-5.1",
+                    messages=[
+                        AgentMessageInput(
+                            role="user",
+                            text="Summarize this",
+                            parts=[AgentMessagePartInput(text="Summarize this")],
+                            metadata={"source": "native"},
+                        )
+                    ],
+                    tool_refs=[
+                        AgentToolRefInput(
+                            plugin="github",
+                            operation="issues.get",
+                            connection="default",
+                        )
+                    ],
+                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+                    response_schema={"type": "object"},
+                    metadata={"request": "native"},
+                    model_options={"temperature": 0},
+                )
+            )
+            resolved = manager.resolve_interaction(
+                AgentManagerResolveInteractionInput(
+                    turn_id="turn-managed-1",
+                    interaction_id="interaction-1",
+                    resolution={"approved": True},
+                )
+            )
+
+        self.assertEqual(created_turn.id, "turn-managed-1")
+        self.assertEqual(created_turn.messages[0].role, "user")
+        self.assertEqual(created_turn.messages[0].metadata["source"], "native")
+        self.assertEqual(
+            created_turn.messages[0].parts[0].type,
+            agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
+        )
+        self.assertEqual(resolved.id, "interaction-1")
+        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(
+            [item["method"] for item in _manager_requests],
+            ["create_turn", "resolve_interaction"],
         )
 
 

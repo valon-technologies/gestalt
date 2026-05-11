@@ -18,7 +18,10 @@ use gestalt::proto::v1::{
     AgentManagerUpdateSessionRequest, AgentMessage, AgentMessagePart, AgentMessagePartType,
     AgentSession, AgentSessionState, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
 };
-use gestalt::{AgentManager, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN, Request};
+use gestalt::{
+    AgentManager, AgentManagerCreateTurnInput, AgentMessageInput, AgentMessagePartInput,
+    AgentToolRefInput, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
+};
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
@@ -40,6 +43,7 @@ struct SeenRequest {
 struct TestAgentManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
+    create_turn_requests: Arc<Mutex<Vec<AgentManagerCreateTurnRequest>>>,
 }
 
 #[async_trait]
@@ -158,6 +162,10 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
         request: GrpcRequest<AgentManagerCreateTurnRequest>,
     ) -> std::result::Result<GrpcResponse<AgentTurn>, Status> {
         let request = request.into_inner();
+        self.create_turn_requests
+            .lock()
+            .expect("lock create turn requests")
+            .push(request.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create_turn".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -646,6 +654,101 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
                 reason: String::new(),
             },
         ]
+    );
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn agent_manager_native_create_turn_input_reaches_host() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("g-rust-agent-manager-native.sock");
+    let _socket_guard = helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET, socket.as_os_str());
+
+    let server = TestAgentManagerServer::default();
+    let serve_server = server.clone();
+    let serve_socket = socket.clone();
+    let serve_task = tokio::spawn(async move {
+        serve_agent_manager(serve_server, &serve_socket)
+            .await
+            .expect("serve agent manager");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let mut manager = AgentManager::connect("token-123")
+        .await
+        .expect("connect agent manager");
+    let created_turn = manager
+        .create_turn_input(AgentManagerCreateTurnInput {
+            session_id: "session-managed-1".to_string(),
+            model: "gpt-5.1".to_string(),
+            messages: vec![AgentMessageInput {
+                role: "user".to_string(),
+                text: "Summarize this".to_string(),
+                parts: vec![AgentMessagePartInput {
+                    text: "Summarize this".to_string(),
+                    ..Default::default()
+                }],
+                metadata: Some(serde_json::json!({ "source": "native" })),
+            }],
+            tool_refs: vec![AgentToolRefInput {
+                plugin: "github".to_string(),
+                operation: "issues.get".to_string(),
+                connection: "default".to_string(),
+                ..Default::default()
+            }],
+            tool_source: AgentToolSourceMode::McpCatalog,
+            response_schema: Some(serde_json::json!({ "type": "object" })),
+            metadata: Some(serde_json::json!({ "request": "native" })),
+            model_options: Some(serde_json::json!({ "temperature": 0 })),
+            ..Default::default()
+        })
+        .await
+        .expect("create turn");
+
+    assert_eq!(created_turn.id, "turn-managed-1");
+
+    let requests = server
+        .create_turn_requests
+        .lock()
+        .expect("lock create turn requests")
+        .clone();
+    assert_eq!(requests.len(), 1);
+    let request = &requests[0];
+    assert_eq!(request.invocation_token, "token-123");
+    assert_eq!(request.session_id, "session-managed-1");
+    assert_eq!(request.model, "gpt-5.1");
+    assert_eq!(request.tool_source, AgentToolSourceMode::McpCatalog as i32);
+    assert_eq!(request.messages.len(), 1);
+    assert_eq!(request.messages[0].role, "user");
+    assert_eq!(request.messages[0].text, "Summarize this");
+    assert_eq!(
+        gestalt::protocol::json_from_struct(request.messages[0].metadata.as_ref().unwrap()),
+        serde_json::json!({ "source": "native" })
+    );
+    assert_eq!(request.messages[0].parts.len(), 1);
+    assert_eq!(
+        request.messages[0].parts[0].r#type,
+        AgentMessagePartType::Text as i32
+    );
+    assert_eq!(request.messages[0].parts[0].text, "Summarize this");
+    assert_eq!(request.tool_refs.len(), 1);
+    assert_eq!(request.tool_refs[0].plugin, "github");
+    assert_eq!(request.tool_refs[0].operation, "issues.get");
+    assert_eq!(request.tool_refs[0].connection, "default");
+    assert_eq!(
+        gestalt::protocol::json_from_struct(request.response_schema.as_ref().unwrap()),
+        serde_json::json!({ "type": "object" })
+    );
+    assert_eq!(
+        gestalt::protocol::json_from_struct(request.metadata.as_ref().unwrap()),
+        serde_json::json!({ "request": "native" })
+    );
+    assert_eq!(
+        gestalt::protocol::json_from_struct(request.model_options.as_ref().unwrap()),
+        serde_json::json!({ "temperature": 0.0 })
     );
 
     serve_task.abort();

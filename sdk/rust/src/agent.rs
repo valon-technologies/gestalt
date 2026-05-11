@@ -27,6 +27,121 @@ pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_AGENT_HOST_SOCKET";
 pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
 const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
+/// Input for an agent message.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessageInput {
+    pub role: String,
+    pub text: String,
+    pub parts: Vec<AgentMessagePartInput>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl AgentMessageInput {
+    /// Sets message metadata from any JSON-object-like serializable value.
+    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.metadata = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+
+    /// Creates a user text message.
+    pub fn user_text(text: impl Into<String>) -> Self {
+        Self {
+            role: "user".to_string(),
+            text: text.into(),
+            ..Default::default()
+        }
+    }
+}
+
+/// Input for an agent message part.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartInput {
+    pub part_type: pb::AgentMessagePartType,
+    pub text: String,
+    pub json: Option<serde_json::Value>,
+    pub tool_call: Option<AgentMessagePartToolCallInput>,
+    pub tool_result: Option<AgentMessagePartToolResultInput>,
+    pub image_ref: Option<AgentMessagePartImageRefInput>,
+}
+
+impl AgentMessagePartInput {
+    /// Creates a JSON message part from any JSON-object-like serializable value.
+    pub fn json<T: Serialize>(value: T) -> ProviderResult<Self> {
+        Ok(Self {
+            part_type: pb::AgentMessagePartType::Json,
+            json: Some(protocol::json_from_serializable(value)?),
+            ..Default::default()
+        })
+    }
+}
+
+/// Input for an agent tool-call message part payload.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartToolCallInput {
+    pub id: String,
+    pub tool_id: String,
+    pub arguments: Option<serde_json::Value>,
+}
+
+impl AgentMessagePartToolCallInput {
+    /// Sets tool-call arguments from any JSON-object-like serializable value.
+    pub fn with_arguments<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.arguments = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+}
+
+/// Input for an agent tool-result message part payload.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartToolResultInput {
+    pub tool_call_id: String,
+    pub status: i32,
+    pub content: String,
+    pub output: Option<serde_json::Value>,
+}
+
+impl AgentMessagePartToolResultInput {
+    /// Sets tool-result output from any JSON-object-like serializable value.
+    pub fn with_output<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.output = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+}
+
+/// Input for an agent image-reference message part payload.
+#[derive(Clone, Debug, Default)]
+pub struct AgentMessagePartImageRefInput {
+    pub uri: String,
+    pub mime_type: String,
+}
+
+/// Input for an agent tool reference.
+#[derive(Clone, Debug, Default)]
+pub struct AgentToolRefInput {
+    pub plugin: String,
+    pub operation: String,
+    pub connection: String,
+    pub instance: String,
+    pub title: String,
+    pub description: String,
+    pub system: String,
+}
+
+/// Input for an agent workspace.
+#[derive(Clone, Debug, Default)]
+pub struct AgentWorkspaceInput {
+    pub checkouts: Vec<AgentWorkspaceGitCheckoutInput>,
+    pub cwd: String,
+}
+
+/// Input for an agent workspace git checkout.
+#[derive(Clone, Debug, Default)]
+pub struct AgentWorkspaceGitCheckoutInput {
+    pub url: String,
+    pub reference: String,
+    pub path: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`AgentHost`].
 pub enum AgentHostError {
@@ -107,6 +222,127 @@ pub struct AgentHostResolveConnectionInput {
     pub instance: String,
     /// Optional run grant scoped to this turn.
     pub run_grant: String,
+}
+
+/// Creates an agent message.
+pub fn new_agent_message(input: AgentMessageInput) -> ProviderResult<pb::AgentMessage> {
+    Ok(pb::AgentMessage {
+        role: input.role,
+        text: input.text,
+        parts: input
+            .parts
+            .into_iter()
+            .map(new_agent_message_part)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+/// Creates an agent message part.
+pub fn new_agent_message_part(
+    input: AgentMessagePartInput,
+) -> ProviderResult<pb::AgentMessagePart> {
+    let mut part_type = input.part_type;
+    if part_type == pb::AgentMessagePartType::Unspecified {
+        part_type = infer_agent_message_part_type(&input);
+    }
+    Ok(pb::AgentMessagePart {
+        r#type: part_type as i32,
+        text: input.text,
+        json: input.json.map(protocol::struct_from_json).transpose()?,
+        tool_call: input.tool_call.map(new_agent_tool_call).transpose()?,
+        tool_result: input.tool_result.map(new_agent_tool_result).transpose()?,
+        image_ref: input.image_ref.map(new_agent_image_ref),
+    })
+}
+
+/// Creates an agent tool-call payload.
+pub fn new_agent_tool_call(
+    input: AgentMessagePartToolCallInput,
+) -> ProviderResult<pb::AgentMessagePartToolCall> {
+    Ok(pb::AgentMessagePartToolCall {
+        id: input.id,
+        tool_id: input.tool_id,
+        arguments: input
+            .arguments
+            .map(protocol::struct_from_json)
+            .transpose()?,
+    })
+}
+
+/// Creates an agent tool-result payload.
+pub fn new_agent_tool_result(
+    input: AgentMessagePartToolResultInput,
+) -> ProviderResult<pb::AgentMessagePartToolResult> {
+    Ok(pb::AgentMessagePartToolResult {
+        tool_call_id: input.tool_call_id,
+        status: input.status,
+        content: input.content,
+        output: input.output.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+/// Creates an agent image-reference payload.
+pub fn new_agent_image_ref(input: AgentMessagePartImageRefInput) -> pb::AgentMessagePartImageRef {
+    pb::AgentMessagePartImageRef {
+        uri: input.uri,
+        mime_type: input.mime_type,
+    }
+}
+
+/// Creates an agent tool reference.
+pub fn new_agent_tool_ref(input: AgentToolRefInput) -> pb::AgentToolRef {
+    pb::AgentToolRef {
+        plugin: input.plugin,
+        operation: input.operation,
+        connection: input.connection,
+        instance: input.instance,
+        title: input.title,
+        description: input.description,
+        system: input.system,
+    }
+}
+
+/// Creates an agent workspace.
+pub fn new_agent_workspace(input: AgentWorkspaceInput) -> pb::AgentWorkspace {
+    pb::AgentWorkspace {
+        checkouts: input
+            .checkouts
+            .into_iter()
+            .map(|checkout| pb::AgentWorkspaceGitCheckout {
+                url: checkout.url,
+                r#ref: checkout.reference,
+                path: checkout.path,
+            })
+            .collect(),
+        cwd: input.cwd,
+    }
+}
+
+pub(crate) fn new_agent_messages(
+    values: Vec<AgentMessageInput>,
+) -> ProviderResult<Vec<pb::AgentMessage>> {
+    values.into_iter().map(new_agent_message).collect()
+}
+
+pub(crate) fn new_agent_tool_refs(values: Vec<AgentToolRefInput>) -> Vec<pb::AgentToolRef> {
+    values.into_iter().map(new_agent_tool_ref).collect()
+}
+
+fn infer_agent_message_part_type(input: &AgentMessagePartInput) -> pb::AgentMessagePartType {
+    if input.tool_call.is_some() {
+        pb::AgentMessagePartType::ToolCall
+    } else if input.tool_result.is_some() {
+        pb::AgentMessagePartType::ToolResult
+    } else if input.image_ref.is_some() {
+        pb::AgentMessagePartType::ImageRef
+    } else if input.json.is_some() {
+        pb::AgentMessagePartType::Json
+    } else if !input.text.is_empty() {
+        pb::AgentMessagePartType::Text
+    } else {
+        pb::AgentMessagePartType::Unspecified
+    }
 }
 
 /// Client for the agent host service available inside agent providers.

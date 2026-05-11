@@ -15,9 +15,15 @@ from gestalt import (
     ENV_WORKFLOW_HOST_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
+    BoundWorkflowPluginTargetInput,
+    BoundWorkflowTargetInput,
     Request,
+    WorkflowEventInput,
     WorkflowHost,
     WorkflowManager,
+    WorkflowManagerCreateDefinitionInput,
+    WorkflowManagerCreateScheduleInput,
+    WorkflowManagerPublishEventInput,
 )
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -229,10 +235,10 @@ class WorkflowTransportTests(unittest.TestCase):
 
         with request.workflow_manager() as manager:
             created_definition = manager.create_definition(
-                workflow_pb2.WorkflowManagerCreateDefinitionRequest(
+                WorkflowManagerCreateDefinitionInput(
                     provider_name="managed",
-                    target=workflow_pb2.BoundWorkflowTarget(
-                        plugin=workflow_pb2.BoundWorkflowPluginTarget(
+                    target=BoundWorkflowTargetInput(
+                        plugin=BoundWorkflowPluginTargetInput(
                             plugin_name="demo",
                             operation="sync",
                         ),
@@ -240,20 +246,20 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
             created = manager.create_schedule(
-                workflow_pb2.WorkflowManagerCreateScheduleRequest(
+                WorkflowManagerCreateScheduleInput(
                     provider_name="managed",
                     cron="*/5 * * * *",
                     timezone="UTC",
                 )
             )
             published = manager.publish_event(
-                workflow_pb2.WorkflowManagerPublishEventRequest(
+                WorkflowManagerPublishEventInput(
                     provider_name="managed",
-                    event=workflow_pb2.WorkflowEvent(
+                    event=WorkflowEventInput(
                         source="github",
                         type="github.app.webhook",
                         subject="installation:99",
-                    )
+                    ),
                 )
             )
 
@@ -287,6 +293,6 @@ class WorkflowTransportTests(unittest.TestCase):
                     "event_source": "github",
                     "event_subject": "installation:99",
                     "provider_name": "managed",
-                }
+                },
             ],
         )

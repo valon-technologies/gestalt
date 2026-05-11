@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// BoundWorkflowPluginTargetInput contains native Go values for constructing a
+// BoundWorkflowPluginTargetInput contains fields for constructing a
 // BoundWorkflowPluginTarget.
 type BoundWorkflowPluginTargetInput struct {
 	PluginName     string
@@ -19,8 +19,7 @@ type BoundWorkflowPluginTargetInput struct {
 	CredentialMode string
 }
 
-// NewBoundWorkflowPluginTarget creates a plugin workflow target from native Go
-// values.
+// NewBoundWorkflowPluginTarget creates a plugin workflow target.
 func NewBoundWorkflowPluginTarget(input BoundWorkflowPluginTargetInput) (*BoundWorkflowPluginTarget, error) {
 	value, err := StructFromAny(input.Input)
 	if err != nil {
@@ -37,7 +36,7 @@ func NewBoundWorkflowPluginTarget(input BoundWorkflowPluginTargetInput) (*BoundW
 }
 
 // BoundWorkflowPluginTargetInputFromTarget converts an existing protocol target
-// into native builder input.
+// into builder input.
 func BoundWorkflowPluginTargetInputFromTarget(value *BoundWorkflowPluginTarget) BoundWorkflowPluginTargetInput {
 	if value == nil {
 		return BoundWorkflowPluginTargetInput{}
@@ -52,7 +51,7 @@ func BoundWorkflowPluginTargetInputFromTarget(value *BoundWorkflowPluginTarget) 
 	}
 }
 
-// WorkflowOutputDeliveryInput contains native Go values for constructing a
+// WorkflowOutputDeliveryInput contains fields for constructing a
 // WorkflowOutputDelivery.
 type WorkflowOutputDeliveryInput struct {
 	Target         *BoundWorkflowPluginTargetInput
@@ -60,7 +59,7 @@ type WorkflowOutputDeliveryInput struct {
 	CredentialMode string
 }
 
-// WorkflowOutputValueSourceInput contains native Go values for constructing a
+// WorkflowOutputValueSourceInput contains fields for constructing a
 // workflow output value source. Set at most one source field.
 type WorkflowOutputValueSourceInput struct {
 	AgentOutput    string
@@ -70,15 +69,14 @@ type WorkflowOutputValueSourceInput struct {
 	AgentSession   string
 }
 
-// WorkflowOutputBindingInput contains native Go values for one workflow output
+// WorkflowOutputBindingInput contains fields for one workflow output
 // binding.
 type WorkflowOutputBindingInput struct {
 	InputField string
 	Value      *WorkflowOutputValueSourceInput
 }
 
-// NewWorkflowOutputDelivery creates a workflow output delivery from native Go
-// values.
+// NewWorkflowOutputDelivery creates a workflow output delivery.
 func NewWorkflowOutputDelivery(input WorkflowOutputDeliveryInput) (*WorkflowOutputDelivery, error) {
 	var target *BoundWorkflowPluginTarget
 	if input.Target != nil {
@@ -100,7 +98,7 @@ func NewWorkflowOutputDelivery(input WorkflowOutputDeliveryInput) (*WorkflowOutp
 }
 
 // WorkflowOutputDeliveryInputFromDelivery converts an existing protocol delivery
-// into native builder input.
+// into builder input.
 func WorkflowOutputDeliveryInputFromDelivery(value *WorkflowOutputDelivery) *WorkflowOutputDeliveryInput {
 	if value == nil {
 		return nil
@@ -117,14 +115,16 @@ func WorkflowOutputDeliveryInputFromDelivery(value *WorkflowOutputDelivery) *Wor
 	}
 }
 
-// BoundWorkflowAgentTargetInput contains native Go values for constructing a
+// BoundWorkflowAgentTargetInput contains fields for constructing a
 // BoundWorkflowAgentTarget.
 type BoundWorkflowAgentTargetInput struct {
 	ProviderName         string
 	Model                string
 	Prompt               string
 	Messages             []*AgentMessage
+	MessageInputs        []AgentMessageInput
 	ToolRefs             []*AgentToolRef
+	ToolRefInputs        []AgentToolRefInput
 	ResponseSchema       any
 	Metadata             any
 	TimeoutSeconds       int32
@@ -133,8 +133,7 @@ type BoundWorkflowAgentTargetInput struct {
 	SessionReadyDelivery *WorkflowOutputDeliveryInput
 }
 
-// NewBoundWorkflowAgentTarget creates an agent workflow target from native Go
-// values.
+// NewBoundWorkflowAgentTarget creates an agent workflow target.
 func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTargetInput) (*BoundWorkflowAgentTarget, error) {
 	responseSchema, err := StructFromAny(input.ResponseSchema)
 	if err != nil {
@@ -156,12 +155,20 @@ func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTargetInput) (*BoundWor
 	if err != nil {
 		return nil, err
 	}
+	messages := copyAgentMessages(input.Messages)
+	messageInputs, err := agentMessagesFromInputs(input.MessageInputs)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, messageInputs...)
+	toolRefs := copyAgentToolRefs(input.ToolRefs)
+	toolRefs = append(toolRefs, agentToolRefsFromInputs(input.ToolRefInputs)...)
 	return &BoundWorkflowAgentTarget{
 		ProviderName:         input.ProviderName,
 		Model:                input.Model,
 		Prompt:               input.Prompt,
-		Messages:             copyAgentMessages(input.Messages),
-		ToolRefs:             copyAgentToolRefs(input.ToolRefs),
+		Messages:             messages,
+		ToolRefs:             toolRefs,
 		ResponseSchema:       responseSchema,
 		Metadata:             metadata,
 		TimeoutSeconds:       input.TimeoutSeconds,
@@ -172,7 +179,7 @@ func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTargetInput) (*BoundWor
 }
 
 // BoundWorkflowAgentTargetInputFromTarget converts an existing protocol target
-// into native builder input.
+// into builder input.
 func BoundWorkflowAgentTargetInputFromTarget(value *BoundWorkflowAgentTarget) BoundWorkflowAgentTargetInput {
 	if value == nil {
 		return BoundWorkflowAgentTargetInput{}
@@ -192,14 +199,14 @@ func BoundWorkflowAgentTargetInputFromTarget(value *BoundWorkflowAgentTarget) Bo
 	}
 }
 
-// BoundWorkflowTargetInput contains native Go values for constructing a
+// BoundWorkflowTargetInput contains fields for constructing a
 // BoundWorkflowTarget. Exactly one of Plugin or Agent should be set.
 type BoundWorkflowTargetInput struct {
 	Plugin *BoundWorkflowPluginTargetInput
 	Agent  *BoundWorkflowAgentTargetInput
 }
 
-// WorkflowActorInput contains native Go values for constructing workflow actor
+// WorkflowActorInput contains fields for constructing workflow actor
 // metadata.
 type WorkflowActorInput struct {
 	SubjectID   string
@@ -208,7 +215,7 @@ type WorkflowActorInput struct {
 	AuthSource  string
 }
 
-// NewWorkflowActor creates workflow actor metadata from native Go values.
+// NewWorkflowActor creates workflow actor metadata.
 func NewWorkflowActor(input WorkflowActorInput) *WorkflowActor {
 	return &WorkflowActor{
 		SubjectId:   input.SubjectID,
@@ -219,7 +226,7 @@ func NewWorkflowActor(input WorkflowActorInput) *WorkflowActor {
 }
 
 // WorkflowActorInputFromActor converts existing workflow actor metadata into
-// native builder input.
+// builder input.
 func WorkflowActorInputFromActor(value *WorkflowActor) WorkflowActorInput {
 	if value == nil {
 		return WorkflowActorInput{}
@@ -232,7 +239,7 @@ func WorkflowActorInputFromActor(value *WorkflowActor) WorkflowActorInput {
 	}
 }
 
-// NewBoundWorkflowTarget creates a workflow target from native Go values.
+// NewBoundWorkflowTarget creates a workflow target.
 func NewBoundWorkflowTarget(input BoundWorkflowTargetInput) (*BoundWorkflowTarget, error) {
 	switch {
 	case input.Plugin != nil:
@@ -253,7 +260,7 @@ func NewBoundWorkflowTarget(input BoundWorkflowTargetInput) (*BoundWorkflowTarge
 }
 
 // BoundWorkflowTargetInputFromTarget converts an existing protocol target into
-// native builder input.
+// builder input.
 func BoundWorkflowTargetInputFromTarget(value *BoundWorkflowTarget) BoundWorkflowTargetInput {
 	if value == nil {
 		return BoundWorkflowTargetInput{}
@@ -270,7 +277,7 @@ func BoundWorkflowTargetInputFromTarget(value *BoundWorkflowTarget) BoundWorkflo
 }
 
 // NewBoundWorkflowTargetFromTarget creates a copy of an existing workflow target
-// through the native target input builder.
+// through the target input builder.
 func NewBoundWorkflowTargetFromTarget(value *BoundWorkflowTarget) (*BoundWorkflowTarget, error) {
 	if value == nil {
 		return nil, nil
@@ -278,7 +285,7 @@ func NewBoundWorkflowTargetFromTarget(value *BoundWorkflowTarget) (*BoundWorkflo
 	return NewBoundWorkflowTarget(BoundWorkflowTargetInputFromTarget(value))
 }
 
-// WorkflowEventInput contains native Go values for constructing a WorkflowEvent.
+// WorkflowEventInput contains fields for constructing a WorkflowEvent.
 type WorkflowEventInput struct {
 	ID              string
 	Source          string
@@ -291,7 +298,7 @@ type WorkflowEventInput struct {
 	Extensions      map[string]any
 }
 
-// NewWorkflowEvent creates a workflow event from native Go values.
+// NewWorkflowEvent creates a workflow event.
 func NewWorkflowEvent(input WorkflowEventInput) (*WorkflowEvent, error) {
 	data, err := StructFromAny(input.Data)
 	if err != nil {
@@ -314,8 +321,7 @@ func NewWorkflowEvent(input WorkflowEventInput) (*WorkflowEvent, error) {
 	}, nil
 }
 
-// WorkflowEventInputFromEvent converts an existing protocol event into native
-// builder input.
+// WorkflowEventInputFromEvent converts an existing protocol event into builder input.
 func WorkflowEventInputFromEvent(value *WorkflowEvent) WorkflowEventInput {
 	if value == nil {
 		return WorkflowEventInput{}
@@ -334,7 +340,7 @@ func WorkflowEventInputFromEvent(value *WorkflowEvent) WorkflowEventInput {
 }
 
 // NewWorkflowEventFromEvent creates a copy of an existing workflow event through
-// the native event input builder.
+// the event input builder.
 func NewWorkflowEventFromEvent(value *WorkflowEvent) (*WorkflowEvent, error) {
 	if value == nil {
 		return nil, nil
@@ -342,7 +348,7 @@ func NewWorkflowEventFromEvent(value *WorkflowEvent) (*WorkflowEvent, error) {
 	return NewWorkflowEvent(WorkflowEventInputFromEvent(value))
 }
 
-// WorkflowSignalInput contains native Go values for constructing a
+// WorkflowSignalInput contains fields for constructing a
 // WorkflowSignal.
 type WorkflowSignalInput struct {
 	ID             string
@@ -355,7 +361,7 @@ type WorkflowSignalInput struct {
 	Sequence       int64
 }
 
-// NewWorkflowSignal creates a workflow signal from native Go values.
+// NewWorkflowSignal creates a workflow signal.
 func NewWorkflowSignal(input WorkflowSignalInput) (*WorkflowSignal, error) {
 	payload, err := StructFromAny(input.Payload)
 	if err != nil {
@@ -377,8 +383,7 @@ func NewWorkflowSignal(input WorkflowSignalInput) (*WorkflowSignal, error) {
 	}, nil
 }
 
-// WorkflowSignalInputFromSignal converts an existing protocol signal into native
-// builder input.
+// WorkflowSignalInputFromSignal converts an existing protocol signal into builder input.
 func WorkflowSignalInputFromSignal(value *WorkflowSignal) WorkflowSignalInput {
 	if value == nil {
 		return WorkflowSignalInput{}
@@ -396,7 +401,7 @@ func WorkflowSignalInputFromSignal(value *WorkflowSignal) WorkflowSignalInput {
 }
 
 // NewWorkflowSignalFromSignal creates a copy of an existing workflow signal
-// through the native signal input builder.
+// through the signal input builder.
 func NewWorkflowSignalFromSignal(value *WorkflowSignal) (*WorkflowSignal, error) {
 	if value == nil {
 		return nil, nil
@@ -404,21 +409,21 @@ func NewWorkflowSignalFromSignal(value *WorkflowSignal) (*WorkflowSignal, error)
 	return NewWorkflowSignal(WorkflowSignalInputFromSignal(value))
 }
 
-// WorkflowScheduleTriggerInput contains native Go values for constructing a
+// WorkflowScheduleTriggerInput contains fields for constructing a
 // schedule-triggered workflow run trigger.
 type WorkflowScheduleTriggerInput struct {
 	ScheduleID   string
 	ScheduledFor *time.Time
 }
 
-// WorkflowEventTriggerInvocationInput contains native Go values for
+// WorkflowEventTriggerInvocationInput contains fields for
 // constructing an event-triggered workflow run trigger.
 type WorkflowEventTriggerInvocationInput struct {
 	TriggerID string
 	Event     *WorkflowEventInput
 }
 
-// WorkflowRunTriggerInput contains native Go values for constructing a
+// WorkflowRunTriggerInput contains fields for constructing a
 // workflow run trigger. Exactly one trigger kind should be set.
 type WorkflowRunTriggerInput struct {
 	Manual   bool
@@ -426,8 +431,7 @@ type WorkflowRunTriggerInput struct {
 	Event    *WorkflowEventTriggerInvocationInput
 }
 
-// NewWorkflowScheduleTrigger creates a schedule-trigger run trigger from native
-// Go values.
+// NewWorkflowScheduleTrigger creates a schedule-trigger run trigger.
 func NewWorkflowScheduleTrigger(scheduleID string, scheduledFor time.Time) *WorkflowRunTrigger {
 	return &WorkflowRunTrigger{Kind: &WorkflowRunTriggerSchedule{Schedule: &WorkflowScheduleTrigger{
 		ScheduleId:   scheduleID,
@@ -435,7 +439,7 @@ func NewWorkflowScheduleTrigger(scheduleID string, scheduledFor time.Time) *Work
 	}}}
 }
 
-// NewWorkflowRunTrigger creates a workflow run trigger from native Go values.
+// NewWorkflowRunTrigger creates a workflow run trigger.
 func NewWorkflowRunTrigger(input WorkflowRunTriggerInput) (*WorkflowRunTrigger, error) {
 	selected := 0
 	if input.Manual {
@@ -478,7 +482,7 @@ func NewWorkflowRunTrigger(input WorkflowRunTriggerInput) (*WorkflowRunTrigger, 
 }
 
 // WorkflowRunTriggerInputFromTrigger converts an existing protocol trigger into
-// native builder input.
+// builder input.
 func WorkflowRunTriggerInputFromTrigger(value *WorkflowRunTrigger) (WorkflowRunTriggerInput, error) {
 	if value == nil {
 		return WorkflowRunTriggerInput{}, nil
@@ -526,7 +530,7 @@ func NewWorkflowRunTriggerFromTrigger(value *WorkflowRunTrigger) (*WorkflowRunTr
 	return NewWorkflowRunTrigger(input)
 }
 
-// BoundWorkflowRunInput contains native Go values for constructing a
+// BoundWorkflowRunInput contains fields for constructing a
 // BoundWorkflowRun.
 type BoundWorkflowRunInput struct {
 	ID            string
@@ -543,7 +547,7 @@ type BoundWorkflowRunInput struct {
 	WorkflowKey   string
 }
 
-// NewBoundWorkflowRun creates a bound workflow run from native Go values.
+// NewBoundWorkflowRun creates a bound workflow run.
 func NewBoundWorkflowRun(input BoundWorkflowRunInput) (*BoundWorkflowRun, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
@@ -569,8 +573,7 @@ func NewBoundWorkflowRun(input BoundWorkflowRunInput) (*BoundWorkflowRun, error)
 	}, nil
 }
 
-// BoundWorkflowRunInputFromRun converts an existing protocol run into native
-// builder input.
+// BoundWorkflowRunInputFromRun converts an existing protocol run into builder input.
 func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInput, error) {
 	if value == nil {
 		return BoundWorkflowRunInput{}, nil
@@ -604,7 +607,7 @@ func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInpu
 }
 
 // NewBoundWorkflowRunFromRun creates a copy of an existing bound workflow run
-// through the native run input builder.
+// through the run input builder.
 func NewBoundWorkflowRunFromRun(value *BoundWorkflowRun) (*BoundWorkflowRun, error) {
 	input, err := BoundWorkflowRunInputFromRun(value)
 	if err != nil || value == nil {
@@ -613,7 +616,7 @@ func NewBoundWorkflowRunFromRun(value *BoundWorkflowRun) (*BoundWorkflowRun, err
 	return NewBoundWorkflowRun(input)
 }
 
-// BoundWorkflowScheduleInput contains native Go values for constructing a
+// BoundWorkflowScheduleInput contains fields for constructing a
 // BoundWorkflowSchedule.
 type BoundWorkflowScheduleInput struct {
 	ID           string
@@ -628,8 +631,7 @@ type BoundWorkflowScheduleInput struct {
 	ExecutionRef string
 }
 
-// NewBoundWorkflowSchedule creates a bound workflow schedule from native Go
-// values.
+// NewBoundWorkflowSchedule creates a bound workflow schedule.
 func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) (*BoundWorkflowSchedule, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
@@ -650,7 +652,7 @@ func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) (*BoundWorkflowS
 }
 
 // BoundWorkflowScheduleInputFromSchedule converts an existing protocol schedule
-// into native builder input.
+// into builder input.
 func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (BoundWorkflowScheduleInput, error) {
 	if value == nil {
 		return BoundWorkflowScheduleInput{}, nil
@@ -674,7 +676,7 @@ func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (Bound
 }
 
 // NewBoundWorkflowScheduleFromSchedule creates a copy of an existing schedule
-// through the native schedule input builder.
+// through the schedule input builder.
 func NewBoundWorkflowScheduleFromSchedule(value *BoundWorkflowSchedule) (*BoundWorkflowSchedule, error) {
 	input, err := BoundWorkflowScheduleInputFromSchedule(value)
 	if err != nil || value == nil {
@@ -683,7 +685,7 @@ func NewBoundWorkflowScheduleFromSchedule(value *BoundWorkflowSchedule) (*BoundW
 	return NewBoundWorkflowSchedule(input)
 }
 
-// BoundWorkflowEventTriggerInput contains native Go values for constructing a
+// BoundWorkflowEventTriggerInput contains fields for constructing a
 // BoundWorkflowEventTrigger.
 type BoundWorkflowEventTriggerInput struct {
 	ID           string
@@ -696,7 +698,7 @@ type BoundWorkflowEventTriggerInput struct {
 	ExecutionRef string
 }
 
-// WorkflowEventMatchInput contains native Go values for matching workflow
+// WorkflowEventMatchInput contains fields for matching workflow
 // events.
 type WorkflowEventMatchInput struct {
 	Type    string
@@ -704,8 +706,7 @@ type WorkflowEventMatchInput struct {
 	Subject string
 }
 
-// NewBoundWorkflowEventTrigger creates a bound workflow event trigger from
-// native Go values.
+// NewBoundWorkflowEventTrigger creates a bound workflow event trigger.
 func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTriggerInput) (*BoundWorkflowEventTrigger, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
@@ -724,7 +725,7 @@ func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTriggerInput) (*BoundW
 }
 
 // BoundWorkflowEventTriggerInputFromTrigger converts an existing protocol event
-// trigger into native builder input.
+// trigger into builder input.
 func BoundWorkflowEventTriggerInputFromTrigger(value *BoundWorkflowEventTrigger) (BoundWorkflowEventTriggerInput, error) {
 	if value == nil {
 		return BoundWorkflowEventTriggerInput{}, nil
@@ -742,7 +743,7 @@ func BoundWorkflowEventTriggerInputFromTrigger(value *BoundWorkflowEventTrigger)
 }
 
 // NewBoundWorkflowEventTriggerFromTrigger creates a copy of an existing event
-// trigger through the native event trigger input builder.
+// trigger through the event trigger input builder.
 func NewBoundWorkflowEventTriggerFromTrigger(value *BoundWorkflowEventTrigger) (*BoundWorkflowEventTrigger, error) {
 	input, err := BoundWorkflowEventTriggerInputFromTrigger(value)
 	if err != nil || value == nil {
@@ -751,7 +752,7 @@ func NewBoundWorkflowEventTriggerFromTrigger(value *BoundWorkflowEventTrigger) (
 	return NewBoundWorkflowEventTrigger(input)
 }
 
-// WorkflowExecutionReferenceInput contains native Go values for constructing a
+// WorkflowExecutionReferenceInput contains fields for constructing a
 // WorkflowExecutionReference.
 type WorkflowExecutionReferenceInput struct {
 	ID                  string
@@ -770,14 +771,14 @@ type WorkflowExecutionReferenceInput struct {
 	SourceDefinitionID  string
 }
 
-// WorkflowAccessPermissionInput contains native Go values for an execution
+// WorkflowAccessPermissionInput contains fields for an execution
 // reference permission.
 type WorkflowAccessPermissionInput struct {
 	Plugin     string
 	Operations []string
 }
 
-// WorkflowRunAsSubjectInput contains native Go values for workflow run-as
+// WorkflowRunAsSubjectInput contains fields for workflow run-as
 // metadata.
 type WorkflowRunAsSubjectInput struct {
 	SubjectID   string
@@ -786,8 +787,7 @@ type WorkflowRunAsSubjectInput struct {
 	AuthSource  string
 }
 
-// NewWorkflowExecutionReference creates a workflow execution reference from
-// native Go values.
+// NewWorkflowExecutionReference creates a workflow execution reference.
 func NewWorkflowExecutionReference(input WorkflowExecutionReferenceInput) (*WorkflowExecutionReference, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
@@ -812,7 +812,7 @@ func NewWorkflowExecutionReference(input WorkflowExecutionReferenceInput) (*Work
 }
 
 // WorkflowExecutionReferenceInputFromReference converts an existing protocol
-// execution reference into native builder input.
+// execution reference into builder input.
 func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionReference) (WorkflowExecutionReferenceInput, error) {
 	if value == nil {
 		return WorkflowExecutionReferenceInput{}, nil
@@ -840,7 +840,7 @@ func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionRefere
 }
 
 // NewWorkflowExecutionReferenceFromReference creates a copy of an existing
-// execution reference through the native execution reference input builder.
+// execution reference through the execution reference input builder.
 func NewWorkflowExecutionReferenceFromReference(value *WorkflowExecutionReference) (*WorkflowExecutionReference, error) {
 	input, err := WorkflowExecutionReferenceInputFromReference(value)
 	if err != nil || value == nil {

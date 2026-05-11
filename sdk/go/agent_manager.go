@@ -72,6 +72,15 @@ func (c *AgentManagerClient) CreateSession(ctx context.Context, req *proto.Agent
 	return c.client.CreateSession(ctx, value)
 }
 
+// CreateSessionWithInput creates an agent session.
+func (c *AgentManagerClient) CreateSessionWithInput(ctx context.Context, input AgentManagerCreateSessionInput) (*proto.AgentSession, error) {
+	req, err := NewAgentManagerCreateSessionRequest(input)
+	if err != nil {
+		return nil, err
+	}
+	return c.CreateSession(ctx, req)
+}
+
 // GetSession fetches one agent session.
 func (c *AgentManagerClient) GetSession(ctx context.Context, req *proto.AgentManagerGetSessionRequest) (*proto.AgentSession, error) {
 	if c == nil || c.client == nil {
@@ -83,6 +92,11 @@ func (c *AgentManagerClient) GetSession(ctx context.Context, req *proto.AgentMan
 	}
 	value.InvocationToken = c.invocationToken
 	return c.client.GetSession(ctx, value)
+}
+
+// GetSessionWithInput fetches one agent session.
+func (c *AgentManagerClient) GetSessionWithInput(ctx context.Context, input AgentManagerGetSessionInput) (*proto.AgentSession, error) {
+	return c.GetSession(ctx, NewAgentManagerGetSessionRequest(input))
 }
 
 // ListSessions lists agent sessions visible to the invocation token.
@@ -98,6 +112,11 @@ func (c *AgentManagerClient) ListSessions(ctx context.Context, req *proto.AgentM
 	return c.client.ListSessions(ctx, value)
 }
 
+// ListSessionsWithInput lists agent sessions.
+func (c *AgentManagerClient) ListSessionsWithInput(ctx context.Context, input AgentManagerListSessionsInput) (*proto.AgentManagerListSessionsResponse, error) {
+	return c.ListSessions(ctx, NewAgentManagerListSessionsRequest(input))
+}
+
 // UpdateSession updates mutable fields on an agent session.
 func (c *AgentManagerClient) UpdateSession(ctx context.Context, req *proto.AgentManagerUpdateSessionRequest) (*proto.AgentSession, error) {
 	if c == nil || c.client == nil {
@@ -109,6 +128,15 @@ func (c *AgentManagerClient) UpdateSession(ctx context.Context, req *proto.Agent
 	}
 	value.InvocationToken = c.invocationToken
 	return c.client.UpdateSession(ctx, value)
+}
+
+// UpdateSessionWithInput updates an agent session.
+func (c *AgentManagerClient) UpdateSessionWithInput(ctx context.Context, input AgentManagerUpdateSessionInput) (*proto.AgentSession, error) {
+	req, err := NewAgentManagerUpdateSessionRequest(input)
+	if err != nil {
+		return nil, err
+	}
+	return c.UpdateSession(ctx, req)
 }
 
 // CreateTurn creates an agent turn.
@@ -124,6 +152,15 @@ func (c *AgentManagerClient) CreateTurn(ctx context.Context, req *proto.AgentMan
 	return c.client.CreateTurn(ctx, value)
 }
 
+// CreateTurnWithInput creates an agent turn.
+func (c *AgentManagerClient) CreateTurnWithInput(ctx context.Context, input AgentManagerCreateTurnInput) (*proto.AgentTurn, error) {
+	req, err := NewAgentManagerCreateTurnRequest(input)
+	if err != nil {
+		return nil, err
+	}
+	return c.CreateTurn(ctx, req)
+}
+
 // GetTurn fetches one agent turn.
 func (c *AgentManagerClient) GetTurn(ctx context.Context, req *proto.AgentManagerGetTurnRequest) (*proto.AgentTurn, error) {
 	if c == nil || c.client == nil {
@@ -135,6 +172,11 @@ func (c *AgentManagerClient) GetTurn(ctx context.Context, req *proto.AgentManage
 	}
 	value.InvocationToken = c.invocationToken
 	return c.client.GetTurn(ctx, value)
+}
+
+// GetTurnWithInput fetches one agent turn.
+func (c *AgentManagerClient) GetTurnWithInput(ctx context.Context, input AgentManagerGetTurnInput) (*proto.AgentTurn, error) {
+	return c.GetTurn(ctx, NewAgentManagerGetTurnRequest(input))
 }
 
 // ListTurns lists turns for an agent session.
@@ -150,6 +192,11 @@ func (c *AgentManagerClient) ListTurns(ctx context.Context, req *proto.AgentMana
 	return c.client.ListTurns(ctx, value)
 }
 
+// ListTurnsWithInput lists turns.
+func (c *AgentManagerClient) ListTurnsWithInput(ctx context.Context, input AgentManagerListTurnsInput) (*proto.AgentManagerListTurnsResponse, error) {
+	return c.ListTurns(ctx, NewAgentManagerListTurnsRequest(input))
+}
+
 // CancelTurn cancels an in-progress agent turn.
 func (c *AgentManagerClient) CancelTurn(ctx context.Context, req *proto.AgentManagerCancelTurnRequest) (*proto.AgentTurn, error) {
 	if c == nil || c.client == nil {
@@ -161,6 +208,11 @@ func (c *AgentManagerClient) CancelTurn(ctx context.Context, req *proto.AgentMan
 	}
 	value.InvocationToken = c.invocationToken
 	return c.client.CancelTurn(ctx, value)
+}
+
+// CancelTurnWithInput cancels an agent turn.
+func (c *AgentManagerClient) CancelTurnWithInput(ctx context.Context, input AgentManagerCancelTurnInput) (*proto.AgentTurn, error) {
+	return c.CancelTurn(ctx, NewAgentManagerCancelTurnRequest(input))
 }
 
 // ListTurnEvents lists events emitted for an agent turn.
@@ -176,6 +228,11 @@ func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, req *proto.Agen
 	return c.client.ListTurnEvents(ctx, value)
 }
 
+// ListTurnEventsWithInput lists turn events.
+func (c *AgentManagerClient) ListTurnEventsWithInput(ctx context.Context, input AgentManagerListTurnEventsInput) (*proto.AgentManagerListTurnEventsResponse, error) {
+	return c.ListTurnEvents(ctx, NewAgentManagerListTurnEventsRequest(input))
+}
+
 // ListInteractions lists pending or completed agent interactions.
 func (c *AgentManagerClient) ListInteractions(ctx context.Context, req *proto.AgentManagerListInteractionsRequest) (*proto.AgentManagerListInteractionsResponse, error) {
 	if c == nil || c.client == nil {
@@ -189,6 +246,11 @@ func (c *AgentManagerClient) ListInteractions(ctx context.Context, req *proto.Ag
 	return c.client.ListInteractions(ctx, value)
 }
 
+// ListInteractionsWithInput lists interactions.
+func (c *AgentManagerClient) ListInteractionsWithInput(ctx context.Context, input AgentManagerListInteractionsInput) (*proto.AgentManagerListInteractionsResponse, error) {
+	return c.ListInteractions(ctx, NewAgentManagerListInteractionsRequest(input))
+}
+
 // ResolveInteraction resolves an agent interaction with a host response.
 func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, req *proto.AgentManagerResolveInteractionRequest) (*proto.AgentInteraction, error) {
 	if c == nil || c.client == nil {
@@ -200,4 +262,13 @@ func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, req *proto.
 	}
 	value.InvocationToken = c.invocationToken
 	return c.client.ResolveInteraction(ctx, value)
+}
+
+// ResolveInteractionWithInput resolves an interaction.
+func (c *AgentManagerClient) ResolveInteractionWithInput(ctx context.Context, input AgentManagerResolveInteractionInput) (*proto.AgentInteraction, error) {
+	req, err := NewAgentManagerResolveInteractionRequest(input)
+	if err != nil {
+		return nil, err
+	}
+	return c.ResolveInteraction(ctx, req)
 }
