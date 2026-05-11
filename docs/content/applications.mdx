@@ -218,7 +218,6 @@ details. Those come from the deployment bindings.
       "time"
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
-      "google.golang.org/protobuf/types/known/structpb"
     )
 
     type Provider struct{}
@@ -313,18 +312,18 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      data, err := structpb.NewStruct(map[string]any{"reportUrl": access.URL})
+      event, err := gestalt.NewWorkflowEvent(gestalt.WorkflowEventInput{
+        Type:            "workspace_review.report.generated",
+        Source:          "workspace_review",
+        Subject:         "nightly",
+        DataContentType: "application/json",
+        Data:            map[string]any{"reportUrl": access.URL},
+      })
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
       _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
-        Event: &gestalt.WorkflowEvent{
-          Type:            "workspace_review.report.generated",
-          Source:          "workspace_review",
-          Subject:         "nightly",
-          Datacontenttype: "application/json",
-          Data:            data,
-        },
+        Event: event,
       })
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
@@ -363,7 +362,7 @@ details. Those come from the deployment bindings.
         WriteOptions,
         PresignOptions,
         PresignMethod,
-        WorkflowEvent,
+        workflow_event,
         WorkflowManagerPublishEventRequest,
     )
 
@@ -419,13 +418,13 @@ details. Those come from the deployment bindings.
             }
         )
 
-        event = WorkflowEvent(
+        event = workflow_event(
             type="workspace_review.report.generated",
             source="workspace_review",
             subject="nightly",
             datacontenttype="application/json",
+            data={"reportUrl": access.url},
         )
-        event.data.update({"reportUrl": access.url})
         with request.workflow_manager() as workflows:
             workflows.publish_event(
                 WorkflowManagerPublishEventRequest(event=event)
@@ -441,10 +440,9 @@ details. Those come from the deployment bindings.
     use std::collections::BTreeMap;
 
     use gestalt::{
-        proto::v1::{WorkflowEvent, WorkflowManagerPublishEventRequest},
-        IndexedDB, PresignMethod, PresignOptions, S3,
+        IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEventInput,
+        WorkflowManagerPublishEventRequest,
     };
-    use prost_types::{value::Kind, Struct, Value};
     use serde::{Deserialize, Serialize};
     use serde_json::json;
 
@@ -524,23 +522,17 @@ details. Those come from the deployment bindings.
             .await?;
 
         let mut workflows = request.workflow_manager().await?;
+        let event = gestalt::new_workflow_event(WorkflowEventInput {
+            event_type: "workspace_review.report.generated".to_string(),
+            source: "workspace_review".to_string(),
+            subject: "nightly".to_string(),
+            datacontenttype: "application/json".to_string(),
+            data: Some(json!({ "reportUrl": access.url.clone() })),
+            ..Default::default()
+        })?;
         workflows
             .publish_event(WorkflowManagerPublishEventRequest {
-                event: Some(WorkflowEvent {
-                    r#type: "workspace_review.report.generated".to_string(),
-                    source: "workspace_review".to_string(),
-                    subject: "nightly".to_string(),
-                    datacontenttype: "application/json".to_string(),
-                    data: Some(Struct {
-                        fields: BTreeMap::from([(
-                            "reportUrl".to_string(),
-                            Value {
-                                kind: Some(Kind::StringValue(access.url.clone())),
-                            },
-                        )]),
-                    }),
-                    ..Default::default()
-                }),
+                event: Some(event),
                 ..Default::default()
             })
             .await?;
