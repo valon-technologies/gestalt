@@ -5,7 +5,7 @@ export default {
   "-- server": { type: "separator", title: "Server" },
   configuration: "Configuration",
   providers: "Providers",
-  "building-an-application": "Building an Application",
+  applications: "Applications",
   security: "Security",
   observability: "Observability",
   "audit-logging": "Audit Logging",
