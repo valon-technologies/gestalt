@@ -56,8 +56,25 @@ func BoundWorkflowPluginTargetInputFromTarget(value *BoundWorkflowPluginTarget) 
 // WorkflowOutputDelivery.
 type WorkflowOutputDeliveryInput struct {
 	Target         *BoundWorkflowPluginTargetInput
-	InputBindings  []*WorkflowOutputBinding
+	InputBindings  []WorkflowOutputBindingInput
 	CredentialMode string
+}
+
+// WorkflowOutputValueSourceInput contains native Go values for constructing a
+// workflow output value source. Set at most one source field.
+type WorkflowOutputValueSourceInput struct {
+	AgentOutput    string
+	SignalPayload  string
+	SignalMetadata string
+	Literal        any
+	AgentSession   string
+}
+
+// WorkflowOutputBindingInput contains native Go values for one workflow output
+// binding.
+type WorkflowOutputBindingInput struct {
+	InputField string
+	Value      *WorkflowOutputValueSourceInput
 }
 
 // NewWorkflowOutputDelivery creates a workflow output delivery from native Go
@@ -71,7 +88,7 @@ func NewWorkflowOutputDelivery(input WorkflowOutputDeliveryInput) (*WorkflowOutp
 		}
 		target = value
 	}
-	bindings, err := copyWorkflowOutputBindings(input.InputBindings)
+	bindings, err := newWorkflowOutputBindings(input.InputBindings)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +112,7 @@ func WorkflowOutputDeliveryInputFromDelivery(value *WorkflowOutputDelivery) *Wor
 	}
 	return &WorkflowOutputDeliveryInput{
 		Target:         target,
-		InputBindings:  value.GetInputBindings(),
+		InputBindings:  workflowOutputBindingInputsFromBindings(value.GetInputBindings()),
 		CredentialMode: value.GetCredentialMode(),
 	}
 }
@@ -514,8 +531,8 @@ func NewWorkflowRunTriggerFromTrigger(value *WorkflowRunTrigger) (*WorkflowRunTr
 type BoundWorkflowRunInput struct {
 	ID            string
 	Status        WorkflowRunStatus
-	Target        *BoundWorkflowTarget
-	Trigger       *WorkflowRunTrigger
+	Target        *BoundWorkflowTargetInput
+	Trigger       *WorkflowRunTriggerInput
 	CreatedAt     time.Time
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
@@ -527,12 +544,20 @@ type BoundWorkflowRunInput struct {
 }
 
 // NewBoundWorkflowRun creates a bound workflow run from native Go values.
-func NewBoundWorkflowRun(input BoundWorkflowRunInput) *BoundWorkflowRun {
+func NewBoundWorkflowRun(input BoundWorkflowRunInput) (*BoundWorkflowRun, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := newOptionalWorkflowRunTrigger(input.Trigger)
+	if err != nil {
+		return nil, err
+	}
 	return &BoundWorkflowRun{
 		Id:            input.ID,
 		Status:        input.Status,
-		Target:        input.Target,
-		Trigger:       input.Trigger,
+		Target:        target,
+		Trigger:       trigger,
 		CreatedAt:     timestampFromNonZeroTime(input.CreatedAt),
 		StartedAt:     timestampFromOptionalTime(input.StartedAt),
 		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
@@ -541,7 +566,7 @@ func NewBoundWorkflowRun(input BoundWorkflowRunInput) *BoundWorkflowRun {
 		CreatedBy:     workflowActorFromInput(input.CreatedBy),
 		ExecutionRef:  input.ExecutionRef,
 		WorkflowKey:   input.WorkflowKey,
-	}
+	}, nil
 }
 
 // BoundWorkflowRunInputFromRun converts an existing protocol run into native
@@ -549,10 +574,6 @@ func NewBoundWorkflowRun(input BoundWorkflowRunInput) *BoundWorkflowRun {
 func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInput, error) {
 	if value == nil {
 		return BoundWorkflowRunInput{}, nil
-	}
-	target, err := NewBoundWorkflowTargetFromTarget(value.GetTarget())
-	if err != nil {
-		return BoundWorkflowRunInput{}, err
 	}
 	startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
 	if err != nil {
@@ -562,15 +583,15 @@ func BoundWorkflowRunInputFromRun(value *BoundWorkflowRun) (BoundWorkflowRunInpu
 	if err != nil {
 		return BoundWorkflowRunInput{}, err
 	}
-	trigger, err := NewWorkflowRunTriggerFromTrigger(value.GetTrigger())
+	trigger, err := WorkflowRunTriggerInputFromTrigger(value.GetTrigger())
 	if err != nil {
 		return BoundWorkflowRunInput{}, err
 	}
 	return BoundWorkflowRunInput{
 		ID:            value.GetId(),
 		Status:        value.GetStatus(),
-		Target:        target,
-		Trigger:       trigger,
+		Target:        workflowTargetInputPtrFromTarget(value.GetTarget()),
+		Trigger:       &trigger,
 		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
 		StartedAt:     startedAt,
 		CompletedAt:   completedAt,
@@ -589,7 +610,7 @@ func NewBoundWorkflowRunFromRun(value *BoundWorkflowRun) (*BoundWorkflowRun, err
 	if err != nil || value == nil {
 		return nil, err
 	}
-	return NewBoundWorkflowRun(input), nil
+	return NewBoundWorkflowRun(input)
 }
 
 // BoundWorkflowScheduleInput contains native Go values for constructing a
@@ -598,7 +619,7 @@ type BoundWorkflowScheduleInput struct {
 	ID           string
 	Cron         string
 	Timezone     string
-	Target       *BoundWorkflowTarget
+	Target       *BoundWorkflowTargetInput
 	Paused       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -609,19 +630,23 @@ type BoundWorkflowScheduleInput struct {
 
 // NewBoundWorkflowSchedule creates a bound workflow schedule from native Go
 // values.
-func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) *BoundWorkflowSchedule {
+func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) (*BoundWorkflowSchedule, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
 	return &BoundWorkflowSchedule{
 		Id:           input.ID,
 		Cron:         input.Cron,
 		Timezone:     input.Timezone,
-		Target:       input.Target,
+		Target:       target,
 		Paused:       input.Paused,
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
-	}
+	}, nil
 }
 
 // BoundWorkflowScheduleInputFromSchedule converts an existing protocol schedule
@@ -629,10 +654,6 @@ func NewBoundWorkflowSchedule(input BoundWorkflowScheduleInput) *BoundWorkflowSc
 func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (BoundWorkflowScheduleInput, error) {
 	if value == nil {
 		return BoundWorkflowScheduleInput{}, nil
-	}
-	target, err := NewBoundWorkflowTargetFromTarget(value.GetTarget())
-	if err != nil {
-		return BoundWorkflowScheduleInput{}, err
 	}
 	nextRunAt, err := timePtrFromTimestamp(value.GetNextRunAt())
 	if err != nil {
@@ -642,7 +663,7 @@ func BoundWorkflowScheduleInputFromSchedule(value *BoundWorkflowSchedule) (Bound
 		ID:           value.GetId(),
 		Cron:         value.GetCron(),
 		Timezone:     value.GetTimezone(),
-		Target:       target,
+		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Paused:       value.GetPaused(),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
@@ -659,15 +680,15 @@ func NewBoundWorkflowScheduleFromSchedule(value *BoundWorkflowSchedule) (*BoundW
 	if err != nil || value == nil {
 		return nil, err
 	}
-	return NewBoundWorkflowSchedule(input), nil
+	return NewBoundWorkflowSchedule(input)
 }
 
 // BoundWorkflowEventTriggerInput contains native Go values for constructing a
 // BoundWorkflowEventTrigger.
 type BoundWorkflowEventTriggerInput struct {
 	ID           string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
+	Match        *WorkflowEventMatchInput
+	Target       *BoundWorkflowTargetInput
 	Paused       bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -675,19 +696,31 @@ type BoundWorkflowEventTriggerInput struct {
 	ExecutionRef string
 }
 
+// WorkflowEventMatchInput contains native Go values for matching workflow
+// events.
+type WorkflowEventMatchInput struct {
+	Type    string
+	Source  string
+	Subject string
+}
+
 // NewBoundWorkflowEventTrigger creates a bound workflow event trigger from
 // native Go values.
-func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTriggerInput) *BoundWorkflowEventTrigger {
+func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTriggerInput) (*BoundWorkflowEventTrigger, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
 	return &BoundWorkflowEventTrigger{
 		Id:           input.ID,
-		Match:        input.Match,
-		Target:       input.Target,
+		Match:        workflowEventMatchFromInput(input.Match),
+		Target:       target,
 		Paused:       input.Paused,
 		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
-	}
+	}, nil
 }
 
 // BoundWorkflowEventTriggerInputFromTrigger converts an existing protocol event
@@ -696,14 +729,10 @@ func BoundWorkflowEventTriggerInputFromTrigger(value *BoundWorkflowEventTrigger)
 	if value == nil {
 		return BoundWorkflowEventTriggerInput{}, nil
 	}
-	target, err := NewBoundWorkflowTargetFromTarget(value.GetTarget())
-	if err != nil {
-		return BoundWorkflowEventTriggerInput{}, err
-	}
 	return BoundWorkflowEventTriggerInput{
 		ID:           value.GetId(),
-		Match:        copyWorkflowEventMatch(value.GetMatch()),
-		Target:       target,
+		Match:        workflowEventMatchInputPtrFromMatch(value.GetMatch()),
+		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Paused:       value.GetPaused(),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
@@ -719,7 +748,7 @@ func NewBoundWorkflowEventTriggerFromTrigger(value *BoundWorkflowEventTrigger) (
 	if err != nil || value == nil {
 		return nil, err
 	}
-	return NewBoundWorkflowEventTrigger(input), nil
+	return NewBoundWorkflowEventTrigger(input)
 }
 
 // WorkflowExecutionReferenceInput contains native Go values for constructing a
@@ -727,39 +756,59 @@ func NewBoundWorkflowEventTriggerFromTrigger(value *BoundWorkflowEventTrigger) (
 type WorkflowExecutionReferenceInput struct {
 	ID                  string
 	ProviderName        string
-	Target              *BoundWorkflowTarget
+	Target              *BoundWorkflowTargetInput
 	SubjectID           string
 	CredentialSubjectID string
-	Permissions         []*WorkflowAccessPermission
+	Permissions         []WorkflowAccessPermissionInput
 	CreatedAt           time.Time
 	RevokedAt           *time.Time
 	SubjectKind         string
 	DisplayName         string
 	AuthSource          string
 	CallerPluginName    string
-	RunAs               *WorkflowRunAsSubject
+	RunAs               *WorkflowRunAsSubjectInput
 	SourceDefinitionID  string
+}
+
+// WorkflowAccessPermissionInput contains native Go values for an execution
+// reference permission.
+type WorkflowAccessPermissionInput struct {
+	Plugin     string
+	Operations []string
+}
+
+// WorkflowRunAsSubjectInput contains native Go values for workflow run-as
+// metadata.
+type WorkflowRunAsSubjectInput struct {
+	SubjectID   string
+	SubjectKind string
+	DisplayName string
+	AuthSource  string
 }
 
 // NewWorkflowExecutionReference creates a workflow execution reference from
 // native Go values.
-func NewWorkflowExecutionReference(input WorkflowExecutionReferenceInput) *WorkflowExecutionReference {
+func NewWorkflowExecutionReference(input WorkflowExecutionReferenceInput) (*WorkflowExecutionReference, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkflowExecutionReference{
 		Id:                  input.ID,
 		ProviderName:        input.ProviderName,
-		Target:              input.Target,
+		Target:              target,
 		SubjectId:           input.SubjectID,
 		CredentialSubjectId: input.CredentialSubjectID,
-		Permissions:         input.Permissions,
+		Permissions:         workflowAccessPermissionsFromInputs(input.Permissions),
 		CreatedAt:           timestampFromNonZeroTime(input.CreatedAt),
 		RevokedAt:           timestampFromOptionalTime(input.RevokedAt),
 		SubjectKind:         input.SubjectKind,
 		DisplayName:         input.DisplayName,
 		AuthSource:          input.AuthSource,
 		CallerPluginName:    input.CallerPluginName,
-		RunAs:               input.RunAs,
+		RunAs:               workflowRunAsSubjectFromInput(input.RunAs),
 		SourceDefinitionId:  input.SourceDefinitionID,
-	}
+	}, nil
 }
 
 // WorkflowExecutionReferenceInputFromReference converts an existing protocol
@@ -768,10 +817,6 @@ func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionRefere
 	if value == nil {
 		return WorkflowExecutionReferenceInput{}, nil
 	}
-	target, err := NewBoundWorkflowTargetFromTarget(value.GetTarget())
-	if err != nil {
-		return WorkflowExecutionReferenceInput{}, err
-	}
 	revokedAt, err := timePtrFromTimestamp(value.GetRevokedAt())
 	if err != nil {
 		return WorkflowExecutionReferenceInput{}, err
@@ -779,17 +824,17 @@ func WorkflowExecutionReferenceInputFromReference(value *WorkflowExecutionRefere
 	return WorkflowExecutionReferenceInput{
 		ID:                  value.GetId(),
 		ProviderName:        value.GetProviderName(),
-		Target:              target,
+		Target:              workflowTargetInputPtrFromTarget(value.GetTarget()),
 		SubjectID:           value.GetSubjectId(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
-		Permissions:         copyWorkflowAccessPermissions(value.GetPermissions()),
+		Permissions:         workflowAccessPermissionInputsFromPermissions(value.GetPermissions()),
 		CreatedAt:           timeFromTimestamp(value.GetCreatedAt()),
 		RevokedAt:           revokedAt,
 		SubjectKind:         value.GetSubjectKind(),
 		DisplayName:         value.GetDisplayName(),
 		AuthSource:          value.GetAuthSource(),
 		CallerPluginName:    value.GetCallerPluginName(),
-		RunAs:               copyWorkflowRunAsSubject(value.GetRunAs()),
+		RunAs:               workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
 		SourceDefinitionID:  value.GetSourceDefinitionId(),
 	}, nil
 }
@@ -801,7 +846,7 @@ func NewWorkflowExecutionReferenceFromReference(value *WorkflowExecutionReferenc
 	if err != nil || value == nil {
 		return nil, err
 	}
-	return NewWorkflowExecutionReference(input), nil
+	return NewWorkflowExecutionReference(input)
 }
 
 func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
@@ -823,6 +868,28 @@ func newOptionalWorkflowOutputDelivery(input *WorkflowOutputDeliveryInput) (*Wor
 		return nil, nil
 	}
 	return NewWorkflowOutputDelivery(*input)
+}
+
+func newOptionalBoundWorkflowTarget(input *BoundWorkflowTargetInput) (*BoundWorkflowTarget, error) {
+	if input == nil {
+		return nil, nil
+	}
+	return NewBoundWorkflowTarget(*input)
+}
+
+func newOptionalWorkflowRunTrigger(input *WorkflowRunTriggerInput) (*WorkflowRunTrigger, error) {
+	if input == nil {
+		return nil, nil
+	}
+	return NewWorkflowRunTrigger(*input)
+}
+
+func workflowTargetInputPtrFromTarget(value *BoundWorkflowTarget) *BoundWorkflowTargetInput {
+	if value == nil {
+		return nil
+	}
+	input := BoundWorkflowTargetInputFromTarget(value)
+	return &input
 }
 
 func copyAgentMessages(values []*AgentMessage) []*AgentMessage {
@@ -868,39 +935,76 @@ func workflowActorInputPtrFromActor(value *WorkflowActor) *WorkflowActorInput {
 	return &input
 }
 
-func copyWorkflowEventMatch(value *WorkflowEventMatch) *WorkflowEventMatch {
-	if value == nil {
+func workflowEventMatchFromInput(input *WorkflowEventMatchInput) *WorkflowEventMatch {
+	if input == nil {
 		return nil
 	}
 	return &WorkflowEventMatch{
+		Type:    input.Type,
+		Source:  input.Source,
+		Subject: input.Subject,
+	}
+}
+
+func workflowEventMatchInputPtrFromMatch(value *WorkflowEventMatch) *WorkflowEventMatchInput {
+	if value == nil {
+		return nil
+	}
+	return &WorkflowEventMatchInput{
 		Type:    value.GetType(),
 		Source:  value.GetSource(),
 		Subject: value.GetSubject(),
 	}
 }
 
-func copyWorkflowRunAsSubject(value *WorkflowRunAsSubject) *WorkflowRunAsSubject {
-	if value == nil {
+func workflowRunAsSubjectFromInput(input *WorkflowRunAsSubjectInput) *WorkflowRunAsSubject {
+	if input == nil {
 		return nil
 	}
 	return &WorkflowRunAsSubject{
-		SubjectId:   value.GetSubjectId(),
+		SubjectId:   input.SubjectID,
+		SubjectKind: input.SubjectKind,
+		DisplayName: input.DisplayName,
+		AuthSource:  input.AuthSource,
+	}
+}
+
+func workflowRunAsSubjectInputPtrFromSubject(value *WorkflowRunAsSubject) *WorkflowRunAsSubjectInput {
+	if value == nil {
+		return nil
+	}
+	return &WorkflowRunAsSubjectInput{
+		SubjectID:   value.GetSubjectId(),
 		SubjectKind: value.GetSubjectKind(),
 		DisplayName: value.GetDisplayName(),
 		AuthSource:  value.GetAuthSource(),
 	}
 }
 
-func copyWorkflowAccessPermissions(values []*WorkflowAccessPermission) []*WorkflowAccessPermission {
+func workflowAccessPermissionsFromInputs(values []WorkflowAccessPermissionInput) []*WorkflowAccessPermission {
 	if len(values) == 0 {
 		return nil
 	}
 	out := make([]*WorkflowAccessPermission, 0, len(values))
 	for _, value := range values {
+		out = append(out, &WorkflowAccessPermission{
+			Plugin:     value.Plugin,
+			Operations: append([]string(nil), value.Operations...),
+		})
+	}
+	return out
+}
+
+func workflowAccessPermissionInputsFromPermissions(values []*WorkflowAccessPermission) []WorkflowAccessPermissionInput {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]WorkflowAccessPermissionInput, 0, len(values))
+	for _, value := range values {
 		if value == nil {
 			continue
 		}
-		out = append(out, &WorkflowAccessPermission{
+		out = append(out, WorkflowAccessPermissionInput{
 			Plugin:     value.GetPlugin(),
 			Operations: append([]string(nil), value.GetOperations()...),
 		})
@@ -908,47 +1012,101 @@ func copyWorkflowAccessPermissions(values []*WorkflowAccessPermission) []*Workfl
 	return out
 }
 
-func copyWorkflowOutputBindings(values []*WorkflowOutputBinding) ([]*WorkflowOutputBinding, error) {
+func newWorkflowOutputBindings(values []WorkflowOutputBindingInput) ([]*WorkflowOutputBinding, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
 	out := make([]*WorkflowOutputBinding, 0, len(values))
 	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		source, err := copyWorkflowOutputValueSource(value.GetValue())
+		source, err := workflowOutputValueSourceFromInput(value.Value)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, &WorkflowOutputBinding{
-			InputField: value.GetInputField(),
+			InputField: value.InputField,
 			Value:      source,
 		})
 	}
 	return out, nil
 }
 
-func copyWorkflowOutputValueSource(value *WorkflowOutputValueSource) (*WorkflowOutputValueSource, error) {
-	if value == nil {
+func workflowOutputBindingInputsFromBindings(values []*WorkflowOutputBinding) []WorkflowOutputBindingInput {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]WorkflowOutputBindingInput, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, WorkflowOutputBindingInput{
+			InputField: value.GetInputField(),
+			Value:      workflowOutputValueSourceInputPtrFromSource(value.GetValue()),
+		})
+	}
+	return out
+}
+
+func workflowOutputValueSourceFromInput(input *WorkflowOutputValueSourceInput) (*WorkflowOutputValueSource, error) {
+	if input == nil {
 		return nil, nil
 	}
-	switch kind := value.GetKind().(type) {
-	case *WorkflowOutputValueSourceAgentOutput:
-		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceAgentOutput{AgentOutput: kind.AgentOutput}}, nil
-	case *WorkflowOutputValueSourceSignalPayload:
-		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceSignalPayload{SignalPayload: kind.SignalPayload}}, nil
-	case *WorkflowOutputValueSourceSignalMetadata:
-		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceSignalMetadata{SignalMetadata: kind.SignalMetadata}}, nil
-	case *WorkflowOutputValueSourceAgentSession:
-		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceAgentSession{AgentSession: kind.AgentSession}}, nil
-	case *WorkflowOutputValueSourceLiteral:
-		literal, err := ValueFromAny(AnyFromValue(kind.Literal))
+	selected := 0
+	if input.AgentOutput != "" {
+		selected++
+	}
+	if input.SignalPayload != "" {
+		selected++
+	}
+	if input.SignalMetadata != "" {
+		selected++
+	}
+	if input.Literal != nil {
+		selected++
+	}
+	if input.AgentSession != "" {
+		selected++
+	}
+	if selected == 0 {
+		return &WorkflowOutputValueSource{}, nil
+	}
+	if selected > 1 {
+		return nil, fmt.Errorf("workflow output value source must set exactly one source")
+	}
+	switch {
+	case input.AgentOutput != "":
+		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceAgentOutput{AgentOutput: input.AgentOutput}}, nil
+	case input.SignalPayload != "":
+		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceSignalPayload{SignalPayload: input.SignalPayload}}, nil
+	case input.SignalMetadata != "":
+		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceSignalMetadata{SignalMetadata: input.SignalMetadata}}, nil
+	case input.AgentSession != "":
+		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceAgentSession{AgentSession: input.AgentSession}}, nil
+	default:
+		literal, err := ValueFromAny(input.Literal)
 		if err != nil {
 			return nil, err
 		}
 		return &WorkflowOutputValueSource{Kind: &WorkflowOutputValueSourceLiteral{Literal: literal}}, nil
+	}
+}
+
+func workflowOutputValueSourceInputPtrFromSource(value *WorkflowOutputValueSource) *WorkflowOutputValueSourceInput {
+	if value == nil {
+		return nil
+	}
+	switch kind := value.GetKind().(type) {
+	case *WorkflowOutputValueSourceAgentOutput:
+		return &WorkflowOutputValueSourceInput{AgentOutput: kind.AgentOutput}
+	case *WorkflowOutputValueSourceSignalPayload:
+		return &WorkflowOutputValueSourceInput{SignalPayload: kind.SignalPayload}
+	case *WorkflowOutputValueSourceSignalMetadata:
+		return &WorkflowOutputValueSourceInput{SignalMetadata: kind.SignalMetadata}
+	case *WorkflowOutputValueSourceAgentSession:
+		return &WorkflowOutputValueSourceInput{AgentSession: kind.AgentSession}
+	case *WorkflowOutputValueSourceLiteral:
+		return &WorkflowOutputValueSourceInput{Literal: AnyFromValue(kind.Literal)}
 	default:
-		return &WorkflowOutputValueSource{}, nil
+		return &WorkflowOutputValueSourceInput{}
 	}
 }

@@ -32,17 +32,17 @@ func (p *fullWorkflowProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{
-		Id:     req.GetIdempotencyKey(),
+func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
+	return &gestalt.BoundWorkflowRunInput{
+		ID:     req.IdempotencyKey,
 		Status: gestalt.WorkflowRunStatusValuePending,
-		Target: req.GetTarget(),
+		Target: req.Target,
 	}, nil
 }
 
 func (p *fullWorkflowProvider) PublishEvent(_ context.Context, req *gestalt.PublishWorkflowProviderEventRequest) error {
-	if event := req.GetEvent(); event != nil {
-		p.publishedEvents = append(p.publishedEvents, event.GetType())
+	if req.Event != nil {
+		p.publishedEvents = append(p.publishedEvents, req.Event.Type)
 	}
 	return nil
 }
