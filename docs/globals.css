@@ -523,6 +523,28 @@ article.nextra-content main::before {
   order: 1;
 }
 
+.provider-kind-cards {
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)) !important;
+  gap: 0.5rem !important;
+  margin-top: 0.75rem !important;
+}
+
+.provider-kind-cards .nextra-card {
+  min-height: 3.25rem !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+
+.provider-kind-cards .nextra-card > span:last-child {
+  width: 100%;
+  min-height: 3.25rem;
+  justify-content: center;
+  padding: 0.65rem 0.75rem !important;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
 .nextra-callout {
   align-items: baseline;
 }

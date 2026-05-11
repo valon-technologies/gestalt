@@ -462,13 +462,19 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        Request,
+        AgentManagerCreateSessionRequest,
+        AgentManagerCreateTurnRequest,
+        AgentMessage,
+        AgentToolRef,
+        AgentManagerListTurnEventsRequest,
+    )
 
-
-    def summarize_with_agent(request: gestalt.Request) -> dict[str, object]:
+    def summarize_with_agent(request: Request) -> dict[str, object]:
         with request.agent_manager() as agents:
             session = agents.create_session(
-                gestalt.AgentManagerCreateSessionRequest(
+                AgentManagerCreateSessionRequest(
                     provider_name="simple",
                     model="fast",
                     client_ref="roadmap-risk",
@@ -476,23 +482,23 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             )
 
             turn = agents.create_turn(
-                gestalt.AgentManagerCreateTurnRequest(
+                AgentManagerCreateTurnRequest(
                     session_id=session.id,
                     model="fast",
                     messages=[
-                        gestalt.AgentMessage(
+                        AgentMessage(
                             role="user",
                             text="Summarize the latest roadmap risk.",
                         )
                     ],
                     tool_refs=[
-                        gestalt.AgentToolRef(plugin="roadmap", operation="sync")
+                        AgentToolRef(plugin="roadmap", operation="sync")
                     ],
                 )
             )
 
             events = agents.list_turn_events(
-                gestalt.AgentManagerListTurnEventsRequest(
+                AgentManagerListTurnEventsRequest(
                     turn_id=turn.id,
                     limit=100,
                 )
@@ -768,29 +774,35 @@ signals instead of creating duplicate runs.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        Request,
+        WorkflowManagerSignalOrStartRunRequest,
+        BoundWorkflowTarget,
+        BoundWorkflowAgentTarget,
+        AgentToolRef,
+        WorkflowSignal,
+    )
 
-
-    def enqueue_agent_workflow(request: gestalt.Request, item_id: str) -> str:
+    def enqueue_agent_workflow(request: Request, item_id: str) -> str:
         with request.workflow_manager() as workflows:
             queued = workflows.signal_or_start_run(
-                gestalt.WorkflowManagerSignalOrStartRunRequest(
+                WorkflowManagerSignalOrStartRunRequest(
                     provider_name="local",
                     workflow_key=f"roadmap-summary:{item_id}",
-                    target=gestalt.BoundWorkflowTarget(
-                        agent=gestalt.BoundWorkflowAgentTarget(
+                    target=BoundWorkflowTarget(
+                        agent=BoundWorkflowAgentTarget(
                             provider_name="simple",
                             model="fast",
                             prompt="Summarize the updated roadmap item.",
                             tool_refs=[
-                                gestalt.AgentToolRef(
+                                AgentToolRef(
                                     plugin="roadmap",
                                     operation="items.get",
                                 )
                             ],
                         )
                     ),
-                    signal=gestalt.WorkflowSignal(
+                    signal=WorkflowSignal(
                         name="roadmap.item.updated",
                         idempotency_key=f"roadmap-item-updated:{item_id}",
                     ),
@@ -958,8 +970,10 @@ Providers that support deployer-defined session setup must advertise
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from gestalt import AgentProviderCapabilities
+
     def GetCapabilities(self, request, context):
-        return gestalt.AgentProviderCapabilities(
+        return AgentProviderCapabilities(
             supports_session_start=True,
         )
     ```
@@ -1024,8 +1038,10 @@ prepared `root` and `cwd` first.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from gestalt import AgentProviderCapabilities, AgentSession, AGENT_SESSION_STATE_ACTIVE
+
     def GetCapabilities(self, request, context):
-        return gestalt.AgentProviderCapabilities(
+        return AgentProviderCapabilities(
             supports_prepared_workspace=True,
         )
 
@@ -1040,10 +1056,10 @@ prepared `root` and `cwd` first.
             cwd = prepared.cwd
             # Launch the vendor harness with cwd as its working directory.
 
-        return gestalt.AgentSession(
+        return AgentSession(
             id=request.session_id,
             provider_name="example",
-            state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+            state=AGENT_SESSION_STATE_ACTIVE,
         )
     ```
   </Tabs.Tab>
@@ -1116,11 +1132,13 @@ Agent providers opt in to Gestalt integration tools by advertising
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from gestalt import AgentProviderCapabilities, AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+
     def GetCapabilities(self, request, context):
-        return gestalt.AgentProviderCapabilities(
+        return AgentProviderCapabilities(
             tool_calls=True,
             supported_tool_sources=[
-                gestalt.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+                AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
             ],
         )
     ```
@@ -1245,11 +1263,10 @@ provider-owned inference.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
-
+    from gestalt import AgentHost
 
     def execute_granted_tool(turn) -> str | None:
-        with gestalt.AgentHost() as host:
+        with AgentHost() as host:
             listed = host.list_tools_for_turn(
                 turn.session_id,
                 turn.turn_id,
@@ -1587,43 +1604,59 @@ own events.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        AgentActor,
+        AgentProvider,
+        AgentSession,
+        AGENT_SESSION_STATE_ACTIVE,
+        ListAgentProviderSessionsResponse,
+        AgentTurn,
+        AGENT_EXECUTION_STATUS_RUNNING,
+        AGENT_EXECUTION_STATUS_SUCCEEDED,
+        ListAgentProviderTurnsResponse,
+        AGENT_EXECUTION_STATUS_CANCELED,
+        ListAgentProviderTurnEventsResponse,
+        AgentInteraction,
+        AGENT_INTERACTION_STATE_PENDING,
+        ListAgentProviderInteractionsResponse,
+        AGENT_INTERACTION_STATE_RESOLVED,
+        AgentProviderCapabilities,
+    )
 
     def actor_from_subject(subject):
         if subject is None:
             return None
-        return gestalt.AgentActor(
+        return AgentActor(
             subject_id=subject.subject_id,
             subject_kind=subject.subject_kind,
             display_name=subject.display_name,
             auth_source=subject.auth_source,
         )
 
-
-    class ExampleAgent(gestalt.AgentProvider):
+    class ExampleAgent(AgentProvider):
         def CreateSession(self, request, context):
-            return gestalt.AgentSession(
+            return AgentSession(
                 id=request.session_id,
                 provider_name="example",
                 model=request.model,
                 client_ref=request.client_ref,
-                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+                state=AGENT_SESSION_STATE_ACTIVE,
                 created_by=request.created_by,
             )
 
         def GetSession(self, request, context):
-            return gestalt.AgentSession(
+            return AgentSession(
                 id=request.session_id,
                 provider_name="example",
-                state=gestalt.AGENT_SESSION_STATE_ACTIVE,
+                state=AGENT_SESSION_STATE_ACTIVE,
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListSessions(self, request, context):
-            return gestalt.ListAgentProviderSessionsResponse()
+            return ListAgentProviderSessionsResponse()
 
         def UpdateSession(self, request, context):
-            return gestalt.AgentSession(
+            return AgentSession(
                 id=request.session_id,
                 provider_name="example",
                 client_ref=request.client_ref,
@@ -1632,61 +1665,61 @@ own events.
             )
 
         def CreateTurn(self, request, context):
-            return gestalt.AgentTurn(
+            return AgentTurn(
                 id=request.turn_id,
                 session_id=request.session_id,
                 provider_name="example",
                 model=request.model,
-                status=gestalt.AGENT_EXECUTION_STATUS_RUNNING,
+                status=AGENT_EXECUTION_STATUS_RUNNING,
                 messages=request.messages,
                 created_by=request.created_by,
                 execution_ref=request.execution_ref,
             )
 
         def GetTurn(self, request, context):
-            return gestalt.AgentTurn(
+            return AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
                 provider_name="example",
-                status=gestalt.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                status=AGENT_EXECUTION_STATUS_SUCCEEDED,
                 output_text="done",
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListTurns(self, request, context):
-            return gestalt.ListAgentProviderTurnsResponse()
+            return ListAgentProviderTurnsResponse()
 
         def CancelTurn(self, request, context):
-            return gestalt.AgentTurn(
+            return AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
                 provider_name="example",
-                status=gestalt.AGENT_EXECUTION_STATUS_CANCELED,
+                status=AGENT_EXECUTION_STATUS_CANCELED,
                 status_message="operator requested",
                 created_by=actor_from_subject(request.subject),
             )
 
         def ListTurnEvents(self, request, context):
-            return gestalt.ListAgentProviderTurnEventsResponse()
+            return ListAgentProviderTurnEventsResponse()
 
         def GetInteraction(self, request, context):
-            return gestalt.AgentInteraction(
+            return AgentInteraction(
                 id=request.interaction_id,
-                state=gestalt.AGENT_INTERACTION_STATE_PENDING,
+                state=AGENT_INTERACTION_STATE_PENDING,
             )
 
         def ListInteractions(self, request, context):
-            return gestalt.ListAgentProviderInteractionsResponse()
+            return ListAgentProviderInteractionsResponse()
 
         def ResolveInteraction(self, request, context):
-            return gestalt.AgentInteraction(
+            return AgentInteraction(
                 id=request.interaction_id,
-                state=gestalt.AGENT_INTERACTION_STATE_RESOLVED,
+                state=AGENT_INTERACTION_STATE_RESOLVED,
                 resolution=request.resolution,
             )
 
         def GetCapabilities(self, request, context):
-            return gestalt.AgentProviderCapabilities(
+            return AgentProviderCapabilities(
                 streaming_text=True,
                 tool_calls=True,
                 structured_output=True,
@@ -1695,7 +1728,6 @@ own events.
                 bounded_list_hydration=True,
                 supports_prepared_workspace=True,
             )
-
 
     provider = ExampleAgent()
     ```

@@ -128,7 +128,9 @@ Each entry under `plugins` registers a plugin backed by a provider package:
 plugins:
   github:
     displayName: GitHub
-    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -137,7 +139,12 @@ plugins:
       bundle: github_console
 ```
 
-For published providers, `source` usually points at a `provider-release.yaml` metadata URL. When the release is hosted in GitHub and you want checked-in config to stay readable, use `source.githubRelease` instead. Gestalt resolves the matching platform archive during `gestaltd lock` and records the exact release in the lockfile. First-party providers are published from `github.com/valon-technologies/gestalt-providers/`.
+For published providers, prefer a package source. Gestalt resolves the package
+through the provider registry during `gestaltd lock` and records the exact
+release in the lockfile. Use an exact `provider-release.yaml` URL or
+`source.githubRelease` only when the provider is outside a package index or
+when you need to pin directly to one release asset. First-party providers are
+published from `github.com/valon-technologies/gestalt-providers/`.
 
 For a private GitHub release, pair `source.githubRelease` with inline source auth:
 
@@ -169,13 +176,15 @@ A provider package may expose a large catalog. Use `allowedOperations` to publis
 
 ```yaml
 plugins:
-  support:
-    source: https://artifacts.example.com/plugin/support/v2.4.0/provider-release.yaml
+  github:
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     allowedOperations:
-      tickets.list:
-        alias: list_tickets
-      tickets.get:
-        alias: get_ticket
+      issues.list:
+        alias: list_issues
+      issues.get:
+        alias: get_issue
 ```
 
 Each entry can set an `alias` to rename the operation as it appears to callers.
@@ -194,7 +203,9 @@ those runtime/plugin combinations instead of silently weakening policy.
 ```yaml
 plugins:
   example:
-    source: https://artifacts.example.com/plugin/example/v1.0.0/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+      version: 0.0.1-alpha.1
     egress:
       allowedHosts:
         - api.example.com
@@ -279,7 +290,9 @@ S3 providers are plugin-only bindings. Configure named entries under
 providers:
   s3:
     assets:
-      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -297,8 +310,8 @@ plugins:
 ```
 
 With one S3 binding, the SDK can use its default helper (`GESTALT_S3_SOCKET`).
-With multiple bindings, use the named helper such as `gestalt.S3("archive")`
-or `new S3("archive")`. See [S3 Providers](/providers/s3) for backend-specific
+With multiple bindings, use the named helper such as `S3("archive")` in Python
+or `new S3("archive")` in TypeScript. See [S3 Providers](/providers/s3) for backend-specific
 configuration and operational notes.
 
 ## Connecting to upstream APIs
@@ -341,7 +354,9 @@ For example, the GitHub plugin requires OAuth app credentials from the [GitHub D
 ```yaml
 plugins:
   github:
-    source: https://artifacts.example.com/plugin/github/v0.0.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     config:
       clientId: ${GITHUB_CLIENT_ID}
       clientSecret:
@@ -408,13 +423,15 @@ The `providers.ui` map controls public static UI bundles served under explicit n
 providers: {}
 ```
 
-Or point at a custom UI bundle:
+Or point at a published UI bundle:
 
 ```yaml
 providers:
   ui:
     roadmap:
-      source: https://artifacts.example.com/ui/your-ui/v1.0.0/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/ui/default
+        version: 0.0.1
       path: /create-customer-roadmap-review
 ```
 
@@ -434,7 +451,9 @@ server:
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -470,7 +489,9 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: sqlite://./gestalt.db
 ```
@@ -492,13 +513,17 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: sqlite://./gestalt.db
 
   authorization:
     indexeddb:
-      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
       config:
         indexeddb: main
 ```
@@ -522,13 +547,17 @@ the same provider pool through the global workflow API and CLI surface:
 providers:
   indexeddb:
     workflow_state:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: sqlite://./gestalt.db
 
   workflow:
     local:
-      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       indexeddb:
         provider: workflow_state
         db: workflow
@@ -692,7 +721,9 @@ providers:
 
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -703,14 +734,18 @@ providers:
 
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: sqlite://./gestalt.db
 
 plugins:
   github:
     displayName: GitHub
-    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -744,7 +779,9 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: sqlite://./gestalt.db
 ```

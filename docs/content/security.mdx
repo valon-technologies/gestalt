@@ -73,7 +73,9 @@ server:
 
 plugins:
   my-plugin:
-    source: https://artifacts.example.com/plugin/my-plugin/v1.0.0/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+      version: 0.0.1-alpha.1
     egress:
       allowedHosts:
         - "api.example.com"

@@ -49,11 +49,15 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${SYSTEM_DATABASE_URL}
     workplaceHub:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${APP_DATABASE_URL}
 
@@ -102,9 +106,9 @@ Then inside the plugin:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import IndexedDB
 
-    db = gestalt.IndexedDB()
+    db = IndexedDB()
     tasks = db.object_store("tasks")
 
     tasks.put({"id": "task-1", "title": "Ship docs"})
@@ -178,7 +182,7 @@ providers:
         dsn: sqlite://gestalt.db
 ```
 
-For production, reference a published release metadata URL:
+For production, use the first-party package source:
 
 ```yaml
 server:
@@ -188,7 +192,9 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -202,7 +208,9 @@ Other first-party IndexedDB providers use their own config blocks:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/dynamodb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
+        version: 0.0.1-alpha.1
       config:
         table: gestalt
         region: us-east-1
@@ -213,7 +221,9 @@ providers:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/mongodb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
+        version: 0.0.1-alpha.1
       config:
         uri: ${MONGODB_URI}
         database: gestalt
@@ -331,9 +341,9 @@ You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-inte
     ```python
     from typing import Any
 
-    import gestalt
+    from gestalt import IndexedDBProvider
 
-    class RelationalDB(gestalt.IndexedDBProvider):
+    class RelationalDB(IndexedDBProvider):
         def configure(self, name: str, config: dict) -> None:
             dsn = config.get("dsn", "")
             if not dsn:

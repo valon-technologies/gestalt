@@ -38,7 +38,9 @@ under
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -154,14 +156,20 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        AuthenticationProvider,
+        BeginLoginRequest,
+        BeginLoginResponse,
+        CompleteLoginRequest,
+        AuthenticatedUser,
+    )
 
-    class GoogleAuth(gestalt.AuthenticationProvider):
+    class GoogleAuth(AuthenticationProvider):
         def configure(self, name: str, config: dict) -> None:
             self.client_id = config["clientId"]
             self.client_secret = config["clientSecret"]
 
-        def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
+        def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
             auth_url = (
                 "https://accounts.google.com/o/oauth2/v2/auth"
                 f"?client_id={self.client_id}"
@@ -170,11 +178,11 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
                 "&response_type=code"
                 "&scope=openid+email+profile"
             )
-            return gestalt.BeginLoginResponse(authorization_url=auth_url)
+            return BeginLoginResponse(authorization_url=auth_url)
 
-        def complete_login(self, request: gestalt.CompleteLoginRequest) -> gestalt.AuthenticatedUser:
+        def complete_login(self, request: CompleteLoginRequest) -> AuthenticatedUser:
             # Exchange request.query["code"] for a token, then fetch userinfo.
-            return gestalt.AuthenticatedUser(
+            return AuthenticatedUser(
                 subject="user-123",
                 email="user@example.com",
                 email_verified=True,
@@ -319,21 +327,21 @@ External token validation lets API clients present a bearer token directly inste
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Inherit from `gestalt.ExternalTokenValidator` and implement `validate_external_token`:
+    Inherit from `ExternalTokenValidator` and implement `validate_external_token`:
 
     ```python
     from typing import Any
 
-    import gestalt
+    from gestalt import AuthenticationProvider, ExternalTokenValidator, AuthenticatedUser
 
-    class GoogleAuth(gestalt.AuthenticationProvider, gestalt.ExternalTokenValidator):
+    class GoogleAuth(AuthenticationProvider, ExternalTokenValidator):
         def validate_external_token(self, token: str) -> Any:
             if not token:
                 return None
 
             # Validate the bearer token with the upstream issuer, then map the
             # token claims into a Gestalt identity.
-            return gestalt.AuthenticatedUser(
+            return AuthenticatedUser(
                 subject="user-123",
                 email="user@example.com",
                 email_verified=True,
@@ -416,13 +424,13 @@ Session TTL controls how long Gestalt persists a successful browser login. If yo
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Inherit from `gestalt.SessionTTLProvider` and return a `datetime.timedelta`:
+    Inherit from `SessionTTLProvider` and return a `datetime.timedelta`:
 
     ```python
     import datetime as dt
-    import gestalt
+    from gestalt import AuthenticationProvider, SessionTTLProvider
 
-    class GoogleAuth(gestalt.AuthenticationProvider, gestalt.SessionTTLProvider):
+    class GoogleAuth(AuthenticationProvider, SessionTTLProvider):
         def session_ttl(self) -> dt.timedelta:
             return dt.timedelta(hours=8)
     ```

@@ -46,14 +46,18 @@ config:
   providers:
       auth:
         oidc:
-          source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+          source:
+            package: github.com/valon-technologies/gestalt-providers/auth/oidc
+            version: 0.0.1-alpha.1
         config:
           issuerUrl: "${OIDC_ISSUER_URL}"
           clientId: "${OIDC_CLIENT_ID}"
           clientSecret: "${OIDC_CLIENT_SECRET}"
       indexeddb:
         main:
-          source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+          source:
+            package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+            version: 0.0.1-alpha.1
         config:
           dsn: "${DATABASE_URL}"
 
@@ -125,7 +129,9 @@ config:
   providers:
       auth:
         oidc:
-          source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+          source:
+            package: github.com/valon-technologies/gestalt-providers/auth/oidc
+            version: 0.0.1-alpha.1
         config:
           issuerUrl: "${OIDC_ISSUER_URL}"
           clientId: "${OIDC_CLIENT_ID}"
@@ -133,7 +139,9 @@ config:
           redirectUrl: "${OIDC_REDIRECT_URL}"
       indexeddb:
         main:
-          source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+          source:
+            package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+            version: 0.0.1-alpha.1
         config:
           dsn: "${DATABASE_URL}"
 
@@ -177,7 +185,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `preparation`
 
-Enable the preparation init containers when your config uses published provider metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The chart runs:
+Enable the preparation init containers when your config uses published package sources or metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The chart runs:
 
 `/gestaltd lock --config /etc/gestaltd-config/config.yaml --lockfile /etc/gestaltd-state/gestalt.lock.json`
 

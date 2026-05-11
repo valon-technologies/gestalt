@@ -115,8 +115,8 @@ repository entry.
 
 ```yaml
 providerRepositories:
-  acme:
-    url: https://artifacts.example.com/gestalt/provider-index.yaml
+  valon:
+    url: https://registry.gestaltd.ai/provider-index.yaml
 ```
 
 Use `gestaltd provider repo add NAME URL --config ./gestalt.yaml` to write this
@@ -330,7 +330,9 @@ manifest entrypoint and passes the manifest entrypoint args:
 ```yaml
 plugins:
   support:
-    source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+      version: 0.0.1-alpha.1
     runtime:
       provider: modal
       image: ghcr.io/example/support-plugin@sha256:...
@@ -354,7 +356,9 @@ The `local` authentication provider is intended for single-user development on a
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -414,7 +418,9 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -447,13 +453,17 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
   authorization:
     indexeddb:
-      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
       config:
         indexeddb: main
 ```
@@ -496,13 +506,17 @@ through `/api/v1/workflow/schedules`,
 providers:
   indexeddb:
     workflow_state:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
   workflow:
     local:
-      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       indexeddb:
         provider: workflow_state
         db: workflow
@@ -553,7 +567,9 @@ polling backends such as Temporal. Workflow runtime pools are fixed-size:
 providers:
   workflow:
     temporal:
-      source: https://artifacts.example.com/workflow/temporal/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/workflow/temporal
+        version: 0.0.1-alpha.1
       runtime:
         provider: gke
         template: workflow-workers
@@ -570,7 +586,9 @@ providers:
 runtime:
   providers:
     gke:
-      source: https://artifacts.example.com/runtime/gke/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/runtime/gke
+        version: 0.0.1-alpha.1
 ```
 
 | Field | Description |
@@ -784,7 +802,9 @@ Unlike IndexedDB, caches are not selected through `server.providers`.
 providers:
   cache:
     session:
-      source: https://artifacts.example.com/cache/valkey/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/cache/valkey
+        version: 0.0.1-alpha.1
       config:
         address: ${VALKEY_ADDR}
         database: 0
@@ -875,13 +895,15 @@ providers:
 
 ### Cloud secret backends
 
-Cloud secret managers are external providers configured with a metadata URL source:
+Cloud secret managers are external providers configured with package sources:
 
 ```yaml
 providers:
   secrets:
     gsm:
-      source: https://artifacts.example.com/secrets/google/v0.0.1-alpha.13/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/secrets/google
+        version: 0.0.1-alpha.1
       config:
         project: my-gcp-project
 ```
@@ -1130,7 +1152,9 @@ plugins:
     ui:
       path: /github
       bundle: github_console
-    source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -1240,14 +1264,14 @@ plugins:
 For exact published releases, point at a `provider-release.yaml` URL:
 
 ```yaml
-source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
+source: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/github/v1.2.3/provider-release.yaml
 ```
 
 Canonical metadata-source auth lives under `source.auth`. For direct metadata URLs:
 
 ```yaml
 source:
-  url: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
+  url: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/github/v1.2.3/provider-release.yaml
   auth:
     token: ${PLUGIN_RELEASE_TOKEN}
 ```
@@ -1721,7 +1745,9 @@ host-specific OS wrappers alone.
 providers:
   ui:
     console:
-      source: https://artifacts.example.com/ui/console/v1.0.0/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/ui/default
+        version: 0.0.1
       path: /console
       config:
         brandName: Acme

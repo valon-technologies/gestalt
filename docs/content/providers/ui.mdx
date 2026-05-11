@@ -101,10 +101,12 @@ Reference a published bundle in production:
 ```yaml
 providers:
   ui:
-    roadmap:
-      source: https://artifacts.example.com/ui/customer-roadmap-review/v0.0.1/provider-release.yaml
-      path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_review
+    console:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/ui/default
+        version: 0.0.1
+      path: /console
+      authorizationPolicy: console
 ```
 
 When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves
@@ -145,7 +147,9 @@ the built-in admin UI continue using the server-wide auth provider.
 
 ### Manifest
 
-The Default UI manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
+The UI manifest declares `spec.assetRoot`, which points to the directory
+containing built static assets. The source field identifies the provider in the
+registry.
 
 ```yaml
 kind: ui
@@ -167,7 +171,17 @@ spec:
       allowedRoles: [admin]
 ```
 
-The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
+The `assetRoot` path is relative to the manifest file. It should contain the
+output of your frontend build, typically an `index.html` and accompanying JS,
+CSS, and image files. The directory does not need to be named `out`; common
+names include `out`, `dist`, and `build`.
+
+Gestalt serves and packages static assets rather than frontend source files
+because it does not own each project's frontend build lifecycle. Frameworks,
+package managers, build commands, and environment handling vary by project, so
+production serving stays deterministic and framework-agnostic. If the frontend
+needs a build step, declare it with `release.build` and write the result into
+`assetRoot`.
 
 `spec.routes` is optional unless a deployment binds the UI to
 `providers.ui.<name>.authorizationPolicy`. In that case, Gestalt uses these
@@ -177,7 +191,10 @@ declare non-empty `allowedRoles`.
 
 ### Build step
 
-If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
+If your UI needs a build step before packaging, use `release.build` to run it
+automatically during `gestaltd provider release`. This runs before
+source-manifest preparation, so the built assets are included in the release
+archive.
 
 The Default UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
 
@@ -195,7 +212,11 @@ spec:
   assetRoot: out
 ```
 
-The command runs relative to the manifest directory. After the build completes, Gestalt packages everything under `assetRoot` into the release archive. You can use any build tool here -- `npm run build`, `vite build`, `next build && next export` -- as long as it writes output to the directory specified in `assetRoot`.
+The command runs relative to the manifest directory. After the build completes,
+Gestalt packages everything under `assetRoot` into the release archive. You can
+use any build tool here -- `npm run build`, `vite build`, `next build && next
+export` -- as long as it writes output to the directory specified in
+`assetRoot`.
 
 ### Deploying the bundle
 

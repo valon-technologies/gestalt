@@ -78,8 +78,8 @@ That keeps provider telemetry on the same OpenTelemetry configuration as the
 host without routing telemetry through another Gestalt RPC service. Non-Python
 providers should initialize their language's OpenTelemetry SDK from the
 injected environment. Python providers using `gestalt-sdk` get exporter setup
-automatically from the runtime and can import `gestalt.telemetry` for GenAI
-semantic-convention helpers.
+automatically from the runtime and can import `telemetry` from `gestalt` for
+GenAI semantic-convention helpers.
 
 Provider SDKs expose GenAI semantic-convention helpers for provider-owned model,
 agent, and tool work. These helpers record through the process-global
