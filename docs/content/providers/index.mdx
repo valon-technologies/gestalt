@@ -33,25 +33,37 @@ starts it with the permissions and request context it needs.
 
 ## How providers work
 
-- Use [provider packages](#provider-packages) for published providers that are
-  listed in a provider repository. Package sources keep a package address and
-  version constraint in config, so `gestaltd provider add`, `list`, `remove`,
-  and `upgrade` can manage them directly.
-- Use `source.path` during local development to point at a provider manifest in
-  a local source tree.
-- Use `source: https://.../provider-release.yaml` when you need an exact
-  metadata URL outside a provider repository.
-- Use `source.githubRelease` when the published `provider-release.yaml` lives in
-  a private GitHub Release and you want checked-in config to stay readable.
-- Use `source.auth.token` when a package repository, remote release source, or
-  `source.githubRelease` needs authenticated metadata or archive fetches.
-- Executable providers run as child processes and connect back to the host over
-  gRPC on a temporary Unix socket.
-- UI providers are static asset bundles rather than executable processes.
-- `allowedHosts` and `server.egress` declare outbound policy for executable
-  providers, with complete enforcement depending on the sandbox runtime in use.
-- Two simple secret managers, `env` and `file`, remain built into
-  `gestaltd`. Telemetry and audit backends are also built in.
+Gestalt providers are distributed separately from `gestaltd`. Published
+providers should use [provider packages](#provider-packages) when they are
+listed in a provider repository. Package sources keep a package address and
+version constraint in config, so `gestaltd provider add`, `list`, `remove`, and
+`upgrade` can manage them directly.
+
+During local development, use `source.path` to point at a provider manifest in a
+local source tree. When you need to pin an exact release outside a provider
+repository, set `source` to the release metadata URL, such as
+`https://.../provider-release.yaml`. If that metadata file lives in a private
+GitHub Release, use `source.githubRelease` so the checked-in config can remain
+readable.
+
+Private package repositories and private release sources can require
+credentials. Use `source.auth.token` when Gestalt needs to authenticate while it
+fetches repository metadata, a remote `provider-release.yaml`, or a release
+archive referenced from `source.githubRelease`.
+
+Executable providers run as child processes. After `gestaltd` resolves and
+validates the provider manifest, it starts the process and the provider connects
+back to the host over gRPC on a temporary Unix socket. UI providers use the same
+package and release model, but they are static asset bundles rather than
+executable processes.
+
+Outbound access is declared in configuration. `allowedHosts` and
+`server.egress` describe the network policy for executable providers, with
+complete enforcement depending on the sandbox runtime in use.
+
+Some provider-like surfaces remain built into `gestaltd`. The `env` and `file`
+secret managers are built in for simple deployments, and telemetry and audit
+backends are also configured directly by the host.
 
 ## First-party providers
 
