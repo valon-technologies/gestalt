@@ -2,7 +2,7 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Applications
 
-An application in Gestalt is not a separate provider kind. At minimum, it is a
+Gestalt can be used to build applications. At a minimum, an application is a
 single [plugin](/providers/plugins), or optionally a composition of
 [plugins](/providers/plugins) and [UIs](/providers/ui), using existing
 primitives for [authentication](/providers/authentication),
@@ -98,10 +98,6 @@ authorization:
     workspace_review:
       default: deny
       members:
-        - subjectID: user:reviewer
-          role: viewer
-        - subjectID: user:admin
-          role: admin
         - subjectID: service_account:workspace-review-nightly
           role: admin
 
