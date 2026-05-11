@@ -51,11 +51,13 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${SYSTEM_DATABASE_URL}
     workplaceHub:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${APP_DATABASE_URL}
 
@@ -192,6 +194,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -207,6 +210,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
+        version: 0.0.1-alpha.1
       config:
         table: gestalt
         region: us-east-1
@@ -219,6 +223,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
+        version: 0.0.1-alpha.1
       config:
         uri: ${MONGODB_URI}
         database: gestalt

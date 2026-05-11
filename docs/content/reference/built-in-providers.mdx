@@ -24,6 +24,7 @@ providers:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -52,6 +53,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -59,6 +61,7 @@ providers:
     indexeddb:
       source:
         package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
       config:
         indexeddb: main
 ```
@@ -81,6 +84,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -104,6 +108,7 @@ runtime:
     modal:
       source:
         package: github.com/valon-technologies/gestalt-providers/runtime/modal
+        version: 0.0.1-alpha.1
       default: true
       config:
         app: gestalt-runtime
@@ -132,6 +137,7 @@ providers:
     workflow_state:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -139,6 +145,7 @@ providers:
     local:
       source:
         package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       indexeddb:
         provider: workflow_state
         db: workflow
@@ -181,6 +188,7 @@ providers:
     assets:
       source:
         package: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -237,6 +245,7 @@ plugins:
   jira:
     source:
       package: github.com/valon-technologies/gestalt-providers/plugins/jira
+      version: 0.0.1-alpha.1
 ```
 
 ## Community and Custom Providers

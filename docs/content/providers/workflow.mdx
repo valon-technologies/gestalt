@@ -82,6 +82,7 @@ providers:
     workflow_state:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -89,6 +90,7 @@ providers:
     local:
       source:
         package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       default: true
       indexeddb:
         provider: workflow_state

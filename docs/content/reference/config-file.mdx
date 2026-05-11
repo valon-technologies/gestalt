@@ -332,6 +332,7 @@ plugins:
   support:
     source:
       package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+      version: 0.0.1-alpha.1
     runtime:
       provider: modal
       image: ghcr.io/example/support-plugin@sha256:...
@@ -357,6 +358,7 @@ providers:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -418,6 +420,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -452,6 +455,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -459,6 +463,7 @@ providers:
     indexeddb:
       source:
         package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
       config:
         indexeddb: main
 ```
@@ -503,6 +508,7 @@ providers:
     workflow_state:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -510,6 +516,7 @@ providers:
     local:
       source:
         package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       indexeddb:
         provider: workflow_state
         db: workflow
@@ -562,6 +569,7 @@ providers:
     temporal:
       source:
         package: github.com/valon-technologies/gestalt-providers/workflow/temporal
+        version: 0.0.1-alpha.1
       runtime:
         provider: gke
         template: workflow-workers
@@ -580,6 +588,7 @@ runtime:
     gke:
       source:
         package: github.com/valon-technologies/gestalt-providers/runtime/gke
+        version: 0.0.1-alpha.1
 ```
 
 | Field | Description |
@@ -795,6 +804,7 @@ providers:
     session:
       source:
         package: github.com/valon-technologies/gestalt-providers/cache/valkey
+        version: 0.0.1-alpha.1
       config:
         address: ${VALKEY_ADDR}
         database: 0
@@ -893,6 +903,7 @@ providers:
     gsm:
       source:
         package: github.com/valon-technologies/gestalt-providers/secrets/google
+        version: 0.0.1-alpha.1
       config:
         project: my-gcp-project
 ```
@@ -1143,6 +1154,7 @@ plugins:
       bundle: github_console
     source:
       package: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -1735,6 +1747,7 @@ providers:
     console:
       source:
         package: github.com/valon-technologies/gestalt-providers/ui/default
+        version: 0.0.1
       path: /console
       config:
         brandName: Acme

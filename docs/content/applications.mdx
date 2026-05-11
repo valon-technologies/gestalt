@@ -111,6 +111,7 @@ providers:
     oidc:
       source:
         package: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -123,6 +124,7 @@ providers:
     authz:
       source:
         package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
       indexeddb:
         provider: main
         db: authz
@@ -131,6 +133,7 @@ providers:
     main:
       source:
         package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
       config:
         dsn: ${DATABASE_URL}
 
@@ -138,6 +141,7 @@ providers:
     reports:
       source:
         package: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -146,6 +150,7 @@ providers:
     local:
       source:
         package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
+        version: 0.0.1-alpha.1
       default: true
       indexeddb:
         provider: main

@@ -38,6 +38,7 @@ providers:
     session:
       source:
         package: github.com/valon-technologies/gestalt-providers/cache/valkey
+        version: 0.0.1-alpha.1
       config:
         address: ${VALKEY_ADDR}
         database: 0
@@ -45,6 +46,7 @@ providers:
     rate_limit:
       source:
         package: github.com/valon-technologies/gestalt-providers/cache/valkey
+        version: 0.0.1-alpha.1
       config:
         address: ${VALKEY_ADDR}
         database: 1
