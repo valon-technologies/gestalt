@@ -50,10 +50,6 @@ For the canonical manifest schema, use
 [Provider Manifests](/reference/plugin-manifests). For the full server and
 provider configuration reference, use [Config File](/reference/config-file).
 
-Two simple secret managers, `env` and `file`, remain built into `gestaltd` for
-small deployments. Telemetry and audit backends are also configured directly by
-the host.
-
 ## Where Providers Come From
 
 Providers are distributed separately from `gestaltd`, and each provider package
@@ -243,25 +239,6 @@ gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc 
   --kind authentication \
   --name oidc
 ```
-
-| Kind | Config location | Notes |
-| --- | --- | --- |
-| `plugin` | `plugins.<name>` | Default location for plugin packages. |
-| `ui` | `providers.ui.<name>` | Requires `--set path=/mount` when adding a directly mounted UI. |
-| `authentication` | `providers.authentication.<name>` | Select with `server.providers.authentication` when more than one exists. |
-| `authorization` | `providers.authorization.<name>` | Select with `server.providers.authorization` when more than one exists. |
-| `external_credentials` | `providers.externalCredentials.<name>` | Select with `server.providers.externalCredentials` when more than one exists. |
-| `secrets` | `providers.secrets.<name>` | Select with `server.providers.secrets` when more than one exists. |
-| `indexeddb` | `providers.indexeddb.<name>` | Select with `server.providers.indexeddb`. |
-| `cache` | `providers.cache.<name>` | Bind from `plugins.<name>.cache`. |
-| `s3` | `providers.s3.<name>` | Bind from `plugins.<name>.s3`. |
-| `workflow` | `providers.workflow.<name>` | Bind from workflow schedules and triggers. |
-| `agent` | `providers.agent.<name>` | Used by agent sessions and turns. |
-| `runtime` | `runtime.providers.<name>` | Used by hosted executable providers. |
-
-`provider add` does not create telemetry or audit providers yet. Existing
-telemetry and audit entries can still appear in `provider list`, lockfiles, and
-package-source upgrades.
 
 Add a directly mounted UI with a path:
 
