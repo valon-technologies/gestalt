@@ -271,28 +271,6 @@ gestaltd provider list --config ./gestalt.yaml
 gestaltd provider list --config ./gestalt.yaml --kind plugin
 ```
 
-Output columns:
-
-| Column | Meaning |
-| --- | --- |
-| `KIND` | Provider kind and config collection. |
-| `NAME` | Config entry name. |
-| `SOURCE` | Source shape: `package`, `metadata`, `github`, `local`, `builtin`, or `unsupported`. |
-| `PACKAGE` | Package address for package sources. |
-| `VERSION` | Version constraint from config. |
-| `LOCKED` | Exact version recorded in the lockfile. |
-| `STATUS` | Lock status for the entry. |
-
-Status values:
-
-| Status | Meaning |
-| --- | --- |
-| `builtin` | Built into `gestaltd`; no release artifact is locked. |
-| `locked` | The lockfile matches the current source config. |
-| `unverified` | The config and lock agree on package and version, but this list operation did not re-resolve package metadata. |
-| `unlocked` | The source-backed entry has no matching lock entry. |
-| `drifted` | A lock entry exists, but it no longer matches the current source config. |
-
 Run `gestaltd lock --check --config ./gestalt.yaml` in CI when you need a
 strict lockfile check.
 
