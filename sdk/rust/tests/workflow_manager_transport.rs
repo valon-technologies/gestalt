@@ -8,10 +8,9 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger,
-    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
-    ManagedWorkflowDefinition, ManagedWorkflowEventTrigger, ManagedWorkflowRun,
-    ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
+    AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun,
+    BoundWorkflowSchedule, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
+    ManagedWorkflowRun, ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent,
     WorkflowManagerCreateDefinitionRequest, WorkflowManagerCreateEventTriggerRequest,
     WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteDefinitionRequest,
     WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
@@ -21,13 +20,24 @@ use gestalt::proto::v1::{
     WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
     WorkflowManagerSignalOrStartRunRequest, WorkflowManagerSignalRunRequest,
     WorkflowManagerStartRunRequest, WorkflowManagerUpdateDefinitionRequest,
-    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, WorkflowSignal,
+    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest,
     bound_workflow_target,
 };
 use gestalt::{
     AgentMessageInput, AgentMessagePartInput, BoundWorkflowAgentTargetInput,
-    BoundWorkflowTargetInput, ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
-    Request, WorkflowManager, WorkflowManagerSignalOrStartRunInput, WorkflowSignalInput,
+    BoundWorkflowPluginTargetInput, BoundWorkflowTargetInput, ENV_WORKFLOW_MANAGER_SOCKET,
+    ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowEventInput, WorkflowEventMatchInput,
+    WorkflowManager, WorkflowManagerCreateDefinitionInput, WorkflowManagerCreateEventTriggerInput,
+    WorkflowManagerCreateScheduleInput, WorkflowManagerDeleteDefinitionInput,
+    WorkflowManagerDeleteEventTriggerInput, WorkflowManagerDeleteScheduleInput,
+    WorkflowManagerGetDefinitionInput, WorkflowManagerGetEventTriggerInput,
+    WorkflowManagerGetScheduleInput, WorkflowManagerPauseEventTriggerInput,
+    WorkflowManagerPauseScheduleInput, WorkflowManagerPublishEventInput,
+    WorkflowManagerResumeEventTriggerInput, WorkflowManagerResumeScheduleInput,
+    WorkflowManagerSignalOrStartRunInput, WorkflowManagerSignalRunInput,
+    WorkflowManagerStartRunInput, WorkflowManagerUpdateDefinitionInput,
+    WorkflowManagerUpdateEventTriggerInput, WorkflowManagerUpdateScheduleInput,
+    WorkflowSignalInput,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -52,16 +62,12 @@ struct TestWorkflowManagerServer {
     signal_or_start_requests: Arc<Mutex<Vec<WorkflowManagerSignalOrStartRunRequest>>>,
 }
 
-fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
-    BoundWorkflowTarget {
-        kind: Some(bound_workflow_target::Kind::Plugin(
-            BoundWorkflowPluginTarget {
-                plugin_name: plugin_name.to_string(),
-                operation: operation.to_string(),
-                ..Default::default()
-            },
-        )),
-    }
+fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTargetInput {
+    BoundWorkflowTargetInput::Plugin(BoundWorkflowPluginTargetInput {
+        plugin_name: plugin_name.to_string(),
+        operation: operation.to_string(),
+        ..Default::default()
+    })
 }
 
 #[async_trait]
@@ -589,7 +595,7 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
             .await
             .expect("connect workflow manager");
     let created = manager
-        .create_schedule(WorkflowManagerCreateScheduleRequest {
+        .create_schedule(WorkflowManagerCreateScheduleInput {
             provider_name: "managed".to_string(),
             cron: "*/5 * * * *".to_string(),
             ..Default::default()
@@ -633,7 +639,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
             .await
             .expect("connect workflow manager");
     let started_run = manager
-        .start_run(WorkflowManagerStartRunRequest {
+        .start_run(WorkflowManagerStartRunInput {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             target: Some(plugin_target("roadmap", "sync")),
@@ -642,9 +648,9 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("start run");
     let signaled_run = manager
-        .signal_run(WorkflowManagerSignalRunRequest {
+        .signal_run(WorkflowManagerSignalRunInput {
             run_id: "run-1".to_string(),
-            signal: Some(WorkflowSignal {
+            signal: Some(WorkflowSignalInput {
                 name: "slack.event".to_string(),
                 ..Default::default()
             }),
@@ -653,11 +659,11 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("signal run");
     let signaled_or_started_run = manager
-        .signal_or_start_run(WorkflowManagerSignalOrStartRunRequest {
+        .signal_or_start_run(WorkflowManagerSignalOrStartRunInput {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             target: Some(plugin_target("roadmap", "sync")),
-            signal: Some(WorkflowSignal {
+            signal: Some(WorkflowSignalInput {
                 name: "slack.event".to_string(),
                 ..Default::default()
             }),
@@ -666,7 +672,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("signal or start run");
     let created_definition = manager
-        .create_definition(WorkflowManagerCreateDefinitionRequest {
+        .create_definition(WorkflowManagerCreateDefinitionInput {
             provider_name: "basic".to_string(),
             target: Some(plugin_target("roadmap", "sync")),
             ..Default::default()
@@ -674,14 +680,14 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create definition");
     let fetched_definition = manager
-        .get_definition(WorkflowManagerGetDefinitionRequest {
+        .get_definition(WorkflowManagerGetDefinitionInput {
             definition_id: "definition-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("get definition");
     let updated_definition = manager
-        .update_definition(WorkflowManagerUpdateDefinitionRequest {
+        .update_definition(WorkflowManagerUpdateDefinitionInput {
             definition_id: "definition-1".to_string(),
             provider_name: "secondary".to_string(),
             target: Some(plugin_target("roadmap", "status")),
@@ -690,14 +696,14 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update definition");
     manager
-        .delete_definition(WorkflowManagerDeleteDefinitionRequest {
+        .delete_definition(WorkflowManagerDeleteDefinitionInput {
             definition_id: "definition-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("delete definition");
     let created = manager
-        .create_schedule(WorkflowManagerCreateScheduleRequest {
+        .create_schedule(WorkflowManagerCreateScheduleInput {
             provider_name: "basic".to_string(),
             cron: "*/5 * * * *".to_string(),
             timezone: "UTC".to_string(),
@@ -708,14 +714,14 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create schedule");
     let fetched = manager
-        .get_schedule(WorkflowManagerGetScheduleRequest {
+        .get_schedule(WorkflowManagerGetScheduleInput {
             schedule_id: "sched-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("get schedule");
     let updated = manager
-        .update_schedule(WorkflowManagerUpdateScheduleRequest {
+        .update_schedule(WorkflowManagerUpdateScheduleInput {
             schedule_id: "sched-1".to_string(),
             provider_name: "secondary".to_string(),
             cron: "0 * * * *".to_string(),
@@ -727,31 +733,31 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update schedule");
     let paused = manager
-        .pause_schedule(WorkflowManagerPauseScheduleRequest {
+        .pause_schedule(WorkflowManagerPauseScheduleInput {
             schedule_id: "sched-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("pause schedule");
     let resumed = manager
-        .resume_schedule(WorkflowManagerResumeScheduleRequest {
+        .resume_schedule(WorkflowManagerResumeScheduleInput {
             schedule_id: "sched-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("resume schedule");
     manager
-        .delete_schedule(WorkflowManagerDeleteScheduleRequest {
+        .delete_schedule(WorkflowManagerDeleteScheduleInput {
             schedule_id: "sched-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("delete schedule");
     let created_trigger = manager
-        .create_trigger(WorkflowManagerCreateEventTriggerRequest {
+        .create_trigger(WorkflowManagerCreateEventTriggerInput {
             provider_name: "basic".to_string(),
-            r#match: Some(WorkflowEventMatch {
-                r#type: "roadmap.item.updated".to_string(),
+            event_match: Some(WorkflowEventMatchInput {
+                event_type: "roadmap.item.updated".to_string(),
                 source: "roadmap".to_string(),
                 ..Default::default()
             }),
@@ -762,18 +768,18 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("create trigger");
     let fetched_trigger = manager
-        .get_trigger(WorkflowManagerGetEventTriggerRequest {
+        .get_trigger(WorkflowManagerGetEventTriggerInput {
             trigger_id: "trg-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("get trigger");
     let updated_trigger = manager
-        .update_trigger(WorkflowManagerUpdateEventTriggerRequest {
+        .update_trigger(WorkflowManagerUpdateEventTriggerInput {
             trigger_id: "trg-1".to_string(),
             provider_name: "secondary".to_string(),
-            r#match: Some(WorkflowEventMatch {
-                r#type: "roadmap.item.synced".to_string(),
+            event_match: Some(WorkflowEventMatchInput {
+                event_type: "roadmap.item.synced".to_string(),
                 ..Default::default()
             }),
             target: Some(plugin_target("slack", "chat.postMessage")),
@@ -783,30 +789,30 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         .await
         .expect("update trigger");
     let paused_trigger = manager
-        .pause_trigger(WorkflowManagerPauseEventTriggerRequest {
+        .pause_trigger(WorkflowManagerPauseEventTriggerInput {
             trigger_id: "trg-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("pause trigger");
     let resumed_trigger = manager
-        .resume_trigger(WorkflowManagerResumeEventTriggerRequest {
+        .resume_trigger(WorkflowManagerResumeEventTriggerInput {
             trigger_id: "trg-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("resume trigger");
     manager
-        .delete_trigger(WorkflowManagerDeleteEventTriggerRequest {
+        .delete_trigger(WorkflowManagerDeleteEventTriggerInput {
             trigger_id: "trg-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("delete trigger");
     let published_event = manager
-        .publish_event(WorkflowManagerPublishEventRequest {
-            event: Some(WorkflowEvent {
-                r#type: "roadmap.item.updated".to_string(),
+        .publish_event(WorkflowManagerPublishEventInput {
+            event: Some(WorkflowEventInput {
+                event_type: "roadmap.item.updated".to_string(),
                 source: "roadmap".to_string(),
                 ..Default::default()
             }),
@@ -1024,7 +1030,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
 }
 
 #[tokio::test]
-async fn workflow_manager_native_signal_or_start_input_reaches_host() {
+async fn workflow_manager_signal_or_start_accepts_native_values() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm-native.sock");
     let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
@@ -1045,7 +1051,7 @@ async fn workflow_manager_native_signal_or_start_input_reaches_host() {
             .await
             .expect("connect workflow manager");
     let signaled = manager
-        .signal_or_start_run_input(WorkflowManagerSignalOrStartRunInput {
+        .signal_or_start_run(WorkflowManagerSignalOrStartRunInput {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             idempotency_key: "signal-request-key".to_string(),
@@ -1142,7 +1148,7 @@ async fn request_workflow_manager_uses_embedded_invocation_token() {
         .await
         .expect("request workflow manager");
     let response = manager
-        .get_schedule(WorkflowManagerGetScheduleRequest {
+        .get_schedule(WorkflowManagerGetScheduleInput {
             schedule_id: "sched-1".to_string(),
             ..Default::default()
         })

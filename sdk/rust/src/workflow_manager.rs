@@ -462,8 +462,9 @@ impl WorkflowManager {
     /// Creates a reusable workflow definition.
     pub async fn create_definition(
         &mut self,
-        mut request: pb::WorkflowManagerCreateDefinitionRequest,
+        input: WorkflowManagerCreateDefinitionInput,
     ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
+        let mut request = new_workflow_manager_create_definition_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
@@ -471,75 +472,43 @@ impl WorkflowManager {
         Ok(self.client.create_definition(request).await?.into_inner())
     }
 
-    /// Creates a reusable workflow definition.
-    pub async fn create_definition_input(
-        &mut self,
-        input: WorkflowManagerCreateDefinitionInput,
-    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
-        self.create_definition(new_workflow_manager_create_definition_request(input)?)
-            .await
-    }
-
     /// Fetches one workflow definition.
     pub async fn get_definition(
         &mut self,
-        mut request: pb::WorkflowManagerGetDefinitionRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_definition(request).await?.into_inner())
-    }
-
-    /// Fetches one workflow definition.
-    pub async fn get_definition_input(
-        &mut self,
         input: WorkflowManagerGetDefinitionInput,
     ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
-        self.get_definition(new_workflow_manager_get_definition_request(input))
-            .await
+        let mut request = new_workflow_manager_get_definition_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_definition(request).await?.into_inner())
     }
 
     /// Updates a workflow definition.
     pub async fn update_definition(
         &mut self,
-        mut request: pb::WorkflowManagerUpdateDefinitionRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.update_definition(request).await?.into_inner())
-    }
-
-    /// Updates a workflow definition.
-    pub async fn update_definition_input(
-        &mut self,
         input: WorkflowManagerUpdateDefinitionInput,
     ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
-        self.update_definition(new_workflow_manager_update_definition_request(input)?)
-            .await
+        let mut request = new_workflow_manager_update_definition_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.update_definition(request).await?.into_inner())
     }
 
     /// Deletes a workflow definition.
     pub async fn delete_definition(
         &mut self,
-        mut request: pb::WorkflowManagerDeleteDefinitionRequest,
+        input: WorkflowManagerDeleteDefinitionInput,
     ) -> std::result::Result<(), WorkflowManagerError> {
+        let mut request = new_workflow_manager_delete_definition_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_definition(request).await?;
         Ok(())
     }
 
-    /// Deletes a workflow definition.
-    pub async fn delete_definition_input(
-        &mut self,
-        input: WorkflowManagerDeleteDefinitionInput,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        self.delete_definition(new_workflow_manager_delete_definition_request(input))
-            .await
-    }
-
     /// Creates a workflow schedule.
     pub async fn create_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerCreateScheduleRequest,
+        input: WorkflowManagerCreateScheduleInput,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        let mut request = new_workflow_manager_create_schedule_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
@@ -547,165 +516,93 @@ impl WorkflowManager {
         Ok(self.client.create_schedule(request).await?.into_inner())
     }
 
-    /// Creates a workflow schedule.
-    pub async fn create_schedule_input(
-        &mut self,
-        input: WorkflowManagerCreateScheduleInput,
-    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        self.create_schedule(new_workflow_manager_create_schedule_request(input)?)
-            .await
-    }
-
     /// Starts a workflow run.
     pub async fn start_run(
         &mut self,
-        mut request: pb::WorkflowManagerStartRunRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowRun, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.start_run(request).await?.into_inner())
-    }
-
-    /// Starts a workflow run.
-    pub async fn start_run_input(
-        &mut self,
         input: WorkflowManagerStartRunInput,
     ) -> std::result::Result<pb::ManagedWorkflowRun, WorkflowManagerError> {
-        self.start_run(new_workflow_manager_start_run_request(input)?)
-            .await
+        let mut request = new_workflow_manager_start_run_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.start_run(request).await?.into_inner())
     }
 
     /// Signals an existing workflow run.
     pub async fn signal_run(
         &mut self,
-        mut request: pb::WorkflowManagerSignalRunRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.signal_run(request).await?.into_inner())
-    }
-
-    /// Signals an existing workflow run.
-    pub async fn signal_run_input(
-        &mut self,
         input: WorkflowManagerSignalRunInput,
     ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
-        self.signal_run(new_workflow_manager_signal_run_request(input)?)
-            .await
+        let mut request = new_workflow_manager_signal_run_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.signal_run(request).await?.into_inner())
     }
 
     /// Signals a run or starts it when no matching run exists.
     pub async fn signal_or_start_run(
         &mut self,
-        mut request: pb::WorkflowManagerSignalOrStartRunRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.signal_or_start_run(request).await?.into_inner())
-    }
-
-    /// Signals or starts a workflow run.
-    pub async fn signal_or_start_run_input(
-        &mut self,
         input: WorkflowManagerSignalOrStartRunInput,
     ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
-        self.signal_or_start_run(new_workflow_manager_signal_or_start_run_request(input)?)
-            .await
+        let mut request = new_workflow_manager_signal_or_start_run_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.signal_or_start_run(request).await?.into_inner())
     }
 
     /// Fetches one workflow schedule.
     pub async fn get_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerGetScheduleRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_schedule(request).await?.into_inner())
-    }
-
-    /// Fetches one workflow schedule.
-    pub async fn get_schedule_input(
-        &mut self,
         input: WorkflowManagerGetScheduleInput,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        self.get_schedule(new_workflow_manager_get_schedule_request(input))
-            .await
+        let mut request = new_workflow_manager_get_schedule_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_schedule(request).await?.into_inner())
     }
 
     /// Updates a workflow schedule.
     pub async fn update_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerUpdateScheduleRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.update_schedule(request).await?.into_inner())
-    }
-
-    /// Updates a workflow schedule.
-    pub async fn update_schedule_input(
-        &mut self,
         input: WorkflowManagerUpdateScheduleInput,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        self.update_schedule(new_workflow_manager_update_schedule_request(input)?)
-            .await
+        let mut request = new_workflow_manager_update_schedule_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.update_schedule(request).await?.into_inner())
     }
 
     /// Deletes a workflow schedule.
     pub async fn delete_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerDeleteScheduleRequest,
+        input: WorkflowManagerDeleteScheduleInput,
     ) -> std::result::Result<(), WorkflowManagerError> {
+        let mut request = new_workflow_manager_delete_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_schedule(request).await?;
         Ok(())
     }
 
-    /// Deletes a workflow schedule.
-    pub async fn delete_schedule_input(
-        &mut self,
-        input: WorkflowManagerDeleteScheduleInput,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        self.delete_schedule(new_workflow_manager_delete_schedule_request(input))
-            .await
-    }
-
     /// Pauses a workflow schedule.
     pub async fn pause_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerPauseScheduleRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.pause_schedule(request).await?.into_inner())
-    }
-
-    /// Pauses a workflow schedule.
-    pub async fn pause_schedule_input(
-        &mut self,
         input: WorkflowManagerPauseScheduleInput,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        self.pause_schedule(new_workflow_manager_pause_schedule_request(input))
-            .await
+        let mut request = new_workflow_manager_pause_schedule_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.pause_schedule(request).await?.into_inner())
     }
 
     /// Resumes a workflow schedule.
     pub async fn resume_schedule(
         &mut self,
-        mut request: pb::WorkflowManagerResumeScheduleRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.resume_schedule(request).await?.into_inner())
-    }
-
-    /// Resumes a workflow schedule.
-    pub async fn resume_schedule_input(
-        &mut self,
         input: WorkflowManagerResumeScheduleInput,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        self.resume_schedule(new_workflow_manager_resume_schedule_request(input))
-            .await
+        let mut request = new_workflow_manager_resume_schedule_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.resume_schedule(request).await?.into_inner())
     }
 
     /// Creates an event trigger.
     pub async fn create_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerCreateEventTriggerRequest,
+        input: WorkflowManagerCreateEventTriggerInput,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        let mut request = new_workflow_manager_create_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         if request.idempotency_key.trim().is_empty() {
             request.idempotency_key = self.idempotency_key.clone();
@@ -717,38 +614,22 @@ impl WorkflowManager {
             .into_inner())
     }
 
-    /// Creates an event trigger.
-    pub async fn create_trigger_input(
-        &mut self,
-        input: WorkflowManagerCreateEventTriggerInput,
-    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        self.create_trigger(new_workflow_manager_create_event_trigger_request(input)?)
-            .await
-    }
-
     /// Fetches one event trigger.
     pub async fn get_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerGetEventTriggerRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_event_trigger(request).await?.into_inner())
-    }
-
-    /// Fetches one event trigger.
-    pub async fn get_trigger_input(
-        &mut self,
         input: WorkflowManagerGetEventTriggerInput,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        self.get_trigger(new_workflow_manager_get_event_trigger_request(input))
-            .await
+        let mut request = new_workflow_manager_get_event_trigger_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_event_trigger(request).await?.into_inner())
     }
 
     /// Updates an event trigger.
     pub async fn update_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerUpdateEventTriggerRequest,
+        input: WorkflowManagerUpdateEventTriggerInput,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        let mut request = new_workflow_manager_update_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
         Ok(self
             .client
@@ -757,57 +638,33 @@ impl WorkflowManager {
             .into_inner())
     }
 
-    /// Updates an event trigger.
-    pub async fn update_trigger_input(
-        &mut self,
-        input: WorkflowManagerUpdateEventTriggerInput,
-    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        self.update_trigger(new_workflow_manager_update_event_trigger_request(input)?)
-            .await
-    }
-
     /// Deletes an event trigger.
     pub async fn delete_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerDeleteEventTriggerRequest,
+        input: WorkflowManagerDeleteEventTriggerInput,
     ) -> std::result::Result<(), WorkflowManagerError> {
+        let mut request = new_workflow_manager_delete_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
         self.client.delete_event_trigger(request).await?;
         Ok(())
     }
 
-    /// Deletes an event trigger.
-    pub async fn delete_trigger_input(
-        &mut self,
-        input: WorkflowManagerDeleteEventTriggerInput,
-    ) -> std::result::Result<(), WorkflowManagerError> {
-        self.delete_trigger(new_workflow_manager_delete_event_trigger_request(input))
-            .await
-    }
-
     /// Pauses an event trigger.
     pub async fn pause_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerPauseEventTriggerRequest,
-    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.pause_event_trigger(request).await?.into_inner())
-    }
-
-    /// Pauses an event trigger.
-    pub async fn pause_trigger_input(
-        &mut self,
         input: WorkflowManagerPauseEventTriggerInput,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        self.pause_trigger(new_workflow_manager_pause_event_trigger_request(input))
-            .await
+        let mut request = new_workflow_manager_pause_event_trigger_request(input);
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.pause_event_trigger(request).await?.into_inner())
     }
 
     /// Resumes an event trigger.
     pub async fn resume_trigger(
         &mut self,
-        mut request: pb::WorkflowManagerResumeEventTriggerRequest,
+        input: WorkflowManagerResumeEventTriggerInput,
     ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        let mut request = new_workflow_manager_resume_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
         Ok(self
             .client
@@ -816,31 +673,14 @@ impl WorkflowManager {
             .into_inner())
     }
 
-    /// Resumes an event trigger.
-    pub async fn resume_trigger_input(
-        &mut self,
-        input: WorkflowManagerResumeEventTriggerInput,
-    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
-        self.resume_trigger(new_workflow_manager_resume_event_trigger_request(input))
-            .await
-    }
-
     /// Publishes an event into the workflow manager.
     pub async fn publish_event(
         &mut self,
-        mut request: pb::WorkflowManagerPublishEventRequest,
-    ) -> std::result::Result<pb::WorkflowEvent, WorkflowManagerError> {
-        request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.publish_event(request).await?.into_inner())
-    }
-
-    /// Publishes an event.
-    pub async fn publish_event_input(
-        &mut self,
         input: WorkflowManagerPublishEventInput,
     ) -> std::result::Result<pb::WorkflowEvent, WorkflowManagerError> {
-        self.publish_event(new_workflow_manager_publish_event_request(input)?)
-            .await
+        let mut request = new_workflow_manager_publish_event_request(input)?;
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.publish_event(request).await?.into_inner())
     }
 }
 

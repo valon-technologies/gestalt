@@ -487,20 +487,15 @@ definition do not silently change existing automation.
         }
         defer workflows.Close()
 
-        event, err := gestalt.NewWorkflowEvent(gestalt.WorkflowEventInput{
-            Type:            "slack.event.received",
-            Source:          "slack",
-            Subject:         "route:knowledge-ingest",
-            DataContentType: "application/json",
-            Data:            map[string]any{"event": slackEvent},
-        })
-        if err != nil {
-            return "", err
-        }
-
-        published, err := workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
+        published, err := workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEventInput{
             ProviderName: "local",
-            Event:        event,
+            Event: &gestalt.WorkflowEventInput{
+                Type:            "slack.event.received",
+                Source:          "slack",
+                Subject:         "route:knowledge-ingest",
+                DataContentType: "application/json",
+                Data:            map[string]any{"event": slackEvent},
+            },
         })
         if err != nil {
             return "", err
@@ -511,25 +506,23 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import Request, WorkflowManagerPublishEventRequest, workflow_event
+    from gestalt import Request, WorkflowEventInput, WorkflowManagerPublishEventInput
 
     def publish_slack_event(
         request: Request,
         slack_event: dict[str, object],
     ) -> str:
-        event = workflow_event(
-            type="slack.event.received",
-            source="slack",
-            subject="route:knowledge-ingest",
-            datacontenttype="application/json",
-            data={"event": slack_event},
-        )
-
         with request.workflow_manager() as workflows:
             published = workflows.publish_event(
-                WorkflowManagerPublishEventRequest(
+                WorkflowManagerPublishEventInput(
                     provider_name="local",
-                    event=event,
+                    event=WorkflowEventInput(
+                        type="slack.event.received",
+                        source="slack",
+                        subject="route:knowledge-ingest",
+                        datacontenttype="application/json",
+                        data={"event": slack_event},
+                    ),
                 )
             )
 
@@ -538,7 +531,7 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{WorkflowEventInput, WorkflowManagerPublishEventRequest};
+    use gestalt::{WorkflowEventInput, WorkflowManagerPublishEventInput};
     use serde_json::json;
 
     async fn publish_slack_event(
@@ -546,19 +539,17 @@ definition do not silently change existing automation.
         slack_event: serde_json::Value,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let mut workflows = request.workflow_manager().await?;
-        let event = gestalt::new_workflow_event(WorkflowEventInput {
-            event_type: "slack.event.received".to_string(),
-            source: "slack".to_string(),
-            subject: "route:knowledge-ingest".to_string(),
-            datacontenttype: "application/json".to_string(),
-            data: Some(json!({ "event": slack_event })),
-            ..Default::default()
-        })?;
-
         let event = workflows
-            .publish_event(WorkflowManagerPublishEventRequest {
+            .publish_event(WorkflowManagerPublishEventInput {
                 provider_name: "local".to_string(),
-                event: Some(event),
+                event: Some(WorkflowEventInput {
+                    event_type: "slack.event.received".to_string(),
+                    source: "slack".to_string(),
+                    subject: "route:knowledge-ingest".to_string(),
+                    datacontenttype: "application/json".to_string(),
+                    data: Some(json!({ "event": slack_event })),
+                    ..Default::default()
+                }),
                 ..Default::default()
             })
             .await?;
@@ -569,7 +560,11 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { WorkflowManager, type Request } from "@valon-technologies/gestalt";
+    import {
+      WorkflowManager,
+      workflowEvent,
+      type Request,
+    } from "@valon-technologies/gestalt";
 
     export async function publishSlackEvent(
       request: Request,
@@ -579,7 +574,7 @@ definition do not silently change existing automation.
 
       const event = await workflowManager.publishEvent({
         providerName: "local",
-        event: {
+        event: workflowEvent({
           type: "slack.event.received",
           source: "slack",
           subject: "route:knowledge-ingest",
@@ -587,7 +582,7 @@ definition do not silently change existing automation.
           data: {
             event: slackEvent,
           },
-        },
+        }),
       });
 
       return event.id;
@@ -788,13 +783,14 @@ The full protocol includes:
 | `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
 | `PublishEvent` | Deliver an event into the provider |
 
-Go and Rust expose the complete generated workflow provider service. Python
-currently registers run, signal, schedule, trigger, and publish methods through
-the SDK runtime. TypeScript currently exposes the core run, schedule, trigger,
-and publish methods through `defineWorkflowProvider`. If you need signal or
-execution-reference methods before the handwritten TypeScript and Python helpers
-grow those methods, implement that provider in Go or Rust, or serve the
-generated protocol directly.
+Go exposes the complete workflow provider service through native request and
+response input types. Rust exposes the complete generated workflow provider
+service. Python currently registers run, signal, schedule, trigger, and publish
+methods through the SDK runtime. TypeScript currently exposes the core run,
+schedule, trigger, and publish methods through `defineWorkflowProvider`. If you
+need signal or execution-reference methods before the handwritten TypeScript
+and Python helpers grow those methods, implement that provider in Go or Rust,
+or serve the generated protocol directly.
 
 The examples below show the core authored shape. Production workflow providers
 should persist returned IDs, timestamps, status, execution references, and
@@ -819,17 +815,17 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-        return &gestalt.BoundWorkflowRun{
-            Id:     req.GetTarget().GetPlugin().GetPluginName() + ":run-1",
+    func (p *Provider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
+        return &gestalt.BoundWorkflowRunInput{
+            ID:     "workflow:run-1",
             Status: gestalt.WorkflowRunStatusValuePending,
-            Target: req.GetTarget(),
+            Target: req.Target,
         }, nil
     }
 
-    func (p *Provider) GetRun(_ context.Context, req *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-        return &gestalt.BoundWorkflowRun{
-            Id: req.GetRunId(),
+    func (p *Provider) GetRun(_ context.Context, req *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
+        return &gestalt.BoundWorkflowRunInput{
+            ID: req.RunID,
         }, nil
     }
 
@@ -837,24 +833,24 @@ signal sequence numbers exactly as stored.
         return &gestalt.ListWorkflowProviderRunsResponse{}, nil
     }
 
-    func (p *Provider) CancelRun(_ context.Context, req *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-        return &gestalt.BoundWorkflowRun{
-            Id:     req.GetRunId(),
+    func (p *Provider) CancelRun(_ context.Context, req *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
+        return &gestalt.BoundWorkflowRunInput{
+            ID:     req.RunID,
             Status: gestalt.WorkflowRunStatusValueCanceled,
         }, nil
     }
 
-    func (p *Provider) UpsertSchedule(_ context.Context, req *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-        return &gestalt.BoundWorkflowSchedule{
-            Id:     req.GetScheduleId(),
-            Cron:   req.GetCron(),
-            Target: req.GetTarget(),
-            Paused: req.GetPaused(),
+    func (p *Provider) UpsertSchedule(_ context.Context, req *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
+        return &gestalt.BoundWorkflowScheduleInput{
+            ID:     req.ScheduleID,
+            Cron:   req.Cron,
+            Target: req.Target,
+            Paused: req.Paused,
         }, nil
     }
 
-    func (p *Provider) GetSchedule(_ context.Context, req *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-        return &gestalt.BoundWorkflowSchedule{Id: req.GetScheduleId()}, nil
+    func (p *Provider) GetSchedule(_ context.Context, req *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
+        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID}, nil
     }
 
     func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
@@ -865,25 +861,25 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) PauseSchedule(_ context.Context, req *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-        return &gestalt.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: true}, nil
+    func (p *Provider) PauseSchedule(_ context.Context, req *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
+        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID, Paused: true}, nil
     }
 
-    func (p *Provider) ResumeSchedule(_ context.Context, req *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-        return &gestalt.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: false}, nil
+    func (p *Provider) ResumeSchedule(_ context.Context, req *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
+        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID, Paused: false}, nil
     }
 
-    func (p *Provider) UpsertEventTrigger(_ context.Context, req *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-        return &gestalt.BoundWorkflowEventTrigger{
-            Id:     req.GetTriggerId(),
-            Match:  req.GetMatch(),
-            Target: req.GetTarget(),
-            Paused: req.GetPaused(),
+    func (p *Provider) UpsertEventTrigger(_ context.Context, req *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
+        return &gestalt.BoundWorkflowEventTriggerInput{
+            ID:     req.TriggerID,
+            Match:  req.Match,
+            Target: req.Target,
+            Paused: req.Paused,
         }, nil
     }
 
-    func (p *Provider) GetEventTrigger(_ context.Context, req *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-        return &gestalt.BoundWorkflowEventTrigger{Id: req.GetTriggerId()}, nil
+    func (p *Provider) GetEventTrigger(_ context.Context, req *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
+        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID}, nil
     }
 
     func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
@@ -894,12 +890,12 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) PauseEventTrigger(_ context.Context, req *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-        return &gestalt.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: true}, nil
+    func (p *Provider) PauseEventTrigger(_ context.Context, req *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
+        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID, Paused: true}, nil
     }
 
-    func (p *Provider) ResumeEventTrigger(_ context.Context, req *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-        return &gestalt.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: false}, nil
+    func (p *Provider) ResumeEventTrigger(_ context.Context, req *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
+        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID, Paused: false}, nil
     }
 
     func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {

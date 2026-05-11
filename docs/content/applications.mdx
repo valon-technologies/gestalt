@@ -312,18 +312,14 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      event, err := gestalt.NewWorkflowEvent(gestalt.WorkflowEventInput{
-        Type:            "workspace_review.report.generated",
-        Source:          "workspace_review",
-        Subject:         "nightly",
-        DataContentType: "application/json",
-        Data:            map[string]any{"reportUrl": access.URL},
-      })
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
-        Event: event,
+      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEventInput{
+        Event: &gestalt.WorkflowEventInput{
+          Type:            "workspace_review.report.generated",
+          Source:          "workspace_review",
+          Subject:         "nightly",
+          DataContentType: "application/json",
+          Data:            map[string]any{"reportUrl": access.URL},
+        },
       })
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
@@ -362,8 +358,8 @@ details. Those come from the deployment bindings.
         WriteOptions,
         PresignOptions,
         PresignMethod,
-        workflow_event,
-        WorkflowManagerPublishEventRequest,
+        WorkflowEventInput,
+        WorkflowManagerPublishEventInput,
     )
 
     plugin = Plugin("workspace_review")
@@ -418,16 +414,17 @@ details. Those come from the deployment bindings.
             }
         )
 
-        event = workflow_event(
-            type="workspace_review.report.generated",
-            source="workspace_review",
-            subject="nightly",
-            datacontenttype="application/json",
-            data={"reportUrl": access.url},
-        )
         with request.workflow_manager() as workflows:
             workflows.publish_event(
-                WorkflowManagerPublishEventRequest(event=event)
+                WorkflowManagerPublishEventInput(
+                    event=WorkflowEventInput(
+                        type="workspace_review.report.generated",
+                        source="workspace_review",
+                        subject="nightly",
+                        datacontenttype="application/json",
+                        data={"reportUrl": access.url},
+                    )
+                )
             )
 
         db.close()
@@ -441,7 +438,7 @@ details. Those come from the deployment bindings.
 
     use gestalt::{
         IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEventInput,
-        WorkflowManagerPublishEventRequest,
+        WorkflowManagerPublishEventInput,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::json;
@@ -522,17 +519,16 @@ details. Those come from the deployment bindings.
             .await?;
 
         let mut workflows = request.workflow_manager().await?;
-        let event = gestalt::new_workflow_event(WorkflowEventInput {
-            event_type: "workspace_review.report.generated".to_string(),
-            source: "workspace_review".to_string(),
-            subject: "nightly".to_string(),
-            datacontenttype: "application/json".to_string(),
-            data: Some(json!({ "reportUrl": access.url.clone() })),
-            ..Default::default()
-        })?;
         workflows
-            .publish_event(WorkflowManagerPublishEventRequest {
-                event: Some(event),
+            .publish_event(WorkflowManagerPublishEventInput {
+                event: Some(WorkflowEventInput {
+                    event_type: "workspace_review.report.generated".to_string(),
+                    source: "workspace_review".to_string(),
+                    subject: "nightly".to_string(),
+                    datacontenttype: "application/json".to_string(),
+                    data: Some(json!({ "reportUrl": access.url.clone() })),
+                    ..Default::default()
+                }),
                 ..Default::default()
             })
             .await?;
@@ -554,6 +550,7 @@ details. Those come from the deployment bindings.
       ok,
       operation,
       s,
+      workflowEvent,
     } from "@valon-technologies/gestalt";
 
     export const plugin = definePlugin({
@@ -610,13 +607,13 @@ details. Those come from the deployment bindings.
 
             const workflows = new WorkflowManager(request);
             await workflows.publishEvent({
-              event: {
+              event: workflowEvent({
                 type: "workspace_review.report.generated",
                 source: "workspace_review",
                 subject: "nightly",
                 datacontenttype: "application/json",
                 data: { reportUrl: access.url },
-              },
+              }),
             });
 
             return ok({ reportUrl: access.url });

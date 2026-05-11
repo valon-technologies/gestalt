@@ -23,3 +23,17 @@ servers.
 3. Build the smallest plugin provider first.
 4. Add provider-specific surfaces such as authentication, cache, S3, workflow,
    runtime, or agent support only after the basic provider runs locally.
+
+## Native input coverage
+
+The SDK examples use native input helpers for manager requests where those
+helpers exist. That includes agent-manager messages and tool refs, workflow
+events, workflow signals, and bound workflow targets in Go, Python, and Rust.
+TypeScript workflow examples use root helper functions such as
+`workflowEvent`, `workflowSignal`, and `boundWorkflowTarget` when a manager
+field would otherwise expose a generated oneof or protobuf well-known type.
+
+Manager responses still return protocol-backed objects. Examples may therefore
+read response fields with language-specific protocol accessors such as Go
+`GetId`-style methods or generated response fields in Python, Rust, and
+TypeScript. Native response objects are a remaining SDK gap.
